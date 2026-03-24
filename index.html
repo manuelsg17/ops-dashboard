@@ -1,0 +1,803 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta http-equiv="Content-Style-Type" content="text/css">
+  <title></title>
+  <meta name="Generator" content="Cocoa HTML Writer">
+  <meta name="CocoaVersion" content="2685.4">
+  <style type="text/css">
+    p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica}
+    p.p2 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica; min-height: 14.0px}
+  </style>
+</head>
+<body>
+<p class="p1">&lt;!DOCTYPE html&gt;</p>
+<p class="p1">&lt;html lang="es"&gt;</p>
+<p class="p1">&lt;head&gt;</p>
+<p class="p1">&lt;meta charset="UTF-8"/&gt;</p>
+<p class="p1">&lt;meta name="viewport" content="width=device-width,initial-scale=1.0"/&gt;</p>
+<p class="p1">&lt;title&gt;Yango Dashboard&lt;/title&gt;</p>
+<p class="p1">&lt;script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"&gt;&lt;/script&gt;</p>
+<p class="p1">&lt;script src="https://cdnjs.cloudflare.com/ajax/libs/apexcharts/3.41.0/apexcharts.min.js"&gt;&lt;/script&gt;</p>
+<p class="p1">&lt;style&gt;</p>
+<p class="p1">*{box-sizing:border-box;margin:0;padding:0}</p>
+<p class="p1">body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#F2F2F2;color:#111;min-height:100vh}</p>
+<p class="p1">.topbar{background:#fff;border-bottom:2px solid #e5e5e5;padding:0 24px;display:flex;align-items:stretch;justify-content:space-between;position:sticky;top:0;z-index:200;box-shadow:0 2px 8px rgba(0,0,0,.06)}</p>
+<p class="p1">.topbar-left{display:flex;align-items:center;gap:14px;padding:10px 0}</p>
+<p class="p1">.logo{width:36px;height:36px;background:#FF0000;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}</p>
+<p class="p1">.logo svg{width:20px;height:20px;fill:none;stroke:#fff;stroke-width:2}</p>
+<p class="p1">.brand{font-weight:900;font-size:1.1rem;letter-spacing:-.5px}</p>
+<p class="p1">.brand span{color:#FF0000}</p>
+<p class="p1">.nav-tabs{display:flex;gap:4px;margin-left:20px}</p>
+<p class="p1">.nav-tab{padding:8px 16px;border-radius:8px;font-size:.83rem;font-weight:600;border:none;background:none;cursor:pointer;color:#999;transition:all .15s}</p>
+<p class="p1">.nav-tab:hover{background:#f5f5f5;color:#111}</p>
+<p class="p1">.nav-tab.active{background:#FF0000;color:#fff}</p>
+<p class="p1">.topbar-right{display:flex;align-items:center;gap:8px;padding:10px 0;flex-wrap:wrap}</p>
+<p class="p1">.up-btn{padding:7px 14px;border-radius:6px;font-size:.8rem;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;border:2px dashed #FF0000;color:#FF0000;background:#fff}</p>
+<p class="p1">.up-btn:hover{background:#fff5f5}</p>
+<p class="p1">.up-btn.metas{border-color:#8b5cf6;color:#8b5cf6}</p>
+<p class="p1">.up-btn.metas:hover{background:#f5f3ff}</p>
+<p class="p1">.up-btn.sheets{border-color:#10b981;color:#10b981;border-style:solid}</p>
+<p class="p1">.up-btn.sheets:hover{background:#f0fdf4}</p>
+<p class="p1">.dl-btn{padding:7px 14px;border-radius:6px;font-size:.8rem;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;border:2px solid #e5e5e5;color:#555;background:#fff}</p>
+<p class="p1">.dl-btn:hover{border-color:#FF0000;color:#FF0000}</p>
+<p class="p1">input[type=file]{display:none}</p>
+<p class="p1">.layout{display:flex;min-height:calc(100vh - 58px)}</p>
+<p class="p1">.sidebar{width:250px;min-width:250px;background:#fff;border-right:1px solid #e5e5e5;padding:14px 12px;overflow-y:auto;max-height:calc(100vh - 58px);position:sticky;top:58px}</p>
+<p class="p1">.sb-label{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#aaa;margin:12px 0 5px}</p>
+<p class="p1">.sb-label:first-child{margin-top:0}</p>
+<p class="p1">.sb-sel{width:100%;border:1px solid #e5e5e5;border-radius:6px;padding:6px 9px;font-size:.82rem;outline:none;background:#fff;color:#111}</p>
+<p class="p1">.sb-sel:focus{border-color:#FF0000}</p>
+<p class="p1">.sb-inp{width:100%;border:1px solid #e5e5e5;border-radius:6px;padding:6px 9px;font-size:.82rem;outline:none}</p>
+<p class="p1">.sb-inp:focus{border-color:#FF0000}</p>
+<p class="p1">.date-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}</p>
+<p class="p1">.date-grid label{font-size:.7rem;color:#aaa;display:block;margin-bottom:2px}</p>
+<p class="p1">.plist{max-height:200px;overflow-y:auto;border:1px solid #e5e5e5;border-radius:6px;padding:5px;margin-top:4px}</p>
+<p class="p1">.pi{display:flex;align-items:center;gap:6px;padding:3px 2px;border-radius:4px;cursor:pointer}</p>
+<p class="p1">.pi:hover{background:#f5f5f5}</p>
+<p class="p1">.pi label{font-size:.78rem;cursor:pointer;display:flex;align-items:center;gap:5px;user-select:none}</p>
+<p class="p1">.pi input[type=checkbox]{accent-color:#FF0000;width:13px;height:13px}</p>
+<p class="p1">.pdot{width:8px;height:8px;border-radius:50%;flex-shrink:0}</p>
+<p class="p1">.sb-row{display:flex;gap:5px;margin-bottom:5px}</p>
+<p class="p1">.sb-row button{flex:1;background:#f5f5f5;border:1px solid #e5e5e5;border-radius:5px;padding:4px;font-size:.72rem;cursor:pointer;font-weight:600}</p>
+<p class="p1">.sb-row button:hover{background:#FF0000;color:#fff;border-color:#FF0000}</p>
+<p class="p1">/* DATA SOURCE BANNER */</p>
+<p class="p1">.ds-banner{background:#f0fdf4;border:1px solid #10b981;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:.78rem;display:flex;align-items:center;gap:8px;justify-content:space-between}</p>
+<p class="p1">.ds-banner.err{background:#fff5f5;border-color:#FF0000}</p>
+<p class="p1">.ds-dot{width:8px;height:8px;border-radius:50%;background:#10b981;flex-shrink:0;animation:pulse 2s infinite}</p>
+<p class="p1">.ds-dot.err{background:#FF0000;animation:none}</p>
+<p class="p1">@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}</p>
+<p class="p1">.ds-refresh{background:#10b981;color:#fff;border:none;border-radius:5px;padding:4px 10px;font-size:.73rem;font-weight:600;cursor:pointer}</p>
+<p class="p1">.ds-refresh:hover{opacity:.85}</p>
+<p class="p1">.main{flex:1;padding:20px;overflow:auto;min-width:0}</p>
+<p class="p1">.tab-panel{display:none}</p>
+<p class="p1">.tab-panel.active{display:block}</p>
+<p class="p1">.section{margin-bottom:32px}</p>
+<p class="p1">.sh{display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid #f0f0f0}</p>
+<p class="p1">.sh-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0}</p>
+<p class="p1">.sh-title{font-weight:900;font-size:1rem;color:#111}</p>
+<p class="p1">.sh-sub{font-size:.75rem;color:#aaa;margin-top:1px}</p>
+<p class="p1">.sh-tag{margin-left:auto;display:inline-block;padding:3px 10px;border-radius:20px;font-size:.72rem;font-weight:700;background:#fff0f0;color:#FF0000}</p>
+<p class="p1">.metric-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}</p>
+<p class="p1">.mcard{background:#fff;border-radius:12px;padding:16px 18px;box-shadow:0 1px 4px rgba(0,0,0,.05)}</p>
+<p class="p1">.mcard-label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#aaa;margin-bottom:8px;display:flex;align-items:center;gap:5px}</p>
+<p class="p1">.mcard-val{font-size:1.7rem;font-weight:900;color:#111;margin-bottom:4px;letter-spacing:-1px}</p>
+<p class="p1">.mcard-badge{display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:20px;font-size:.75rem;font-weight:700}</p>
+<p class="p1">.b-pos{background:#d1fae5;color:#065f46}</p>
+<p class="p1">.b-neg{background:#FF0000;color:#fff}</p>
+<p class="p1">.b-neu{background:#e5e7eb;color:#6b7280}</p>
+<p class="p1">.mcard-breakdown{margin-top:10px;padding-top:10px;border-top:1px solid #f5f5f5;display:flex;flex-direction:column;gap:4px}</p>
+<p class="p1">.mb-row{display:flex;align-items:center;justify-content:space-between;font-size:.76rem}</p>
+<p class="p1">.mb-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-right:5px}</p>
+<p class="p1">.mb-name{flex:1;color:#555;display:flex;align-items:center}</p>
+<p class="p1">.mb-val{font-weight:700;color:#111}</p>
+<p class="p1">.mb-badge{font-size:.66rem;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:5px}</p>
+<p class="p1">.city-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}</p>
+<p class="p1">.city-card{background:#fff;border-radius:12px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.05);border-top:3px solid #06b6d4}</p>
+<p class="p1">.city-name{font-weight:900;font-size:.95rem;margin-bottom:12px;display:flex;align-items:center;gap:6px}</p>
+<p class="p1">.city-kpi{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #f5f5f5;font-size:.8rem}</p>
+<p class="p1">.city-kpi:last-child{border-bottom:none}</p>
+<p class="p1">.city-kpi-label{color:#777}</p>
+<p class="p1">.city-kpi-right{display:flex;align-items:center;gap:6px}</p>
+<p class="p1">.city-kpi-val{font-weight:700;color:#111}</p>
+<p class="p1">.chart-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}</p>
+<p class="p1">.chart-card{background:#fff;border-radius:12px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.05)}</p>
+<p class="p1">.chart-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}</p>
+<p class="p1">.chart-title{font-weight:700;font-size:.85rem;color:#111}</p>
+<p class="p1">.png-btn{background:#f5f5f5;border:1px solid #e5e5e5;border-radius:5px;padding:3px 8px;font-size:.7rem;font-weight:600;cursor:pointer;color:#777}</p>
+<p class="p1">.png-btn:hover{background:#FF0000;color:#fff;border-color:#FF0000}</p>
+<p class="p1">.meta-bar-wrap{margin-bottom:10px}</p>
+<p class="p1">.meta-bar-label{display:flex;justify-content:space-between;font-size:.74rem;margin-bottom:4px}</p>
+<p class="p1">.bar-bg{background:#f0f0f0;border-radius:20px;height:11px;position:relative;overflow:hidden}</p>
+<p class="p1">.bar-real{height:11px;border-radius:20px;position:absolute;top:0;left:0;transition:width .4s}</p>
+<p class="p1">.bar-proj{height:11px;border-radius:20px;position:absolute;top:0;left:0;opacity:.35}</p>
+<p class="p1">.sem{display:inline-block;width:9px;height:9px;border-radius:50%;flex-shrink:0}</p>
+<p class="p1">.sem-g{background:#10b981}</p>
+<p class="p1">.sem-y{background:#f59e0b}</p>
+<p class="p1">.sem-r{background:#FF0000}</p>
+<p class="p1">.proj-note{font-size:.67rem;margin-top:3px}</p>
+<p class="p1">.partner-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}</p>
+<p class="p1">.pcard{background:#fff;border-radius:12px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.05);border-left:4px solid #e5e5e5}</p>
+<p class="p1">.pcard-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px}</p>
+<p class="p1">.pcard-name{font-weight:900;font-size:.92rem}</p>
+<p class="p1">.pcard-sub{font-size:.7rem;color:#aaa;margin-top:2px}</p>
+<p class="p1">.pcard-kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px}</p>
+<p class="p1">.pk{background:#f9f9f9;border-radius:8px;padding:9px}</p>
+<p class="p1">.pk-label{font-size:.67rem;color:#aaa;font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px}</p>
+<p class="p1">.pk-val{font-weight:700;font-size:.95rem}</p>
+<p class="p1">.pk-wide{grid-column:1/-1;background:#f9f9f9;border-radius:8px;padding:9px}</p>
+<p class="p1">.pk-sub-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:6px}</p>
+<p class="p1">.pk-sub-label{font-size:.63rem;color:#bbb;margin-bottom:2px}</p>
+<p class="p1">.pk-sub-val{font-weight:700;font-size:.82rem}</p>
+<p class="p1">.tbl-wrap{background:#fff;border-radius:12px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.05);overflow-x:auto}</p>
+<p class="p1">.dtbl{width:100%;border-collapse:collapse;font-size:.79rem}</p>
+<p class="p1">.dtbl th{background:#f5f5f5;padding:8px 10px;text-align:left;font-weight:700;font-size:.71rem;text-transform:uppercase;letter-spacing:.4px;color:#666;cursor:pointer;user-select:none;white-space:nowrap}</p>
+<p class="p1">.dtbl th:hover{background:#fff0f0;color:#FF0000}</p>
+<p class="p1">.dtbl th.sa::after{content:" ↑"}</p>
+<p class="p1">.dtbl th.sd::after{content:" ↓"}</p>
+<p class="p1">.dtbl td{padding:7px 10px;border-bottom:1px solid #f5f5f5;white-space:nowrap}</p>
+<p class="p1">.dtbl tr:hover td{background:#fafafa}</p>
+<p class="p1">.tn{text-align:right;font-weight:600}</p>
+<p class="p1">.tbadge{display:inline-block;padding:1px 5px;border-radius:10px;font-size:.66rem;font-weight:700}</p>
+<p class="p1">.empty{text-align:center;padding:60px 20px;color:#bbb}</p>
+<p class="p1">.empty svg{width:50px;height:50px;margin-bottom:12px;opacity:.2}</p>
+<p class="p1">.overlay{position:fixed;inset:0;background:rgba(255,255,255,.9);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;gap:12px}</p>
+<p class="p1">.spinner{width:36px;height:36px;border:4px solid #eee;border-top-color:#FF0000;border-radius:50%;animation:spin .7s linear infinite}</p>
+<p class="p1">@keyframes spin{to{transform:rotate(360deg)}}</p>
+<p class="p1">#floatTip{position:fixed;z-index:99999;background:#fff;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.15);padding:12px 14px;min-width:190px;max-width:250px;max-height:80vh;overflow-y:auto;display:none;pointer-events:none;border-top:3px solid #FF0000}</p>
+<p class="p1">#floatTip .ft-d{font-weight:700;font-size:.8rem;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #eee}</p>
+<p class="p1">#floatTip .ft-r{display:flex;align-items:center;gap:7px;padding:2px 0;font-size:.76rem}</p>
+<p class="p1">#floatTip .ft-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}</p>
+<p class="p1">#floatTip .ft-n{flex:1;color:#444}</p>
+<p class="p1">#floatTip .ft-v{font-weight:700;color:#111;white-space:nowrap}</p>
+<p class="p1">@media(max-width:900px){.metric-row{grid-template-columns:1fr 1fr}.city-grid{grid-template-columns:1fr}.chart-grid{grid-template-columns:1fr}}</p>
+<p class="p1">&lt;/style&gt;</p>
+<p class="p1">&lt;/head&gt;</p>
+<p class="p1">&lt;body&gt;</p>
+<p class="p1">&lt;div id="floatTip"&gt;&lt;/div&gt;</p>
+<p class="p1">&lt;div class="topbar"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;div class="topbar-left"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="logo"&gt;&lt;svg viewBox="0 0 24 24"&gt;&lt;polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/&gt;&lt;/svg&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div&gt;&lt;div class="brand"&gt;YANGO &lt;span&gt;Dashboard&lt;/span&gt;&lt;/div&gt;&lt;div style="font-size:.66rem;color:#aaa"&gt;Partner Performance Analytics&lt;/div&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="nav-tabs"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;button class="nav-tab active" onclick="switchTab('rend')"&gt;Rendimiento&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;button class="nav-tab" onclick="switchTab('metas')"&gt;Metas&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;div class="topbar-right"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;button class="up-btn sheets" onclick="loadFromSheets()"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"&gt;&lt;polyline points="1 4 1 10 7 10"/&gt;&lt;path d="M3.51 15a9 9 0 1 0 .49-3.36"/&gt;&lt;/svg&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>Actualizar Sheets</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;label class="up-btn" for="fileInput"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"&gt;&lt;path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/&gt;&lt;polyline points="17 8 12 3 7 8"/&gt;&lt;line x1="12" y1="15" x2="12" y2="3"/&gt;&lt;/svg&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>Excel Rendimiento</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/label&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;input type="file" id="fileInput" accept=".xlsx,.xls"/&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;label class="up-btn metas" for="fileMetasInput"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2.5"&gt;&lt;circle cx="12" cy="12" r="10"/&gt;&lt;circle cx="12" cy="12" r="6"/&gt;&lt;circle cx="12" cy="12" r="2"/&gt;&lt;/svg&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>Excel Metas</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/label&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;input type="file" id="fileMetasInput" accept=".xlsx,.xls"/&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;button class="dl-btn" onclick="downloadDashboard()"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"&gt;&lt;path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/&gt;&lt;polyline points="7 10 12 15 17 10"/&gt;&lt;line x1="12" y1="15" x2="12" y2="3"/&gt;&lt;/svg&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>Descargar HTML</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;/div&gt;</p>
+<p class="p1">&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1">&lt;div class="layout"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;div class="sidebar"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div id="dsBanner" style="display:none"&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="sb-label"&gt;Buscar Partner&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;input class="sb-inp" id="partnerSearch" type="text" placeholder="Filtrar..." oninput="filterPList()"/&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="sb-label" style="margin-top:12px"&gt;Rango de Fechas&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="date-grid"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div&gt;&lt;label&gt;Desde&lt;/label&gt;&lt;select class="sb-sel" id="dateFrom" onchange="onFC()"&gt;&lt;/select&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div&gt;&lt;label&gt;Hasta&lt;/label&gt;&lt;select class="sb-sel" id="dateTo" onchange="onFC()"&gt;&lt;/select&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="sb-label" style="margin-top:12px"&gt;Ciudad&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;select class="sb-sel" id="cityFilter" onchange="onFC()"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;option value="all"&gt;Total Peru&lt;/option&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;option value="Lima"&gt;Lima&lt;/option&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;option value="Trujillo"&gt;Trujillo&lt;/option&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;option value="Arequipa"&gt;Arequipa&lt;/option&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/select&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="sb-label" style="margin-top:12px"&gt;KAM&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;select class="sb-sel" id="kamFilter" onchange="onKAM()"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;option value="all"&gt;Todos&lt;/option&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/select&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="sb-label" style="margin-top:12px"&gt;Partners&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="sb-row"&gt;&lt;button onclick="selAll()"&gt;Todos&lt;/button&gt;&lt;button onclick="deselAll()"&gt;Ninguno&lt;/button&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="plist" id="pList"&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;div class="main"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="tab-panel active" id="tab-rend"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div class="empty" id="rendEmpty"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"&gt;&lt;path d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/&gt;&lt;/svg&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;p style="margin-bottom:8px"&gt;Carga datos para comenzar&lt;/p&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;p style="font-size:.78rem;color:#ccc"&gt;Usa &lt;strong&gt;Actualizar Sheets&lt;/strong&gt; para cargar desde Google Sheets&lt;br/&gt;o &lt;strong&gt;Excel Rendimiento&lt;/strong&gt; para subir un archivo local&lt;/p&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div id="rendContent" style="display:none"&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="tab-panel" id="tab-metas"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div class="empty" id="metasEmpty"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"&gt;&lt;circle cx="12" cy="12" r="10"/&gt;&lt;circle cx="12" cy="12" r="6"/&gt;&lt;circle cx="12" cy="12" r="2"/&gt;&lt;/svg&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;p&gt;Carga el archivo de &lt;strong&gt;Metas&lt;/strong&gt; para ver el progreso&lt;/p&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div id="metasContent" style="display:none"&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;/div&gt;</p>
+<p class="p1">&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1">&lt;script&gt;</p>
+<p class="p1">// ============================================================</p>
+<p class="p1">// ▼▼▼<span class="Apple-converted-space">  </span>REEMPLAZA ESTAS DOS URLs CON LAS DE TU GOOGLE SHEET<span class="Apple-converted-space">  </span>▼▼▼</p>
+<p class="p1">// ============================================================</p>
+<p class="p1">var SHEET_RENDIMIENTO_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT83vq2LLFWeMugwQ4DG_EMnATL_XN-pgNbgz9qvY-dgdJqpQsVLFKb9XGhiSF6kQ/pub?gid=1106533435&amp;single=true&amp;output=csv";</p>
+<p class="p1">var SHEET_METAS_URL <span class="Apple-converted-space">      </span>= "https://docs.google.com/spreadsheets/d/e/2PACX-1vT83vq2LLFWeMugwQ4DG_EMnATL_XN-pgNbgz9qvY-dgdJqpQsVLFKb9XGhiSF6kQ/pub?gid=1356153222&amp;single=true&amp;output=csv";</p>
+<p class="p1">// ============================================================</p>
+<p class="p1">// Instrucciones para obtener la URL correcta:</p>
+<p class="p1">// 1. Abre tu Google Sheet</p>
+<p class="p1">// 2. Archivo → Compartir → Publicar en la web</p>
+<p class="p1">// 3. Selecciona la hoja y formato CSV</p>
+<p class="p1">// 4. Copia la URL generada y pégala arriba</p>
+<p class="p1">// ============================================================</p>
+<p class="p2"><br></p>
+<p class="p1">var CLID_MAP={"400003338829":"TRANSPOTAXI","400001047495":"DG Flota","400001264902":"Lizzo","400006292084":"YEGO","400001117455":"YEGO","400001198352":"YEGO","400001170698":"SUPER MOVIL","400001051877":"REDI","400001371974":"REDI","400003181259":"EasyDriver","400001100869":"PRO DRIVERS","400001100391":"Flota Pe","400001043961":"Peru Driving","400001604401":"LimaGo","400007304388":"PRIME","400006466224":"Alo Taxi","400007890926":"AXIS","400006829734":"Leasy","400001044975":"Lideres","400001095256":"MIGO","400005135120":"YevoGo","400001079675":"ZAZ CONDUCTORES EIRL","400008232743":"CUMPA","400008875409":"ESTRELLA","400008430884":"GRUPO EYAL","400008402928":"INKA","400004882398":"PVD MOTOR SAC","400007373780":"Urban Cars PE SAC","400008429535":"CLICK TAXI GLOBAL SAC","400008528594":"Corp. Santa Clara","400008194680":"KINGO","400008337352":"PROMOVIMIENTO","400008541137":"LETS GO","400008726549":"Loyale Transporte","400007260995":"RUTEA","400001150258":"Velotaxi","400006499927":"1000 ESTRELLAS","400005399775":"BLACK DRIVE SAC","400006837448":"CLUB CONDUCE SAC","400004153537":"Corp. ALV EIRL","400001162355":"Express MV","400006969095":"GIAL WAY","400005128606":"Palante","400008404070":"Siberianz","400004284243":"TaxiApp","400006233972":"AutoLovers","400007509458":"BROTHER DRIVER","400004797129":"Company VIP","400006560265":"Driver Trux","400005129120":"Driver Xhulo","400006049094":"Elite Group","400002148684":"Emp. La Libertad","400006031284":"Golden Driver","400006947005":"INVICTUS","400006887216":"LUXURY DRIVER","400006412187":"Milton Trujillo","400006041563":"Prestige VIP","400005811022":"Quick Service","400006960257":"SOL DE TRUJILLO","400005493591":"Taxi Las Americas","400010135383":"FENIX DRIVE","400006023212":"Vip Silver","400007351353":"TuTaxi","400001105113":"Taxigo","400006280519":"Taxigo","400007299106":"JAPICAR EIRL","400008000820":"Flota Service","400009415590":"CDC FLEET","400009670561":"TAXIR S","400009311243":"VITABO","400009701305":"TAXIR","400009878846":"TRANSPOFLEET"};</p>
+<p class="p1">var KAM_MAP={"400003338829":"Miguel","400001047495":"Miguel","400001264902":"Manuel","400006292084":"Manuel","400001117455":"Manuel","400001198352":"Manuel","400001170698":"Matias","400001051877":"Manuel","400001371974":"Manuel","400003181259":"Matias","400001100869":"Matias","400001100391":"Miguel","400001043961":"Miguel","400001604401":"Manuel","400007304388":"Manuel","400006466224":"Matias","400007890926":"Matias","400006829734":"Matias","400001044975":"Matias","400001095256":"Matias","400005135120":"Matias","400001079675":"Miguel","400008232743":"Alvaro","400008875409":"Matias","400008430884":"Alvaro","400008402928":"Alvaro","400004882398":"Alvaro","400007373780":"Alvaro","400008429535":"Manuel","400008528594":"Manuel","400008194680":"Manuel","400008337352":"Manuel","400008541137":"Matias","400008726549":"Matias","400007260995":"Matias","400001150258":"Matias","400006499927":"Miguel","400005399775":"Miguel","400006837448":"Miguel","400004153537":"Miguel","400001162355":"Miguel","400006969095":"Miguel","400005128606":"Miguel","400008404070":"Miguel","400004284243":"Miguel","400006233972":"Rodolfo","400007509458":"Rodolfo","400004797129":"Rodolfo","400006560265":"Rodolfo","400005129120":"Rodolfo","400006049094":"Rodolfo","400002148684":"Rodolfo","400006031284":"Rodolfo","400006947005":"Rodolfo","400006887216":"Rodolfo","400006412187":"Rodolfo","400006041563":"Rodolfo","400005811022":"Rodolfo","400006960257":"Rodolfo","400005493591":"Rodolfo","400010135383":"Miguel","400006023212":"Diego","400007351353":"Manuel","400001105113":"Miguel","400006280519":"Miguel","400007299106":"Manuel","400008000820":"Matias","400009415590":"Miguel","400009670561":"Matias","400009311243":"Manuel","400009701305":"Matias","400009878846":"Miguel"};</p>
+<p class="p1">var KAM_COLORS={"Miguel":"#FF0000","Manuel":"#f97316","Matias":"#8b5cf6","Alvaro":"#06b6d4","Rodolfo":"#10b981","Diego":"#f59e0b"};</p>
+<p class="p1">var CITIES=["Lima","Trujillo","Arequipa"];</p>
+<p class="p1">var CITY_COLORS={"Lima":"#FF0000","Trujillo":"#06b6d4","Arequipa":"#f97316"};</p>
+<p class="p1">var KAM_PARTNERS={};</p>
+<p class="p1">Object.entries(KAM_MAP).forEach(function(e){var p=CLID_MAP[e[0]];if(!p)return;if(!KAM_PARTNERS[e[1]])KAM_PARTNERS[e[1]]=new Set();KAM_PARTNERS[e[1]].add(p);});</p>
+<p class="p2"><br></p>
+<p class="p1">var rawData=[],allDates=[],allPartners=[],pColors={},charts={};</p>
+<p class="p1">var tblSort={col:"activeDrivers",dir:"desc"};</p>
+<p class="p1">var curSummaries=[];</p>
+<p class="p1">var metasData=[];</p>
+<p class="p1">var curTab="rend";</p>
+<p class="p1">var lastLoadTime=null;</p>
+<p class="p2"><br></p>
+<p class="p1">// ── UTILS ──</p>
+<p class="p1">function hc(s){var h=0;for(var i=0;i&lt;s.length;i++)h=s.charCodeAt(i)+((h&lt;&lt;5)-h);return"hsl("+Math.abs(h)%360+",62%,46%)";}</p>
+<p class="p1">function fmt(n){return Math.round(n||0).toLocaleString("es-PE");}</p>
+<p class="p1">function fmtK(n){return"$"+(((n||0)/1000)).toLocaleString("es-PE",{minimumFractionDigits:1,maximumFractionDigits:1})+"K";}</p>
+<p class="p1">function toN(v){return parseFloat(String(v||0).replace(/[,%\s]/g,""))||0;}</p>
+<p class="p1">function d2s(d){return d?d.split("-").reverse().join("/"):"--";}</p>
+<p class="p1">function bdg(c,p,cls){cls=cls||"mcard-badge";if(p===null||p===undefined)return"&lt;span class=\""+cls+" b-neu\"&gt;N/A&lt;/span&gt;";if(p===0)return c&gt;0?"&lt;span class=\""+cls+" b-pos\"&gt;NEW&lt;/span&gt;":"&lt;span class=\""+cls+" b-neu\"&gt;--&lt;/span&gt;";var v=((c-p)/p)*100,s=v&gt;=0?"+":"",a=v&gt;=0?"↑":"↓";return"&lt;span class=\""+cls+" "+(v&gt;=0?"b-pos":"b-neg")+"\"&gt;"+a+s+v.toFixed(1)+"%&lt;/span&gt;";}</p>
+<p class="p1">function semCls(p){return p&gt;=80?"sem-g":p&gt;=50?"sem-y":"sem-r";}</p>
+<p class="p1">function pColor(p){return p&gt;=80?"#10b981":p&gt;=50?"#f59e0b":"#FF0000";}</p>
+<p class="p1">function trendArr(vals){var v=vals.filter(function(x){return x&gt;0;});if(v.length&lt;2)return{icon:"→",cls:""};var l=v.slice(-3),ups=0,dn=0;for(var i=1;i&lt;l.length;i++){if(l[i]&gt;l[i-1])ups++;else if(l[i]&lt;l[i-1])dn++;}if(ups&gt;dn)return{icon:"↑",cls:"color:#10b981"};if(dn&gt;ups)return{icon:"↓",cls:"color:#FF0000"};return{icon:"→",cls:"color:#888"};}</p>
+<p class="p1">function projArr(vals,weeksDone,weeksTotal){var v=vals.filter(function(x){return x&gt;0;});if(!v.length)return 0;var left=Math.max(weeksTotal-weeksDone,0);var l3=v.slice(-3);var rate=l3.reduce(function(s,x){return s+x;},0)/l3.length;return Math.round(v.reduce(function(s,x){return s+x;},0)+(rate*left));}</p>
+<p class="p1">function monthWeeks(from,to){if(!from||!to)return 4;var d=(new Date(to)-new Date(from))/(1000*60*60*24);return d&gt;28?5:4;}</p>
+<p class="p1">function sumRows(rows,fn){return rows.reduce(function(s,r){return s+fn(r);},0);}</p>
+<p class="p2"><br></p>
+<p class="p1">// ── CSV PARSER (for Google Sheets) ──</p>
+<p class="p1">function parseCSV(text){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var lines=text.split("\n");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(!lines.length)return[];</p>
+<p class="p1"><span class="Apple-converted-space">  </span>// Handle quoted fields</p>
+<p class="p1"><span class="Apple-converted-space">  </span>function parseLine(line){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var fields=[],cur="",inQ=false;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>for(var i=0;i&lt;line.length;i++){</p>
+<p class="p1"><span class="Apple-converted-space">      </span>var ch=line[i];</p>
+<p class="p1"><span class="Apple-converted-space">      </span>if(ch==='"'){inQ=!inQ;}</p>
+<p class="p1"><span class="Apple-converted-space">      </span>else if(ch===","&amp;&amp;!inQ){fields.push(cur.trim());cur="";}</p>
+<p class="p1"><span class="Apple-converted-space">      </span>else{cur+=ch;}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>fields.push(cur.trim());</p>
+<p class="p1"><span class="Apple-converted-space">    </span>return fields;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>}</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var headers=parseLine(lines[0]);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var rows=[];</p>
+<p class="p1"><span class="Apple-converted-space">  </span>for(var i=1;i&lt;lines.length;i++){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>if(!lines[i].trim())continue;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var vals=parseLine(lines[i]);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var obj={};</p>
+<p class="p1"><span class="Apple-converted-space">    </span>headers.forEach(function(h,j){obj[h.trim()]=vals[j]||"";});</p>
+<p class="p1"><span class="Apple-converted-space">    </span>rows.push(obj);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>}</p>
+<p class="p1"><span class="Apple-converted-space">  </span>return rows;</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">// ── LOAD FROM GOOGLE SHEETS ──</p>
+<p class="p1">function loadFromSheets(){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>// Check if URLs have been replaced</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(SHEET_RENDIMIENTO_URL.indexOf("TU_ID_AQUI")&gt;=0){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>alert("Reemplaza las URLs de Google Sheets en el codigo antes de usar esta funcion.\n\nBusca la seccion marcada con TU_ID_AQUI al inicio del script.");</p>
+<p class="p1"><span class="Apple-converted-space">    </span>return;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>}</p>
+<p class="p1"><span class="Apple-converted-space">  </span>showLoad(true,"Cargando desde Google Sheets...");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>// Use a CORS proxy for the fetch — works when hosted on GitHub Pages</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var proxyR=SHEET_RENDIMIENTO_URL;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var proxyM=SHEET_METAS_URL;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var loaded={r:false,m:false,rData:null,mData:null,rErr:null,mErr:null};</p>
+<p class="p1"><span class="Apple-converted-space">  </span>function checkDone(){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>if(!loaded.r||!loaded.m)return;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>showLoad(false);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>if(loaded.rErr&amp;&amp;loaded.mErr){showBanner(false,"Error al cargar ambos archivos: "+loaded.rErr);return;}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>if(loaded.rData){</p>
+<p class="p1"><span class="Apple-converted-space">      </span>rawData=parsePivot(loaded.rData);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>allDates=[...new Set(rawData.map(function(r){return r.date;}))].sort();</p>
+<p class="p1"><span class="Apple-converted-space">      </span>allPartners=[...new Set(rawData.map(function(r){return r.partner;}))].sort();</p>
+<p class="p1"><span class="Apple-converted-space">      </span>allPartners.forEach(function(p){if(!pColors[p])pColors[p]=hc(p);});</p>
+<p class="p1"><span class="Apple-converted-space">      </span>popDates();popKAM();popPartners(allPartners);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>if(loaded.mData){metasData=parseMetas(loaded.mData);}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>lastLoadTime=new Date();</p>
+<p class="p1"><span class="Apple-converted-space">    </span>showBanner(true,"Datos actualizados: "+lastLoadTime.toLocaleTimeString("es-PE"));</p>
+<p class="p1"><span class="Apple-converted-space">    </span>renderRend();</p>
+<p class="p1"><span class="Apple-converted-space">    </span>if(loaded.mData)renderMetas();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>}</p>
+<p class="p1"><span class="Apple-converted-space">  </span>fetch(proxyR)</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.then(function(r){if(!r.ok)throw new Error("HTTP "+r.status);return r.text();})</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.then(function(txt){loaded.rData=parseCSV(txt);loaded.r=true;checkDone();})</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.catch(function(e){loaded.rErr=e.message;loaded.r=true;checkDone();});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>fetch(proxyM)</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.then(function(r){if(!r.ok)throw new Error("HTTP "+r.status);return r.text();})</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.then(function(txt){loaded.mData=parseCSV(txt);loaded.m=true;checkDone();})</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.catch(function(e){loaded.mErr=e.message;loaded.m=true;checkDone();});</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">function showBanner(ok,msg){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var el=document.getElementById("dsBanner");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>el.style.display="flex";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(ok){el.className="ds-banner";el.innerHTML="&lt;span class=\"ds-dot\"&gt;&lt;/span&gt;&lt;span style=\"font-size:.76rem;color:#065f46;flex:1\"&gt;"+msg+"&lt;/span&gt;&lt;button class=\"ds-refresh\" onclick=\"loadFromSheets()\"&gt;↻ Actualizar&lt;/button&gt;";}</p>
+<p class="p1"><span class="Apple-converted-space">  </span>else{el.className="ds-banner err";el.innerHTML="&lt;span class=\"ds-dot err\"&gt;&lt;/span&gt;&lt;span style=\"font-size:.76rem;color:#FF0000;flex:1\"&gt;"+msg+"&lt;/span&gt;";}</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">// ── PARSE PERFORMANCE (pivot format) ──</p>
+<p class="p1">function parsePivot(rows){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(!rows||!rows.length)return[];</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var keys=Object.keys(rows[0]),dcm={};</p>
+<p class="p1"><span class="Apple-converted-space">  </span>keys.forEach(function(k){var m=k.match(/^(\d{2})\.(\d{2})\.(\d{4})\s*-\s*(.+)$/);if(!m)return;var iso=m[3]+"-"+m[2]+"-"+m[1];if(!dcm[iso])dcm[iso]={};dcm[iso][m[4].trim().toLowerCase()]=k;});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>function pick(mc){var nn=Array.prototype.slice.call(arguments,1);for(var i=0;i&lt;nn.length;i++){var mkeys=Object.keys(mc);for(var j=0;j&lt;mkeys.length;j++)if(mkeys[j].indexOf(nn[i])&gt;=0)return mc[mkeys[j]];}return null;}</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var res=[];</p>
+<p class="p1"><span class="Apple-converted-space">  </span>rows.forEach(function(row){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var clid=String(row["CLID"]||row["clid"]||"").trim();</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var partner=CLID_MAP[clid]||String(row["Partner"]||row["partner"]||"").trim()||clid||"Unknown";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var kam=KAM_MAP[clid]||"";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var city=String(row["City"]||row["city"]||row["Ciudad"]||"").trim();</p>
+<p class="p1"><span class="Apple-converted-space">    </span>Object.keys(dcm).forEach(function(iso){</p>
+<p class="p1"><span class="Apple-converted-space">      </span>var mc=dcm[iso];</p>
+<p class="p1"><span class="Apple-converted-space">      </span>function v(col){return col?toN(row[col]):0;}</p>
+<p class="p1"><span class="Apple-converted-space">      </span>var ad=v(pick(mc,"active driver")),np=v(pick(mc,"new profile from partner","new profiles from partner","from partner")),ns=v(pick(mc,"new profile from service","new profiles from service","from service")),re=v(pick(mc,"reactivat")),sh=v(pick(mc,"supply hour")),co=v(pick(mc,"commission","comisi")),tr=v(pick(mc,"trip","viaje"));</p>
+<p class="p1"><span class="Apple-converted-space">      </span>if(ad||np||ns||re||sh||co||tr)res.push({partner:partner,kam:kam,city:city,date:iso,activeDrivers:ad,newPartner:np,newService:ns,reactivated:re,supplyHours:sh,commission:co,trips:tr});</p>
+<p class="p1"><span class="Apple-converted-space">    </span>});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>return res;</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">// ── PARSE METAS ──</p>
+<p class="p1">function parseMetas(rows){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var res=[];</p>
+<p class="p1"><span class="Apple-converted-space">  </span>rows.forEach(function(row){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var clid=String(row["CLID"]||row["clid"]||"").trim();</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var partner=CLID_MAP[clid]||String(row["Partner"]||row["partner"]||"").trim()||clid||"Unknown";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var kam=KAM_MAP[clid]||"";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var mes=String(row["MES"]||row["Mes"]||row["mes"]||"").trim();</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var city=String(row["CIUDAD"]||row["Ciudad"]||row["ciudad"]||"").trim();</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var mH=toN(row["SUPPLY HOURS"]||row["Supply Hours"]||0);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var mA=toN(row["ACTIVE DRIVERS"]||row["Active Drivers"]||0);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var mNR=toN(row["N+R"]||row["n+r"]||0);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>if(partner&amp;&amp;mes)res.push({clid:clid,partner:partner,kam:kam,mes:mes,city:city,mH:mH,mA:mA,mNR:mNR});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>return res;</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">// ── FILE LOADERS (Excel fallback) ──</p>
+<p class="p1">document.getElementById("fileInput").addEventListener("change",function(e){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var file=e.target.files[0];if(!file)return;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>showLoad(true,"Procesando archivo...");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var r=new FileReader();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>r.onload=function(ev){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>try{</p>
+<p class="p1"><span class="Apple-converted-space">      </span>var wb=XLSX.read(ev.target.result,{type:"binary",cellDates:false,raw:false});</p>
+<p class="p1"><span class="Apple-converted-space">      </span>var json=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{raw:false,defval:""});</p>
+<p class="p1"><span class="Apple-converted-space">      </span>if(!json.length){alert("Archivo vacio.");showLoad(false);return;}</p>
+<p class="p1"><span class="Apple-converted-space">      </span>rawData=parsePivot(json);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>if(!rawData.length){alert("No se encontraron datos.");showLoad(false);return;}</p>
+<p class="p1"><span class="Apple-converted-space">      </span>allDates=[...new Set(rawData.map(function(r){return r.date;}))].sort();</p>
+<p class="p1"><span class="Apple-converted-space">      </span>allPartners=[...new Set(rawData.map(function(r){return r.partner;}))].sort();</p>
+<p class="p1"><span class="Apple-converted-space">      </span>allPartners.forEach(function(p){if(!pColors[p])pColors[p]=hc(p);});</p>
+<p class="p1"><span class="Apple-converted-space">      </span>popDates();popKAM();popPartners(allPartners);renderRend();</p>
+<p class="p1"><span class="Apple-converted-space">      </span>showBanner(true,"Archivo local cargado");</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}catch(err){alert("Error:\n"+err.message);}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>showLoad(false);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>};</p>
+<p class="p1"><span class="Apple-converted-space">  </span>r.readAsBinaryString(file);</p>
+<p class="p1">});</p>
+<p class="p1">document.getElementById("fileMetasInput").addEventListener("change",function(e){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var file=e.target.files[0];if(!file)return;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>showLoad(true,"Procesando metas...");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var r=new FileReader();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>r.onload=function(ev){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>try{</p>
+<p class="p1"><span class="Apple-converted-space">      </span>var wb=XLSX.read(ev.target.result,{type:"binary",cellDates:false,raw:false});</p>
+<p class="p1"><span class="Apple-converted-space">      </span>var json=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{raw:false,defval:""});</p>
+<p class="p1"><span class="Apple-converted-space">      </span>metasData=parseMetas(json);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>renderMetas();switchTab("metas");</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}catch(err){alert("Error metas:\n"+err.message);}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>showLoad(false);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>};</p>
+<p class="p1"><span class="Apple-converted-space">  </span>r.readAsBinaryString(file);</p>
+<p class="p1">});</p>
+<p class="p2"><br></p>
+<p class="p1">// ── SIDEBAR ──</p>
+<p class="p1">function popDates(){["dateFrom","dateTo"].forEach(function(id){var s=document.getElementById(id);s.innerHTML="";allDates.forEach(function(d){s.innerHTML+="&lt;option value=\""+d+"\"&gt;"+d2s(d)+"&lt;/option&gt;";});});if(allDates.length){document.getElementById("dateFrom").value=allDates[0];document.getElementById("dateTo").value=allDates[allDates.length-1];}}</p>
+<p class="p1">function popKAM(){var s=document.getElementById("kamFilter");s.innerHTML="&lt;option value=\"all\"&gt;Todos&lt;/option&gt;";[...new Set(Object.values(KAM_MAP))].sort().forEach(function(k){s.innerHTML+="&lt;option value=\""+k+"\"&gt;"+k+"&lt;/option&gt;";});}</p>
+<p class="p1">function popPartners(sel){var list=document.getElementById("pList");list.innerHTML="";allPartners.forEach(function(p){var chk=sel.indexOf(p)&gt;=0?"checked":"";var c=pColors[p]||"#FF0000";var id="c_"+p.replace(/[^a-z0-9]/gi,"_");list.innerHTML+="&lt;div class=\"pi\" data-p=\""+p+"\"&gt;&lt;input type=\"checkbox\" id=\""+id+"\" value=\""+p+"\" "+chk+" onchange=\"onFC()\"/&gt;&lt;label for=\""+id+"\"&gt;&lt;span class=\"pdot\" style=\"background:"+c+"\"&gt;&lt;/span&gt;"+p+"&lt;/label&gt;&lt;/div&gt;";});}</p>
+<p class="p1">function filterPList(){var q=document.getElementById("partnerSearch").value.toLowerCase();document.querySelectorAll("#pList .pi").forEach(function(el){el.style.display=el.dataset.p.toLowerCase().indexOf(q)&gt;=0?"flex":"none";});}</p>
+<p class="p1">function selAll(){document.querySelectorAll("#pList input").forEach(function(c){c.checked=true;});onFC();}</p>
+<p class="p1">function deselAll(){document.querySelectorAll("#pList input").forEach(function(c){c.checked=false;});onFC();}</p>
+<p class="p1">function onKAM(){var k=document.getElementById("kamFilter").value;if(k==="all"){selAll();return;}var ps=KAM_PARTNERS[k]?[...KAM_PARTNERS[k]]:[];document.querySelectorAll("#pList input").forEach(function(c){c.checked=ps.indexOf(c.value)&gt;=0;});onFC();}</p>
+<p class="p1">function getSel(){return[...document.querySelectorAll("#pList input:checked")].map(function(c){return c.value;});}</p>
+<p class="p1">function onFC(){if(curTab==="rend")renderRend();else renderMetas();}</p>
+<p class="p2"><br></p>
+<p class="p1">// ── AGGREGATION ──</p>
+<p class="p1">function getFiltered(){var city=document.getElementById("cityFilter").value;var from=document.getElementById("dateFrom").value;var to=document.getElementById("dateTo").value;var sel=getSel();return rawData.filter(function(r){return(city==="all"||r.city===city)&amp;&amp;r.date&gt;=from&amp;&amp;r.date&lt;=to&amp;&amp;sel.indexOf(r.partner)&gt;=0;});}</p>
+<p class="p1">function aggPD(data){var m={};data.forEach(function(r){var k=r.partner+"|||"+r.date;if(!m[k])m[k]={partner:r.partner,kam:r.kam,date:r.date,activeDrivers:0,newPartner:0,newService:0,reactivated:0,supplyHours:0,commission:0,trips:0};var e=m[k];e.activeDrivers+=r.activeDrivers;e.newPartner+=r.newPartner;e.newService+=r.newService;e.reactivated+=r.reactivated;e.supplyHours+=r.supplyHours;e.commission+=r.commission;e.trips+=r.trips;});return Object.values(m).sort(function(a,b){return a.date.localeCompare(b.date);});}</p>
+<p class="p1">function aggDate(data){var m={};data.forEach(function(r){if(!m[r.date])m[r.date]={};if(!m[r.date][r.partner])m[r.date][r.partner]={activeDrivers:0,newPartner:0,newService:0,reactivated:0,supplyHours:0,commission:0};var e=m[r.date][r.partner];e.activeDrivers+=r.activeDrivers;e.newPartner+=r.newPartner;e.newService+=r.newService;e.reactivated+=r.reactivated;e.supplyHours+=r.supplyHours;e.commission+=r.commission;});return m;}</p>
+<p class="p1">function aggCityDate(data){var m={};data.forEach(function(r){if(!m[r.date])m[r.date]={ad:0,nr:0,sh:0};m[r.date].ad+=r.activeDrivers;m[r.date].nr+=r.newPartner+r.newService+r.reactivated;m[r.date].sh+=r.supplyHours;});return m;}</p>
+<p class="p2"><br></p>
+<p class="p1">// ── SECTION HEADER ──</p>
+<p class="p1">function secHtml(icon,bg,title,sub,tag){return"&lt;div class=\"sh\"&gt;&lt;div class=\"sh-icon\" style=\"background:"+bg+"20\"&gt;"+icon+"&lt;/div&gt;&lt;div&gt;&lt;div class=\"sh-title\"&gt;"+title+"&lt;/div&gt;&lt;div class=\"sh-sub\"&gt;"+sub+"&lt;/div&gt;&lt;/div&gt;"+(tag?"&lt;span class=\"sh-tag\"&gt;"+tag+"&lt;/span&gt;":"")+"&lt;/div&gt;";}</p>
+<p class="p2"><br></p>
+<p class="p1">// ── RENDER RENDIMIENTO ──</p>
+<p class="p1">function renderRend(){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(!rawData.length)return;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var filtered=getFiltered();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var apd=aggPD(filtered);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var byDate=aggDate(filtered);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var dates=[...new Set(apd.map(function(r){return r.date;}))].sort();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var partners=getSel();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var empty=document.getElementById("rendEmpty");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var content=document.getElementById("rendContent");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(!partners.length||!filtered.length){empty.style.display="";content.style.display="none";return;}</p>
+<p class="p1"><span class="Apple-converted-space">  </span>empty.style.display="none";content.style.display="";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var lastDate=dates[dates.length-1]||"";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var prevDate=dates.length&gt;1?dates[dates.length-2]:"";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var lastRows=apd.filter(function(r){return r.date===lastDate;});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var prevRows=apd.filter(function(r){return r.date===prevDate;});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var tAD=sumRows(lastRows,function(r){return r.activeDrivers;});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var tNR=sumRows(lastRows,function(r){return r.newPartner+r.newService+r.reactivated;});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var tSH=sumRows(lastRows,function(r){return r.supplyHours;});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var pAD=sumRows(prevRows,function(r){return r.activeDrivers;});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var pNR=sumRows(prevRows,function(r){return r.newPartner+r.newService+r.reactivated;});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var pSH=sumRows(prevRows,function(r){return r.supplyHours;});</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>var html="";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+=secHtml("🇵🇪","#FF0000","Peru - Vista General","Comparativo semana vs semana anterior",d2s(lastDate));</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+="&lt;div class=\"section\"&gt;&lt;div class=\"metric-row\"&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+=metricCard("Conductores Activos","📊",tAD,pAD,apd,dates,"activeDrivers","#FF0000");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+=metricCard("Nuevos + Reactivados","🆕",tNR,pNR,apd,dates,"nr","#f97316");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+=metricCard("Horas de Conexion","⏱️",tSH,pSH,apd,dates,"sh","#8b5cf6");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+="&lt;/div&gt;&lt;/div&gt;";</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+=secHtml("🏙️","#06b6d4","Por Ciudad","Rendimiento y comparativo WoW","");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+="&lt;div class=\"section\"&gt;&lt;div class=\"city-grid\"&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>CITIES.forEach(function(city){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var cr=filtered.filter(function(r){return r.city===city;});if(!cr.length)return;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var ca=aggPD(cr);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var cL=ca.filter(function(r){return r.date===lastDate;});</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var cP=ca.filter(function(r){return r.date===prevDate;});</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var cAD=sumRows(cL,function(r){return r.activeDrivers;}),cNR=sumRows(cL,function(r){return r.newPartner+r.newService+r.reactivated;}),cSH=sumRows(cL,function(r){return r.supplyHours;});</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var cpAD=sumRows(cP,function(r){return r.activeDrivers;}),cpNR=sumRows(cP,function(r){return r.newPartner+r.newService+r.reactivated;}),cpSH=sumRows(cP,function(r){return r.supplyHours;});</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var color=CITY_COLORS[city]||"#888";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+="&lt;div class=\"city-card\" style=\"border-top-color:"+color+"\"&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+="&lt;div class=\"city-name\"&gt;&lt;span style=\"width:10px;height:10px;border-radius:50%;background:"+color+";display:inline-block\"&gt;&lt;/span&gt;"+city+"&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+="&lt;div class=\"city-kpi\"&gt;&lt;span class=\"city-kpi-label\"&gt;Conductores Activos&lt;/span&gt;&lt;div class=\"city-kpi-right\"&gt;&lt;span class=\"city-kpi-val\"&gt;"+fmt(cAD)+"&lt;/span&gt;"+bdg(cAD,cpAD,"mb-badge")+"&lt;/div&gt;&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+="&lt;div class=\"city-kpi\"&gt;&lt;span class=\"city-kpi-label\"&gt;Nuevos + Reactivados&lt;/span&gt;&lt;div class=\"city-kpi-right\"&gt;&lt;span class=\"city-kpi-val\"&gt;"+fmt(cNR)+"&lt;/span&gt;"+bdg(cNR,cpNR,"mb-badge")+"&lt;/div&gt;&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+="&lt;div class=\"city-kpi\"&gt;&lt;span class=\"city-kpi-label\"&gt;Horas de Conexion&lt;/span&gt;&lt;div class=\"city-kpi-right\"&gt;&lt;span class=\"city-kpi-val\"&gt;"+fmt(cSH)+"&lt;/span&gt;"+bdg(cSH,cpSH,"mb-badge")+"&lt;/div&gt;&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+="&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+="&lt;/div&gt;&lt;/div&gt;";</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+=secHtml("👤","#f59e0b","Por KAM","Rendimiento por responsable","");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+="&lt;div class=\"section\"&gt;&lt;div style=\"display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px\"&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>[...new Set(Object.values(KAM_MAP))].sort().forEach(function(kam){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var kp=KAM_PARTNERS[kam]?[...KAM_PARTNERS[kam]]:[];</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var kL=lastRows.filter(function(r){return kp.indexOf(r.partner)&gt;=0;});</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var kP=prevRows.filter(function(r){return kp.indexOf(r.partner)&gt;=0;});</p>
+<p class="p1"><span class="Apple-converted-space">    </span>if(!kL.length)return;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var kAD=sumRows(kL,function(r){return r.activeDrivers;}),kNR=sumRows(kL,function(r){return r.newPartner+r.newService+r.reactivated;}),kSH=sumRows(kL,function(r){return r.supplyHours;});</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var kpAD=sumRows(kP,function(r){return r.activeDrivers;}),kpNR=sumRows(kP,function(r){return r.newPartner+r.newService+r.reactivated;});</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var color=KAM_COLORS[kam]||"#888";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+="&lt;div class=\"mcard\" style=\"border-left:3px solid "+color+"\"&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+="&lt;div class=\"mcard-label\"&gt;&lt;span style=\"width:8px;height:8px;border-radius:50%;background:"+color+";display:inline-block\"&gt;&lt;/span&gt;"+kam+"&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+="&lt;div class=\"mcard-val\"&gt;"+fmt(kAD)+"&lt;/div&gt;&lt;div&gt;"+bdg(kAD,kpAD)+"&lt;span style=\"font-size:.72rem;color:#aaa;margin-left:5px\"&gt;Activos&lt;/span&gt;&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+="&lt;div class=\"mcard-breakdown\"&gt;&lt;div class=\"mb-row\"&gt;&lt;span class=\"mb-name\"&gt;N+R&lt;/span&gt;&lt;span class=\"mb-val\"&gt;"+fmt(kNR)+"&lt;/span&gt;"+bdg(kNR,kpNR,"mb-badge")+"&lt;/div&gt;&lt;div class=\"mb-row\"&gt;&lt;span class=\"mb-name\"&gt;Hs. Conexion&lt;/span&gt;&lt;span class=\"mb-val\"&gt;"+fmt(kSH)+"&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+="&lt;/div&gt;&lt;/div&gt;";</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+=secHtml("📈","#10b981","Tendencia en el Tiempo","Peru y ciudades - Graficas por KPI","");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+="&lt;div class=\"section\"&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+="&lt;div style=\"font-weight:700;font-size:.78rem;color:#666;margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px\"&gt;Peru Total&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+="&lt;div style=\"display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px\"&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+="&lt;div class=\"chart-card\"&gt;&lt;div class=\"chart-head\"&gt;&lt;span class=\"chart-title\"&gt;Conductores Activos&lt;/span&gt;&lt;button class=\"png-btn\" onclick=\"dlChart('chP_ad','AD_Peru')\"&gt;PNG&lt;/button&gt;&lt;/div&gt;&lt;div id=\"chP_ad\"&gt;&lt;/div&gt;&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+="&lt;div class=\"chart-card\"&gt;&lt;div class=\"chart-head\"&gt;&lt;span class=\"chart-title\"&gt;Nuevos + Reactivados&lt;/span&gt;&lt;button class=\"png-btn\" onclick=\"dlChart('chP_nr','NR_Peru')\"&gt;PNG&lt;/button&gt;&lt;/div&gt;&lt;div id=\"chP_nr\"&gt;&lt;/div&gt;&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+="&lt;div class=\"chart-card\"&gt;&lt;div class=\"chart-head\"&gt;&lt;span class=\"chart-title\"&gt;Horas de Conexion&lt;/span&gt;&lt;button class=\"png-btn\" onclick=\"dlChart('chP_sh','SH_Peru')\"&gt;PNG&lt;/button&gt;&lt;/div&gt;&lt;div id=\"chP_sh\"&gt;&lt;/div&gt;&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+="&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>CITIES.forEach(function(city){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var cr=filtered.filter(function(r){return r.city===city;});if(!cr.length)return;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var cid=city.toLowerCase();var color=CITY_COLORS[city]||"#888";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+="&lt;div style=\"font-weight:700;font-size:.78rem;color:"+color+";margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px\"&gt;"+city+"&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+="&lt;div style=\"display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px\"&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+="&lt;div class=\"chart-card\"&gt;&lt;div class=\"chart-head\"&gt;&lt;span class=\"chart-title\"&gt;Conductores Activos&lt;/span&gt;&lt;button class=\"png-btn\" onclick=\"dlChart('ch_"+cid+"_ad','AD_"+city+"')\"&gt;PNG&lt;/button&gt;&lt;/div&gt;&lt;div id=\"ch_"+cid+"_ad\"&gt;&lt;/div&gt;&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+="&lt;div class=\"chart-card\"&gt;&lt;div class=\"chart-head\"&gt;&lt;span class=\"chart-title\"&gt;Nuevos + Reactivados&lt;/span&gt;&lt;button class=\"png-btn\" onclick=\"dlChart('ch_"+cid+"_nr','NR_"+city+"')\"&gt;PNG&lt;/button&gt;&lt;/div&gt;&lt;div id=\"ch_"+cid+"_nr\"&gt;&lt;/div&gt;&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+="&lt;div class=\"chart-card\"&gt;&lt;div class=\"chart-head\"&gt;&lt;span class=\"chart-title\"&gt;Horas de Conexion&lt;/span&gt;&lt;button class=\"png-btn\" onclick=\"dlChart('ch_"+cid+"_sh','SH_"+city+"')\"&gt;PNG&lt;/button&gt;&lt;/div&gt;&lt;div id=\"ch_"+cid+"_sh\"&gt;&lt;/div&gt;&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+="&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+="&lt;/div&gt;";</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+=secHtml("📋","#6366f1","Tabla de Partners","Datos del ultimo periodo - click en columna para ordenar","");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+="&lt;div class=\"section\"&gt;&lt;div class=\"tbl-wrap\"&gt;&lt;div id=\"tblContainer\"&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;";</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+=secHtml("🃏","#FF0000","KPIs por Partner","Detalle con tendencia de 3 periodos","");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+="&lt;div class=\"section\"&gt;&lt;div class=\"partner-grid\" id=\"partnerCards\"&gt;&lt;/div&gt;&lt;/div&gt;";</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>content.innerHTML=html;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>buildMultiLine("chP_ad",dates,partners,byDate,"activeDrivers","#FF0000");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>buildMultiLine("chP_nr",dates,partners,byDate,"nr","#f97316");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>buildMultiLine("chP_sh",dates,partners,byDate,"sh","#8b5cf6");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>CITIES.forEach(function(city){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var cr=filtered.filter(function(r){return r.city===city;});if(!cr.length)return;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var cid=city.toLowerCase();var color=CITY_COLORS[city]||"#888";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var cbd=aggCityDate(cr);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>buildSingleLine("ch_"+cid+"_ad",dates,cbd,"ad",color,city);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>buildSingleLine("ch_"+cid+"_nr",dates,cbd,"nr",color,city);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>buildSingleLine("ch_"+cid+"_sh",dates,cbd,"sh",color,city);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>buildTable(apd,dates);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>buildPartnerCards(apd,dates,partners);</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">function metricCard(label,icon,val,prev,apd,dates,metric,color){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var lastDate=dates[dates.length-1]||"";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var prevDate=dates.length&gt;1?dates[dates.length-2]:"";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var lR=apd.filter(function(r){return r.date===lastDate;});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var pR=apd.filter(function(r){return r.date===prevDate;});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var html="&lt;div class=\"mcard\" style=\"border-top:3px solid "+color+"\"&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+="&lt;div class=\"mcard-label\"&gt;"+icon+" "+label+"&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+="&lt;div class=\"mcard-val\"&gt;"+fmt(val)+"&lt;/div&gt;&lt;div style=\"margin-top:4px\"&gt;"+bdg(val,prev)+"&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+="&lt;div class=\"mcard-breakdown\"&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>[...new Set(Object.values(KAM_MAP))].sort().forEach(function(kam){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var kp=KAM_PARTNERS[kam]?[...KAM_PARTNERS[kam]]:[];</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var kl=lR.filter(function(r){return kp.indexOf(r.partner)&gt;=0;});if(!kl.length)return;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var kpr=pR.filter(function(r){return kp.indexOf(r.partner)&gt;=0;});</p>
+<p class="p1"><span class="Apple-converted-space">    </span>function gv(rows){if(metric==="nr")return sumRows(rows,function(r){return r.newPartner+r.newService+r.reactivated;});if(metric==="sh")return sumRows(rows,function(r){return r.supplyHours;});return sumRows(rows,function(r){return r.activeDrivers;});}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var kv=gv(kl),kpv=gv(kpr);var dot=KAM_COLORS[kam]||"#888";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+="&lt;div class=\"mb-row\"&gt;&lt;span class=\"mb-name\"&gt;&lt;span class=\"mb-dot\" style=\"background:"+dot+"\"&gt;&lt;/span&gt;"+kam+"&lt;/span&gt;&lt;span class=\"mb-val\"&gt;"+fmt(kv)+"&lt;/span&gt;"+bdg(kv,kpv,"mb-badge")+"&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>return html+"&lt;/div&gt;&lt;/div&gt;";</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">// ── CHARTS ──</p>
+<p class="p1">function buildMultiLine(elId,dates,partners,byDate,metric,fallback){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var colors=partners.map(function(p){return pColors[p]||fallback;});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var series=partners.map(function(p){return{name:p,data:dates.map(function(d){var dp=byDate[d]&amp;&amp;byDate[d][p];if(!dp)return 0;if(metric==="nr")return Math.round(dp.newPartner+dp.newService+dp.reactivated);if(metric==="sh")return Math.round(dp.supplyHours);return Math.round(dp.activeDrivers);})};});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>buildLineChart(elId,dates,series,colors);</p>
+<p class="p1">}</p>
+<p class="p1">function buildSingleLine(elId,dates,cbd,metric,color,label){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var data=dates.map(function(d){var r=cbd[d];return r?Math.round(r[metric]||0):0;});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>buildLineChart(elId,dates,[{name:label,data:data}],[color]);</p>
+<p class="p1">}</p>
+<p class="p1">function buildLineChart(elId,dates,series,colors){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var opts={series:series,chart:{type:"line",height:200,toolbar:{show:false},zoom:{enabled:false},fontFamily:"inherit",animations:{enabled:true,speed:300},events:{mouseMove:function(e){var ft=document.getElementById("floatTip");if(ft.style.display==="none")return;var vw=window.innerWidth,vh=window.innerHeight;var x=e.clientX+16,y=e.clientY-16;if(x+260&gt;vw)x=e.clientX-265;if(y+ft.offsetHeight&gt;vh)y=vh-ft.offsetHeight-10;ft.style.left=x+"px";ft.style.top=y+"px";},mouseLeave:function(){document.getElementById("floatTip").style.display="none";}}},stroke:{curve:"smooth",width:2},colors:colors,xaxis:{categories:dates.map(d2s),labels:{style:{fontSize:"10px"},rotate:-30},axisBorder:{show:false},axisTicks:{show:false}},yaxis:{labels:{formatter:function(v){return fmt(v);},style:{fontSize:"10px"}}},legend:{show:series.length&lt;=8,position:"bottom",fontSize:"10px",itemMargin:{horizontal:4,vertical:2}},grid:{borderColor:"#f0f0f0",strokeDashArray:4},markers:{size:3,strokeWidth:0,hover:{size:5}},tooltip:{custom:function(o){var s=o.series,di=o.dataPointIndex,w=o.w;var date=w.globals.labels[di];var rows=series.map(function(sr,i){return{name:sr.name,val:s[i][di]||0,color:colors[i]};}).filter(function(r){return r.val&gt;0;}).sort(function(a,b){return b.val-a.val;});var ft=document.getElementById("floatTip");var h="&lt;div class=\"ft-d\"&gt;"+date+"&lt;/div&gt;";rows.forEach(function(r){h+="&lt;div class=\"ft-r\"&gt;&lt;span class=\"ft-dot\" style=\"background:"+r.color+"\"&gt;&lt;/span&gt;&lt;span class=\"ft-n\"&gt;"+r.name+"&lt;/span&gt;&lt;span class=\"ft-v\"&gt;"+fmt(r.val)+"&lt;/span&gt;&lt;/div&gt;";});ft.innerHTML=h;ft.style.display="block";return"&lt;div style=\"display:none\"&gt;&lt;/div&gt;";}}};</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(charts[elId]){charts[elId].destroy();delete charts[elId];}</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var el=document.getElementById(elId);if(!el)return;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var ch=new ApexCharts(el,opts);ch.render();charts[elId]=ch;</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">// ── TABLE ──</p>
+<p class="p1">function buildTable(apd,dates){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var lastDate=dates[dates.length-1]||"";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var prevDate=dates.length&gt;1?dates[dates.length-2]:"";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var lR=apd.filter(function(r){return r.date===lastDate;});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var pR=apd.filter(function(r){return r.date===prevDate;});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var partners=[...new Set(apd.map(function(r){return r.partner;}))];</p>
+<p class="p1"><span class="Apple-converted-space">  </span>curSummaries=partners.map(function(p){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var l=lR.filter(function(r){return r.partner===p;});</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var pr=pR.filter(function(r){return r.partner===p;});</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var rows=apd.filter(function(r){return r.partner===p;}).sort(function(a,b){return a.date.localeCompare(b.date);});</p>
+<p class="p1"><span class="Apple-converted-space">    </span>return{partner:p,kam:(l[0]||{}).kam||"",ad:sumRows(l,function(r){return r.activeDrivers;}),nr:sumRows(l,function(r){return r.newPartner+r.newService+r.reactivated;}),sh:sumRows(l,function(r){return r.supplyHours;}),co:sumRows(l,function(r){return r.commission;}),pad:sumRows(pr,function(r){return r.activeDrivers;}),pnr:sumRows(pr,function(r){return r.newPartner+r.newService+r.reactivated;}),tAD:trendArr(rows.map(function(r){return r.activeDrivers;}))};</p>
+<p class="p1"><span class="Apple-converted-space">  </span>});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>renderTable();</p>
+<p class="p1">}</p>
+<p class="p1">function renderTable(){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var sorted=curSummaries.slice().sort(function(a,b){var va=a[tblSort.col],vb=b[tblSort.col];if(typeof va==="string")return tblSort.dir==="asc"?va.localeCompare(vb):vb.localeCompare(va);return tblSort.dir==="asc"?va-vb:vb-va;});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var cols=[{k:"partner",l:"Partner"},{k:"kam",l:"KAM"},{k:"ad",l:"Cond. Activos"},{k:"nr",l:"Nuevos+React"},{k:"sh",l:"Hs. Conexion"},{k:"co",l:"Comision"}];</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var h="&lt;table class=\"dtbl\"&gt;&lt;thead&gt;&lt;tr&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>cols.forEach(function(c){var s=tblSort.col===c.k?(tblSort.dir==="asc"?"sa":"sd"):"";h+="&lt;th class=\""+s+"\" onclick=\"sortTbl('"+c.k+"')\"&gt;"+c.l+"&lt;/th&gt;";});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>h+="&lt;th&gt;WoW&lt;/th&gt;&lt;th&gt;Tend.&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>sorted.forEach(function(r){var pdot="&lt;span style=\"display:inline-block;width:7px;height:7px;border-radius:50%;background:"+(pColors[r.partner]||"#ccc")+";margin-right:5px\"&gt;&lt;/span&gt;";var kdot="&lt;span style=\"display:inline-block;width:7px;height:7px;border-radius:50%;background:"+(KAM_COLORS[r.kam]||"#ccc")+";margin-right:4px\"&gt;&lt;/span&gt;";h+="&lt;tr&gt;&lt;td&gt;"+pdot+r.partner+"&lt;/td&gt;&lt;td&gt;"+kdot+r.kam+"&lt;/td&gt;&lt;td class=\"tn\"&gt;"+fmt(r.ad)+"&lt;/td&gt;&lt;td class=\"tn\"&gt;"+fmt(r.nr)+"&lt;/td&gt;&lt;td class=\"tn\"&gt;"+fmt(r.sh)+"&lt;/td&gt;&lt;td class=\"tn\"&gt;"+fmtK(r.co)+"&lt;/td&gt;&lt;td class=\"tn\"&gt;"+bdg(r.ad,r.pad,"tbadge")+"&lt;/td&gt;&lt;td style=\"text-align:center;font-size:.85rem\"&gt;&lt;span style=\""+r.tAD.cls+"\"&gt;"+r.tAD.icon+"&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;";});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>h+="&lt;/tbody&gt;&lt;/table&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var el=document.getElementById("tblContainer");if(el)el.innerHTML=h;</p>
+<p class="p1">}</p>
+<p class="p1">function sortTbl(col){if(tblSort.col===col)tblSort.dir=tblSort.dir==="asc"?"desc":"asc";else{tblSort.col=col;tblSort.dir="desc";}renderTable();}</p>
+<p class="p2"><br></p>
+<p class="p1">// ── PARTNER CARDS ──</p>
+<p class="p1">function buildPartnerCards(apd,dates,partners){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var grid=document.getElementById("partnerCards");if(!grid)return;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var lastDate=dates[dates.length-1]||"";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var prevDate=dates.length&gt;1?dates[dates.length-2]:"";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>partners.forEach(function(partner){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var rows=apd.filter(function(r){return r.partner===partner;}).sort(function(a,b){return a.date.localeCompare(b.date);});</p>
+<p class="p1"><span class="Apple-converted-space">    </span>if(!rows.length)return;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var last=rows[rows.length-1];var prev=rows.length&gt;1?rows[rows.length-2]:null;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var color=pColors[partner]||"#FF0000";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var lastNR=last.newPartner+last.newService+last.reactivated;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var prevNR=prev?(prev.newPartner+prev.newService+prev.reactivated):null;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var tA=trendArr(rows.map(function(r){return r.activeDrivers;}));</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var tN=trendArr(rows.map(function(r){return r.newPartner+r.newService+r.reactivated;}));</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var tH=trendArr(rows.map(function(r){return r.supplyHours;}));</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var card=document.createElement("div");card.className="pcard";card.style.borderLeftColor=color;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>card.innerHTML="&lt;div class=\"pcard-head\"&gt;&lt;div&gt;&lt;div class=\"pcard-name\"&gt;&lt;span style=\"display:inline-block;width:9px;height:9px;border-radius:50%;background:"+color+";margin-right:5px\"&gt;&lt;/span&gt;"+partner+"&lt;/div&gt;&lt;div class=\"pcard-sub\"&gt;&lt;span style=\"width:7px;height:7px;border-radius:50%;background:"+(KAM_COLORS[last.kam]||"#888")+";display:inline-block;margin-right:3px\"&gt;&lt;/span&gt;"+last.kam+" &amp;nbsp;·&amp;nbsp; "+(prev?d2s(prev.date)+" → ":"")+d2s(last.date)+"&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;"+</p>
+<p class="p1"><span class="Apple-converted-space">      </span>"&lt;div class=\"pcard-kpis\"&gt;"+</p>
+<p class="p1"><span class="Apple-converted-space">      </span>"&lt;div class=\"pk\"&gt;&lt;div class=\"pk-label\"&gt;Cond. Activos&lt;/div&gt;&lt;div class=\"pk-val\"&gt;"+fmt(last.activeDrivers)+"&lt;/div&gt;"+bdg(last.activeDrivers,prev?prev.activeDrivers:null,"mb-badge")+" &lt;span style=\""+tA.cls+"\"&gt;"+tA.icon+"&lt;/span&gt;&lt;/div&gt;"+</p>
+<p class="p1"><span class="Apple-converted-space">      </span>"&lt;div class=\"pk\"&gt;&lt;div class=\"pk-label\"&gt;Hs. Conexion&lt;/div&gt;&lt;div class=\"pk-val\"&gt;"+fmt(last.supplyHours)+"&lt;/div&gt;"+bdg(last.supplyHours,prev?prev.supplyHours:null,"mb-badge")+" &lt;span style=\""+tH.cls+"\"&gt;"+tH.icon+"&lt;/span&gt;&lt;/div&gt;"+</p>
+<p class="p1"><span class="Apple-converted-space">      </span>"&lt;div class=\"pk-wide\"&gt;&lt;div class=\"pk-label\"&gt;Nuevos + Reactivados &amp;nbsp;"+bdg(lastNR,prevNR,"mb-badge")+" &lt;span style=\""+tN.cls+"\"&gt;"+tN.icon+"&lt;/span&gt;&lt;/div&gt;"+</p>
+<p class="p1"><span class="Apple-converted-space">      </span>"&lt;div class=\"pk-sub-grid\"&gt;"+</p>
+<p class="p1"><span class="Apple-converted-space">      </span>"&lt;div&gt;&lt;div class=\"pk-sub-label\"&gt;Partner&lt;/div&gt;&lt;div class=\"pk-sub-val\"&gt;"+fmt(last.newPartner)+"&lt;/div&gt;"+bdg(last.newPartner,prev?prev.newPartner:null,"mb-badge")+"&lt;/div&gt;"+</p>
+<p class="p1"><span class="Apple-converted-space">      </span>"&lt;div&gt;&lt;div class=\"pk-sub-label\"&gt;Servicio&lt;/div&gt;&lt;div class=\"pk-sub-val\"&gt;"+fmt(last.newService)+"&lt;/div&gt;"+bdg(last.newService,prev?prev.newService:null,"mb-badge")+"&lt;/div&gt;"+</p>
+<p class="p1"><span class="Apple-converted-space">      </span>"&lt;div&gt;&lt;div class=\"pk-sub-label\"&gt;Reactivados&lt;/div&gt;&lt;div class=\"pk-sub-val\"&gt;"+fmt(last.reactivated)+"&lt;/div&gt;"+bdg(last.reactivated,prev?prev.reactivated:null,"mb-badge")+"&lt;/div&gt;"+</p>
+<p class="p1"><span class="Apple-converted-space">      </span>"&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>grid.appendChild(card);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>});</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">// ── RENDER METAS ──</p>
+<p class="p1">function renderMetas(){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(!metasData.length)return;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var cityFilter=document.getElementById("cityFilter").value;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var kamFilter=document.getElementById("kamFilter").value;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var sel=getSel();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var from=document.getElementById("dateFrom").value;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var to=document.getElementById("dateTo").value;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var metas=metasData.filter(function(m){if(kamFilter!=="all"&amp;&amp;m.kam!==kamFilter)return false;if(sel.length&amp;&amp;sel.indexOf(m.partner)&lt;0)return false;return true;});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var mesName=metasData.length?metasData[0].mes:"";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var weeksTotal=monthWeeks(from,to);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var perfFiltered=rawData.filter(function(r){return r.date&gt;=from&amp;&amp;r.date&lt;=to;});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var cpMap={};</p>
+<p class="p1"><span class="Apple-converted-space">  </span>perfFiltered.forEach(function(r){var k=r.partner+"|||"+r.city+"|||"+r.date;if(!cpMap[k])cpMap[k]={partner:r.partner,city:r.city,date:r.date,activeDrivers:0,newPartner:0,newService:0,reactivated:0,supplyHours:0};var e=cpMap[k];e.activeDrivers+=r.activeDrivers;e.newPartner+=r.newPartner;e.newService+=r.newService;e.reactivated+=r.reactivated;e.supplyHours+=r.supplyHours;});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var cpRows=Object.values(cpMap);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var allPD=[...new Set(cpRows.map(function(r){return r.date;}))].sort();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var weeksDone=allPD.length||1;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>function getRPC(partner,city){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var rows=cpRows.filter(function(r){return r.partner===partner&amp;&amp;(city===""||r.city===city);});</p>
+<p class="p1"><span class="Apple-converted-space">    </span>if(!rows.length)return{ad:0,nr:0,sh:0,lastAD:0,nrV:[],shV:[]};</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var bd={};rows.forEach(function(r){if(!bd[r.date])bd[r.date]={ad:0,nr:0,sh:0};bd[r.date].ad+=r.activeDrivers;bd[r.date].nr+=r.newPartner+r.newService+r.reactivated;bd[r.date].sh+=r.supplyHours;});</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var sorted=Object.keys(bd).sort().map(function(d){return bd[d];});</p>
+<p class="p1"><span class="Apple-converted-space">    </span>return{ad:Math.max.apply(null,sorted.map(function(v){return v.ad;})),nr:sorted.reduce(function(s,v){return s+v.nr;},0),sh:sorted.reduce(function(s,v){return s+v.sh;},0),lastAD:sorted.length?sorted[sorted.length-1].ad:0,nrV:sorted.map(function(v){return v.nr;}),shV:sorted.map(function(v){return v.sh;})};</p>
+<p class="p1"><span class="Apple-converted-space">  </span>}</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var combos=[];</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(cityFilter==="all"){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var pm={};metas.forEach(function(m){if(!pm[m.partner])pm[m.partner]={partner:m.partner,kam:m.kam,mA:0,mNR:0,mH:0};pm[m.partner].mA+=m.mA;pm[m.partner].mNR+=m.mNR;pm[m.partner].mH+=m.mH;});</p>
+<p class="p1"><span class="Apple-converted-space">    </span>Object.values(pm).forEach(function(p){var r=getRPC(p.partner,"");combos.push({partner:p.partner,kam:p.kam,city:"Todas",mA:p.mA,mNR:p.mNR,mH:p.mH,ad:r.ad,nr:r.nr,sh:r.sh,projAD:r.lastAD*1.4,projNR:projArr(r.nrV,weeksDone,weeksTotal),projSH:projArr(r.shV,weeksDone,weeksTotal)});});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>} else {</p>
+<p class="p1"><span class="Apple-converted-space">    </span>metas.filter(function(m){return m.city===cityFilter;}).forEach(function(m){var r=getRPC(m.partner,m.city);combos.push({partner:m.partner,kam:m.kam,city:m.city,mA:m.mA,mNR:m.mNR,mH:m.mH,ad:r.ad,nr:r.nr,sh:r.sh,projAD:r.lastAD*1.4,projNR:projArr(r.nrV,weeksDone,weeksTotal),projSH:projArr(r.shV,weeksDone,weeksTotal)});});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>}</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var tMA=metas.reduce(function(s,m){return s+m.mA;},0),tMNR=metas.reduce(function(s,m){return s+m.mNR;},0),tMH=metas.reduce(function(s,m){return s+m.mH;},0);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var tAD=combos.reduce(function(s,c){return s+c.ad;},0),tNR=combos.reduce(function(s,c){return s+c.nr;},0),tSH=combos.reduce(function(s,c){return s+c.sh;},0);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var tPAD=combos.reduce(function(s,c){return s+c.projAD;},0),tPNR=combos.reduce(function(s,c){return s+c.projNR;},0),tPSH=combos.reduce(function(s,c){return s+c.projSH;},0);</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>var empty=document.getElementById("metasEmpty");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var content=document.getElementById("metasContent");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>empty.style.display="none";content.style.display="";</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>var html="";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+=secHtml("🎯","#8b5cf6","Cumplimiento de Metas - "+mesName,"Progreso actual vs meta del mes","Peru");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+="&lt;div class=\"section\"&gt;&lt;div class=\"metric-row\"&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+=metaResCard("Conductores Activos","max semana",tAD,tMA,tPAD,"#8b5cf6");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+=metaResCard("Nuevos + Reactivados","acumulado mes",tNR,tMNR,tPNR,"#f97316");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+=metaResCard("Horas de Conexion","acumulado mes",tSH,tMH,tPSH,"#06b6d4");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+="&lt;/div&gt;&lt;/div&gt;";</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+=secHtml("🏙️","#06b6d4","Metas por Ciudad","Progreso y proyeccion","");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+="&lt;div class=\"section\"&gt;&lt;div class=\"city-grid\"&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>CITIES.forEach(function(city){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var cm=metas.filter(function(m){return m.city===city;});if(!cm.length)return;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var cc=combos.filter(function(c){return c.city===city;});</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var cmA=cm.reduce(function(s,m){return s+m.mA;},0),cmNR=cm.reduce(function(s,m){return s+m.mNR;},0),cmH=cm.reduce(function(s,m){return s+m.mH;},0);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var crAD=cc.reduce(function(s,c){return s+c.ad;},0),crNR=cc.reduce(function(s,c){return s+c.nr;},0),crSH=cc.reduce(function(s,c){return s+c.sh;},0);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var cpAD=cc.reduce(function(s,c){return s+c.projAD;},0),cpNR=cc.reduce(function(s,c){return s+c.projNR;},0),cpSH=cc.reduce(function(s,c){return s+c.projSH;},0);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var color=CITY_COLORS[city]||"#888";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+="&lt;div class=\"city-card\" style=\"border-top-color:"+color+"\"&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+="&lt;div class=\"city-name\"&gt;&lt;span style=\"width:10px;height:10px;border-radius:50%;background:"+color+";display:inline-block\"&gt;&lt;/span&gt;"+city+"&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+=miniBar("Cond. Activos",crAD,cmA,cpAD);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+=miniBar("Nuevos+React",crNR,cmNR,cpNR);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+=miniBar("Hs. Conexion",crSH,cmH,cpSH);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+="&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+="&lt;/div&gt;&lt;/div&gt;";</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+=secHtml("👤","#f59e0b","Metas por KAM","Progreso total de cada responsable","");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+="&lt;div class=\"section\"&gt;&lt;div style=\"display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px\"&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>[...new Set(combos.map(function(c){return c.kam;}))].sort().forEach(function(kam){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var kc=combos.filter(function(c){return c.kam===kam;});</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var km=metas.filter(function(m){return m.kam===kam;});if(!kc.length)return;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var kmA=km.reduce(function(s,m){return s+m.mA;},0),kmNR=km.reduce(function(s,m){return s+m.mNR;},0),kmH=km.reduce(function(s,m){return s+m.mH;},0);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var krAD=kc.reduce(function(s,c){return s+c.ad;},0),krNR=kc.reduce(function(s,c){return s+c.nr;},0),krSH=kc.reduce(function(s,c){return s+c.sh;},0);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var kpAD=kc.reduce(function(s,c){return s+c.projAD;},0),kpNR=kc.reduce(function(s,c){return s+c.projNR;},0),kpSH=kc.reduce(function(s,c){return s+c.projSH;},0);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var color=KAM_COLORS[kam]||"#888";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+="&lt;div class=\"city-card\" style=\"border-top-color:"+color+"\"&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+="&lt;div class=\"city-name\"&gt;&lt;span style=\"width:10px;height:10px;border-radius:50%;background:"+color+";display:inline-block\"&gt;&lt;/span&gt;"+kam+" &lt;span style=\"font-size:.7rem;font-weight:500;color:#aaa\"&gt;("+kc.length+" cuentas)&lt;/span&gt;&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+=miniBar("Cond. Activos",krAD,kmA,kpAD);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+=miniBar("Nuevos+React",krNR,kmNR,kpNR);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+=miniBar("Hs. Conexion",krSH,kmH,kpSH);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+="&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+="&lt;/div&gt;&lt;/div&gt;";</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+=secHtml("🃏","#FF0000","Metas por Partner","Progreso individual con proyeccion al cierre","");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+="&lt;div class=\"section\"&gt;&lt;div class=\"partner-grid\"&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>combos.forEach(function(c){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>var color=pColors[c.partner]||"#ccc";var kcolor=KAM_COLORS[c.kam]||"#888";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+="&lt;div class=\"pcard\" style=\"border-left-color:"+color+"\"&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+="&lt;div class=\"pcard-head\"&gt;&lt;div&gt;&lt;div class=\"pcard-name\"&gt;&lt;span style=\"display:inline-block;width:9px;height:9px;border-radius:50%;background:"+color+";margin-right:5px\"&gt;&lt;/span&gt;"+c.partner+"&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+="&lt;div class=\"pcard-sub\"&gt;&lt;span style=\"width:7px;height:7px;border-radius:50%;background:"+kcolor+";display:inline-block;margin-right:3px\"&gt;&lt;/span&gt;"+c.kam+" &amp;nbsp;·&amp;nbsp; "+c.city+"&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+=miniBarFull("Cond. Activos",c.ad,c.mA,c.projAD);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+=miniBarFull("Nuevos+React",c.nr,c.mNR,c.projNR);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+=miniBarFull("Hs. Conexion",c.sh,c.mH,c.projSH);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html+="&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>html+="&lt;/div&gt;&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>content.innerHTML=html;</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">function metaResCard(label,sub,real,meta,proj,color){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var p=meta&gt;0?Math.min((real/meta)*100,100):0;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var pp=meta&gt;0?Math.min((proj/meta)*100,100):0;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var pc=pColor(p);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>return "&lt;div class=\"mcard\" style=\"border-top:3px solid "+color+"\"&gt;"+</p>
+<p class="p1"><span class="Apple-converted-space">    </span>"&lt;div class=\"mcard-label\"&gt;"+label+"&lt;/div&gt;&lt;div style=\"font-size:.7rem;color:#bbb;margin-bottom:8px\"&gt;"+sub+"&lt;/div&gt;"+</p>
+<p class="p1"><span class="Apple-converted-space">    </span>"&lt;div class=\"mcard-val\"&gt;"+fmt(real)+"&lt;/div&gt;"+</p>
+<p class="p1"><span class="Apple-converted-space">    </span>"&lt;div style=\"margin:4px 0\"&gt;&lt;span style=\"font-size:.85rem;font-weight:700;color:"+pc+"\"&gt;"+p.toFixed(1)+"% &lt;/span&gt;&lt;span class=\"sem "+semCls(p)+"\"&gt;&lt;/span&gt;&lt;span style=\"font-size:.72rem;color:#aaa\"&gt; de meta "+fmt(meta)+"&lt;/span&gt;&lt;/div&gt;"+</p>
+<p class="p1"><span class="Apple-converted-space">    </span>"&lt;div style=\"margin:8px 0 4px\"&gt;"+barProj(p,pp)+"&lt;/div&gt;"+</p>
+<p class="p1"><span class="Apple-converted-space">    </span>"&lt;div style=\"font-size:.72rem;color:"+pColor(pp)+";margin-top:4px\"&gt;Proyeccion: &lt;strong&gt;"+fmt(proj)+"&lt;/strong&gt; ("+pp.toFixed(1)+"%)&lt;/div&gt;&lt;/div&gt;";</p>
+<p class="p1">}</p>
+<p class="p1">function miniBar(label,real,meta,proj){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var p=meta&gt;0?Math.min((real/meta)*100,100):0;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var pp=meta&gt;0?Math.min((proj/meta)*100,100):0;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>return "&lt;div style=\"padding:6px 0;border-bottom:1px solid #f5f5f5\"&gt;"+</p>
+<p class="p1"><span class="Apple-converted-space">    </span>"&lt;div style=\"display:flex;justify-content:space-between;font-size:.74rem;margin-bottom:4px\"&gt;&lt;span style=\"color:#777\"&gt;"+label+"&lt;/span&gt;&lt;span style=\"display:flex;align-items:center;gap:4px\"&gt;&lt;strong style=\"color:"+pColor(p)+"\"&gt;"+p.toFixed(1)+"%&lt;/strong&gt;&lt;span class=\"sem "+semCls(p)+"\"&gt;&lt;/span&gt;&lt;/span&gt;&lt;/div&gt;"+</p>
+<p class="p1"><span class="Apple-converted-space">    </span>barProj(p,pp)+</p>
+<p class="p1"><span class="Apple-converted-space">    </span>"&lt;div style=\"font-size:.67rem;color:#aaa;margin-top:2px\"&gt;Real: "+fmt(real)+" / Meta: "+fmt(meta)+" / Proy: &lt;span style=\"color:"+pColor(pp)+";font-weight:700\"&gt;"+fmt(proj)+"&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;";</p>
+<p class="p1">}</p>
+<p class="p1">function miniBarFull(label,real,meta,proj){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var p=meta&gt;0?Math.min((real/meta)*100,100):0;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var pp=meta&gt;0?Math.min((proj/meta)*100,100):0;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>return "&lt;div class=\"meta-bar-wrap\"&gt;"+</p>
+<p class="p1"><span class="Apple-converted-space">    </span>"&lt;div class=\"meta-bar-label\"&gt;&lt;span&gt;"+label+"&lt;/span&gt;&lt;span style=\"display:flex;align-items:center;gap:4px\"&gt;&lt;strong style=\"color:"+pColor(p)+"\"&gt;"+p.toFixed(1)+"%&lt;/strong&gt;&lt;span class=\"sem "+semCls(p)+"\"&gt;&lt;/span&gt;&lt;/span&gt;&lt;/div&gt;"+</p>
+<p class="p1"><span class="Apple-converted-space">    </span>"&lt;div style=\"font-size:.7rem;color:#777;margin-bottom:3px\"&gt;Real: &lt;strong&gt;"+fmt(real)+"&lt;/strong&gt; / Meta: &lt;strong&gt;"+fmt(meta)+"&lt;/strong&gt;&lt;/div&gt;"+</p>
+<p class="p1"><span class="Apple-converted-space">    </span>barProj(p,pp)+</p>
+<p class="p1"><span class="Apple-converted-space">    </span>"&lt;div class=\"proj-note\" style=\"color:"+pColor(pp)+"\"&gt;Proyeccion: &lt;strong&gt;"+fmt(proj)+"&lt;/strong&gt; ("+pp.toFixed(1)+"%)&lt;/div&gt;&lt;/div&gt;";</p>
+<p class="p1">}</p>
+<p class="p1">function barProj(pReal,pProj){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var pc=pColor(pReal),ppc=pColor(pProj);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>var h="&lt;div class=\"bar-bg\"&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(pProj&gt;pReal)h+="&lt;div class=\"bar-proj\" style=\"width:"+Math.min(pProj,100)+"%;background:"+ppc+"\"&gt;&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>h+="&lt;div class=\"bar-real\" style=\"width:"+pReal+"%;background:"+pc+"\"&gt;&lt;/div&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>return h+"&lt;/div&gt;";</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">function dlChart(id,name){var ch=charts[id];if(!ch)return;ch.dataURI().then(function(r){var a=document.createElement("a");a.href=r.imgURI;a.download="yango_"+name+"_"+new Date().toISOString().slice(0,10)+".png";document.body.appendChild(a);a.click();document.body.removeChild(a);});}</p>
+<p class="p1">function switchTab(tab){curTab=tab;document.querySelectorAll(".nav-tab").forEach(function(b,i){b.classList.toggle("active",["rend","metas"][i]===tab);});document.querySelectorAll(".tab-panel").forEach(function(p){p.classList.remove("active");});document.getElementById("tab-"+tab).classList.add("active");}</p>
+<p class="p1">function downloadDashboard(){var html="&lt;!DOCTYPE html&gt;\n"+document.documentElement.outerHTML;var blob=new Blob([html],{type:"text/html;charset=utf-8"});var url=URL.createObjectURL(blob);var a=document.createElement("a");a.href=url;a.download="yango_dashboard_"+new Date().toISOString().slice(0,10)+".html";document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(url),1000});}</p>
+<p class="p1">function showLoad(show,msg){var el=document.getElementById("loadingEl");if(show){if(!el){el=document.createElement("div");el.id="loadingEl";el.className="overlay";document.body.appendChild(el);}el.innerHTML="&lt;div class=\"spinner\"&gt;&lt;/div&gt;&lt;div style=\"font-weight:600;color:#555\"&gt;"+(msg||"Procesando...")+"&lt;/div&gt;";}else{if(el)el.remove();}}</p>
+<p class="p2"><br></p>
+<p class="p1">// Auto-load from Sheets on page open if URLs are configured</p>
+<p class="p1">window.addEventListener("load",function(){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(SHEET_RENDIMIENTO_URL.indexOf("TU_ID_AQUI")&lt;0){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>loadFromSheets();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>}</p>
+<p class="p1">});</p>
+<p class="p1">&lt;/script&gt;</p>
+<p class="p1">&lt;/body&gt;</p>
+<p class="p1">&lt;/html&gt;</p>
+</body>
+</html>
