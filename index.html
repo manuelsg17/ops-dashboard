@@ -455,56 +455,78 @@ function getFiltered(){
   var from=document.getElementById("dateFrom").value;
   var to=document.getElementById("dateTo").value;
   var sel=getSel();
-  // First deduplicate by CLID+date to avoid double counting partners with multiple CLIDs
-  // We keep one row per CLID+city+date (already done at parse level)
-  // Then filter
   return rawData.filter(function(r){
-    return(city==="all"||r.city===city)&&r.date>=from&&r.date<=to&&sel.indexOf(r.partner)>=0;
+    return (city==="all"||r.city===city)
+      && r.date>=from
+      && r.date<=to
+      && sel.indexOf(r.partner)>=0;
   });
 }
-// Aggregate by partner+date — sum across CLIDs of same partner
-// Key includes city to avoid cross-city double counting when city=all
+
+// Step 1: deduplicate by CLID — rawData already has one row per CLID+city+date
+// Step 2: sum by partner+city+date (consolidates multiple CLIDs of same partner)
+// Step 3: sum by partner+date (consolidates cities for Total Peru view)
 function aggPD(data){
-  var m={};
+  // Step 2: partner+city+date
+  var s2={};
   data.forEach(function(r){
-    // When city filter is "all", we must aggregate per partner+city+date
-    // to avoid summing Lima+Trujillo+Arequipa for same partner into one row
     var k=r.partner+"|||"+r.city+"|||"+r.date;
-    if(!m[k])m[k]={partner:r.partner,kam:r.kam,city:r.city,date:r.date,activeDrivers:0,newPartner:0,newService:0,reactivated:0,supplyHours:0,commission:0,trips:0};
-    var e=m[k];
-    e.activeDrivers+=r.activeDrivers;e.newPartner+=r.newPartner;e.newService+=r.newService;
-    e.reactivated+=r.reactivated;e.supplyHours+=r.supplyHours;e.commission+=r.commission;e.trips+=r.trips;
+    if(!s2[k])s2[k]={partner:r.partner,kam:r.kam,city:r.city,date:r.date,ad:0,np:0,ns:0,re:0,sh:0,co:0,tr:0};
+    var e=s2[k];
+    e.ad+=r.activeDrivers;e.np+=r.newPartner;e.ns+=r.newService;
+    e.re+=r.reactivated;e.sh+=r.supplyHours;e.co+=r.commission;e.tr+=r.trips;
   });
-  // Now collapse partner+city+date into partner+date by summing cities
-  var m2={};
-  Object.values(m).forEach(function(r){
-    var k2=r.partner+"|||"+r.date;
-    if(!m2[k2])m2[k2]={partner:r.partner,kam:r.kam,date:r.date,activeDrivers:0,newPartner:0,newService:0,reactivated:0,supplyHours:0,commission:0,trips:0};
-    var e=m2[k2];
-    e.activeDrivers+=r.activeDrivers;e.newPartner+=r.newPartner;e.newService+=r.newService;
-    e.reactivated+=r.reactivated;e.supplyHours+=r.supplyHours;e.commission+=r.commission;e.trips+=r.trips;
+  // Step 3: partner+date
+  var s3={};
+  Object.values(s2).forEach(function(r){
+    var k=r.partner+"|||"+r.date;
+    if(!s3[k])s3[k]={partner:r.partner,kam:r.kam,date:r.date,activeDrivers:0,newPartner:0,newService:0,reactivated:0,supplyHours:0,commission:0,trips:0};
+    var e=s3[k];
+    e.activeDrivers+=r.ad;e.newPartner+=r.np;e.newService+=r.ns;
+    e.reactivated+=r.re;e.supplyHours+=r.sh;e.commission+=r.co;e.trips+=r.tr;
   });
-  return Object.values(m2).sort(function(a,b){return a.date.localeCompare(b.date);});
+  return Object.values(s3).sort(function(a,b){return a.date.localeCompare(b.date);});
 }
-// Aggregate by date→partner for chart series
+
+// For charts: date → partner → metrics
 function aggDate(data){
-  var m={};
+  // First deduplicate by partner+city+date
+  var s2={};
   data.forEach(function(r){
+    var k=r.partner+"|||"+r.city+"|||"+r.date;
+    if(!s2[k])s2[k]={partner:r.partner,date:r.date,ad:0,np:0,ns:0,re:0,sh:0,co:0};
+    var e=s2[k];
+    e.ad+=r.activeDrivers;e.np+=r.newPartner;e.ns+=r.newService;
+    e.re+=r.reactivated;e.sh+=r.supplyHours;e.co+=r.commission;
+  });
+  // Then collapse into date→partner
+  var m={};
+  Object.values(s2).forEach(function(r){
     if(!m[r.date])m[r.date]={};
     if(!m[r.date][r.partner])m[r.date][r.partner]={activeDrivers:0,newPartner:0,newService:0,reactivated:0,supplyHours:0,commission:0};
     var e=m[r.date][r.partner];
-    e.activeDrivers+=r.activeDrivers;e.newPartner+=r.newPartner;e.newService+=r.newService;
-    e.reactivated+=r.reactivated;e.supplyHours+=r.supplyHours;e.commission+=r.commission;
+    e.activeDrivers+=r.ad;e.newPartner+=r.np;e.newService+=r.ns;
+    e.reactivated+=r.re;e.supplyHours+=r.sh;e.commission+=r.co;
   });
   return m;
 }
+
+// For city line charts: date → {ad, nr, sh}
 function aggCityDate(data){
-  var m={};
+  // Deduplicate by partner+city+date first
+  var s2={};
   data.forEach(function(r){
+    var k=r.partner+"|||"+r.city+"|||"+r.date;
+    if(!s2[k])s2[k]={date:r.date,ad:0,nr:0,sh:0};
+    s2[k].ad+=r.activeDrivers;
+    s2[k].nr+=r.newPartner+r.newService+r.reactivated;
+    s2[k].sh+=r.supplyHours;
+  });
+  // Collapse by date
+  var m={};
+  Object.values(s2).forEach(function(r){
     if(!m[r.date])m[r.date]={ad:0,nr:0,sh:0};
-    m[r.date].ad+=r.activeDrivers;
-    m[r.date].nr+=r.newPartner+r.newService+r.reactivated;
-    m[r.date].sh+=r.supplyHours;
+    m[r.date].ad+=r.ad;m[r.date].nr+=r.nr;m[r.date].sh+=r.sh;
   });
   return m;
 }
@@ -528,19 +550,26 @@ function renderRend(){
   var prevDate=dates.length>1?dates[dates.length-2]:"";
   var lastRows=apd.filter(function(r){return r.date===lastDate;});
   var prevRows=apd.filter(function(r){return r.date===prevDate;});
+
+  // Active Drivers: last week only (snapshot)
   var tAD=sumRows(lastRows,function(r){return r.activeDrivers;});
-  var tNR=sumRows(lastRows,function(r){return r.newPartner+r.newService+r.reactivated;});
-  var tSH=sumRows(lastRows,function(r){return r.supplyHours;});
   var pAD=sumRows(prevRows,function(r){return r.activeDrivers;});
+
+  // N+R and Supply Hours: CUMULATIVE across all weeks in range
+  var tNR=sumRows(apd,function(r){return r.newPartner+r.newService+r.reactivated;});
+  var tSH=sumRows(apd,function(r){return r.supplyHours;});
+  // For WoW comparison on cumulative: use last week vs prev week
   var pNR=sumRows(prevRows,function(r){return r.newPartner+r.newService+r.reactivated;});
+  var lNR=sumRows(lastRows,function(r){return r.newPartner+r.newService+r.reactivated;});
   var pSH=sumRows(prevRows,function(r){return r.supplyHours;});
+  var lSH=sumRows(lastRows,function(r){return r.supplyHours;});
 
   var html="";
-  html+=secHtml("🇵🇪","#FF0000","Peru - Vista General","Comparativo semana vs semana anterior",d2s(lastDate));
+  html+=secHtml("🇵🇪","#FF0000","Peru - Vista General","Active Drivers: ultima semana | N+R y Horas: acumulado del rango",d2s(lastDate));
   html+="<div class=\"section\"><div class=\"metric-row\">";
-  html+=metricCard("Conductores Activos","📊",tAD,pAD,apd,dates,"activeDrivers","#FF0000");
-  html+=metricCard("Nuevos + Reactivados","🆕",tNR,pNR,apd,dates,"nr","#f97316");
-  html+=metricCard("Horas de Conexion","⏱️",tSH,pSH,apd,dates,"sh","#8b5cf6");
+  html+=metricCard("Conductores Activos","📊",tAD,pAD,apd,dates,"activeDrivers","#FF0000",false);
+  html+=metricCard("Nuevos + Reactivados","🆕",tNR,lNR,apd,dates,"nr","#f97316",true);
+  html+=metricCard("Horas de Conexion","⏱️",tSH,lSH,apd,dates,"sh","#8b5cf6",true);
   html+="</div></div>";
 
   html+=secHtml("🏙️","#06b6d4","Por Ciudad","Rendimiento y comparativo WoW","");
@@ -622,21 +651,34 @@ function renderRend(){
   buildPartnerCards(apd,dates,partners);
 }
 
-function metricCard(label,icon,val,prev,apd,dates,metric,color){
+function metricCard(label,icon,val,prevWeekVal,apd,dates,metric,color,isCumulative){
   var lastDate=dates[dates.length-1]||"";
   var prevDate=dates.length>1?dates[dates.length-2]:"";
   var lR=apd.filter(function(r){return r.date===lastDate;});
   var pR=apd.filter(function(r){return r.date===prevDate;});
+  var subLabel=isCumulative?"acumulado rango":"ultima semana";
   var html="<div class=\"mcard\" style=\"border-top:3px solid "+color+"\">";
   html+="<div class=\"mcard-label\">"+icon+" "+label+"</div>";
-  html+="<div class=\"mcard-val\">"+fmt(val)+"</div><div style=\"margin-top:4px\">"+bdg(val,prev)+"</div>";
+  html+="<div style=\"font-size:.68rem;color:#bbb;margin-bottom:6px\">"+subLabel+"</div>";
+  html+="<div class=\"mcard-val\">"+fmt(val)+"</div>";
+  html+="<div style=\"margin-top:4px\">"+bdg(isCumulative?sumRows(lR,function(r){return metric==="nr"?r.newPartner+r.newService+r.reactivated:metric==="sh"?r.supplyHours:r.activeDrivers;}):val,isCumulative?sumRows(pR,function(r){return metric==="nr"?r.newPartner+r.newService+r.reactivated:metric==="sh"?r.supplyHours:r.activeDrivers;}):prevWeekVal)+"<span style=\"font-size:.7rem;color:#bbb;margin-left:5px\">vs semana anterior</span></div>";
   html+="<div class=\"mcard-breakdown\">";
   [...new Set(Object.values(KAM_MAP))].sort().forEach(function(kam){
     var kp=KAM_PARTNERS[kam]?[...KAM_PARTNERS[kam]]:[];
-    var kl=lR.filter(function(r){return kp.indexOf(r.partner)>=0;});if(!kl.length)return;
+    // Active Drivers: last week; N+R and SH: cumulative
+    var kamAll=apd.filter(function(r){return kp.indexOf(r.partner)>=0;});
+    var kl=lR.filter(function(r){return kp.indexOf(r.partner)>=0;});
     var kpr=pR.filter(function(r){return kp.indexOf(r.partner)>=0;});
-    function gv(rows){if(metric==="nr")return sumRows(rows,function(r){return r.newPartner+r.newService+r.reactivated;});if(metric==="sh")return sumRows(rows,function(r){return r.supplyHours;});return sumRows(rows,function(r){return r.activeDrivers;});}
-    var kv=gv(kl),kpv=gv(kpr);var dot=KAM_COLORS[kam]||"#888";
+    if(!kl.length&&!kamAll.length)return;
+    function gv(rows,cumRows){
+      if(metric==="nr"){return isCumulative?sumRows(cumRows,function(r){return r.newPartner+r.newService+r.reactivated;}):sumRows(rows,function(r){return r.newPartner+r.newService+r.reactivated;});}
+      if(metric==="sh"){return isCumulative?sumRows(cumRows,function(r){return r.supplyHours;}):sumRows(rows,function(r){return r.supplyHours;});}
+      return sumRows(rows,function(r){return r.activeDrivers;});
+    }
+    var kv=gv(kl,kamAll);
+    var kpv=gv(kpr,apd.filter(function(r){return kp.indexOf(r.partner)>=0&&r.date===prevDate;}));
+    if(!kv)return;
+    var dot=KAM_COLORS[kam]||"#888";
     html+="<div class=\"mb-row\"><span class=\"mb-name\"><span class=\"mb-dot\" style=\"background:"+dot+"\"></span>"+kam+"</span><span class=\"mb-val\">"+fmt(kv)+"</span>"+bdg(kv,kpv,"mb-badge")+"</div>";
   });
   return html+"</div></div>";
