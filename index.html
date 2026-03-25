@@ -213,6 +213,10 @@ input[type=file]{display:none}
     <div class="sb-label" style="margin-top:12px">Partners</div>
     <div class="sb-row"><button onclick="selAll()">Todos</button><button onclick="deselAll()">Ninguno</button></div>
     <div class="plist" id="pList"></div>
+    <button onclick="applyFilters()" style="width:100%;margin-top:14px;background:#FF0000;color:#fff;border:none;border-radius:8px;padding:10px;font-size:.85rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+      Aplicar Filtros
+    </button>
   </div>
 
   <div class="main">
@@ -435,17 +439,75 @@ function popDates(){["dateFrom","dateTo"].forEach(function(id){var s=document.ge
 function popKAM(){var s=document.getElementById("kamFilter");s.innerHTML="<option value=\"all\">Todos</option>";[...new Set(Object.values(KAM_MAP))].sort().forEach(function(k){s.innerHTML+="<option value=\""+k+"\">"+k+"</option>";});}
 function popPartners(sel){var list=document.getElementById("pList");list.innerHTML="";allPartners.forEach(function(p){var chk=sel.indexOf(p)>=0?"checked":"";var c=pColors[p]||"#FF0000";var id="c_"+p.replace(/[^a-z0-9]/gi,"_");list.innerHTML+="<div class=\"pi\" data-p=\""+p+"\"><input type=\"checkbox\" id=\""+id+"\" value=\""+p+"\" "+chk+" onchange=\"onFC()\"/><label for=\""+id+"\"><span class=\"pdot\" style=\"background:"+c+"\"></span>"+p+"</label></div>";});}
 function filterPList(){var q=document.getElementById("partnerSearch").value.toLowerCase();document.querySelectorAll("#pList .pi").forEach(function(el){el.style.display=el.dataset.p.toLowerCase().indexOf(q)>=0?"flex":"none";});}
-function selAll(){document.querySelectorAll("#pList input").forEach(function(c){c.checked=true;});onFC();}
-function deselAll(){document.querySelectorAll("#pList input").forEach(function(c){c.checked=false;});onFC();}
-function onKAM(){var k=document.getElementById("kamFilter").value;if(k==="all"){selAll();return;}var ps=KAM_PARTNERS[k]?[...KAM_PARTNERS[k]]:[];document.querySelectorAll("#pList input").forEach(function(c){c.checked=ps.indexOf(c.value)>=0;});onFC();}
+function selAll(){document.querySelectorAll("#pList input").forEach(function(c){c.checked=true;});}
+function deselAll(){document.querySelectorAll("#pList input").forEach(function(c){c.checked=false;});}
+function onKAM(){var k=document.getElementById("kamFilter").value;if(k==="all"){selAll();return;}var ps=KAM_PARTNERS[k]?[...KAM_PARTNERS[k]]:[];document.querySelectorAll("#pList input").forEach(function(c){c.checked=ps.indexOf(c.value)>=0;});}
 function getSel(){return[...document.querySelectorAll("#pList input:checked")].map(function(c){return c.value;});}
-function onFC(){if(curTab==="rend")renderRend();else renderMetas();}
+function onFC(){} // disabled — use Apply button instead
+function applyFilters(){
+  if(curTab==="rend"&&rawData.length)renderRend();
+  else if(curTab==="metas"&&metasData.length&&rawData.length)renderMetas();
+}
 
 // ── AGGREGATION ──
-function getFiltered(){var city=document.getElementById("cityFilter").value;var from=document.getElementById("dateFrom").value;var to=document.getElementById("dateTo").value;var sel=getSel();return rawData.filter(function(r){return(city==="all"||r.city===city)&&r.date>=from&&r.date<=to&&sel.indexOf(r.partner)>=0;});}
-function aggPD(data){var m={};data.forEach(function(r){var k=r.partner+"|||"+r.date;if(!m[k])m[k]={partner:r.partner,kam:r.kam,date:r.date,activeDrivers:0,newPartner:0,newService:0,reactivated:0,supplyHours:0,commission:0,trips:0};var e=m[k];e.activeDrivers+=r.activeDrivers;e.newPartner+=r.newPartner;e.newService+=r.newService;e.reactivated+=r.reactivated;e.supplyHours+=r.supplyHours;e.commission+=r.commission;e.trips+=r.trips;});return Object.values(m).sort(function(a,b){return a.date.localeCompare(b.date);});}
-function aggDate(data){var m={};data.forEach(function(r){if(!m[r.date])m[r.date]={};if(!m[r.date][r.partner])m[r.date][r.partner]={activeDrivers:0,newPartner:0,newService:0,reactivated:0,supplyHours:0,commission:0};var e=m[r.date][r.partner];e.activeDrivers+=r.activeDrivers;e.newPartner+=r.newPartner;e.newService+=r.newService;e.reactivated+=r.reactivated;e.supplyHours+=r.supplyHours;e.commission+=r.commission;});return m;}
-function aggCityDate(data){var m={};data.forEach(function(r){if(!m[r.date])m[r.date]={ad:0,nr:0,sh:0};m[r.date].ad+=r.activeDrivers;m[r.date].nr+=r.newPartner+r.newService+r.reactivated;m[r.date].sh+=r.supplyHours;});return m;}
+function getFiltered(){
+  var city=document.getElementById("cityFilter").value;
+  var from=document.getElementById("dateFrom").value;
+  var to=document.getElementById("dateTo").value;
+  var sel=getSel();
+  // First deduplicate by CLID+date to avoid double counting partners with multiple CLIDs
+  // We keep one row per CLID+city+date (already done at parse level)
+  // Then filter
+  return rawData.filter(function(r){
+    return(city==="all"||r.city===city)&&r.date>=from&&r.date<=to&&sel.indexOf(r.partner)>=0;
+  });
+}
+// Aggregate by partner+date — sum across CLIDs of same partner
+// Key includes city to avoid cross-city double counting when city=all
+function aggPD(data){
+  var m={};
+  data.forEach(function(r){
+    // When city filter is "all", we must aggregate per partner+city+date
+    // to avoid summing Lima+Trujillo+Arequipa for same partner into one row
+    var k=r.partner+"|||"+r.city+"|||"+r.date;
+    if(!m[k])m[k]={partner:r.partner,kam:r.kam,city:r.city,date:r.date,activeDrivers:0,newPartner:0,newService:0,reactivated:0,supplyHours:0,commission:0,trips:0};
+    var e=m[k];
+    e.activeDrivers+=r.activeDrivers;e.newPartner+=r.newPartner;e.newService+=r.newService;
+    e.reactivated+=r.reactivated;e.supplyHours+=r.supplyHours;e.commission+=r.commission;e.trips+=r.trips;
+  });
+  // Now collapse partner+city+date into partner+date by summing cities
+  var m2={};
+  Object.values(m).forEach(function(r){
+    var k2=r.partner+"|||"+r.date;
+    if(!m2[k2])m2[k2]={partner:r.partner,kam:r.kam,date:r.date,activeDrivers:0,newPartner:0,newService:0,reactivated:0,supplyHours:0,commission:0,trips:0};
+    var e=m2[k2];
+    e.activeDrivers+=r.activeDrivers;e.newPartner+=r.newPartner;e.newService+=r.newService;
+    e.reactivated+=r.reactivated;e.supplyHours+=r.supplyHours;e.commission+=r.commission;e.trips+=r.trips;
+  });
+  return Object.values(m2).sort(function(a,b){return a.date.localeCompare(b.date);});
+}
+// Aggregate by date→partner for chart series
+function aggDate(data){
+  var m={};
+  data.forEach(function(r){
+    if(!m[r.date])m[r.date]={};
+    if(!m[r.date][r.partner])m[r.date][r.partner]={activeDrivers:0,newPartner:0,newService:0,reactivated:0,supplyHours:0,commission:0};
+    var e=m[r.date][r.partner];
+    e.activeDrivers+=r.activeDrivers;e.newPartner+=r.newPartner;e.newService+=r.newService;
+    e.reactivated+=r.reactivated;e.supplyHours+=r.supplyHours;e.commission+=r.commission;
+  });
+  return m;
+}
+function aggCityDate(data){
+  var m={};
+  data.forEach(function(r){
+    if(!m[r.date])m[r.date]={ad:0,nr:0,sh:0};
+    m[r.date].ad+=r.activeDrivers;
+    m[r.date].nr+=r.newPartner+r.newService+r.reactivated;
+    m[r.date].sh+=r.supplyHours;
+  });
+  return m;
+}
 
 // ── SECTION HEADER ──
 function secHtml(icon,bg,title,sub,tag){return"<div class=\"sh\"><div class=\"sh-icon\" style=\"background:"+bg+"20\">"+icon+"</div><div><div class=\"sh-title\">"+title+"</div><div class=\"sh-sub\">"+sub+"</div></div>"+(tag?"<span class=\"sh-tag\">"+tag+"</span>":"")+"</div>";}
