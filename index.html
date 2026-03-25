@@ -332,8 +332,9 @@ function loadFromSheets(){
     if(loaded.mData){metasData=parseMetas(loaded.mData);}
     lastLoadTime=new Date();
     showBanner(true,"Datos actualizados: "+lastLoadTime.toLocaleTimeString("es-PE"));
-    renderRend();
-    if(loaded.mData)renderMetas();
+    // Render both tabs after all data and controls are ready
+    if(rawData.length)renderRend();
+    if(metasData.length&&rawData.length)renderMetas();
   }
   fetch(proxyR)
     .then(function(r){if(!r.ok)throw new Error("HTTP "+r.status);return r.text();})
@@ -789,7 +790,15 @@ function barProj(pReal,pProj){
 }
 
 function dlChart(id,name){var ch=charts[id];if(!ch)return;ch.dataURI().then(function(r){var a=document.createElement("a");a.href=r.imgURI;a.download="yango_"+name+"_"+new Date().toISOString().slice(0,10)+".png";document.body.appendChild(a);a.click();document.body.removeChild(a);});}
-function switchTab(tab){curTab=tab;document.querySelectorAll(".nav-tab").forEach(function(b,i){b.classList.toggle("active",["rend","metas"][i]===tab);});document.querySelectorAll(".tab-panel").forEach(function(p){p.classList.remove("active");});document.getElementById("tab-"+tab).classList.add("active");}
+function switchTab(tab){
+  curTab=tab;
+  document.querySelectorAll(".nav-tab").forEach(function(b,i){b.classList.toggle("active",["rend","metas"][i]===tab);});
+  document.querySelectorAll(".tab-panel").forEach(function(p){p.classList.remove("active");});
+  document.getElementById("tab-"+tab).classList.add("active");
+  // Render on tab switch if data is already loaded
+  if(tab==="metas"&&metasData.length&&rawData.length)renderMetas();
+  if(tab==="rend"&&rawData.length)renderRend();
+}
 function downloadDashboard(){var html="<!DOCTYPE html>\n"+document.documentElement.outerHTML;var blob=new Blob([html],{type:"text/html;charset=utf-8"});var url=URL.createObjectURL(blob);var a=document.createElement("a");a.href=url;a.download="yango_dashboard_"+new Date().toISOString().slice(0,10)+".html";document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(url),1000});}
 function showLoad(show,msg){var el=document.getElementById("loadingEl");if(show){if(!el){el=document.createElement("div");el.id="loadingEl";el.className="overlay";document.body.appendChild(el);}el.innerHTML="<div class=\"spinner\"></div><div style=\"font-weight:600;color:#555\">"+(msg||"Procesando...")+"</div>";}else{if(el)el.remove();}}
 
