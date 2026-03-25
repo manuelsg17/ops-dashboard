@@ -308,15 +308,15 @@ function parseCSV(text){
 
 // ── LOAD FROM GOOGLE SHEETS ──
 function loadFromSheets(){
-  // Check if URLs have been replaced
   if(SHEET_RENDIMIENTO_URL.indexOf("TU_ID_AQUI")>=0){
-    alert("Reemplaza las URLs de Google Sheets en el codigo antes de usar esta funcion.\n\nBusca la seccion marcada con TU_ID_AQUI al inicio del script.");
+    alert("Reemplaza las URLs de Google Sheets en el codigo.");
     return;
   }
   showLoad(true,"Cargando desde Google Sheets...");
-  // Use a CORS proxy for the fetch — works when hosted on GitHub Pages
-  var proxyR=SHEET_RENDIMIENTO_URL;
-  var proxyM=SHEET_METAS_URL;
+  // CORS proxy to bypass browser restrictions
+  var proxy="https://corsproxy.io/?";
+  var proxyR=proxy+encodeURIComponent(SHEET_RENDIMIENTO_URL);
+  var proxyM=proxy+encodeURIComponent(SHEET_METAS_URL);
   var loaded={r:false,m:false,rData:null,mData:null,rErr:null,mErr:null};
   function checkDone(){
     if(!loaded.r||!loaded.m)return;
