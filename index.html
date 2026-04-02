@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23FF0000'/><polyline points='85,50 65,50 55,80 35,20 25,50 15,50' stroke='white' stroke-width='10' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Yango Dashboard</title>
+
+  <!-- External libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/apexcharts/3.41.0/apexcharts.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+
+  <!-- App styles -->
+  <link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+
+<div id="floatTip">
+  <div class="ft-d" id="ftDate"></div>
+  <div id="ftRows"></div>
+</div>
+
+<!-- ── LOGIN ──────────────────────────────────────────────────────────────── -->
+<div id="loginScreen">
+  <div class="login-box">
+    <div class="login-logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+      </svg>
+    </div>
+    <h1 class="login-title">YANGO <span>Dashboard</span></h1>
+    <p class="login-sub">Partner Performance Analytics</p>
+    <input id="loginEmail"    type="email"    class="login-input" placeholder="Email"/>
+    <input id="loginPassword" type="password" class="login-input" placeholder="Contraseña"/>
+    <p id="loginError" class="login-error"></p>
+    <button id="loginBtn" class="login-btn" onclick="handleLogin()">Ingresar</button>
+    <p class="login-footer">Acceso restringido · Uso interno Yango Peru</p>
+  </div>
+</div>
+
+<!-- ── APP ────────────────────────────────────────────────────────────────── -->
+<div id="appContainer">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+        </svg>
+      </div>
+      <div>
+        <div class="brand">YANGO <span>Dashboard</span></div>
+        <div class="brand-sub">Partner Performance Analytics</div>
+      </div>
+      <nav class="nav-tabs">
+  <button class="nav-tab active" onclick="switchTab('rend')">Rendimiento</button>
+  <button class="nav-tab"        onclick="switchTab('metas')">Metas</button>
+  <button class="nav-tab"        onclick="switchTab('ops')">Operaciones</button>
+  <button class="nav-tab"        onclick="switchTab('proyectos')">Proyectos</button>
+  <button class="nav-tab"        onclick="switchTab('config')">Configuración</button>
+  <button class="nav-tab"        onclick="switchTab('present')">Presentación</button>
+</nav>
+    </div>
+    <div class="topbar-right">
+      <!-- Dropdown "Actualizar información" -->
+      <div class="upload-dropdown" id="uploadDropdown">
+        <button class="up-btn upload-main-btn" onclick="toggleUploadMenu(event)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          Actualizar información
+          <svg class="upload-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
+        <div class="upload-menu" id="uploadMenu">
+          <label class="upload-menu-item" for="fileRend">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Rendimiento Semanal
+          </label>
+          <label class="upload-menu-item" for="fileRendMensual">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            Rendimiento Mensual
+          </label>
+          <label class="upload-menu-item" for="fileMetas">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+            Metas
+          </label>
+          <label class="upload-menu-item" for="fileData">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+            Partners
+          </label>
+        </div>
+      </div>
+
+      <!-- Inputs de archivo ocultos -->
+      <input type="file" id="fileRend"        accept=".xlsx,.xls"/>
+      <input type="file" id="fileRendMensual" accept=".xlsx,.xls"/>
+      <input type="file" id="fileMetas"       accept=".xlsx,.xls"/>
+      <input type="file" id="fileData"        accept=".xlsx,.xls"/>
+
+      <span id="userBadge" class="user-badge"></span>
+      <button class="logout-btn" onclick="handleLogout()">Salir →</button>
+    </div>
+  </div>
+
+  <!-- LAYOUT -->
+  <div class="layout">
+
+    <!-- SIDEBAR -->
+    <div class="sidebar-wrap">
+    <div class="sidebar" id="mainSidebar">
+    <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()" title="Ocultar/mostrar filtros">◀</button>
+      <div id="dsBanner" style="display:none"></div>
+
+      <div class="sb-label">Rango de Fechas</div>
+      <div class="date-grid">
+        <div><label>Desde</label><select class="sb-sel" id="dateFrom"></select></div>
+        <div><label>Hasta</label><select class="sb-sel"  id="dateTo"></select></div>
+      </div>
+
+      <div class="sb-label">Ciudad</div>
+      <select class="sb-sel" id="cityFilter">
+        <option value="all">Total Peru</option>
+        <option value="Lima">Lima</option>
+        <option value="Trujillo">Trujillo</option>
+        <option value="Arequipa">Arequipa</option>
+      </select>
+
+      <div class="sb-label">KAM</div>
+      <select class="sb-sel" id="kamFilter" onchange="onKAMChange()">
+        <option value="all">Todos</option>
+      </select>
+
+      <div class="sb-label">Buscar Partner</div>
+      <input class="sb-inp" id="partnerSearch" type="text" placeholder="Filtrar..."/>
+
+      <div class="sb-label">Partners</div>
+      <div class="sb-row">
+        <button onclick="selectAll()">Todos</button>
+        <button onclick="deselectAll()">Ninguno</button>
+      </div>
+      <div class="plist" id="pList"></div>
+
+      <button class="apply-btn" onclick="applyFilters()">
+        <svg width="14" height="14" viewBox="0 0 24 24"
+             fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        Aplicar Filtros
+      </button>
+    </div>
+    </div><!-- end .sidebar-wrap -->
+
+    <!-- MAIN PANELS -->
+    <div class="main">
+      <!-- Rendimiento -->
+      <div class="tab-panel active" id="tab-rend">
+        <div class="empty" id="rendEmpty">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5
+                     a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414
+                     a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+          </svg>
+          <p>Carga datos para comenzar</p>
+          <p class="empty-sub">Sube el Excel de Rendimiento o espera la carga desde Supabase</p>
+        </div>
+        <div id="rendContent" style="display:none"></div>
+      </div>
+
+      <!-- Metas -->
+      <div class="tab-panel" id="tab-metas">
+        <div class="empty" id="metasEmpty">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="12" cy="12" r="10"/>
+            <circle cx="12" cy="12" r="6"/>
+            <circle cx="12" cy="12" r="2"/>
+          </svg>
+          <p>Carga el archivo de <strong>Metas</strong></p>
+          <p class="empty-sub">Formato: CLID | MES | CIUDAD | SUPPLY HOURS | ACTIVE DRIVERS | N+R</p>
+        </div>
+        <div id="metasContent" style="display:none"></div>
+      </div>
+
+      <!-- Operaciones -->
+      <div class="tab-panel" id="tab-ops">
+        <div id="opsContent"></div>
+      </div>
+
+      <!-- Proyectos -->
+      <div class="tab-panel" id="tab-proyectos">
+        <div id="proyectosContent"></div>
+      </div>
+
+      <!-- Configuración -->
+      <div class="tab-panel" id="tab-config">
+        <div id="configContent">
+          <div class="empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/>
+            </svg>
+            <p>Carga el archivo <strong>Partners</strong> para configurar CLIDs</p>
+            <p class="empty-sub">Hoja DATOS con columnas: CLID | KAM | PARTNER</p>
+          </div>
+        </div>
+      </div>
+    </div>
+<!-- Presentación -->
+    <div class="tab-panel" id="tab-present">
+      <div id="presentContent"></div>
+    </div>
+  </div><!-- end .layout -->
+</div><!-- end #appContainer -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<!-- App scripts (order matters) -->
+<script src="config.js"></script>
+<script src="data.js"></script>
+<script src="auth.js"></script>
+<script src="charts.js"></script>
+<script src="rendimiento.js"></script>
+<script src="metas.js"></script>
+<script src="app.js"></script>
+<script src="ops.js"></script>
+<script src="proyectos.js"></script>
+<script src="presentacion.js"></script>
+</body>
+</html>
