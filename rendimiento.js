@@ -187,7 +187,6 @@ function renderRend() {
 
   buildTable(apd, lastDate, prevDate, sel);
   buildPartnerCards(apd, lastDate, prevDate, partners, sel);
-  attachTooltipEvents();
 }
 
 // ── METRIC CARD ───────────────────────────────────────────────────────────────

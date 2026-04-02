@@ -38,6 +38,7 @@ function initApp() {
     });
   });
 
+  attachTooltipEvents(); // solo se necesita una vez
   loadFromSupabase();
 }
 
@@ -124,7 +125,7 @@ function restoreFilters() {
         c.checked = f.selected.includes(c.value);
       });
     }
-    if (f.mode && f.mode !== STATE.curMode) switchMode(f.mode);
+    if (f.mode && f.mode !== STATE.curMode && !_inSwitchMode) switchMode(f.mode);
   } catch (e) {
     localStorage.removeItem("yangoFilters");
   }
@@ -139,7 +140,11 @@ function restoreFilters() {
 }
 
 // ── MODE SWITCH (Semanal / Mensual) ───────────────────────────────────────────
+let _inSwitchMode = false; // guard: evita que restoreFilters() revierta el cambio de modo
 function switchMode(mode) {
+  if (_inSwitchMode) return;
+  _inSwitchMode = true;
+
   STATE.curMode = mode;
 
   document.querySelectorAll(".mode-btn").forEach(btn => {
@@ -154,14 +159,14 @@ function switchMode(mode) {
     if (STATE._rawDataSemanal) STATE.rawData = STATE._rawDataSemanal;
   }
 
+  // updateIndexes ya llama popDates/popKAM/popPartners/restoreFilters internamente
   updateIndexes();
-  popDates();
-  popKAM();
-  popPartners(STATE.allPartners);
 
   if (STATE.curTab === "rend"  && STATE.rawData.length) renderRend();
   if (STATE.curTab === "metas" && STATE.metasData.length && STATE.rawData.length) renderMetas();
   if (STATE.curTab === "ops")                            renderOps();
+
+  _inSwitchMode = false;
 }
 
 // ── TAB NAVIGATION ────────────────────────────────────────────────────────────
@@ -246,20 +251,19 @@ function popKAM() {
 
 // ── SIDEBAR: PARTNERS ────────────────────────────────────────────────────────
 function popPartners(selected) {
-  const list = document.getElementById("pList");
-  list.innerHTML = "";
-  STATE.allPartners.forEach(p => {
-    const chk = selected.includes(p) ? "checked" : "";
+  const list  = document.getElementById("pList");
+  const selSet = new Set(selected);
+  list.innerHTML = STATE.allPartners.map(p => {
+    const chk = selSet.has(p) ? "checked" : "";
     const c   = STATE.partnerColors[p] || "#FF0000";
     const id  = "c_" + p.replace(/[^a-z0-9]/gi, "_");
-    list.innerHTML += `
-      <div class="pi" data-p="${p}">
+    return `<div class="pi" data-p="${p}">
         <input type="checkbox" id="${id}" value="${p}" ${chk}/>
         <label for="${id}">
           <span class="pdot" style="background:${c}"></span>${p}
         </label>
       </div>`;
-  });
+  }).join("");
 }
 
 function updateIndexes() {
