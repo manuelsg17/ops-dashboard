@@ -56,12 +56,22 @@
         <div class="brand-sub">Partner Performance Analytics</div>
       </div>
       <nav class="nav-tabs">
-  <button class="nav-tab active" onclick="switchTab('rend')">Rendimiento</button>
-  <button class="nav-tab"        onclick="switchTab('metas')">Metas</button>
-  <button class="nav-tab"        onclick="switchTab('ops')">Operaciones</button>
-  <button class="nav-tab"        onclick="switchTab('proyectos')">Proyectos</button>
-  <button class="nav-tab"        onclick="switchTab('config')">Configuración</button>
-  <button class="nav-tab"        onclick="switchTab('present')">Presentación</button>
+  <div class="nav-dropdown-wrap" id="navAnalisisWrap">
+    <button class="nav-tab nav-tab-dropdown active" id="navAnalisis" onclick="toggleAnalisisMenu(event)">
+      Análisis
+      <svg class="nav-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <polyline points="6 9 12 15 18 9"/>
+      </svg>
+    </button>
+    <div class="nav-dropdown-menu" id="analisisMenu">
+      <button class="nav-dd-item active" data-tab="rend"      onclick="switchTabFromMenu('rend')">Rendimiento</button>
+      <button class="nav-dd-item"        data-tab="metas"     onclick="switchTabFromMenu('metas')">Metas</button>
+      <button class="nav-dd-item"        data-tab="ops"       onclick="switchTabFromMenu('ops')">Operaciones</button>
+      <button class="nav-dd-item"        data-tab="proyectos" onclick="switchTabFromMenu('proyectos')">Proyectos</button>
+    </div>
+  </div>
+  <button class="nav-tab" data-tab="present" onclick="switchTab('present')">Presentación</button>
+  <button class="nav-tab" data-tab="config"  onclick="switchTab('config')">Configuración</button>
 </nav>
     </div>
     <div class="topbar-right">
@@ -115,7 +125,6 @@
     <!-- SIDEBAR -->
     <div class="sidebar-wrap">
     <div class="sidebar" id="mainSidebar">
-    <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()" title="Ocultar/mostrar filtros">◀</button>
       <div id="dsBanner" style="display:none"></div>
 
       <div class="sb-label">Rango de Fechas</div>
@@ -155,6 +164,9 @@
         Aplicar Filtros
       </button>
     </div>
+    <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()" title="Ocultar/mostrar filtros">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
     </div><!-- end .sidebar-wrap -->
 
     <!-- MAIN PANELS -->

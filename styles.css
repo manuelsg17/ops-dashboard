@@ -90,7 +90,7 @@ body {
 .brand span{ color: #FF0000; }
 .brand-sub { font-size: .66rem; color: #aaa; }
 
-.nav-tabs { display: flex; gap: 4px; margin-left: 20px; }
+.nav-tabs { display: flex; gap: 4px; margin-left: 20px; align-items: center; }
 .nav-tab  {
   padding: 8px 16px; border-radius: 8px;
   font-size: .83rem; font-weight: 600;
@@ -99,6 +99,37 @@ body {
 }
 .nav-tab:hover  { background: #f5f5f5; color: #111; }
 .nav-tab.active { background: #FF0000; color: #fff; }
+
+/* ── NAV ANÁLISIS DROPDOWN ───────────────────────────────────────────────── */
+.nav-dropdown-wrap { position: relative; }
+.nav-tab-dropdown  { display: flex; align-items: center; gap: 5px; }
+.nav-chevron {
+  transition: transform .15s;
+  flex-shrink: 0;
+}
+.nav-dropdown-wrap.menu-open .nav-chevron { transform: rotate(180deg); }
+.nav-dropdown-menu {
+  display: none;
+  position: absolute; top: calc(100% + 6px); left: 0;
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0,0,0,.10);
+  min-width: 160px;
+  z-index: 200;
+  padding: 4px;
+  flex-direction: column;
+}
+.nav-dropdown-menu.open { display: flex; }
+.nav-dd-item {
+  padding: 8px 14px; border-radius: 7px;
+  font-size: .82rem; font-weight: 600;
+  border: none; background: none; cursor: pointer; color: #555;
+  text-align: left; transition: background .12s, color .12s;
+  white-space: nowrap;
+}
+.nav-dd-item:hover  { background: #fff5f5; color: #FF0000; }
+.nav-dd-item.active { color: #FF0000; font-weight: 700; }
 
 .up-btn {
   padding: 7px 14px; border-radius: 6px;
@@ -489,26 +520,26 @@ body.present-mode #slideContainer {
 
 /* ── SIDEBAR COLAPSABLE ──────────────────────────────────────────────────── */
 .sidebar-toggle {
-  position: absolute; right: -14px; top: 50%;
-  transform: translateY(-50%);
+  position: sticky; top: 74px; align-self: flex-start;
+  flex-shrink: 0;
   width: 26px; height: 26px;
   background: #fff;
   border: 1px solid #e5e5e5;
   border-radius: 50%;
   box-shadow: 0 1px 4px rgba(0,0,0,.12);
   cursor: pointer;
-  font-size: .75rem; color: #555;
+  color: #555;
   display: flex; align-items: center; justify-content: center;
   z-index: 10;
   transition: background .15s, color .15s;
   padding: 0;
-  line-height: 1;
+  margin-top: 16px;
 }
 .sidebar-toggle:hover { background: #FF0000; color: #fff; border-color: #FF0000; }
 .sidebar-wrap {
-  position: relative;
   display: flex;
   flex-shrink: 0;
+  gap: 4px;
 }
 .sidebar {
   transition: width .2s ease, min-width .2s ease, padding .2s ease, opacity .2s ease;

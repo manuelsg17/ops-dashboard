@@ -18,10 +18,16 @@ function initApp() {
     _pSearchTimer = setTimeout(filterPList, 300);
   });
 
-  // Cerrar dropdown de uploads al hacer clic fuera
+  // Cerrar dropdowns al hacer clic fuera
   document.addEventListener("click", () => {
     const m = document.getElementById("uploadMenu");
     if (m) m.classList.remove("open");
+    const a = document.getElementById("analisisMenu");
+    if (a) {
+      a.classList.remove("open");
+      const w = document.getElementById("navAnalisisWrap");
+      if (w) w.classList.remove("menu-open");
+    }
   });
 
   // Cerrar dropdown al seleccionar un archivo
@@ -40,12 +46,30 @@ function toggleUploadMenu(e) {
   document.getElementById("uploadMenu").classList.toggle("open");
 }
 
+// ── NAV ANÁLISIS DROPDOWN ─────────────────────────────────────────────────────
+function toggleAnalisisMenu(e) {
+  e.stopPropagation();
+  const menu = document.getElementById("analisisMenu");
+  const wrap = document.getElementById("navAnalisisWrap");
+  menu.classList.toggle("open");
+  wrap.classList.toggle("menu-open", menu.classList.contains("open"));
+}
+
+function switchTabFromMenu(tab) {
+  document.getElementById("analisisMenu").classList.remove("open");
+  document.getElementById("navAnalisisWrap").classList.remove("menu-open");
+  switchTab(tab);
+}
+
 // ── SIDEBAR TOGGLE ────────────────────────────────────────────────────────────
+const _SVG_COLLAPSE = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>`;
+const _SVG_EXPAND   = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>`;
+
 function toggleSidebar() {
   const sb  = document.getElementById("mainSidebar");
   const btn = document.getElementById("sidebarToggle");
   const collapsed = sb.classList.toggle("collapsed");
-  btn.textContent = collapsed ? "▶" : "◀";
+  btn.innerHTML = collapsed ? _SVG_EXPAND : _SVG_COLLAPSE;
   localStorage.setItem("yangoSidebarCollapsed", collapsed ? "1" : "0");
   // Reajustar gráficas ApexCharts al cambiar ancho
   setTimeout(() => window.dispatchEvent(new Event("resize")), 220);
@@ -110,7 +134,7 @@ function restoreFilters() {
     const sb  = document.getElementById("mainSidebar");
     const btn = document.getElementById("sidebarToggle");
     if (sb)  sb.classList.add("collapsed");
-    if (btn) btn.textContent = "▶";
+    if (btn) btn.innerHTML = _SVG_EXPAND;
   }
 }
 
@@ -137,6 +161,7 @@ function switchMode(mode) {
 
   if (STATE.curTab === "rend"  && STATE.rawData.length) renderRend();
   if (STATE.curTab === "metas" && STATE.metasData.length && STATE.rawData.length) renderMetas();
+  if (STATE.curTab === "ops")                            renderOps();
 }
 
 // ── TAB NAVIGATION ────────────────────────────────────────────────────────────
@@ -155,8 +180,14 @@ function switchTab(tab) {
 
   STATE.curTab = tab;
 
-  document.querySelectorAll(".nav-tab").forEach((btn, i) => {
-    btn.classList.toggle("active", ["rend", "metas", "ops", "proyectos", "config", "present"][i] === tab);
+  const ANALISIS_TABS = ["rend", "metas", "ops", "proyectos"];
+  const navAnalisis = document.getElementById("navAnalisis");
+  if (navAnalisis) navAnalisis.classList.toggle("active", ANALISIS_TABS.includes(tab));
+  document.querySelectorAll(".nav-tab[data-tab]").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.tab === tab);
+  });
+  document.querySelectorAll(".nav-dd-item").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.tab === tab);
   });
   document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
   document.getElementById(`tab-${tab}`).classList.add("active");
