@@ -20,8 +20,13 @@ function destroyPresentCharts() {
   PRESENT_STATE.charts = [];
 }
 
-function getSelectedDates(from, to) {
+function getSelectedDates(from, to, mode) {
   const all = [...new Set(STATE.rawData.map(r => r.date))].sort();
+  if (mode === "mensual") {
+    const idx = all.findIndex(d => d > to);
+    const end = idx === -1 ? all.length - 1 : idx - 1;
+    return all.slice(Math.max(0, end - 3), end + 1);
+  }
   const datesInRange = all.filter(d => d >= from && d <= to);
   if (datesInRange.length > 0) return datesInRange;
   const idx = all.findIndex(d => d > to);
@@ -277,7 +282,7 @@ function renderSlide(partner, from, to, mode) {
   switch (PRESENT_STATE.slide) {
     case 0: el.innerHTML = buildSlide0(partner, from, to, mode); break;
     case 1: el.innerHTML = buildSlide1(partner, from, to, mode);
-            setTimeout(() => buildSlide1Charts(partner, from, to), 100); break;
+            setTimeout(() => buildSlide1Charts(partner, from, to, mode), 100); break;
     case 2: el.innerHTML = buildSlide5(partner, from, to, mode); break;
     case 3: el.innerHTML = buildSlide3(partner, from, to, mode); break;
   }
@@ -400,9 +405,9 @@ function buildSlide1(partner, from, to, mode) {
     </div>`;
 }
 
-function buildSlide1Charts(partner, from, to) {
+function buildSlide1Charts(partner, from, to, mode) {
   const cities  = [...new Set(STATE.rawData.filter(r => r.partner === partner).map(r => r.city))];
-  const dates   = getSelectedDates(from, to);
+  const dates   = getSelectedDates(from, to, mode);
   const metrics = [
     { key:"ad", color:"#FF0000", fn: r=>r.activeDrivers },
     { key:"nr", color:"#f97316", fn: r=>r.newPartner+r.newService+r.reactivated },
@@ -467,7 +472,7 @@ function buildSlide3(partner, from, to, mode) {
                   <div style="background:#fafafa;border-radius:6px;padding:7px 9px;flex:1">
                     <div style="font-size:.6rem;color:#aaa;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px">${m.label}</div>
                     <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
-                      <span style="font-size:1.2rem;font-weight:900;color:${pColor}">${pos===1 ? "TOP 5" : "#"+pos}</span>
+                      <span style="font-size:1.2rem;font-weight:900;color:${pColor}">${pos<=3 ? "TOP 3" : "#"+pos}</span>
                       <span style="font-size:.65rem;color:#aaa">${es?"de":"of"} ${total}</span>
                       <span style="margin-left:auto;font-size:.62rem;background:${pColor}20;color:${pColor};padding:1px 5px;border-radius:6px;font-weight:700">Top ${100-pct+1}%</span>
                     </div>
@@ -601,7 +606,7 @@ async function downloadPresentPDF() {
 
     const allSlides = [
       { html: buildSlide0(partner,from,to,mode), hasCharts:false, chartFn:null, name:slideNames[0] },
-      { html: buildSlide1(partner,from,to,mode), hasCharts:true,  chartFn:()=>buildSlide1Charts(partner,from,to), name:slideNames[1] },
+      { html: buildSlide1(partner,from,to,mode), hasCharts:true,  chartFn:()=>buildSlide1Charts(partner,from,to,mode), name:slideNames[1] },
       { html: buildSlide5(partner,from,to,mode), hasCharts:false, chartFn:null, name:slideNames[2] },
       { html: buildSlide3(partner,from,to,mode), hasCharts:false, chartFn:null, name:slideNames[3] }
     ];
