@@ -467,14 +467,14 @@ function buildSlide3(partner, from, to, mode) {
                   <div style="background:#fafafa;border-radius:6px;padding:7px 9px;flex:1">
                     <div style="font-size:.6rem;color:#aaa;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px">${m.label}</div>
                     <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
-                      <span style="font-size:1.2rem;font-weight:900;color:${pColor}">#${pos}</span>
+                      <span style="font-size:1.2rem;font-weight:900;color:${pColor}">${pos===1 ? "TOP 5" : "#"+pos}</span>
                       <span style="font-size:.65rem;color:#aaa">${es?"de":"of"} ${total}</span>
                       <span style="margin-left:auto;font-size:.62rem;background:${pColor}20;color:${pColor};padding:1px 5px;border-radius:6px;font-weight:700">Top ${100-pct+1}%</span>
                     </div>
                     <div style="background:#eee;border-radius:4px;height:3px;margin-bottom:5px">
                       <div style="background:${pColor};height:3px;border-radius:4px;width:${pct}%"></div>
                     </div>
-                    ${prev?`<div style="font-size:.6rem;color:#aaa">▲ ${es?"ant":"prev"}: <strong>+${fmt(prev.val-myVal)}</strong></div>`:`<div style="font-size:.6rem;color:#f59e0b">🏆 ${es?"Líder":"Leader"}</div>`}
+                    ${prev?`<div style="font-size:.6rem;color:#aaa">▲ ${es?"ant":"prev"}: <strong>+${fmt(prev.val-myVal)}</strong></div>`:`<div style="font-size:.6rem;color:#f59e0b">⭐ ${es?"Destacado":"Top Performer"}</div>`}
                     ${next?`<div style="font-size:.6rem;color:#aaa">▼ ${es?"sig":"next"}: <strong style="color:#10b981">-${fmt(myVal-next.val)}</strong></div>`:`<div style="font-size:.6rem;color:#aaa">${es?"Último lugar":"Last place"}</div>`}
                   </div>`;
               }).join("")}
@@ -491,7 +491,9 @@ function buildSlide5(partner, from, to, mode) {
   const es      = PRESENT_STATE.lang === "es";
   const col     = STATE.partnerColors[partner] || "#FF0000";
   const dates   = getSelectedDates(from, to);
-  const cities  = [...new Set(STATE.rawData.filter(r => r.partner === partner).map(r => r.city))].sort();
+  const availableCities = new Set(STATE.rawData.filter(r => r.partner === partner).map(r => r.city));
+  const order = ["Lima", "Trujillo", "Arequipa"];
+  const cities = order.filter(c => availableCities.has(c));
 
   const metrics = [
     { key: "ad", label: es ? "Conductores Activos" : "Active Drivers",    fn: r => r.activeDrivers },
@@ -520,10 +522,10 @@ function buildSlide5(partner, from, to, mode) {
       const pVals = getPartnerVals(partner, city, dates, m.fn);
       const cVals = getCityVals(city, dates, m.fn);
       const cells = dates.map((d, i) => `
-        <td style="text-align:center;padding:5px 8px;font-size:.72rem;border-bottom:1px solid #f5f5f5">
-          <div style="font-size:.65rem;color:#bbb;margin-bottom:2px">${d2s(d)}</div>
+        <td style="text-align:center;padding:4px 3px;font-size:.72rem;border-bottom:1px solid #f5f5f5">
+          <div style="font-size:.60rem;color:#bbb;margin-bottom:2px">${d2s(d)}</div>
           <div>${wowStr(pVals, i)}</div>
-          <div style="color:#aaa;font-size:.65rem">Ciudad: ${wowStr(cVals, i)} ${vsIcon(pVals, cVals, i)}</div>
+          <div style="color:#aaa;font-size:.55rem">C: ${wowStr(cVals, i)} ${vsIcon(pVals, cVals, i)}</div>
         </td>`).join("");
       return `<tr>
         <td style="font-size:.72rem;font-weight:600;color:#555;padding:5px 10px;white-space:nowrap;border-bottom:1px solid #f5f5f5">${m.label}</td>
@@ -628,7 +630,7 @@ const div = document.createElement("div");
         await new Promise(r => setTimeout(r, waitTime));
       }
 
-      const canvas = await html2canvas(div, { width:1280, height:720, scale:3, useCORS:true, logging:false });
+      const canvas = await html2canvas(div, { width:1280, height:720, scale:6, useCORS:true, logging:false });
 
       if (s.hasCharts) {
         div.querySelectorAll("canvas").forEach(c => { const ch = Chart.getChart(c); if(ch) ch.destroy(); });
