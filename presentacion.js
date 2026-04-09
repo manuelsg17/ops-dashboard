@@ -134,7 +134,7 @@ function buildMiniChart(canvasId, dates, partnerVals, cityVals, color) {
       },
       scales: {
         x: { ticks: { font:{size:8}, maxRotation:0 }, grid: { display:false } },
-        y: { grace: "20%", ticks: { font:{size:8}, callback: v => fmt(v) }, grid: { color:"#f5f5f5" } }
+        y: { suggestedMax: pMax * 1.3, ticks: { font:{size:8}, callback: v => fmt(v) }, grid: { color:"#f5f5f5" } }
       }
     }
   });
@@ -390,7 +390,7 @@ function buildSlide1(partner, from, to, mode) {
                       </span>
                     </div>
                     <div style="font-weight:900;font-size:.88rem;color:#111;margin-bottom:3px">${fmt(pValL)}</div>
-                    <div style="flex:1;min-height:60px;position:relative">
+                    <div style="height:80px;position:relative;width:100%;margin-top:auto">
                       <canvas id="mc_${city}_${m.key}" style="width:100%;height:100%"></canvas>
                     </div>
                     <div style="font-size:.58rem;color:#aaa;margin-top:2px;display:flex;justify-content:space-between">
