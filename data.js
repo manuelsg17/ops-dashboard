@@ -38,8 +38,8 @@ function bdg(c, p, cls = "mcard-badge") {
 }
 
 // Semaphore
-function semCls(p) { return p >= 80 ? "sem-g" : p >= 50 ? "sem-y" : "sem-r"; }
-function pColor(p) { return p >= 80 ? "#10b981" : p >= 50 ? "#f59e0b" : "#FF0000"; }
+function semCls(p) { return p > 100 ? "sem-g" : p >= 80 ? "sem-g" : p >= 50 ? "sem-y" : "sem-r"; }
+function pColor(p) { return p > 100 ? "#8b5cf6" : p >= 80 ? "#10b981" : p >= 50 ? "#f59e0b" : "#FF0000"; }
 
 // Trend over last 3 periods
 function trendI(vals) {
@@ -56,20 +56,30 @@ function trendI(vals) {
   return { i: "→", c: "color:#888" };
 }
 
-// Linear projection — full precision, rounding only at display via fmt()
-function projA(vals, weeksDone, weeksTotal) {
-  const v = vals.filter(x => x > 0);
-  if (!v.length) return 0;
-  const left = Math.max(weeksTotal - weeksDone, 0);
-  const last3 = v.slice(-3);
-  const rate  = last3.reduce((s, x) => s + x, 0) / last3.length;
-  return v.reduce((s, x) => s + x, 0) + rate * left;
+// Calculate days elapsed and remaining using the last data date as week start.
+// The file date = start of week → add 6 days → end of that week.
+// Then compute days remaining in month from that end date.
+function calcProjectionDays(lastDate) {
+  if (!lastDate) return { daysElapsed: 28, daysRemaining: 0 };
+  const endOfWeek = new Date(lastDate);
+  endOfWeek.setDate(endOfWeek.getDate() + 6);
+  const daysElapsed = endOfWeek.getDate(); // day-of-month at end of current week
+  const daysInMonth = new Date(
+    endOfWeek.getFullYear(), endOfWeek.getMonth() + 1, 0
+  ).getDate();
+  const daysRemaining = Math.max(daysInMonth - daysElapsed, 0);
+  return { daysElapsed, daysRemaining, daysInMonth };
 }
 
-// Estimate total weeks in month from date range
-function mWeeks(from, to) {
-  if (!from || !to) return 4;
-  return (new Date(to) - new Date(from)) / (1000 * 60 * 60 * 24) > 28 ? 5 : 4;
+// Day-rate projection: total so far + (avg weekly rate / 7) * remaining days
+function projA(vals, daysElapsed, daysRemaining) {
+  const v = vals.filter(x => x > 0);
+  if (!v.length) return 0;
+  const total      = v.reduce((s, x) => s + x, 0);
+  const last3      = v.slice(-3);
+  const weeklyRate = last3.reduce((s, x) => s + x, 0) / last3.length;
+  const dailyRate  = weeklyRate / 7;
+  return total + dailyRate * daysRemaining;
 }
 
 function sumR(rows, fn) { return rows.reduce((s, r) => s + fn(r), 0); }

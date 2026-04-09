@@ -1,5 +1,8 @@
 // app.js — Inicialización principal, sidebar, tabs y helpers de UI
 
+// ── CONFIG PAGINATION STATE ───────────────────────────────────────────────────
+const CONFIG_STATE = { page: 0, search: "", kamFilter: "all", PAGE_SIZE: 20 };
+
 // ── APP INIT ──────────────────────────────────────────────────────────────────
 function initApp() {
   // Restaurar configuración de alerta de declive
@@ -185,7 +188,7 @@ function switchTab(tab) {
 
   STATE.curTab = tab;
 
-  const ANALISIS_TABS = ["rend", "metas", "ops", "proyectos"];
+  const ANALISIS_TABS = ["rend", "metas", "ops", "proyectos", "unifview"];
   const navAnalisis = document.getElementById("navAnalisis");
   if (navAnalisis) navAnalisis.classList.toggle("active", ANALISIS_TABS.includes(tab));
   document.querySelectorAll(".nav-tab[data-tab]").forEach(btn => {
@@ -222,6 +225,7 @@ function switchTab(tab) {
   if (tab === "metas"     && STATE.metasData.length && STATE.rawData.length) renderMetas();
   if (tab === "ops")                                                          renderOps();
   if (tab === "proyectos")                                                    renderProyectos();
+  if (tab === "unifview")                                                     renderUnifView();
   if (tab === "config")                                                       renderConfig();
   if (tab === "present")                                                      renderPresent();
 }
@@ -238,6 +242,49 @@ function popDates() {
     document.getElementById("dateFrom").value = STATE.allDates[0];
     document.getElementById("dateTo").value   = STATE.allDates[STATE.allDates.length - 1];
   }
+}
+
+// ── DATE PRESETS ──────────────────────────────────────────────────────────────
+function setDatePreset(type) {
+  const dates = STATE.allDates;
+  if (!dates || !dates.length) return;
+  const today = new Date();
+  let from, to;
+
+  if (type === 'week') {
+    // Last Monday up to most recent date in data
+    const day = today.getDay(); // 0=Sun, 1=Mon...
+    const diff = (day + 6) % 7; // days since last Monday
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - diff);
+    const mondayStr = monday.toISOString().slice(0, 10);
+    from = dates.find(d => d >= mondayStr) || dates[dates.length - 1];
+    to   = dates[dates.length - 1];
+  } else if (type === 'fortnight') {
+    const dayOfMonth = today.getDate();
+    if (dayOfMonth <= 15) {
+      // First fortnight: 1st to 15th
+      const m = today.toISOString().slice(0, 7);
+      from = dates.find(d => d >= `${m}-01`) || dates[0];
+      to   = dates.filter(d => d <= `${m}-15`).at(-1) || dates[0];
+    } else {
+      // Second fortnight: 16th to end of month
+      const m = today.toISOString().slice(0, 7);
+      from = dates.find(d => d >= `${m}-16`) || dates[0];
+      to   = dates[dates.length - 1];
+    }
+  } else if (type === 'month') {
+    const m = today.toISOString().slice(0, 7);
+    from = dates.find(d => d >= `${m}-01`) || dates[0];
+    to   = dates[dates.length - 1];
+  }
+
+  if (!from || !to) return;
+  const elFrom = document.getElementById("dateFrom");
+  const elTo   = document.getElementById("dateTo");
+  if (elFrom) elFrom.value = from;
+  if (elTo)   elTo.value   = to;
+  applyFilters();
 }
 
 // ── SIDEBAR: KAM ─────────────────────────────────────────────────────────────
@@ -387,9 +434,33 @@ function renderConfig() {
   });
   html += `</div>`;
 
-  // CRUD table
+  // CRUD table with filter + pagination
+  const cfgSearch = CONFIG_STATE.search.toLowerCase();
+  const cfgKamF   = CONFIG_STATE.kamFilter;
+  let allRows = Object.entries(STATE.CLID_MAP)
+    .sort((a, b) => a[1].localeCompare(b[1]))
+    .filter(([clid, partner]) => {
+      const kam = STATE.KAM_MAP[clid] || "";
+      if (cfgKamF !== "all" && kam !== cfgKamF) return false;
+      if (cfgSearch && !clid.toLowerCase().includes(cfgSearch) && !partner.toLowerCase().includes(cfgSearch) && !kam.toLowerCase().includes(cfgSearch)) return false;
+      return true;
+    });
+  const totalPages = Math.max(1, Math.ceil(allRows.length / CONFIG_STATE.PAGE_SIZE));
+  if (CONFIG_STATE.page >= totalPages) CONFIG_STATE.page = 0;
+  const pageRows  = allRows.slice(CONFIG_STATE.page * CONFIG_STATE.PAGE_SIZE, (CONFIG_STATE.page + 1) * CONFIG_STATE.PAGE_SIZE);
+  const kamFilterOpts = kams.map(k => `<option value="${k}"${cfgKamF===k?" selected":""}>${k}</option>`).join("");
+
   html += `
     <div style="margin-bottom:10px;font-size:.8rem;font-weight:700;color:#555">👥 Partners &amp; CLIDs</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+      <input class="crud-input" id="configSearch" placeholder="Buscar CLID, partner o KAM..." value="${CONFIG_STATE.search.replace(/"/g,'&quot;')}"
+        oninput="CONFIG_STATE.search=this.value;CONFIG_STATE.page=0;renderConfig()" style="flex:1;min-width:160px;max-width:300px"/>
+      <select class="crud-input" id="configKamFilter" onchange="CONFIG_STATE.kamFilter=this.value;CONFIG_STATE.page=0;renderConfig()" style="width:auto">
+        <option value="all"${cfgKamF==="all"?" selected":""}>Todos los KAMs</option>
+        ${kamFilterOpts}
+      </select>
+      <span style="font-size:.75rem;color:#aaa">${allRows.length} resultado${allRows.length!==1?"s":""}</span>
+    </div>
     <div class="tbl-wrap">
       <table class="dtbl" id="crudTable">
         <thead>
@@ -400,9 +471,7 @@ function renderConfig() {
         </thead>
         <tbody>`;
 
-  Object.entries(STATE.CLID_MAP)
-    .sort((a, b) => a[1].localeCompare(b[1]))
-    .forEach(([clid, partner]) => {
+  pageRows.forEach(([clid, partner]) => {
       const kam   = STATE.KAM_MAP[clid] || "";
       const color = KAM_COLORS[kam] || "#888";
       const pdot  = STATE.partnerColors[partner] || "#ccc";
@@ -425,17 +494,33 @@ function renderConfig() {
     });
 
   // Fila para agregar nuevo
+  const kamOpts = kams.map(k => `<option value="${k}">${k}</option>`).join("");
   html += `
         <tr id="newClidRow" style="background:#f9fffe">
           <td><input class="crud-input" id="newClid"    placeholder="CLID"/></td>
           <td><input class="crud-input" id="newPartner" placeholder="Nombre del partner"/></td>
-          <td><input class="crud-input" id="newKam"     placeholder="Nombre del KAM"/></td>
+          <td>
+            <select class="crud-input" id="newKam" onchange="kamNewKamChange()" style="width:100%">
+              ${kamOpts}
+              <option value="__new__">+ Añadir nuevo KAM...</option>
+            </select>
+            <input class="crud-input" id="newKamCustom" placeholder="Nuevo nombre de KAM" style="display:none;margin-top:4px"/>
+          </td>
           <td style="text-align:center">
             <button class="crud-btn crud-btn-add" onclick="kamCrudAdd()">+ Agregar</button>
           </td>
         </tr>
       </tbody></table>
-    </div></div>`;
+    </div>
+    ${totalPages > 1 ? `
+    <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.78rem;color:#555">
+      <button class="crud-btn" onclick="CONFIG_STATE.page=Math.max(0,CONFIG_STATE.page-1);renderConfig()"
+        ${CONFIG_STATE.page===0?"disabled":""} style="padding:4px 10px">← Anterior</button>
+      <span>Página <strong>${CONFIG_STATE.page+1}</strong> de <strong>${totalPages}</strong></span>
+      <button class="crud-btn" onclick="CONFIG_STATE.page=Math.min(${totalPages-1},CONFIG_STATE.page+1);renderConfig()"
+        ${CONFIG_STATE.page===totalPages-1?"disabled":""} style="padding:4px 10px">Siguiente →</button>
+    </div>` : ""}
+    </div>`;
   content.innerHTML = html;
 }
 
@@ -445,19 +530,45 @@ function kamMakeEditable(clid) {
   if (!row) return;
   const partner = STATE.CLID_MAP[clid] || "";
   const kam     = STATE.KAM_MAP[clid]  || "";
+  const kams    = [...new Set(Object.values(STATE.KAM_MAP))].sort();
+  // Include current KAM even if not in list (safety)
+  if (kam && !kams.includes(kam)) kams.push(kam);
+  const editKamOpts = kams.map(k => `<option value="${k}"${k===kam?" selected":""}>${k}</option>`).join("");
   row.innerHTML = `
     <td style="font-size:.75rem;color:#aaa;font-family:monospace">${clid}</td>
     <td><input class="crud-input" id="edit_partner_${clid}" value="${partner}"/></td>
-    <td><input class="crud-input" id="edit_kam_${clid}"     value="${kam}"/></td>
+    <td>
+      <select class="crud-input" id="edit_kam_${clid}" onchange="kamEditKamChange('${clid}')" style="width:100%">
+        ${editKamOpts}
+        <option value="__new__">+ Añadir nuevo KAM...</option>
+      </select>
+      <input class="crud-input" id="edit_kam_custom_${clid}" placeholder="Nuevo nombre de KAM" style="display:none;margin-top:4px"/>
+    </td>
     <td style="text-align:center">
       <button class="crud-btn crud-btn-save"   onclick="kamCrudEdit('${clid}')">Guardar</button>
       <button class="crud-btn crud-btn-cancel" onclick="renderConfig()">Cancelar</button>
     </td>`;
 }
 
+function kamNewKamChange() {
+  const sel    = document.getElementById("newKam");
+  const custom = document.getElementById("newKamCustom");
+  if (custom) custom.style.display = sel.value === "__new__" ? "block" : "none";
+}
+
+function kamEditKamChange(clid) {
+  const sel    = document.getElementById(`edit_kam_${clid}`);
+  const custom = document.getElementById(`edit_kam_custom_${clid}`);
+  if (custom) custom.style.display = sel.value === "__new__" ? "block" : "none";
+}
+
 async function kamCrudEdit(clid) {
-  const partner = document.getElementById(`edit_partner_${clid}`)?.value.trim();
-  const kam     = document.getElementById(`edit_kam_${clid}`)?.value.trim();
+  const partner  = document.getElementById(`edit_partner_${clid}`)?.value.trim();
+  const kamSel   = document.getElementById(`edit_kam_${clid}`);
+  const kamRaw   = kamSel?.value;
+  const kam      = kamRaw === "__new__"
+    ? (document.getElementById(`edit_kam_custom_${clid}`)?.value.trim() || "")
+    : (kamRaw || "").trim();
   if (!partner || !kam) { showBanner(false, "Completa nombre y KAM antes de guardar."); return; }
   showLoad(true, "Guardando...");
   const { error } = await sb.from("partners")
@@ -465,19 +576,31 @@ async function kamCrudEdit(clid) {
   showLoad(false);
   if (error) { showBanner(false, "Error al guardar: " + error.message); return; }
   await loadFromSupabase();
+  renderConfig();
+  showBanner(true, "Guardado correctamente ✓");
 }
 
 async function kamCrudAdd() {
   const clid    = document.getElementById("newClid")?.value.trim();
   const partner = document.getElementById("newPartner")?.value.trim();
-  const kam     = document.getElementById("newKam")?.value.trim();
+  const kamSel  = document.getElementById("newKam");
+  const kamRaw  = kamSel?.value;
+  const kam     = kamRaw === "__new__"
+    ? (document.getElementById("newKamCustom")?.value.trim() || "")
+    : (kamRaw || "").trim();
   if (!clid || !partner || !kam) { showBanner(false, "Completa CLID, partner y KAM para agregar."); return; }
+  if (STATE.CLID_MAP[clid]) {
+    const existing = `${STATE.CLID_MAP[clid]} (KAM: ${STATE.KAM_MAP[clid]})`;
+    if (!confirm(`El CLID "${clid}" ya existe: ${existing}.\n¿Deseas actualizarlo con los nuevos datos?`)) return;
+  }
   showLoad(true, "Guardando...");
   const { error } = await sb.from("partners")
     .upsert([{ clid, partner, kam, activo: true }], { onConflict: "clid" });
   showLoad(false);
   if (error) { showBanner(false, "Error al agregar: " + error.message); return; }
   await loadFromSupabase();
+  renderConfig();
+  showBanner(true, "CLID agregado correctamente ✓");
 }
 
 async function kamCrudDelete(clid) {

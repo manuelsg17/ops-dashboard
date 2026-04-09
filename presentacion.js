@@ -1,15 +1,18 @@
 // presentacion.js — Pestaña Presentación v3
+// Register chartjs-plugin-datalabels globally when available
+if (typeof ChartDataLabels !== "undefined") {
+  Chart.register(ChartDataLabels);
+}
 
 let PRESENT_STATE = {
   partner:   null,
   slide:     0,
   lang:      "es",
-  aiSummary: { es: null, en: null },
   charts:    []
 };
 
-const SLIDE_NAMES_ES = ["Carátula", "KPIs", "Tendencia", "Ranking", "Resumen", "vs Ciudad"];
-const SLIDE_NAMES_EN = ["Cover",    "KPIs", "Trend",     "Ranking", "Summary", "vs City"];
+const SLIDE_NAMES_ES = ["Carátula", "KPIs", "vs Ciudad", "Ranking"];
+const SLIDE_NAMES_EN = ["Cover",    "KPIs", "vs City",   "Ranking"];
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 function destroyPresentCharts() {
@@ -108,6 +111,18 @@ function buildMiniChart(canvasId, dates, partnerVals, cityVals, color) {
                 : `Ciudad: tendencia${wStr}`;
             }
           }
+        },
+        datalabels: {
+          display: (ctx) => ctx.datasetIndex === 0 && ctx.dataIndex > 0 && pWoW[ctx.dataIndex] !== null,
+          formatter: (_, ctx) => {
+            const w = pWoW[ctx.dataIndex];
+            return (w >= 0 ? "+" : "") + w.toFixed(1) + "%";
+          },
+          color: (ctx) => wowColor(pWoW[ctx.dataIndex]),
+          font: { size: 8, weight: "bold" },
+          anchor: "end",
+          align: "top",
+          offset: 2
         }
       },
       scales: {
@@ -228,22 +243,29 @@ function renderPresent() {
 }
 
 function onPresentPartnerChange(p) {
-  PRESENT_STATE.partner   = p;
-  PRESENT_STATE.aiSummary = { es: null, en: null };
+  PRESENT_STATE.partner = p;
   renderPresent();
 }
 
 function filterPresentPartners(q) {
   const sel = document.getElementById("presentPartnerSel");
   if (!sel) return;
-  [...sel.options].forEach(o => {
-    o.style.display = o.value.toLowerCase().includes(q.toLowerCase()) ? "" : "none";
-  });
+  const lower    = q.toLowerCase().trim();
+  const filtered = lower
+    ? STATE.allPartners.filter(p => p.toLowerCase().includes(lower))
+    : STATE.allPartners;
+  sel.innerHTML = filtered.map(p =>
+    `<option value="${p}" ${p === PRESENT_STATE.partner ? "selected" : ""}>${p}</option>`
+  ).join("");
+  // Auto-select if exactly 1 match
+  if (filtered.length === 1 && filtered[0] !== PRESENT_STATE.partner) {
+    onPresentPartnerChange(filtered[0]);
+  }
 }
 
 function setPresentLang(lang) { PRESENT_STATE.lang = lang; renderPresent(); }
 function prevSlide() { PRESENT_STATE.slide = Math.max(0, PRESENT_STATE.slide - 1); renderPresent(); }
-function nextSlide() { PRESENT_STATE.slide = Math.min(5, PRESENT_STATE.slide + 1); renderPresent(); }
+function nextSlide() { PRESENT_STATE.slide = Math.min(3, PRESENT_STATE.slide + 1); renderPresent(); }
 function goSlide(i)  { PRESENT_STATE.slide = i; renderPresent(); }
 
 // ── RENDER SLIDE ──────────────────────────────────────────────────────────────
@@ -254,11 +276,8 @@ function renderSlide(partner, from, to, mode) {
     case 0: el.innerHTML = buildSlide0(partner, from, to, mode); break;
     case 1: el.innerHTML = buildSlide1(partner, from, to, mode);
             setTimeout(() => buildSlide1Charts(partner, to), 100); break;
-    case 2: el.innerHTML = buildSlide2(partner, from, to, mode);
-            setTimeout(() => buildSlide2Charts(partner, to), 100); break;
+    case 2: el.innerHTML = buildSlide5(partner, from, to, mode); break;
     case 3: el.innerHTML = buildSlide3(partner, from, to, mode); break;
-    case 4: renderSlide4(el, partner, from, to, mode); break;
-    case 5: el.innerHTML = buildSlide5(partner, from, to, mode); break;
   }
 }
 
@@ -396,88 +415,6 @@ function buildSlide1Charts(partner, to) {
   });
 }
 
-// ── SLIDE 2: TENDENCIA ────────────────────────────────────────────────────────
-function buildSlide2(partner, from, to, mode) {
-  const es     = PRESENT_STATE.lang === "es";
-  const metrics = [
-    { key:"ad", label: es?"Conductores Activos":"Active Drivers",   color:"#FF0000" },
-    { key:"nr", label: es?"Nuevos + Reactivados":"New+Reactivated", color:"#f97316" },
-    { key:"sh", label: es?"Horas de Conexión":"Supply Hours",        color:"#8b5cf6" }
-  ];
-
-  return `
-    <div style="width:100%;height:100%;background:#fff;padding:16px 20px;display:flex;flex-direction:column;overflow:hidden">
-      <div style="font-weight:900;font-size:.9rem;color:#111;margin-bottom:2px">
-        ${partner} <span style="color:#aaa;font-weight:400;font-size:.72rem">· ${es?"Tendencia — Últimas semanas":"Trend — Last weeks"}</span>
-      </div>
-      <div style="font-size:.62rem;color:#aaa;margin-bottom:8px">${d2s(from)} → ${d2s(to)} · ${es?"puntos coloreados = WoW/MoM":"colored dots = WoW/MoM"} · <span style="color:#10b981">●</span> ${es?"positivo":"positive"} <span style="color:#FF0000">●</span> ${es?"negativo":"negative"}</div>
-
-      <!-- Top row: 2 charts -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;flex:0 0 46%;min-height:0">
-        ${metrics.slice(0,2).map(m => `
-          <div style="background:#fafafa;border-radius:10px;padding:10px;display:flex;flex-direction:column;min-height:0">
-            <div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
-              <div style="width:8px;height:8px;border-radius:50%;background:${m.color}"></div>
-              <span style="font-size:.68rem;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.3px">${m.label}</span>
-            </div>
-            <div style="flex:1;min-height:0;position:relative">
-              <canvas id="bc_${m.key}" style="width:100%;height:100%"></canvas>
-            </div>
-          </div>`).join("")}
-      </div>
-
-      <!-- Bottom row: 1 chart centered -->
-      <div style="display:flex;justify-content:center;flex:0 0 46%;min-height:0;margin-top:8px">
-        <div style="width:50%;background:#fafafa;border-radius:10px;padding:10px;display:flex;flex-direction:column;min-height:0">
-          <div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
-            <div style="width:8px;height:8px;border-radius:50%;background:${metrics[2].color}"></div>
-            <span style="font-size:.68rem;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.3px">${metrics[2].label}</span>
-          </div>
-          <div style="flex:1;min-height:0;position:relative">
-            <canvas id="bc_${metrics[2].key}" style="width:100%;height:100%"></canvas>
-          </div>
-        </div>
-      </div>
-    </div>`;
-}
-
-function buildSlide2Charts(partner, to) {
-  const cities  = [...new Set(STATE.rawData.filter(r => r.partner === partner).map(r => r.city))];
-  const dates   = getLast4Dates(to);
-  const metrics = [
-    { key:"ad", color:"#FF0000", fn: r=>r.activeDrivers },
-    { key:"nr", color:"#f97316", fn: r=>r.newPartner+r.newService+r.reactivated },
-    { key:"sh", color:"#8b5cf6", fn: r=>r.supplyHours }
-  ];
-
-  metrics.forEach(m => {
-    const pTotal = dates.map(d =>
-      STATE.rawData.filter(r => r.partner===partner && r.date===d)
-        .reduce((s,r)=>s+m.fn(r),0)
-    );
-    const cityDatasets = cities.map(city => {
-      const cVals = getCityVals(city, dates, m.fn);
-      const pMax  = Math.max(...pTotal, 1);
-      const cMax  = Math.max(...cVals, 1);
-      const cNorm = cVals.map(v => (v/cMax)*pMax);
-      const cWoW  = getWoW(cVals);
-      const col   = CITY_COLORS[city] || "#888";
-      return {
-        label: city,
-        data: cNorm,
-        borderColor: col,
-        borderWidth: 1.5,
-        borderDash: [5,5],
-        pointRadius: 4,
-        pointBackgroundColor: cWoW.map(w => wowColor(w)),
-        pointBorderColor: cWoW.map(w => wowColor(w)),
-        tension: 0.3,
-        fill: false
-      };
-    });
-    buildBigChart(`bc_${m.key}`, dates, pTotal, cityDatasets, m.color, partner);
-  });
-}
 
 // ── SLIDE 3: RANKING ──────────────────────────────────────────────────────────
 function buildSlide3(partner, from, to, mode) {
@@ -545,111 +482,7 @@ function buildSlide3(partner, from, to, mode) {
     </div>`;
 }
 
-// ── SLIDE 4: RESUMEN EJECUTIVO ────────────────────────────────────────────────
-async function renderSlide4(el, partner, from, to, mode) {
-  const es   = PRESENT_STATE.lang === "es";
-  const lang = PRESENT_STATE.lang;
 
-  el.innerHTML = `
-    <div style="width:100%;height:100%;background:#fff;padding:28px 32px;display:flex;flex-direction:column">
-      <div style="font-weight:900;font-size:1rem;color:#111;margin-bottom:16px">
-        ${partner} <span style="color:#aaa;font-weight:400;font-size:.8rem">· ${es?"Resumen Ejecutivo":"Executive Summary"}</span>
-      </div>
-      <div style="flex:1;display:flex;align-items:center;justify-content:center">
-        <div style="text-align:center;color:#aaa">
-          <div class="spinner" style="margin:0 auto 12px"></div>
-          <div style="font-size:.85rem">${es?"Generando resumen con IA...":"Generating AI summary..."}</div>
-        </div>
-      </div>
-    </div>`;
-
-  if (PRESENT_STATE.aiSummary[lang]) {
-    showAISummary(el, partner, PRESENT_STATE.aiSummary[lang], lang);
-    return;
-  }
-
-  const allDates = [...new Set(STATE.rawData.map(r => r.date))].sort();
-  const lastDate = allDates.filter(d => d <= to).slice(-1)[0] || to;
-  const prevIdx  = allDates.indexOf(lastDate);
-  const prevDate = prevIdx > 0 ? allDates[prevIdx-1] : "";
-  const cities   = [...new Set(STATE.rawData.filter(r => r.partner === partner).map(r => r.city))];
-
-  const cityData = cities.map(city => {
-    const pL = STATE.rawData.filter(r => r.partner===partner && r.city===city && r.date===lastDate);
-    const pP = STATE.rawData.filter(r => r.partner===partner && r.city===city && r.date===prevDate);
-    return {
-      city,
-      lAD: pL.reduce((s,r)=>s+r.activeDrivers,0), pAD: pP.reduce((s,r)=>s+r.activeDrivers,0),
-      lNR: pL.reduce((s,r)=>s+r.newPartner+r.newService+r.reactivated,0),
-      pNR: pP.reduce((s,r)=>s+r.newPartner+r.newService+r.reactivated,0),
-      lSH: pL.reduce((s,r)=>s+r.supplyHours,0), pSH: pP.reduce((s,r)=>s+r.supplyHours,0),
-      rAD: getRankPos(city,partner,r=>r.activeDrivers,lastDate),
-      rNR: getRankPos(city,partner,r=>r.newPartner+r.newService+r.reactivated,lastDate),
-      rSH: getRankPos(city,partner,r=>r.supplyHours,lastDate)
-    };
-  });
-
-  const modeStr = mode==="mensual"?(es?"mensual":"monthly"):(es?"semanal":"weekly");
-  const prompt  = lang==="es"
-    ? `Eres un analista de operaciones de Yango Peru. Genera un resumen ejecutivo CONCISO (máximo 5 bullets) para presentar al partner "${partner}" sobre su rendimiento ${modeStr} al ${d2s(lastDate)}. Datos: ${JSON.stringify(cityData)}. Incluye: puntos fuertes, áreas de mejora, y una recomendación accionable. Solo bullets, sin intro.`
-    : `You are a Yango Peru operations analyst. Generate a CONCISE executive summary (max 5 bullets) for partner "${partner}" about their ${modeStr} performance as of ${d2s(lastDate)}. Data: ${JSON.stringify(cityData)}. Strengths, improvements, one recommendation. Only bullets.`;
-
-  try {
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/ai-summary`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_ANON_KEY}` },
-      body: JSON.stringify({ prompt })
-    });
-    const data = await response.json();
-    PRESENT_STATE.aiSummary[lang] = data.text || "";
-    showAISummary(el, partner, PRESENT_STATE.aiSummary[lang], lang);
-  } catch(err) {
-    el.innerHTML = `<div style="padding:28px;color:#FF0000">${es?"Error al generar resumen.":"Error generating summary."}</div>`;
-  }
-}
-
-function getRankPos(city, partner, metricFn, lastDate) {
-  const pm = {};
-  STATE.rawData.filter(r => r.city===city && r.date===lastDate).forEach(r => {
-    if (!pm[r.partner]) pm[r.partner] = 0;
-    pm[r.partner] += metricFn(r);
-  });
-  const sorted = Object.entries(pm).sort((a,b)=>b[1]-a[1]);
-  const idx = sorted.findIndex(([p]) => p===partner);
-  return { pos: idx+1, total: sorted.length };
-}
-
-function showAISummary(el, partner, text, lang) {
-  const es    = lang === "es";
-  const lines = text.split("\n").filter(l => l.trim());
-  el.innerHTML = `
-    <div style="width:100%;height:100%;background:linear-gradient(135deg,#fff 0%,#fafafa 100%);padding:28px 32px;display:flex;flex-direction:column;overflow:hidden">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
-        <div style="width:36px;height:36px;background:#FF000015;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.1rem">🎯</div>
-        <div>
-          <div style="font-weight:900;font-size:1rem;color:#111">${partner}</div>
-          <div style="font-size:.72rem;color:#aaa">${es?"Resumen Ejecutivo · Generado con IA":"Executive Summary · AI Generated"}</div>
-        </div>
-        <button onclick="regenerateSummary()" style="margin-left:auto;padding:5px 12px;border-radius:6px;font-size:.72rem;font-weight:600;border:1px solid #e5e5e5;background:#fff;cursor:pointer;color:#555">
-          ${es?"↺ Regenerar":"↺ Regenerate"}
-        </button>
-      </div>
-      <div style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px">
-        ${lines.map(line => {
-          const clean = line.replace(/^[-•*]\s*/,"").replace(/\*\*/g,"");
-          return `<div style="display:flex;gap:10px;padding:10px 14px;background:#fff;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.05);border-left:3px solid #FF0000">
-            <span style="color:#FF0000;font-size:.9rem;flex-shrink:0">●</span>
-            <span style="font-size:.82rem;color:#333;line-height:1.5">${clean}</span>
-          </div>`;
-        }).join("")}
-      </div>
-    </div>`;
-}
-
-function regenerateSummary() {
-  PRESENT_STATE.aiSummary = { es: null, en: null };
-  renderPresent();
-}
 
 // ── SLIDE 5: COMPARATIVO CIUDAD VS PARTNER ───────────────────────────────────
 function buildSlide5(partner, from, to, mode) {
@@ -760,75 +593,13 @@ async function downloadPresentPDF() {
   }
 
   try {
-    setProgress(5, es?"Generando resumen IA...":"Generating AI summary...");
-
-    if (!PRESENT_STATE.aiSummary[lang]) {
-      const allDates = [...new Set(STATE.rawData.map(r => r.date))].sort();
-      const lastDate = allDates.filter(d => d <= to).slice(-1)[0] || to;
-      const prevIdx  = allDates.indexOf(lastDate);
-      const prevDate = prevIdx > 0 ? allDates[prevIdx-1] : "";
-      const cities   = [...new Set(STATE.rawData.filter(r => r.partner===partner).map(r => r.city))];
-      const cityData = cities.map(city => {
-        const pL = STATE.rawData.filter(r => r.partner===partner && r.city===city && r.date===lastDate);
-        const pP = STATE.rawData.filter(r => r.partner===partner && r.city===city && r.date===prevDate);
-        return {
-          city,
-          lAD: pL.reduce((s,r)=>s+r.activeDrivers,0), pAD: pP.reduce((s,r)=>s+r.activeDrivers,0),
-          lNR: pL.reduce((s,r)=>s+r.newPartner+r.newService+r.reactivated,0),
-          pNR: pP.reduce((s,r)=>s+r.newPartner+r.newService+r.reactivated,0),
-          lSH: pL.reduce((s,r)=>s+r.supplyHours,0), pSH: pP.reduce((s,r)=>s+r.supplyHours,0),
-          rAD: getRankPos(city,partner,r=>r.activeDrivers,lastDate),
-          rNR: getRankPos(city,partner,r=>r.newPartner+r.newService+r.reactivated,lastDate),
-          rSH: getRankPos(city,partner,r=>r.supplyHours,lastDate)
-        };
-      });
-      const modeStr = mode==="mensual"?(es?"mensual":"monthly"):(es?"semanal":"weekly");
-      const prompt = lang==="es"
-        ? `Eres un analista de Yango Peru. 5 bullets concisos para "${partner}" sobre su rendimiento ${modeStr} al ${d2s(lastDate)}. Datos: ${JSON.stringify(cityData)}. Solo bullets.`
-        : `Yango Peru analyst. 5 concise bullets for "${partner}" ${modeStr} performance as of ${d2s(lastDate)}. Data: ${JSON.stringify(cityData)}. Only bullets.`;
-      try {
-        const r = await fetch(`${SUPABASE_URL}/functions/v1/ai-summary`, {
-          method:"POST",
-          headers:{"Content-Type":"application/json","Authorization":`Bearer ${SUPABASE_ANON_KEY}`},
-          body: JSON.stringify({ prompt })
-        });
-        const d = await r.json();
-        PRESENT_STATE.aiSummary[lang] = d.text || (es?"No se pudo generar.":"Could not generate.");
-      } catch(e) {
-        PRESENT_STATE.aiSummary[lang] = es?"• No se pudo generar el resumen.":"• Could not generate summary.";
-      }
-    }
-
-    const aiText = PRESENT_STATE.aiSummary[lang] || "";
-    const lines  = aiText.split("\n").filter(l => l.trim());
-
-    const s4html = `
-      <div style="width:100%;height:100%;background:#fff;padding:48px 56px;display:flex;flex-direction:column">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:28px">
-          <div style="width:36px;height:36px;background:#FF000015;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.1rem">🎯</div>
-          <div>
-            <div style="font-weight:900;font-size:1.1rem;color:#111">${partner}</div>
-            <div style="font-size:.8rem;color:#aaa">${es?"Resumen Ejecutivo":"Executive Summary"}</div>
-          </div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:12px">
-          ${lines.map(line => {
-            const clean = line.replace(/^[-•*]\s*/,"").replace(/\*\*/g,"");
-            return `<div style="display:flex;gap:12px;padding:12px 16px;background:#fff;border-radius:8px;border:1px solid #f0f0f0;border-left:3px solid #FF0000">
-              <span style="color:#FF0000;font-size:1rem;flex-shrink:0">●</span>
-              <span style="font-size:.9rem;color:#333;line-height:1.6">${clean}</span>
-            </div>`;
-          }).join("")}
-        </div>
-      </div>`;
+    setProgress(5, es?"Preparando slides...":"Preparing slides...");
 
     const allSlides = [
       { html: buildSlide0(partner,from,to,mode), hasCharts:false, chartFn:null, name:slideNames[0] },
       { html: buildSlide1(partner,from,to,mode), hasCharts:true,  chartFn:()=>buildSlide1Charts(partner,to), name:slideNames[1] },
-      { html: buildSlide2(partner,from,to,mode), hasCharts:true,  chartFn:()=>buildSlide2Charts(partner,to), name:slideNames[2] },
-      { html: buildSlide3(partner,from,to,mode), hasCharts:false, chartFn:null, name:slideNames[3] },
-      { html: s4html,                            hasCharts:false, chartFn:null, name:slideNames[4] },
-      { html: buildSlide5(partner,from,to,mode), hasCharts:false, chartFn:null, name:slideNames[5] }
+      { html: buildSlide5(partner,from,to,mode), hasCharts:false, chartFn:null, name:slideNames[2] },
+      { html: buildSlide3(partner,from,to,mode), hasCharts:false, chartFn:null, name:slideNames[3] }
     ];
 
     const { jsPDF } = window.jspdf;

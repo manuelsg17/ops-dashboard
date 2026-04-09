@@ -11,6 +11,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/apexcharts/3.41.0/apexcharts.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 
   <!-- App styles -->
   <link rel="stylesheet" href="styles.css"/>
@@ -68,6 +69,7 @@
       <button class="nav-dd-item"        data-tab="metas"     onclick="switchTabFromMenu('metas')">Metas</button>
       <button class="nav-dd-item"        data-tab="ops"       onclick="switchTabFromMenu('ops')">Operaciones</button>
       <button class="nav-dd-item"        data-tab="proyectos" onclick="switchTabFromMenu('proyectos')">Proyectos</button>
+      <button class="nav-dd-item"        data-tab="unifview"  onclick="switchTabFromMenu('unifview')">Rend + Metas</button>
     </div>
   </div>
   <button class="nav-tab" data-tab="present" onclick="switchTab('present')">Presentación</button>
@@ -131,6 +133,11 @@
       <div class="date-grid">
         <div><label>Desde</label><select class="sb-sel" id="dateFrom"></select></div>
         <div><label>Hasta</label><select class="sb-sel"  id="dateTo"></select></div>
+      </div>
+      <div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">
+        <button class="preset-btn" onclick="setDatePreset('week')">Esta semana</button>
+        <button class="preset-btn" onclick="setDatePreset('fortnight')">Quincena</button>
+        <button class="preset-btn" onclick="setDatePreset('month')">Este mes</button>
       </div>
 
       <div class="sb-label">Ciudad</div>
@@ -209,6 +216,11 @@
         <div id="proyectosContent"></div>
       </div>
 
+      <!-- Rend + Metas (Vista Unificada) -->
+      <div class="tab-panel" id="tab-unifview">
+        <div id="unifviewContent"></div>
+      </div>
+
       <!-- Configuración -->
       <div class="tab-panel" id="tab-config">
         <div id="configContent">
@@ -242,6 +254,7 @@
 <script src="app.js"></script>
 <script src="ops.js"></script>
 <script src="proyectos.js"></script>
+<script src="unifview.js"></script>
 <script src="presentacion.js"></script>
 </body>
 </html>
