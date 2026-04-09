@@ -495,7 +495,7 @@ function buildSlide3(partner, from, to, mode) {
 function buildSlide5(partner, from, to, mode) {
   const es      = PRESENT_STATE.lang === "es";
   const col     = STATE.partnerColors[partner] || "#FF0000";
-  const dates   = getSelectedDates(from, to);
+  const dates   = getSelectedDates(from, to, mode);
   const availableCities = new Set(STATE.rawData.filter(r => r.partner === partner).map(r => r.city));
   const order = ["Lima", "Trujillo", "Arequipa"];
   const cities = order.filter(c => availableCities.has(c));
@@ -558,7 +558,7 @@ function buildSlide5(partner, from, to, mode) {
         <div style="width:32px;height:32px;background:${col}20;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1rem">📊</div>
         <div>
           <div style="font-weight:900;font-size:.95rem;color:#111">${partner}</div>
-          <div style="font-size:.72rem;color:#aaa">${es ? "Comparativo WoW vs Ciudad · últimas " + dates.length + " semanas" : "WoW Comparison vs City · last " + dates.length + " periods"}</div>
+          <div style="font-size:.72rem;color:#aaa">${mode === "mensual" ? (es ? "Comparativo MoM vs Ciudad · últimos " + dates.length + " meses" : "MoM Comparison vs City · last " + dates.length + " months") : (es ? "Comparativo WoW vs Ciudad · últimas " + dates.length + " semanas" : "WoW Comparison vs City · last " + dates.length + " weeks")}</div>
         </div>
         <div style="margin-left:auto;font-size:.68rem;color:#bbb;text-align:right">
           ✓ <span style="color:#10b981">${es?"Partner supera ciudad":"Partner above city"}</span> &nbsp;
