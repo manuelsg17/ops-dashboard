@@ -104,7 +104,6 @@ function buildMiniChart(canvasId, dates, partnerVals, cityVals, color) {
       ]
     },
     options: {
-      layout: { padding: { top: 24, right: 16, bottom: 0, left: 0 } },
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
@@ -135,7 +134,7 @@ function buildMiniChart(canvasId, dates, partnerVals, cityVals, color) {
       },
       scales: {
         x: { ticks: { font:{size:8}, maxRotation:0 }, grid: { display:false } },
-        y: { ticks: { font:{size:8}, callback: v => fmt(v) }, grid: { color:"#f5f5f5" } }
+        y: { grace: "20%", ticks: { font:{size:8}, callback: v => fmt(v) }, grid: { color:"#f5f5f5" } }
       }
     }
   });
