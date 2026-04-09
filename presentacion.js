@@ -104,7 +104,7 @@ function buildMiniChart(canvasId, dates, partnerVals, cityVals, color) {
       ]
     },
     options: {
-      layout: { padding: { top: 20, right: 10 } },
+      layout: { padding: { top: 24, right: 16, bottom: 0, left: 0 } },
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
