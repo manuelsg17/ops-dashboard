@@ -20,8 +20,10 @@ function destroyPresentCharts() {
   PRESENT_STATE.charts = [];
 }
 
-function getLast4Dates(to) {
+function getSelectedDates(from, to) {
   const all = [...new Set(STATE.rawData.map(r => r.date))].sort();
+  const datesInRange = all.filter(d => d >= from && d <= to);
+  if (datesInRange.length > 0) return datesInRange;
   const idx = all.findIndex(d => d > to);
   const end = idx === -1 ? all.length - 1 : idx - 1;
   return all.slice(Math.max(0, end - 3), end + 1);
@@ -275,7 +277,7 @@ function renderSlide(partner, from, to, mode) {
   switch (PRESENT_STATE.slide) {
     case 0: el.innerHTML = buildSlide0(partner, from, to, mode); break;
     case 1: el.innerHTML = buildSlide1(partner, from, to, mode);
-            setTimeout(() => buildSlide1Charts(partner, to), 100); break;
+            setTimeout(() => buildSlide1Charts(partner, from, to), 100); break;
     case 2: el.innerHTML = buildSlide5(partner, from, to, mode); break;
     case 3: el.innerHTML = buildSlide3(partner, from, to, mode); break;
   }
@@ -398,9 +400,9 @@ function buildSlide1(partner, from, to, mode) {
     </div>`;
 }
 
-function buildSlide1Charts(partner, to) {
+function buildSlide1Charts(partner, from, to) {
   const cities  = [...new Set(STATE.rawData.filter(r => r.partner === partner).map(r => r.city))];
-  const dates   = getLast4Dates(to);
+  const dates   = getSelectedDates(from, to);
   const metrics = [
     { key:"ad", color:"#FF0000", fn: r=>r.activeDrivers },
     { key:"nr", color:"#f97316", fn: r=>r.newPartner+r.newService+r.reactivated },
@@ -488,7 +490,7 @@ function buildSlide3(partner, from, to, mode) {
 function buildSlide5(partner, from, to, mode) {
   const es      = PRESENT_STATE.lang === "es";
   const col     = STATE.partnerColors[partner] || "#FF0000";
-  const dates   = getLast4Dates(to);
+  const dates   = getSelectedDates(from, to);
   const cities  = [...new Set(STATE.rawData.filter(r => r.partner === partner).map(r => r.city))].sort();
 
   const metrics = [
@@ -597,7 +599,7 @@ async function downloadPresentPDF() {
 
     const allSlides = [
       { html: buildSlide0(partner,from,to,mode), hasCharts:false, chartFn:null, name:slideNames[0] },
-      { html: buildSlide1(partner,from,to,mode), hasCharts:true,  chartFn:()=>buildSlide1Charts(partner,to), name:slideNames[1] },
+      { html: buildSlide1(partner,from,to,mode), hasCharts:true,  chartFn:()=>buildSlide1Charts(partner,from,to), name:slideNames[1] },
       { html: buildSlide5(partner,from,to,mode), hasCharts:false, chartFn:null, name:slideNames[2] },
       { html: buildSlide3(partner,from,to,mode), hasCharts:false, chartFn:null, name:slideNames[3] }
     ];
@@ -626,7 +628,7 @@ const div = document.createElement("div");
         await new Promise(r => setTimeout(r, waitTime));
       }
 
-      const canvas = await html2canvas(div, { width:1280, height:720, scale:1.5, useCORS:true, logging:false });
+      const canvas = await html2canvas(div, { width:1280, height:720, scale:3, useCORS:true, logging:false });
 
       if (s.hasCharts) {
         div.querySelectorAll("canvas").forEach(c => { const ch = Chart.getChart(c); if(ch) ch.destroy(); });
@@ -634,7 +636,7 @@ const div = document.createElement("div");
       document.body.removeChild(div);
 
       if (pageNum > 0) pdf.addPage();
-      pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, 1280, 720);
+      pdf.addImage(canvas.toDataURL("image/jpeg", 0.98), "JPEG", 0, 0, 1280, 720);
       pageNum++;
       setProgress(15 + Math.round((i+1) * (85 / allSlides.length)), `${s.name} ✓`);
     }
