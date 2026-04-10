@@ -183,9 +183,9 @@ function renderUnifView() {
               <th colspan="3" style="text-align:center;border-bottom:1px solid #eee">Hs. Conexión</th>
             </tr>
             <tr>
-              <th style="text-align:right">Real</th><th style="text-align:right">Meta</th><th style="text-align:center">%</th>
-              <th style="text-align:right">Real</th><th style="text-align:right">Meta</th><th style="text-align:center">%</th>
-              <th style="text-align:right">Real</th><th style="text-align:right">Meta</th><th style="text-align:center">%</th>
+              <th style="text-align:right">Fact</th><th style="text-align:right">Plan</th><th style="text-align:center">%</th>
+              <th style="text-align:right">Fact</th><th style="text-align:right">Plan</th><th style="text-align:center">%</th>
+              <th style="text-align:right">Fact</th><th style="text-align:right">Plan</th><th style="text-align:center">%</th>
             </tr>
           </thead>
           <tbody>${tbody}</tbody>

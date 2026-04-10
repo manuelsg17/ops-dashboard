@@ -70,7 +70,7 @@ function renderMetas() {
       combos.push({ partner: p.partner, kam: p.kam, city: "Todas",
         mA: p.mA, mNR: p.mNR, mH: p.mH,
         ad: r.ad, nr: r.nr, sh: r.sh,
-        projAD: r.lastAD * 1.4,
+        projAD: (STATE.curMode === "mensual" || daysRemaining === 0) ? r.lastAD : r.lastAD * 1.4,
         projNR: projA(r.nrV, daysElapsed, daysRemaining),
         projSH: projA(r.shV, daysElapsed, daysRemaining) });
     });
@@ -80,7 +80,7 @@ function renderMetas() {
       combos.push({ partner: m.partner, kam: m.kam, city: m.city,
         mA: m.mA, mNR: m.mNR, mH: m.mH,
         ad: r.ad, nr: r.nr, sh: r.sh,
-        projAD: r.lastAD * 1.4,
+        projAD: (STATE.curMode === "mensual" || daysRemaining === 0) ? r.lastAD : r.lastAD * 1.4,
         projNR: projA(r.nrV, daysElapsed, daysRemaining),
         projSH: projA(r.shV, daysElapsed, daysRemaining) });
     });
@@ -155,7 +155,7 @@ function renderMetas() {
     const lastAD = sorted.length ? sorted[sorted.length - 1].ad : 0;
     const nrV = sorted.map(v => v.nr);
     const shV = sorted.map(v => v.sh);
-    const cpAD = lastAD * 1.4;
+    const cpAD = (STATE.curMode === "mensual" || daysRemaining === 0) ? lastAD : lastAD * 1.4;
     const cpNR = projA(nrV, daysElapsed, daysRemaining);
     const cpSH = projA(shV, daysElapsed, daysRemaining);
 
@@ -276,7 +276,7 @@ function metaResCard(label, sub, real, meta, proj, color) {
         <span style="font-size:.85rem;font-weight:700;color:${pColor(p)}">${p.toFixed(1)}% </span>
         <span class="sem ${semCls(p)}"></span>
         ${overBadge}
-        <span style="font-size:.72rem;color:#aaa"> de meta ${fmt(meta)}</span>
+        <span style="font-size:.72rem;color:#aaa"> de plan ${fmt(meta)}</span>
       </div>
       <div style="margin:8px 0 4px">${barProj(pV, ppV)}</div>
       <div style="font-size:.72rem;color:${pColor(pp)};margin-top:4px">
@@ -305,7 +305,7 @@ function miniBar(label, real, meta, proj) {
       </div>
       ${barProj(pV, ppV)}
       <div style="font-size:.67rem;color:#aaa;margin-top:2px">
-        Real: ${fmt(real)} / Meta: ${fmt(meta)} /
+        Fact: ${fmt(real)} / Plan: ${fmt(meta)} /
         Proy: <span style="color:${pColor(pp)};font-weight:700">${fmt(proj)}</span>
       </div>
     </div>`;
@@ -330,7 +330,7 @@ function miniBarFull(label, real, meta, proj) {
         </span>
       </div>
       <div style="font-size:.7rem;color:#777;margin-bottom:3px">
-        Real: <strong>${fmt(real)}</strong> / Meta: <strong>${fmt(meta)}</strong>
+        Fact: <strong>${fmt(real)}</strong> / Plan: <strong>${fmt(meta)}</strong>
       </div>
       ${barProj(pV, ppV)}
       <div style="font-size:.67rem;color:${pColor(pp)};margin-top:2px">

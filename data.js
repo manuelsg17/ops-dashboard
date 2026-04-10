@@ -76,6 +76,7 @@ function projA(vals, daysElapsed, daysRemaining) {
   const v = vals.filter(x => x > 0);
   if (!v.length) return 0;
   const total      = v.reduce((s, x) => s + x, 0);
+  if (STATE.curMode === "mensual" || daysRemaining === 0) return total;
   const last3      = v.slice(-3);
   const weeklyRate = last3.reduce((s, x) => s + x, 0) / last3.length;
   const dailyRate  = weeklyRate / 7;
