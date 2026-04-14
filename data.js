@@ -192,6 +192,16 @@ while (!rendMDone) {
       STATE.proyectosData = proyectos || [];
     } catch (_) { STATE.proyectosData = []; }
 
+    // 6. Guardar copia completa (para Data Raw) y aplicar filtro de palabras prohibidas
+    STATE.rawDataFull        = [...STATE.rawData];
+    STATE.rawDataMensualFull = [...STATE.rawDataMensual];
+    if (STATE.bannedWords && STATE.bannedWords.length) {
+      const banned = STATE.bannedWords.map(w => w.toLowerCase());
+      const isBanned = name => banned.some(w => (name || "").toLowerCase().includes(w));
+      STATE.rawData        = STATE.rawData.filter(r => !isBanned(r.partner));
+      STATE.rawDataMensual = STATE.rawDataMensual.filter(r => !isBanned(r.partner));
+    }
+
     updateIndexes();
     showBanner(true, "Datos cargados · " + new Date().toLocaleTimeString("es-PE"));
 

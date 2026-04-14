@@ -70,6 +70,7 @@
       <button class="nav-dd-item"        data-tab="ops"       onclick="switchTabFromMenu('ops')">Operaciones</button>
       <button class="nav-dd-item"        data-tab="proyectos" onclick="switchTabFromMenu('proyectos')">Proyectos</button>
       <button class="nav-dd-item"        data-tab="unifview"  onclick="switchTabFromMenu('unifview')">Rend + Metas</button>
+      <button class="nav-dd-item"        data-tab="rawdata"   onclick="switchTabFromMenu('rawdata')">Data Raw</button>
     </div>
   </div>
   <button class="nav-tab" data-tab="present" onclick="switchTab('present')">Presentación</button>
@@ -221,6 +222,11 @@
         <div id="unifviewContent"></div>
       </div>
 
+      <!-- Data Raw -->
+      <div class="tab-panel" id="tab-rawdata">
+        <div id="rawdataContent"></div>
+      </div>
+
       <!-- Configuración -->
       <div class="tab-panel" id="tab-config">
         <div id="configContent">
@@ -255,6 +261,7 @@
 <script src="ops.js"></script>
 <script src="proyectos.js"></script>
 <script src="unifview.js"></script>
+<script src="rawdata.js"></script>
 <script src="presentacion.js"></script>
 </body>
 </html>

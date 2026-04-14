@@ -188,7 +188,7 @@ function switchTab(tab) {
 
   STATE.curTab = tab;
 
-  const ANALISIS_TABS = ["rend", "metas", "ops", "proyectos", "unifview"];
+  const ANALISIS_TABS = ["rend", "metas", "ops", "proyectos", "unifview", "rawdata"];
   const navAnalisis = document.getElementById("navAnalisis");
   if (navAnalisis) navAnalisis.classList.toggle("active", ANALISIS_TABS.includes(tab));
   document.querySelectorAll(".nav-tab[data-tab]").forEach(btn => {
@@ -226,6 +226,7 @@ function switchTab(tab) {
   if (tab === "ops")                                                          renderOps();
   if (tab === "proyectos")                                                    renderProyectos();
   if (tab === "unifview")                                                     renderUnifView();
+  if (tab === "rawdata")                                                      renderRawData();
   if (tab === "config")                                                       renderConfig();
   if (tab === "present")                                                      renderPresent();
 }
@@ -350,8 +351,9 @@ function getSel() {
 
 function applyFilters() {
   saveFilters();
-  if (STATE.curTab === "rend"  && STATE.rawData.length)                      renderRend();
-  if (STATE.curTab === "metas" && STATE.metasData.length && STATE.rawData.length) renderMetas();
+  if (STATE.curTab === "rend"     && STATE.rawData.length)                           renderRend();
+  if (STATE.curTab === "metas"    && STATE.metasData.length && STATE.rawData.length) renderMetas();
+  if (STATE.curTab === "unifview" && STATE.rawData.length)                           renderUnifView();
 }
 
 function updateDeclineSettings() {
@@ -414,6 +416,34 @@ function renderConfig() {
           Se mostrará el badge <span class="decline-badge" style="animation:none">⚠</span> en la tabla cuando un partner tenga
           <strong>${STATE.declineThreshold}</strong> períodos seguidos de baja en <strong>${metricLabel[STATE.declineMetric]}</strong>.
         </div>
+      </div>
+    </div>`;
+
+  // ── Sección: Filtros de Flota (palabras prohibidas) ──────────────────────────
+  const excludedCount = STATE.rawDataFull.length - STATE.rawData.length;
+  const bannedBadges  = STATE.bannedWords.map(w =>
+    `<span style="display:inline-flex;align-items:center;gap:4px;background:#fff0f0;border:1px solid #fecaca;border-radius:20px;padding:3px 10px;font-size:.73rem;font-weight:600;color:#991b1b">
+      ${w}
+      <button onclick="removeBannedWord('${w.replace(/'/g, "\\'")}')"
+        style="background:none;border:none;cursor:pointer;color:#FF0000;font-size:.85rem;line-height:1;padding:0 2px;margin-left:2px" title="Eliminar">✕</button>
+    </span>`
+  ).join("");
+
+  html += `
+    <div class="section" style="margin-bottom:16px">
+      <div style="font-size:.8rem;font-weight:700;color:#555;margin-bottom:10px">🚫 Filtros de Flota — Palabras Prohibidas</div>
+      <div style="font-size:.75rem;color:#888;margin-bottom:10px">
+        Los partners cuyo nombre contenga alguna de estas palabras (sin importar mayúsculas) quedan excluidos del dashboard.
+        Actualmente excluidos: <strong style="color:#FF0000">${excludedCount}</strong> registro(s) en el período cargado.
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
+        ${bannedBadges || `<span style="font-size:.75rem;color:#aaa">Sin palabras prohibidas configuradas.</span>`}
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input class="crud-input" id="newBannedWord" placeholder="Nueva palabra (ej: mototaxi)"
+          style="flex:1;min-width:180px;max-width:280px"
+          onkeydown="if(event.key==='Enter') addBannedWord()"/>
+        <button class="crud-btn crud-btn-add" onclick="addBannedWord()">+ Agregar</button>
       </div>
     </div>`;
 
@@ -611,6 +641,36 @@ async function kamCrudDelete(clid) {
   showLoad(false);
   if (error) { showBanner(false, "Error al eliminar: " + error.message); return; }
   await loadFromSupabase();
+  renderConfig();
+  showBanner(true, `"${partner}" eliminado correctamente ✓`);
+}
+
+// ── BANNED WORDS MANAGEMENT ───────────────────────────────────────────────────
+async function addBannedWord() {
+  const input = document.getElementById("newBannedWord");
+  const word  = (input?.value || "").trim().toLowerCase();
+  if (!word) return;
+  if (STATE.bannedWords.includes(word)) {
+    showBanner(false, `"${word}" ya está en la lista.`);
+    return;
+  }
+  STATE.bannedWords.push(word);
+  localStorage.setItem("yangoBannedWords", JSON.stringify(STATE.bannedWords));
+  showLoad(true, "Aplicando filtro...");
+  await loadFromSupabase();
+  showLoad(false);
+  renderConfig();
+  showBanner(true, `"${word}" agregado a la lista de exclusión ✓`);
+}
+
+async function removeBannedWord(word) {
+  STATE.bannedWords = STATE.bannedWords.filter(w => w !== word);
+  localStorage.setItem("yangoBannedWords", JSON.stringify(STATE.bannedWords));
+  showLoad(true, "Aplicando filtro...");
+  await loadFromSupabase();
+  showLoad(false);
+  renderConfig();
+  showBanner(true, `"${word}" eliminado de la lista de exclusión ✓`);
 }
 
 // ── UI HELPERS ────────────────────────────────────────────────────────────────

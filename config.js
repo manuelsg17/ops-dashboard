@@ -26,23 +26,29 @@ const CITIES = ["Lima", "Trujillo", "Arequipa"];
 
 // Estado global de la aplicación
 const STATE = {
-  rawData:       [],
-  rawDataMensual: [],
-  metasData:     [],
-  allDates:      [],
-  allPartners:   [],
-  partnerColors: {},
-  CLID_MAP:      {},
-  KAM_MAP:       {},
-  KAM_PARTNERS:  {},
-  charts:        {},
+  rawData:             [],
+  rawDataMensual:      [],
+  rawDataFull:         [],   // Copia sin filtrar (incluye flotas excluidas)
+  rawDataMensualFull:  [],   // Idem para mensual
+  metasData:           [],
+  allDates:            [],
+  allPartners:         [],
+  partnerColors:       {},
+  CLID_MAP:            {},
+  KAM_MAP:             {},
+  KAM_PARTNERS:        {},
+  charts:              {},
   tblSort:          { col: "ad", dir: "desc" },
   curSummaries:     [],
   curTab:           "rend",
   curMode:          "semanal",
   declineThreshold: 3,
   declineMetric:    "activeDrivers",
-  proyectosData:    []
+  proyectosData:    [],
+  bannedWords: JSON.parse(
+    localStorage.getItem("yangoBannedWords") ||
+    JSON.stringify(["tuktuk", "tuk tuk", "delivery", "cargo", "mototaxi", "bikes"])
+  )
 };
 function rebuildKAMPartners() {
   STATE.KAM_PARTNERS = {};
