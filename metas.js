@@ -7,11 +7,11 @@ function renderMetas() {
   const kamFilter  = document.getElementById("kamFilter").value;
   const sel        = getSel();
   const from       = document.getElementById("dateFrom").value;
-  const to         = document.getElementById("dateTo").value;
+  const selSet     = new Set(sel);
 
   const metas = STATE.metasData.filter(m => {
     if (kamFilter !== "all" && m.kam !== kamFilter) return false;
-    if (sel.length && !sel.includes(m.partner))     return false;
+    if (sel.length && !selSet.has(m.partner))     return false;
     return true;
   });
 
@@ -120,7 +120,7 @@ function renderMetas() {
     // Use all metas for this city (ignore cityFilter here to always show all cities)
     const cm = STATE.metasData.filter(m => {
       if (kamFilter !== "all" && m.kam !== kamFilter) return false;
-      if (sel.length && !sel.includes(m.partner))     return false;
+      if (sel.length && !selSet.has(m.partner))     return false;
       return m.city === city;
     });
     if (!cm.length) return;
@@ -129,7 +129,7 @@ function renderMetas() {
     const cityPerfRows = STATE.rawData.filter(r =>
       r.date >= from && r.date <= to &&
       r.city === city &&
-      sel.includes(r.partner)
+      selSet.has(r.partner)
     );
     const cityPerfMap = {};
     cityPerfRows.forEach(r => {

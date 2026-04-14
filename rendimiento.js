@@ -30,11 +30,11 @@ function renderRend() {
 
   // prevRows: datos de prevDate fuera del rango filtrado
   const cityFilter = document.getElementById("cityFilter").value;
-  const sel        = getSel();
+  const selSet     = new Set(getSel());
   const prevFiltered = STATE.rawData.filter(r =>
     r.date === prevDate &&
     (cityFilter === "all" || r.city === cityFilter) &&
-    sel.includes(r.partner)
+    selSet.has(r.partner)
   );
   const prevAPD = aggPD(prevFiltered);
 
@@ -73,7 +73,7 @@ function renderRend() {
     const cL   = ca.filter(r => r.date === lastDate);
     // prevDate para ciudad: buscar en todos los rawData
     const cPraw = STATE.rawData.filter(r =>
-      r.date === prevDate && r.city === city && sel.includes(r.partner)
+      r.date === prevDate && r.city === city && selSet.has(r.partner)
     );
     const cP   = aggPD(cPraw);
     const cAD  = sumR(cL,  r => r.activeDrivers);
@@ -109,9 +109,9 @@ function renderRend() {
   html += secH("👤", "#f59e0b", "Por KAM", "Rendimiento por responsable", "");
   html += `<div class="section"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px">`;
   [...new Set(Object.values(STATE.KAM_MAP))].sort().forEach(kam => {
-    const kp  = STATE.KAM_PARTNERS[kam] ? [...STATE.KAM_PARTNERS[kam]] : [];
-    const kL  = lastRows.filter(r => kp.includes(r.partner));
-    const kP  = prevRows.filter(r => kp.includes(r.partner));
+    const kpSet = new Set(STATE.KAM_PARTNERS[kam] || []);
+    const kL  = lastRows.filter(r => kpSet.has(r.partner));
+    const kP  = prevRows.filter(r => kpSet.has(r.partner));
     if (!kL.length) return;
     const kAD  = sumR(kL, r => r.activeDrivers);
     const kNR  = sumR(kL, r => r.newPartner + r.newService + r.reactivated);
@@ -210,10 +210,10 @@ function mkMetricCard(label, icon, val, prevWk, apd, lastRows, prevRows, metric,
       <div class="mcard-breakdown">`;
 
   [...new Set(Object.values(STATE.KAM_MAP))].sort().forEach(kam => {
-    const kp   = STATE.KAM_PARTNERS[kam] ? [...STATE.KAM_PARTNERS[kam]] : [];
-    const kl   = lastRows.filter(r => kp.includes(r.partner));
-    const kAll = apd.filter(r => kp.includes(r.partner));
-    const kpr  = prevRows.filter(r => kp.includes(r.partner));
+    const kpSet = new Set(STATE.KAM_PARTNERS[kam] || []);
+    const kl   = lastRows.filter(r => kpSet.has(r.partner));
+    const kAll = apd.filter(r => kpSet.has(r.partner));
+    const kpr  = prevRows.filter(r => kpSet.has(r.partner));
     if (!kl.length && !kAll.length) return;
     const kv  = gv(kl, kAll);
     const kpv = gv(kpr, kpr);
@@ -231,11 +231,12 @@ function mkMetricCard(label, icon, val, prevWk, apd, lastRows, prevRows, metric,
 
 // ── TABLE ─────────────────────────────────────────────────────────────────────
 function buildTable(apd, lastDate, prevDate, sel) {
+  const selSet = new Set(sel);
   const lR    = apd.filter(r => r.date === lastDate);
-  const pRraw = STATE.rawData.filter(r => r.date === prevDate && sel.includes(r.partner));
+  const pRraw = STATE.rawData.filter(r => r.date === prevDate && selSet.has(r.partner));
   const pR    = aggPD(pRraw);
   // Use full history (all dates) for decline detection, ignoring date range filter
-  const apdFull = aggPD(STATE.rawData.filter(r => sel.includes(r.partner)));
+  const apdFull = aggPD(STATE.rawData.filter(r => selSet.has(r.partner)));
   const partners = [...new Set(apd.map(r => r.partner))];
 
   STATE.curSummaries = partners.map(p => {
@@ -316,7 +317,8 @@ function buildPartnerCards(apd, lastDate, prevDate, partners, sel) {
   const grid = document.getElementById("partnerCards");
   if (!grid) return;
 
-  const prevRaw = STATE.rawData.filter(r => r.date === prevDate && sel.includes(r.partner));
+  const selSet = new Set(sel);
+  const prevRaw = STATE.rawData.filter(r => r.date === prevDate && selSet.has(r.partner));
   const prevAPD = aggPD(prevRaw);
 
   partners.forEach(partner => {

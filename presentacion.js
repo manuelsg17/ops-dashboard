@@ -134,7 +134,7 @@ function buildMiniChart(canvasId, dates, partnerVals, cityVals, color) {
       },
       scales: {
         x: { ticks: { font:{size:8}, maxRotation:0 }, grid: { display:false } },
-        y: { suggestedMax: pMax * 1.3, ticks: { font:{size:8}, callback: v => fmt(v) }, grid: { color:"#f5f5f5" } }
+        y: { beginAtZero: false, suggestedMax: pMax * 1.05, ticks: { font:{size:8}, callback: v => fmt(v) }, grid: { color:"#f5f5f5" } }
       }
     }
   });
@@ -182,7 +182,7 @@ function buildBigChart(canvasId, dates, partnerVals, cityDatasets, color, label)
       },
       scales: {
         x: { ticks: { font:{size:9} }, grid: { display:false } },
-        y: { ticks: { font:{size:9}, callback: v => fmt(v) }, grid: { color:"#f5f5f5" } }
+        y: { beginAtZero: false, suggestedMax: Math.max(...partnerVals) * 1.05, ticks: { font:{size:9}, callback: v => fmt(v) }, grid: { color:"#f5f5f5" } }
       }
     }
   });

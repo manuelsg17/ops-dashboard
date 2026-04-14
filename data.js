@@ -133,8 +133,8 @@ while (!rendDone) {
   rendPage++;
 }
     STATE.rawData = (rend || []).map(r => ({
-      partner:       r.partner,
-      kam:           r.kam || "",
+      partner:       STATE.CLID_MAP[r.clid] || r.partner,
+      kam:           STATE.KAM_MAP[r.clid] || r.kam || "",
       city:          r.city || "",
       date:          r.fecha,
       activeDrivers: +r.active_drivers,
@@ -160,8 +160,8 @@ while (!rendMDone) {
   rendMPage++;
 }
     STATE.rawDataMensual = (rendM || []).map(r => ({
-      partner:       r.partner,
-      kam:           r.kam || "",
+      partner:       STATE.CLID_MAP[r.clid] || r.partner,
+      kam:           STATE.KAM_MAP[r.clid] || r.kam || "",
       city:          r.city || "",
       date:          r.mes,
       activeDrivers: +r.active_drivers,
@@ -177,8 +177,8 @@ while (!rendMDone) {
     const { data: metas, error: mErr } = await sb.from("metas").select("*");
     if (mErr) throw mErr;
     STATE.metasData = (metas || []).map(m => ({
-      partner: m.partner,
-      kam:     m.kam || "",
+      partner: STATE.CLID_MAP[m.clid] || m.partner,
+      kam:     STATE.KAM_MAP[m.clid] || m.kam || "",
       city:    m.city || "",
       mes:     m.mes,
       mA:      +m.meta_active_drivers,
@@ -480,11 +480,11 @@ function getFiltered() {
   const city = document.getElementById("cityFilter").value;
   const from = document.getElementById("dateFrom").value;
   const to   = document.getElementById("dateTo").value;
-  const sel  = getSel();
+  const selSet = new Set(getSel());
   return STATE.rawData.filter(r =>
     (city === "all" || r.city === city) &&
     r.date >= from && r.date <= to &&
-    sel.includes(r.partner)
+    selSet.has(r.partner)
   );
 }
 
