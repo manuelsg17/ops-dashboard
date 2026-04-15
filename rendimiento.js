@@ -185,8 +185,8 @@ function renderRend() {
     buildSingleLine(`ch_${cid}_sh`, dates, cbd, "sh", col, city);
   });
 
-  buildTable(apd, lastDate, prevDate, sel);
-  buildPartnerCards(apd, lastDate, prevDate, partners, sel);
+  buildTable(apd, lastDate, prevDate, partners);
+  buildPartnerCards(apd, lastDate, prevDate, partners, partners);
 }
 
 // ── METRIC CARD ───────────────────────────────────────────────────────────────
