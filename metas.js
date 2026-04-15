@@ -7,6 +7,7 @@ function renderMetas() {
   const kamFilter  = document.getElementById("kamFilter").value;
   const sel        = getSel();
   const from       = document.getElementById("dateFrom").value;
+  const to         = document.getElementById("dateTo").value;
   const selSet     = new Set(sel);
 
   const metas = STATE.metasData.filter(m => {
