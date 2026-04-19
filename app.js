@@ -3,11 +3,19 @@
 // ── CONFIG PAGINATION STATE ───────────────────────────────────────────────────
 const CONFIG_STATE = { page: 0, search: "", kamFilter: "all", PAGE_SIZE: 20 };
 
+// ── LOCALSTORAGE HELPER ───────────────────────────────────────────────────────
+function lsSet(key, val) {
+  try { lsSet(key, val); } catch (e) { /* QuotaExceededError o privado */ }
+}
+function lsGet(key) {
+  try { return lsGet(key); } catch (e) { return null; }
+}
+
 // ── APP INIT ──────────────────────────────────────────────────────────────────
 function initApp() {
   // Restaurar configuración de alerta de declive
   try {
-    const d = JSON.parse(localStorage.getItem("yangoDecline") || "{}");
+    const d = JSON.parse(lsGet("yangoDecline") || "{}");
     if (d.metric)    STATE.declineMetric    = d.metric;
     if (d.threshold) STATE.declineThreshold = d.threshold;
   } catch(e) {}
@@ -74,7 +82,7 @@ function toggleSidebar() {
   const btn = document.getElementById("sidebarToggle");
   const collapsed = sb.classList.toggle("collapsed");
   btn.innerHTML = collapsed ? _SVG_EXPAND : _SVG_COLLAPSE;
-  localStorage.setItem("yangoSidebarCollapsed", collapsed ? "1" : "0");
+  lsSet("yangoSidebarCollapsed", collapsed ? "1" : "0");
   // Reajustar gráficas ApexCharts al cambiar ancho
   setTimeout(() => window.dispatchEvent(new Event("resize")), 220);
 }
@@ -90,11 +98,11 @@ function saveFilters() {
     selected: getSel(),
     mode:     STATE.curMode
   };
-  localStorage.setItem("yangoFilters", JSON.stringify(f));
+  lsSet("yangoFilters", JSON.stringify(f));
 }
 
 function restoreFilters() {
-  const raw = localStorage.getItem("yangoFilters");
+  const raw = lsGet("yangoFilters");
   if (!raw) return;
   try {
     const f = JSON.parse(raw);
@@ -134,7 +142,7 @@ function restoreFilters() {
   }
 
   // Restaurar estado del sidebar
-  if (localStorage.getItem("yangoSidebarCollapsed") === "1") {
+  if (lsGet("yangoSidebarCollapsed") === "1") {
     const sb  = document.getElementById("mainSidebar");
     const btn = document.getElementById("sidebarToggle");
     if (sb)  sb.classList.add("collapsed");
@@ -232,12 +240,9 @@ function switchTab(tab) {
 }
 // ── SIDEBAR: DATES ────────────────────────────────────────────────────────────
 function popDates() {
+  const opts = STATE.allDates.map(d => `<option value="${d}">${d2s(d)}</option>`).join("");
   ["dateFrom", "dateTo"].forEach(id => {
-    const sel = document.getElementById(id);
-    sel.innerHTML = "";
-    STATE.allDates.forEach(d => {
-      sel.innerHTML += `<option value="${d}">${d2s(d)}</option>`;
-    });
+    document.getElementById(id).innerHTML = opts;
   });
   if (STATE.allDates.length) {
     document.getElementById("dateFrom").value = STATE.allDates[0];
@@ -290,11 +295,10 @@ function setDatePreset(type) {
 
 // ── SIDEBAR: KAM ─────────────────────────────────────────────────────────────
 function popKAM() {
-  const sel = document.getElementById("kamFilter");
-  sel.innerHTML = `<option value="all">Todos</option>`;
-  [...new Set(Object.values(STATE.KAM_MAP))].sort().forEach(k => {
-    sel.innerHTML += `<option value="${k}">${k}</option>`;
-  });
+  const kams = [...new Set(Object.values(STATE.KAM_MAP))].sort();
+  document.getElementById("kamFilter").innerHTML =
+    `<option value="all">Todos</option>` +
+    kams.map(k => `<option value="${k}">${k}</option>`).join("");
 }
 
 // ── SIDEBAR: PARTNERS ────────────────────────────────────────────────────────
@@ -350,6 +354,12 @@ function getSel() {
 }
 
 function applyFilters() {
+  // Corregir rango invertido automáticamente
+  const elFrom = document.getElementById("dateFrom");
+  const elTo   = document.getElementById("dateTo");
+  if (elFrom && elTo && elFrom.value > elTo.value) {
+    [elFrom.value, elTo.value] = [elTo.value, elFrom.value];
+  }
   saveFilters();
   if (STATE.curTab === "rend"     && STATE.rawData.length)                           renderRend();
   if (STATE.curTab === "metas"    && STATE.metasData.length && STATE.rawData.length) renderMetas();
@@ -361,7 +371,7 @@ function updateDeclineSettings() {
   const threshold = parseInt(document.getElementById("declineThresholdSel")?.value);
   if (metric)    STATE.declineMetric    = metric;
   if (threshold) STATE.declineThreshold = threshold;
-  localStorage.setItem("yangoDecline", JSON.stringify({ metric: STATE.declineMetric, threshold: STATE.declineThreshold }));
+  lsSet("yangoDecline", JSON.stringify({ metric: STATE.declineMetric, threshold: STATE.declineThreshold }));
   renderConfig(); // refresca el texto descriptivo
   if (STATE.rawData.length) renderRend(); // recalcula badges
 }
@@ -655,7 +665,7 @@ async function addBannedWord() {
     return;
   }
   STATE.bannedWords.push(word);
-  localStorage.setItem("yangoBannedWords", JSON.stringify(STATE.bannedWords));
+  lsSet("yangoBannedWords", JSON.stringify(STATE.bannedWords));
   showLoad(true, "Aplicando filtro...");
   await loadFromSupabase();
   showLoad(false);
@@ -665,7 +675,7 @@ async function addBannedWord() {
 
 async function removeBannedWord(word) {
   STATE.bannedWords = STATE.bannedWords.filter(w => w !== word);
-  localStorage.setItem("yangoBannedWords", JSON.stringify(STATE.bannedWords));
+  lsSet("yangoBannedWords", JSON.stringify(STATE.bannedWords));
   showLoad(true, "Aplicando filtro...");
   await loadFromSupabase();
   showLoad(false);

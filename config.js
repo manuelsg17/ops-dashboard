@@ -45,6 +45,7 @@ const STATE = {
   declineThreshold: 3,
   declineMetric:    "activeDrivers",
   proyectosData:    [],
+  parseWarnings:    new Set(),
   bannedWords: JSON.parse(
     localStorage.getItem("yangoBannedWords") ||
     JSON.stringify(["tuktuk", "tuk tuk", "delivery", "cargo", "mototaxi", "bikes"])

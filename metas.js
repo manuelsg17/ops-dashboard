@@ -47,7 +47,7 @@ function renderMetas() {
     });
     const sorted = Object.keys(bd).sort().map(d => bd[d]);
     return {
-      ad:     Math.max(...sorted.map(v => v.ad)),
+      ad:     sorted.length ? Math.max(...sorted.map(v => v.ad)) : 0,
       nr:     sorted.reduce((s, v) => s + v.nr, 0),
       sh:     sorted.reduce((s, v) => s + v.sh, 0),
       lastAD: sorted[sorted.length - 1]?.ad || 0,

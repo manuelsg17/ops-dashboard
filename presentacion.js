@@ -182,7 +182,7 @@ function buildBigChart(canvasId, dates, partnerVals, cityDatasets, color, label)
       },
       scales: {
         x: { ticks: { font:{size:9} }, grid: { display:false } },
-        y: { beginAtZero: false, suggestedMax: Math.max(...partnerVals) * 1.05, ticks: { font:{size:9}, callback: v => fmt(v) }, grid: { color:"#f5f5f5" } }
+        y: { beginAtZero: false, suggestedMax: (partnerVals.length ? Math.max(...partnerVals) : 0) * 1.05, ticks: { font:{size:9}, callback: v => fmt(v) }, grid: { color:"#f5f5f5" } }
       }
     }
   });

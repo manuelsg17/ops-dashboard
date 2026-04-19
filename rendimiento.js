@@ -317,9 +317,10 @@ function buildPartnerCards(apd, lastDate, prevDate, partners, sel) {
   const grid = document.getElementById("partnerCards");
   if (!grid) return;
 
-  const selSet = new Set(sel);
+  const selSet  = new Set(sel);
   const prevRaw = STATE.rawData.filter(r => r.date === prevDate && selSet.has(r.partner));
   const prevAPD = aggPD(prevRaw);
+  const frag    = document.createDocumentFragment();
 
   partners.forEach(partner => {
     const rows = apd.filter(r => r.partner === partner)
@@ -386,8 +387,9 @@ function buildPartnerCards(apd, lastDate, prevDate, partners, sel) {
           </div>
         </div>
       </div>`;
-    grid.appendChild(card);
+    frag.appendChild(card);
   });
+  grid.appendChild(frag); // un solo reflow al final
 }
 
 // ── SECTION HEADER ─────────────────────────────────────────────────────────────

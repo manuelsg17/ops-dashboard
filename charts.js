@@ -1,18 +1,19 @@
 // charts.js — Toda la lógica de ApexCharts
 
 // ── TOOLTIP FLOTANTE ──────────────────────────────────────────────────────────
-function attachTooltipEvents() {
-  document.addEventListener("mousemove", e => {
-    const ft = document.getElementById("floatTip");
-    if (ft.style.display === "none") return;
-    const vw = window.innerWidth, vh = window.innerHeight;
-    let x = e.clientX + 16, y = e.clientY - 16;
-    if (x + 260 > vw) x = e.clientX - 265;
-    if (y + ft.offsetHeight > vh) y = vh - ft.offsetHeight - 10;
-    ft.style.left = x + "px";
-    ft.style.top  = y + "px";
-  });
+// El listener de mousemove se agrega solo cuando el tooltip está visible y se
+// remueve al ocultarlo, evitando disparos en cada pixel cuando no hay tooltip.
+function _onTipMouseMove(e) {
+  const ft = document.getElementById("floatTip");
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let x = e.clientX + 16, y = e.clientY - 16;
+  if (x + 260 > vw) x = e.clientX - 265;
+  if (y + ft.offsetHeight > vh) y = vh - ft.offsetHeight - 10;
+  ft.style.left = x + "px";
+  ft.style.top  = y + "px";
 }
+
+function attachTooltipEvents() { /* listener se registra en showFloatTip/hideFloatTip */ }
 
 function showFloatTip(date, rows) {
   const ft = document.getElementById("floatTip");
@@ -26,11 +27,15 @@ function showFloatTip(date, rows) {
            <span class="ft-v">${fmt(r.val)}</span>
          </div>`).join("")
     : `<div style="font-size:.75rem;color:#aaa">Sin datos</div>`;
+  if (ft.style.display !== "block") {
+    document.addEventListener("mousemove", _onTipMouseMove);
+  }
   ft.style.display = "block";
 }
 
 function hideFloatTip() {
   document.getElementById("floatTip").style.display = "none";
+  document.removeEventListener("mousemove", _onTipMouseMove);
 }
 
 // ── MULTI-LINE CHART (one series per partner) ─────────────────────────────────

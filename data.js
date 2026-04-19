@@ -7,11 +7,18 @@ function hashColor(s) {
   return `hsl(${Math.abs(h) % 360},62%,46%)`;
 }
 
-// Full-precision number parser — never rounds internally
-function toN(v) {
-  const s = String(v || 0).trim();
+// Full-precision number parser — never rounds internally.
+// Registra en STATE.parseWarnings cuando una celda no es numérica.
+function toN(v, label) {
+  if (v === null || v === undefined || v === "") return 0;
+  const s = String(v).trim();
+  if (s === "0") return 0;
   if (s.toUpperCase().endsWith("K")) return (parseFloat(s.slice(0, -1)) || 0) * 1000;
-  return parseFloat(s.replace(/[,%\s]/g, "")) || 0;
+  const n = parseFloat(s.replace(/[,%\s]/g, ""));
+  if (isNaN(n) && label && STATE?.parseWarnings !== undefined) {
+    STATE.parseWarnings.add(label);
+  }
+  return isNaN(n) ? 0 : n;
 }
 
 // Display formatters — max 2 decimal places
@@ -85,8 +92,8 @@ function projA(vals, daysElapsed, daysRemaining) {
 
 function sumR(rows, fn) { return rows.reduce((s, r) => s + fn(r), 0); }
 
-// Detects if a partner has strictly declined for N consecutive periods
-// Uses STATE.declineThreshold (default 3) and STATE.declineMetric (default "activeDrivers")
+// Detects if a partner has strictly declined for N consecutive periods.
+// Skips partners with gaps in their date sequence (missing weeks = no false positives).
 function hasConsecutiveDecline(apd, partner) {
   const n      = STATE.declineThreshold || 3;
   const metric = STATE.declineMetric || "activeDrivers";
@@ -95,6 +102,13 @@ function hasConsecutiveDecline(apd, partner) {
     .sort((a, b) => a.date.localeCompare(b.date));
   if (rows.length < n) return false;
   const last = rows.slice(-n);
+  // Gap check: all consecutive dates should be equidistant (same interval in ms)
+  if (last.length >= 2) {
+    const interval = new Date(last[1].date) - new Date(last[0].date);
+    for (let i = 2; i < last.length; i++) {
+      if ((new Date(last[i].date) - new Date(last[i - 1].date)) !== interval) return false;
+    }
+  }
   for (let i = 1; i < last.length; i++) {
     if (last[i][metric] >= last[i - 1][metric]) return false;
   }
@@ -202,8 +216,11 @@ while (!rendMDone) {
       STATE.rawDataMensual = STATE.rawDataMensual.filter(r => !isBanned(r.partner));
     }
 
+    STATE.parseWarnings.clear();
     updateIndexes();
-    showBanner(true, "Datos cargados · " + new Date().toLocaleTimeString("es-PE"));
+    const warnSuffix = STATE.parseWarnings.size
+      ? ` · ⚠ ${STATE.parseWarnings.size} campo(s) inválido(s)` : "";
+    showBanner(true, "Datos cargados · " + new Date().toLocaleTimeString("es-PE") + warnSuffix);
 
     if (STATE.rawData.length)   renderRend();
     if (STATE.metasData.length) renderMetas();
