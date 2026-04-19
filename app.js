@@ -5,10 +5,16 @@ const CONFIG_STATE = { page: 0, search: "", kamFilter: "all", PAGE_SIZE: 20 };
 
 // ── LOCALSTORAGE HELPER ───────────────────────────────────────────────────────
 function lsSet(key, val) {
-  try { lsSet(key, val); } catch (e) { /* QuotaExceededError o privado */ }
+  try { localStorage.setItem(key, val); } catch (e) { /* QuotaExceededError o privado */ }
 }
 function lsGet(key) {
-  try { return lsGet(key); } catch (e) { return null; }
+  try { return localStorage.getItem(key); } catch (e) { return null; }
+}
+
+// ── DEBOUNCE ──────────────────────────────────────────────────────────────────
+function debounce(fn, ms) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
 }
 
 // ── APP INIT ──────────────────────────────────────────────────────────────────
@@ -48,6 +54,10 @@ function initApp() {
       if (m) m.classList.remove("open");
     });
   });
+
+  // Debounce del botón Aplicar Filtros: evita renders en ráfaga
+  const applyBtn = document.querySelector(".apply-btn");
+  if (applyBtn) applyBtn.onclick = debounce(applyFilters, 150);
 
   attachTooltipEvents(); // solo se necesita una vez
   loadFromSupabase();

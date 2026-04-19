@@ -500,6 +500,7 @@ function updateIndexes() {
   STATE.allPartners.forEach(p => {
     if (!STATE.partnerColors[p]) STATE.partnerColors[p] = hashColor(p);
   });
+  clearAggCache();
 }
 
 // ── AGGREGATION (full precision, no intermediate rounding) ────────────────────
@@ -580,4 +581,61 @@ function aggCityDate(data) {
     m[r.date].ad += r.ad; m[r.date].nr += r.nr; m[r.date].sh += r.sh;
   });
   return m;
+}
+
+// ── AGGREGATION CACHE ─────────────────────────────────────────────────────────
+// Cache de un solo slot: evita re-computar cuando el filtro no cambió
+// (ej. al volver a la misma tab, o al hacer applyFilters sin cambios reales).
+const _C = { key: null, filtered: null, pd: null, byDate: null, cityByDate: {} };
+
+function _filterKey() {
+  const city = document.getElementById("cityFilter")?.value  || "";
+  const from = document.getElementById("dateFrom")?.value    || "";
+  const to   = document.getElementById("dateTo")?.value      || "";
+  return `${STATE.curMode}|${city}|${from}|${to}|${getSel().sort().join(",")}`;
+}
+
+function clearAggCache() { _C.key = null; }
+
+function getFiltered() {
+  const key = _filterKey();
+  if (_C.key === key) return _C.filtered;
+  const city   = document.getElementById("cityFilter").value;
+  const from   = document.getElementById("dateFrom").value;
+  const to     = document.getElementById("dateTo").value;
+  const selSet = new Set(getSel());
+  _C.filtered  = STATE.rawData.filter(r =>
+    (city === "all" || r.city === city) &&
+    r.date >= from && r.date <= to &&
+    selSet.has(r.partner)
+  );
+  _C.key       = key;
+  _C.pd        = null;
+  _C.byDate    = null;
+  _C.cityByDate = {};
+  return _C.filtered;
+}
+
+function aggPDc(data) {
+  if (data === _C.filtered) {
+    if (!_C.pd) _C.pd = aggPD(data);
+    return _C.pd;
+  }
+  return aggPD(data);
+}
+
+function aggDatec(data) {
+  if (data === _C.filtered) {
+    if (!_C.byDate) _C.byDate = aggDate(data);
+    return _C.byDate;
+  }
+  return aggDate(data);
+}
+
+function aggCityDatec(data, cityKey) {
+  if (data === _C.filtered) {
+    if (!_C.cityByDate[cityKey]) _C.cityByDate[cityKey] = aggCityDate(data);
+    return _C.cityByDate[cityKey];
+  }
+  return aggCityDate(data);
 }

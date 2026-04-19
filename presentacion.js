@@ -231,10 +231,10 @@ function renderPresent() {
       </div>
 
       <!-- Navegación -->
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
+      <div id="presentSlideNav" style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
         <button class="png-btn" onclick="prevSlide()" style="padding:6px 12px">◀</button>
         ${slideNames.map((s,i) => `
-          <button onclick="goSlide(${i})" style="padding:6px 14px;border-radius:6px;font-size:.78rem;font-weight:600;border:2px solid ${PRESENT_STATE.slide===i?'#FF0000':'#e5e5e5'};background:${PRESENT_STATE.slide===i?'#FF0000':'#fff'};color:${PRESENT_STATE.slide===i?'#fff':'#555'};cursor:pointer">${s}</button>
+          <button data-slide="${i}" onclick="goSlide(${i})" style="padding:6px 14px;border-radius:6px;font-size:.78rem;font-weight:600;border:2px solid ${PRESENT_STATE.slide===i?'#FF0000':'#e5e5e5'};background:${PRESENT_STATE.slide===i?'#FF0000':'#fff'};color:${PRESENT_STATE.slide===i?'#fff':'#555'};cursor:pointer">${s}</button>
         `).join("")}
         <button class="png-btn" onclick="nextSlide()" style="padding:6px 12px">▶</button>
       </div>
@@ -271,9 +271,29 @@ function filterPresentPartners(q) {
 }
 
 function setPresentLang(lang) { PRESENT_STATE.lang = lang; renderPresent(); }
-function prevSlide() { PRESENT_STATE.slide = Math.max(0, PRESENT_STATE.slide - 1); renderPresent(); }
-function nextSlide() { PRESENT_STATE.slide = Math.min(3, PRESENT_STATE.slide + 1); renderPresent(); }
-function goSlide(i)  { PRESENT_STATE.slide = i; renderPresent(); }
+
+// Navegación lazy: solo reconstruye el slide activo, no el shell completo
+function _navSlide(i) {
+  PRESENT_STATE.slide = i;
+  // Actualizar botones de nav sin tocar el resto del DOM
+  const slideNames = PRESENT_STATE.lang === "es" ? SLIDE_NAMES_ES : SLIDE_NAMES_EN;
+  document.querySelectorAll("#presentSlideNav button[data-slide]").forEach(btn => {
+    const si = +btn.dataset.slide;
+    btn.style.borderColor = si === i ? "#FF0000" : "#e5e5e5";
+    btn.style.background  = si === i ? "#FF0000" : "#fff";
+    btn.style.color       = si === i ? "#fff"    : "#555";
+  });
+  // Reconstruir solo el slide
+  destroyPresentCharts();
+  const partner = PRESENT_STATE.partner || STATE.allPartners[0];
+  const from    = document.getElementById("dateFrom")?.value;
+  const to      = document.getElementById("dateTo")?.value;
+  const mode    = STATE.curMode;
+  if (partner && from && to) renderSlide(partner, from, to, mode);
+}
+function prevSlide() { _navSlide(Math.max(0, PRESENT_STATE.slide - 1)); }
+function nextSlide() { _navSlide(Math.min(3, PRESENT_STATE.slide + 1)); }
+function goSlide(i)  { _navSlide(i); }
 
 // ── RENDER SLIDE ──────────────────────────────────────────────────────────────
 function renderSlide(partner, from, to, mode) {

@@ -113,9 +113,14 @@ function buildLineChart(elId, dates, series, colors) {
     }
   };
 
-  // Destroy previous instance if exists
-  if (STATE.charts[elId]) {
-    STATE.charts[elId].destroy();
+  const prev = STATE.charts[elId];
+  if (prev) {
+    // Si el elemento sigue en DOM, actualizar series sin recrear el chart (mucho más rápido)
+    if (prev.el && document.body.contains(prev.el)) {
+      prev.updateOptions({ series, colors: opts.colors }, false, false, false);
+      return;
+    }
+    // Elemento fue destruido por innerHTML — orphan, no necesita destroy()
     delete STATE.charts[elId];
   }
 

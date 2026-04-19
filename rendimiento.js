@@ -4,8 +4,8 @@ function renderRend() {
   if (!STATE.rawData.length) return;
 
   const filtered  = getFiltered();
-  const apd       = aggPD(filtered);
-  const byDate    = aggDate(filtered);
+  const apd       = aggPDc(filtered);
+  const byDate    = aggDatec(filtered);
   const dates     = [...new Set(apd.map(r => r.date))].sort();
   const partners  = getSel();
   const empty     = document.getElementById("rendEmpty");
@@ -179,7 +179,7 @@ function renderRend() {
     if (!cr.length) return;
     const cid = city.toLowerCase();
     const col = CITY_COLORS[city] || "#888";
-    const cbd = aggCityDate(cr);
+    const cbd = aggCityDatec(cr, city);
     buildSingleLine(`ch_${cid}_ad`, dates, cbd, "ad", col, city);
     buildSingleLine(`ch_${cid}_nr`, dates, cbd, "nr", col, city);
     buildSingleLine(`ch_${cid}_sh`, dates, cbd, "sh", col, city);
@@ -291,7 +291,7 @@ function renderTable() {
     const nsCell  = r.ns > 0
       ? `<span class="leads-badge" title="Recibe leads de Yango">★ ${fmt(r.ns)}</span>`
       : `<span style="color:#ccc">${fmt(r.ns)}</span>`;
-    h += `<tr${r.ns > 0 ? ' class="leads-row"' : ""}>
+    h += `<tr data-partner="${r.partner}"${r.ns > 0 ? ' class="leads-row"' : ""}>
       <td>${pd}${alertBd}${r.partner}</td><td>${kd}${r.kam}</td>
       <td class="tn">${fmt(r.ad)}</td><td class="tn">${fmt(r.nr)}</td>
       <td class="tn">${fmt(r.sh)}</td><td class="tn">${fmtK(r.co)}</td>
@@ -309,7 +309,34 @@ function sortTbl(col) {
   if (STATE.tblSort.col === col)
     STATE.tblSort.dir = STATE.tblSort.dir === "asc" ? "desc" : "asc";
   else { STATE.tblSort.col = col; STATE.tblSort.dir = "desc"; }
-  renderTable();
+
+  // Intentar reordenar filas existentes sin reconstruir el HTML
+  const tbody = document.querySelector("#tblContainer tbody");
+  if (!tbody || !STATE.curSummaries.length) { renderTable(); return; }
+
+  const dir = STATE.tblSort.dir === "asc" ? 1 : -1;
+  const k   = STATE.tblSort.col;
+  const sorted = STATE.curSummaries.slice().sort((a, b) => {
+    const av = a[k], bv = b[k];
+    return (typeof av === "string" ? av.localeCompare(bv) : (av - bv)) * dir;
+  });
+
+  // Actualizar indicadores de orden en cabeceras
+  const colKeys = ["partner","kam","ad","nr","sh","co","ns"];
+  document.querySelectorAll("#tblContainer th").forEach((th, i) => {
+    if (i < colKeys.length) {
+      th.className = STATE.tblSort.col === colKeys[i]
+        ? (STATE.tblSort.dir === "asc" ? "sa" : "sd") : "";
+    }
+  });
+
+  // Reordenar <tr> existentes vía DocumentFragment (cero re-parse de HTML)
+  const rowMap = new Map(
+    [...tbody.querySelectorAll("tr")].map(tr => [tr.dataset.partner, tr])
+  );
+  const frag = document.createDocumentFragment();
+  sorted.forEach(s => { const tr = rowMap.get(s.partner); if (tr) frag.appendChild(tr); });
+  tbody.appendChild(frag);
 }
 
 // ── PARTNER CARDS ─────────────────────────────────────────────────────────────
