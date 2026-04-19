@@ -115,13 +115,40 @@ function hasConsecutiveDecline(apd, partner) {
   return true;
 }
 
+// ── PAGINACIÓN PARALELA ───────────────────────────────────────────────────────
+// Descarga todas las páginas de una tabla en paralelo (sin esperar página a página)
+async function fetchAllPages(table, orderCol) {
+  // 1. Contar filas
+  const { count, error: cErr } = await sb
+    .from(table).select("*", { count: "exact", head: true });
+  if (cErr || !count) return []; // fallback a array vacío si falla el count
+
+  const PAGE   = 1000;
+  const pages  = Math.ceil(count / PAGE);
+  const reqs   = Array.from({ length: pages }, (_, i) =>
+    sb.from(table).select("*")
+      .order(orderCol, { ascending: true })
+      .range(i * PAGE, (i + 1) * PAGE - 1)
+  );
+  const results = await Promise.all(reqs);
+  const rows = [];
+  for (const { data, error } of results) {
+    if (error) throw error;
+    if (data) rows.push(...data);
+  }
+  return rows;
+}
+
 // ── LOAD FROM SUPABASE ────────────────────────────────────────────────────────
 async function loadFromSupabase() {
   showLoad(true, "Cargando datos desde Supabase...");
   try {
-    // 1. Partners
-    const { data: partners, error: pErr } = await sb.from("partners").select("*");
-    if (pErr) throw pErr;
+    // 1. Partners + Rendimiento semanal en paralelo
+    const [partners, rend] = await Promise.all([
+      sb.from("partners").select("*").then(r => { if (r.error) throw r.error; return r.data; }),
+      fetchAllPages("rendimiento", "fecha")
+    ]);
+
     if (partners && partners.length) {
       STATE.CLID_MAP = {};
       STATE.KAM_MAP  = {};
@@ -133,19 +160,6 @@ async function loadFromSupabase() {
       rebuildKAMPartners();
     }
 
-    // 2. Rendimiento semanal
-    let rend = [], rendPage = 0, rendDone = false;
-while (!rendDone) {
-  const { data: page, error: pageErr } = await sb
-    .from("rendimiento").select("*")
-    .order("fecha", { ascending: true })
-    .range(rendPage * 1000, (rendPage + 1) * 1000 - 1);
-  if (pageErr) throw pageErr;
-  if (!page || page.length === 0) { rendDone = true; break; }
-  rend = rend.concat(page);
-  if (page.length < 1000) rendDone = true;
-  rendPage++;
-}
     STATE.rawData = (rend || []).map(r => ({
       partner:       STATE.CLID_MAP[r.clid] || r.partner,
       kam:           STATE.KAM_MAP[r.clid] || r.kam || "",
@@ -160,32 +174,7 @@ while (!rendDone) {
       trips:         +r.trips
     }));
 
-    // 3. Rendimiento mensual
-   let rendM = [], rendMPage = 0, rendMDone = false;
-while (!rendMDone) {
-  const { data: pageM, error: pageMErr } = await sb
-    .from("rendimiento_mensual").select("*")
-    .order("mes", { ascending: true })
-    .range(rendMPage * 1000, (rendMPage + 1) * 1000 - 1);
-  if (pageMErr) throw pageMErr;
-  if (!pageM || pageM.length === 0) { rendMDone = true; break; }
-  rendM = rendM.concat(pageM);
-  if (pageM.length < 1000) rendMDone = true;
-  rendMPage++;
-}
-    STATE.rawDataMensual = (rendM || []).map(r => ({
-      partner:       STATE.CLID_MAP[r.clid] || r.partner,
-      kam:           STATE.KAM_MAP[r.clid] || r.kam || "",
-      city:          r.city || "",
-      date:          r.mes,
-      activeDrivers: +r.active_drivers,
-      newPartner:    +r.new_from_partner,
-      newService:    +r.new_from_service,
-      reactivated:   +r.reactivated,
-      supplyHours:   +r.supply_hours,
-      commission:    +r.commission,
-      trips:         +r.trips
-    }));
+    // 3. Rendimiento mensual → carga diferida (ver loadMensualIfNeeded)
 
     // 4. Metas
     const { data: metas, error: mErr } = await sb.from("metas").select("*");
@@ -206,15 +195,15 @@ while (!rendMDone) {
       STATE.proyectosData = proyectos || [];
     } catch (_) { STATE.proyectosData = []; }
 
-    // 6. Guardar copia completa (para Data Raw) y aplicar filtro de palabras prohibidas
-    STATE.rawDataFull        = [...STATE.rawData];
-    STATE.rawDataMensualFull = [...STATE.rawDataMensual];
+    // 6. Guardar copia completa y aplicar filtro de palabras prohibidas
+    STATE.rawDataFull = [...STATE.rawData];
     if (STATE.bannedWords && STATE.bannedWords.length) {
-      const banned = STATE.bannedWords.map(w => w.toLowerCase());
+      const banned   = STATE.bannedWords.map(w => w.toLowerCase());
       const isBanned = name => banned.some(w => (name || "").toLowerCase().includes(w));
-      STATE.rawData        = STATE.rawData.filter(r => !isBanned(r.partner));
-      STATE.rawDataMensual = STATE.rawDataMensual.filter(r => !isBanned(r.partner));
+      STATE.rawData  = STATE.rawData.filter(r => !isBanned(r.partner));
     }
+    // Referencia fija al dataset semanal filtrado (C6: elimina backup lazy _rawDataSemanal)
+    STATE._semanalData = STATE.rawData;
 
     STATE.parseWarnings.clear();
     updateIndexes();
@@ -228,6 +217,38 @@ while (!rendMDone) {
   } catch (err) {
     showBanner(false, "Error al cargar: " + err.message);
     console.error(err);
+  }
+  showLoad(false);
+}
+
+// ── LAZY LOAD MENSUAL ─────────────────────────────────────────────────────────
+async function loadMensualIfNeeded() {
+  if (STATE._mensualLoaded) return; // ya cargado
+  showLoad(true, "Cargando datos mensuales...");
+  try {
+    const rendM = await fetchAllPages("rendimiento_mensual", "mes");
+    STATE.rawDataMensual = rendM.map(r => ({
+      partner:       STATE.CLID_MAP[r.clid] || r.partner,
+      kam:           STATE.KAM_MAP[r.clid]  || r.kam || "",
+      city:          r.city || "",
+      date:          r.mes,
+      activeDrivers: +r.active_drivers,
+      newPartner:    +r.new_from_partner,
+      newService:    +r.new_from_service,
+      reactivated:   +r.reactivated,
+      supplyHours:   +r.supply_hours,
+      commission:    +r.commission,
+      trips:         +r.trips
+    }));
+    STATE.rawDataMensualFull = [...STATE.rawDataMensual];
+    if (STATE.bannedWords && STATE.bannedWords.length) {
+      const banned   = STATE.bannedWords.map(w => w.toLowerCase());
+      const isBanned = name => banned.some(w => (name || "").toLowerCase().includes(w));
+      STATE.rawDataMensual = STATE.rawDataMensual.filter(r => !isBanned(r.partner));
+    }
+    STATE._mensualLoaded = true;
+  } catch(err) {
+    showBanner(false, "Error al cargar mensual: " + err.message);
   }
   showLoad(false);
 }
@@ -500,6 +521,13 @@ function updateIndexes() {
   STATE.allPartners.forEach(p => {
     if (!STATE.partnerColors[p]) STATE.partnerColors[p] = hashColor(p);
   });
+  // Índice por fecha para getFiltered O(log n) en lugar de O(n)
+  STATE._byDate = new Map();
+  STATE.rawData.forEach(r => {
+    let arr = STATE._byDate.get(r.date);
+    if (!arr) { arr = []; STATE._byDate.set(r.date, arr); }
+    arr.push(r);
+  });
   clearAggCache();
 }
 
@@ -604,11 +632,25 @@ function getFiltered() {
   const from   = document.getElementById("dateFrom").value;
   const to     = document.getElementById("dateTo").value;
   const selSet = new Set(getSel());
-  _C.filtered  = STATE.rawData.filter(r =>
-    (city === "all" || r.city === city) &&
-    r.date >= from && r.date <= to &&
-    selSet.has(r.partner)
-  );
+
+  // Usar índice por fecha si está disponible (O(log n) en lugar de O(n))
+  let rows;
+  if (STATE._byDate && STATE._byDate.size) {
+    rows = [];
+    for (const [date, arr] of STATE._byDate) {
+      if (date >= from && date <= to) rows.push(...arr);
+    }
+    if (city !== "all") rows = rows.filter(r => r.city === city);
+    rows = rows.filter(r => selSet.has(r.partner));
+  } else {
+    rows = STATE.rawData.filter(r =>
+      (city === "all" || r.city === city) &&
+      r.date >= from && r.date <= to &&
+      selSet.has(r.partner)
+    );
+  }
+
+  _C.filtered  = rows;
   _C.key       = key;
   _C.pd        = null;
   _C.byDate    = null;

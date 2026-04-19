@@ -162,7 +162,7 @@ function restoreFilters() {
 
 // ── MODE SWITCH (Semanal / Mensual) ───────────────────────────────────────────
 let _inSwitchMode = false; // guard: evita que restoreFilters() revierta el cambio de modo
-function switchMode(mode) {
+async function switchMode(mode) {
   if (_inSwitchMode) return;
   _inSwitchMode = true;
 
@@ -172,12 +172,12 @@ function switchMode(mode) {
     btn.classList.toggle("active", btn.dataset.mode === mode);
   });
 
-  // Swap rawData según el modo
+  // Lazy load mensual al primer uso; usar _semanalData como referencia fija al semanal
   if (mode === "mensual") {
-    STATE._rawDataSemanal = STATE._rawDataSemanal || STATE.rawData;
+    await loadMensualIfNeeded();
     STATE.rawData = STATE.rawDataMensual;
   } else {
-    if (STATE._rawDataSemanal) STATE.rawData = STATE._rawDataSemanal;
+    if (STATE._semanalData) STATE.rawData = STATE._semanalData;
   }
 
   // updateIndexes ya llama popDates/popKAM/popPartners/restoreFilters internamente
@@ -312,20 +312,54 @@ function popKAM() {
 }
 
 // ── SIDEBAR: PARTNERS ────────────────────────────────────────────────────────
+const VIRT_THRESHOLD = 100; // partners antes de activar virtualización
+const VIRT_ITEM_H   = 28;   // px por ítem (debe coincidir con CSS .pi height)
+const VIRT_VISIBLE  = 12;   // ítems visibles en la ventana
+
 function popPartners(selected) {
-  const list  = document.getElementById("pList");
+  const list   = document.getElementById("pList");
   const selSet = new Set(selected);
-  list.innerHTML = STATE.allPartners.map(p => {
-    const chk = selSet.has(p) ? "checked" : "";
-    const c   = STATE.partnerColors[p] || "#FF0000";
-    const id  = "c_" + p.replace(/[^a-z0-9]/gi, "_");
-    return `<div class="pi" data-p="${p}">
-        <input type="checkbox" id="${id}" value="${p}" ${chk}/>
-        <label for="${id}">
-          <span class="pdot" style="background:${c}"></span>${p}
-        </label>
-      </div>`;
-  }).join("");
+
+  if (STATE.allPartners.length <= VIRT_THRESHOLD) {
+    // Render completo para listas pequeñas
+    list.style.height = "";
+    list.style.overflowY = "";
+    list.innerHTML = STATE.allPartners.map(p => _pItem(p, selSet)).join("");
+    return;
+  }
+
+  // Virtualización ligera: altura fija + renderizado de ventana
+  list.style.height    = (VIRT_VISIBLE * VIRT_ITEM_H) + "px";
+  list.style.overflowY = "auto";
+
+  const renderWindow = () => {
+    const scrollTop  = list.scrollTop;
+    const start      = Math.max(0, Math.floor(scrollTop / VIRT_ITEM_H) - 2);
+    const end        = Math.min(STATE.allPartners.length, start + VIRT_VISIBLE + 4);
+    const topPad     = start * VIRT_ITEM_H;
+    const botPad     = (STATE.allPartners.length - end) * VIRT_ITEM_H;
+    const items      = STATE.allPartners.slice(start, end)
+                         .map(p => _pItem(p, selSet)).join("");
+    list.innerHTML =
+      `<div style="height:${topPad}px"></div>` +
+      items +
+      `<div style="height:${botPad}px"></div>`;
+  };
+
+  list.onscroll = renderWindow;
+  renderWindow();
+}
+
+function _pItem(p, selSet) {
+  const chk = selSet.has(p) ? "checked" : "";
+  const c   = STATE.partnerColors[p] || "#FF0000";
+  const id  = "c_" + p.replace(/[^a-z0-9]/gi, "_");
+  return `<div class="pi" data-p="${p}" style="height:${VIRT_ITEM_H}px">
+      <input type="checkbox" id="${id}" value="${p}" ${chk}/>
+      <label for="${id}">
+        <span class="pdot" style="background:${c}"></span>${p}
+      </label>
+    </div>`;
 }
 
 function updateIndexes() {
@@ -342,6 +376,17 @@ function updateIndexes() {
 
 function filterPList() {
   const q = document.getElementById("partnerSearch").value.toLowerCase();
+  if (STATE.allPartners.length > VIRT_THRESHOLD) {
+    // En modo virtual, reconstruir con la lista filtrada
+    const filtered = STATE.allPartners.filter(p => p.toLowerCase().includes(q));
+    const list     = document.getElementById("pList");
+    const selSet   = new Set(getSel());
+    list.style.height    = Math.min(filtered.length, VIRT_VISIBLE) * VIRT_ITEM_H + "px";
+    list.style.overflowY = filtered.length > VIRT_VISIBLE ? "auto" : "";
+    list.onscroll        = null;
+    list.innerHTML       = filtered.map(p => _pItem(p, selSet)).join("");
+    return;
+  }
   document.querySelectorAll("#pList .pi").forEach(el => {
     el.style.display = el.dataset.p.toLowerCase().includes(q) ? "flex" : "none";
   });
