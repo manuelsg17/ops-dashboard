@@ -47,6 +47,9 @@ const STATE = {
   proyectosData:    [],
   parseWarnings:    new Set(),
   _mensualLoaded:   false,
+  _diarioLoaded:    false,
+  rawDataDiario:      [],
+  rawDataDiarioFull:  [],
   bannedWords: JSON.parse(
     localStorage.getItem("yangoBannedWords") ||
     JSON.stringify(["tuktuk", "tuk tuk", "delivery", "cargo", "mototaxi", "bikes"])

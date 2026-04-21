@@ -100,6 +100,10 @@
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
             Rendimiento Mensual
           </label>
+          <label class="upload-menu-item" for="fileRendDiario">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Rendimiento Diario
+          </label>
           <label class="upload-menu-item" for="fileMetas">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
             Metas
@@ -114,6 +118,7 @@
       <!-- Inputs de archivo ocultos -->
       <input type="file" id="fileRend"        accept=".xlsx,.xls"/>
       <input type="file" id="fileRendMensual" accept=".xlsx,.xls"/>
+      <input type="file" id="fileRendDiario"  accept=".xlsx,.xls"/>
       <input type="file" id="fileMetas"       accept=".xlsx,.xls"/>
       <input type="file" id="fileData"        accept=".xlsx,.xls"/>
 
@@ -130,12 +135,19 @@
     <div class="sidebar" id="mainSidebar">
       <div id="dsBanner" style="display:none"></div>
 
+      <div class="sb-label">Escala</div>
+      <div class="mode-toggle-row">
+        <button class="mode-btn" data-mode="diario"  onclick="switchMode('diario')">Diario</button>
+        <button class="mode-btn active" data-mode="semanal" onclick="switchMode('semanal')">Semanal</button>
+        <button class="mode-btn" data-mode="mensual" onclick="switchMode('mensual')">Mensual</button>
+      </div>
+
       <div class="sb-label">Rango de Fechas</div>
       <div class="date-grid">
         <div><label>Desde</label><select class="sb-sel" id="dateFrom"></select></div>
         <div><label>Hasta</label><select class="sb-sel"  id="dateTo"></select></div>
       </div>
-      <div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">
+      <div id="datePresets" style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">
         <button class="preset-btn" onclick="setDatePreset('week')">Esta semana</button>
         <button class="preset-btn" onclick="setDatePreset('fortnight')">Quincena</button>
         <button class="preset-btn" onclick="setDatePreset('month')">Este mes</button>

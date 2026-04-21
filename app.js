@@ -48,7 +48,7 @@ function initApp() {
   });
 
   // Cerrar dropdown al seleccionar un archivo
-  ["fileRend", "fileRendMensual", "fileMetas", "fileData"].forEach(id => {
+  ["fileRend", "fileRendMensual", "fileRendDiario", "fileMetas", "fileData"].forEach(id => {
     document.getElementById(id).addEventListener("change", () => {
       const m = document.getElementById("uploadMenu");
       if (m) m.classList.remove("open");
@@ -172,16 +172,19 @@ async function switchMode(mode) {
     btn.classList.toggle("active", btn.dataset.mode === mode);
   });
 
-  // Lazy load mensual al primer uso; usar _semanalData como referencia fija al semanal
+  // Lazy load según escala; _semanalData es la referencia fija al dataset semanal filtrado
   if (mode === "mensual") {
     await loadMensualIfNeeded();
     STATE.rawData = STATE.rawDataMensual;
+  } else if (mode === "diario") {
+    await loadDiarioIfNeeded();
+    STATE.rawData = STATE.rawDataDiario;
   } else {
     if (STATE._semanalData) STATE.rawData = STATE._semanalData;
   }
 
-  // updateIndexes ya llama popDates/popKAM/popPartners/restoreFilters internamente
   updateIndexes();
+  rerenderSidebarPresets();
 
   if (STATE.curTab === "rend"  && STATE.rawData.length) renderRend();
   if (STATE.curTab === "metas" && STATE.metasData.length && STATE.rawData.length) renderMetas();
@@ -293,6 +296,25 @@ function setDatePreset(type) {
     const m = today.toISOString().slice(0, 7);
     from = dates.find(d => d >= `${m}-01`) || dates[0];
     to   = dates[dates.length - 1];
+
+  // ── Presets para escala diaria ───────────────────────────────────────────
+  } else if (type === 'today') {
+    from = to = dates[dates.length - 1]; // día más reciente disponible
+  } else if (type === '7d' || type === '14d' || type === '30d' || type === '90d') {
+    const nDays = { '7d': 6, '14d': 13, '30d': 29, '90d': 89 }[type];
+    const cutoff = new Date(dates[dates.length - 1]);
+    cutoff.setDate(cutoff.getDate() - nDays);
+    from = dates.find(d => d >= cutoff.toISOString().slice(0, 10)) || dates[0];
+    to   = dates[dates.length - 1];
+
+  // ── Presets para escala mensual ──────────────────────────────────────────
+  } else if (type === '3m' || type === '6m') {
+    const nMonths = type === '3m' ? 3 : 6;
+    const cutoff  = new Date(dates[dates.length - 1].slice(0, 7) + "-01");
+    cutoff.setMonth(cutoff.getMonth() - nMonths + 1);
+    const cutoffStr = cutoff.toISOString().slice(0, 7);
+    from = dates.find(d => d >= cutoffStr) || dates[0];
+    to   = dates[dates.length - 1];
   }
 
   if (!from || !to) return;
@@ -301,6 +323,23 @@ function setDatePreset(type) {
   if (elFrom) elFrom.value = from;
   if (elTo)   elTo.value   = to;
   applyFilters();
+}
+
+// ── PRESETS DINÁMICOS POR ESCALA ─────────────────────────────────────────────
+function getPresetButtonsHTML() {
+  const defs = {
+    diario:  [["today","Hoy"],["7d","7 días"],["14d","14 días"],["30d","30 días"],["90d","90 días"]],
+    semanal: [["week","Esta semana"],["fortnight","Quincena"],["month","Este mes"]],
+    mensual: [["month","Este mes"],["3m","Últ. 3 meses"],["6m","Últ. 6 meses"]]
+  };
+  return (defs[STATE.curMode] || defs.semanal)
+    .map(([k, l]) => `<button class="preset-btn" onclick="setDatePreset('${k}')">${l}</button>`)
+    .join("");
+}
+
+function rerenderSidebarPresets() {
+  const el = document.getElementById("datePresets");
+  if (el) el.innerHTML = getPresetButtonsHTML();
 }
 
 // ── SIDEBAR: KAM ─────────────────────────────────────────────────────────────
@@ -369,6 +408,7 @@ function updateIndexes() {
     if (!STATE.partnerColors[p]) STATE.partnerColors[p] = hashColor(p);
   });
   popDates();
+  rerenderSidebarPresets();
   popKAM();
   popPartners(STATE.allPartners);
   restoreFilters();
@@ -433,12 +473,7 @@ function updateDeclineSettings() {
 
 // ── MODE TOGGLE HTML (compartido por Rendimiento y Metas) ─────────────────────
 function modeToggleHTML() {
-  const s = STATE.curMode === "semanal";
-  return `
-    <div class="tab-mode-bar">
-      <button class="mode-btn${s ? " active" : ""}" data-mode="semanal" onclick="switchMode('semanal')">Semanal</button>
-      <button class="mode-btn${!s ? " active" : ""}" data-mode="mensual" onclick="switchMode('mensual')">Mensual</button>
-    </div>`;
+  return ""; // El selector de escala vive en el sidebar — ver .mode-toggle-row
 }
 
 // ── CONFIG TAB ────────────────────────────────────────────────────────────────

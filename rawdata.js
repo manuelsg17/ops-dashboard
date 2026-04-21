@@ -17,7 +17,9 @@ function renderRawData() {
   const content = document.getElementById("rawdataContent");
   if (!content) return;
 
-  const src = STATE.curMode === "mensual" ? STATE.rawDataMensualFull : STATE.rawDataFull;
+  const src = STATE.curMode === "mensual" ? STATE.rawDataMensualFull
+            : STATE.curMode === "diario"  ? STATE.rawDataDiarioFull
+            :                              STATE.rawDataFull;
 
   if (!src || !src.length) {
     content.innerHTML = `
@@ -222,7 +224,9 @@ function rawSortBy(col) {
 
 // ── EXPORT CSV ────────────────────────────────────────────────────────────────
 function exportRawCSV() {
-  const src    = STATE.curMode === "mensual" ? STATE.rawDataMensualFull : STATE.rawDataFull;
+  const src    = STATE.curMode === "mensual" ? STATE.rawDataMensualFull
+               : STATE.curMode === "diario"  ? STATE.rawDataDiarioFull
+               :                              STATE.rawDataFull;
   const banned = (STATE.bannedWords || []).map(w => w.toLowerCase());
   const isBanned = name => banned.some(w => (name || "").toLowerCase().includes(w));
 

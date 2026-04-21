@@ -85,8 +85,9 @@ function projA(vals, daysElapsed, daysRemaining) {
   const total      = v.reduce((s, x) => s + x, 0);
   if (STATE.curMode === "mensual" || daysRemaining === 0) return total;
   const last3      = v.slice(-3);
-  const weeklyRate = last3.reduce((s, x) => s + x, 0) / last3.length;
-  const dailyRate  = weeklyRate / 7;
+  const periodRate = last3.reduce((s, x) => s + x, 0) / last3.length;
+  // Diario: cada período = 1 día; Semanal: cada período = 7 días
+  const dailyRate  = periodRate / (STATE.curMode === "diario" ? 1 : 7);
   return total + dailyRate * daysRemaining;
 }
 
@@ -253,6 +254,38 @@ async function loadMensualIfNeeded() {
   showLoad(false);
 }
 
+// ── LAZY LOAD DIARIO ──────────────────────────────────────────────────────────
+async function loadDiarioIfNeeded() {
+  if (STATE._diarioLoaded) return;
+  showLoad(true, "Cargando datos diarios...");
+  try {
+    const rendD = await fetchAllPages("rendimiento_diario", "date");
+    STATE.rawDataDiario = rendD.map(r => ({
+      partner:       STATE.CLID_MAP[r.clid] || r.partner || r.clid,
+      kam:           STATE.KAM_MAP[r.clid]  || r.kam || "",
+      city:          r.city || "",
+      date:          r.date,
+      activeDrivers: +r.active_drivers || 0,
+      newPartner:    +r.new_partner    || 0,
+      newService:    +r.new_service    || 0,
+      reactivated:   +r.reactivated    || 0,
+      supplyHours:   +r.supply_hours   || 0,
+      commission:    +r.commission     || 0,
+      trips:         +r.trips          || 0
+    }));
+    STATE.rawDataDiarioFull = [...STATE.rawDataDiario];
+    if (STATE.bannedWords && STATE.bannedWords.length) {
+      const banned   = STATE.bannedWords.map(w => w.toLowerCase());
+      const isBanned = name => banned.some(w => (name || "").toLowerCase().includes(w));
+      STATE.rawDataDiario = STATE.rawDataDiario.filter(r => !isBanned(r.partner));
+    }
+    STATE._diarioLoaded = true;
+  } catch (err) {
+    showBanner(false, "Error al cargar diario: " + err.message);
+  }
+  showLoad(false);
+}
+
 // ── UPLOAD RENDIMIENTO MENSUAL ────────────────────────────────────────────────
 async function uploadRendimientoMensual(rows) {
   if (!rows.length) throw new Error("Archivo vacío");
@@ -328,6 +361,70 @@ async function uploadRendimientoMensual(rows) {
   }
 }
 
+// ── UPLOAD RENDIMIENTO DIARIO ─────────────────────────────────────────────────
+async function uploadRendimientoDiario(rows) {
+  if (!rows.length) throw new Error("Archivo vacío");
+
+  const keys = Object.keys(rows[0]);
+  const dateColMap = {};
+
+  keys.forEach(k => {
+    const m = k.match(/^(\d{2})\.(\d{2})\.(\d{4})\s*-\s*(.+)$/);
+    if (!m) return;
+    const iso = `${m[3]}-${m[2]}-${m[1]}`; // DD.MM.YYYY → YYYY-MM-DD
+    if (!dateColMap[iso]) dateColMap[iso] = {};
+    dateColMap[iso][m[4].trim().toLowerCase()] = k;
+  });
+
+  function pick(mc, ...needles) {
+    for (const n of needles)
+      for (const [mk, col] of Object.entries(mc))
+        if (mk.includes(n)) return col;
+    return null;
+  }
+
+  const agg = {};
+  rows.forEach(row => {
+    const clid = String(row["CLID"] || row["clid"] || "").trim();
+    const city = String(row["City"] || row["city"] || row["Ciudad"] || "").trim();
+
+    Object.entries(dateColMap).forEach(([date, mc]) => {
+      const v  = col => col ? toN(row[col]) : 0;
+      const ad = v(pick(mc, "active driver"));
+      const np = v(pick(mc, "new profile from partner", "new profiles from partner", "from partner"));
+      const ns = v(pick(mc, "new profile from service", "new profiles from service", "from service"));
+      const re = v(pick(mc, "reactivat"));
+      const sh = v(pick(mc, "supply hour"));
+      const co = v(pick(mc, "commission", "comisi"));
+      const tr = v(pick(mc, "trip", "viaje"));
+
+      if (ad || np || ns || re || sh || co || tr) {
+        const k = `${clid}|||${city}|||${date}`;
+        if (!agg[k]) agg[k] = { clid, city, date,
+          active_drivers: 0, new_partner: 0, new_service: 0,
+          reactivated: 0, supply_hours: 0, commission: 0, trips: 0 };
+        agg[k].active_drivers += ad;
+        agg[k].new_partner    += np;
+        agg[k].new_service    += ns;
+        agg[k].reactivated    += re;
+        agg[k].supply_hours   += sh;
+        agg[k].commission     += co;
+        agg[k].trips          += tr;
+      }
+    });
+  });
+
+  const flat = Object.values(agg);
+  if (!flat.length) throw new Error("No se encontraron datos. Verifica que las columnas tengan formato DD.MM.YYYY - Métrica");
+
+  for (let i = 0; i < flat.length; i += 500) {
+    const { error } = await sb.from("rendimiento_diario")
+      .upsert(flat.slice(i, i + 500), { onConflict: "clid,city,date" });
+    if (error) throw error;
+  }
+  STATE._diarioLoaded = false; // forzar recarga al siguiente switchMode("diario")
+}
+
 // ── FILE UPLOAD HANDLERS ──────────────────────────────────────────────────────
 function initFileHandlers() {
   document.getElementById("fileRend")
@@ -338,12 +435,15 @@ function initFileHandlers() {
     .addEventListener("change", e => handleFile(e.target.files[0], "data"));
   document.getElementById("fileRendMensual")
     .addEventListener("change", e => handleFile(e.target.files[0], "rendimientoMensual"));
+  document.getElementById("fileRendDiario")
+    .addEventListener("change", e => handleFile(e.target.files[0], "rendimientoDiario"));
 }
 
 // Classifies upload errors into user-friendly messages
 function describeUploadError(type, err) {
   const base = err.message || "Error desconocido";
   const typeLabel = { rendimiento: "Rendimiento Semanal", rendimientoMensual: "Rendimiento Mensual",
+                      rendimientoDiario: "Rendimiento Diario",
                       metas: "Metas", data: "Partners" }[type] || type;
   if (base.includes("duplicate") || base.includes("unico") || base.includes("unique"))
     return `Ya existen filas con las mismas claves en ${typeLabel}. Los datos existentes fueron actualizados (upsert).`;
@@ -378,7 +478,7 @@ async function handleFile(file, type) {
       if (type === "data") {
         sheetName = wb.SheetNames[sheetNames.indexOf("DATOS") >= 0 ? sheetNames.indexOf("DATOS")
           : sheetNames.indexOf("DATA") >= 0 ? sheetNames.indexOf("DATA") : 0];
-      } else if (type === "rendimiento") {
+      } else if (type === "rendimiento" || type === "rendimientoDiario") {
         sheetName = wb.SheetNames[sheetNames.indexOf("RENDIMIENTO") >= 0
           ? sheetNames.indexOf("RENDIMIENTO") : 0];
       } else {
@@ -388,10 +488,11 @@ async function handleFile(file, type) {
 
       const json = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { raw: false, defval: "" });
 
-      if (type === "data")                  await uploadPartners(json);
-else if (type === "rendimiento")      await uploadRendimiento(json);
-else if (type === "rendimientoMensual") await uploadRendimientoMensual(json);
-else                                  await uploadMetas(json);
+      if      (type === "data")               await uploadPartners(json);
+      else if (type === "rendimiento")       await uploadRendimiento(json);
+      else if (type === "rendimientoMensual") await uploadRendimientoMensual(json);
+      else if (type === "rendimientoDiario") await uploadRendimientoDiario(json);
+      else                                   await uploadMetas(json);
 
       await loadFromSupabase();
     } catch (err) {
