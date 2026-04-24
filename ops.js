@@ -13,7 +13,7 @@ function renderOps() {
   }
 
   const content  = document.getElementById("opsContent");
-  const allDates = [...new Set(STATE.rawData.map(r => r.date))].sort();
+  const allDates = STATE.allDates;
   const lastDate = allDates[allDates.length - 1] || "";
   const prevDate = allDates.length > 1 ? allDates[allDates.length - 2] : "";
 
@@ -24,48 +24,58 @@ function renderOps() {
     `Última fecha: ${d2s(lastDate)}  ·  vs período anterior`, "");
   html += `<div class="section"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px">`;
 
+  // Precomputar fuera del forEach: rangos de SH y Map de declines (apdFull cacheado)
+  const last4Dates = allDates.slice(-4);
+  const prev4Dates = allDates.slice(-8, -4);
+  const apdFull        = getApdFull();
+  const apdByPartner   = new Map();
+  apdFull.forEach(r => {
+    if (!apdByPartner.has(r.partner)) apdByPartner.set(r.partner, []);
+    apdByPartner.get(r.partner).push(r);
+  });
+
+  // Deduplicate by partner+city+date
+  function citySum(rows, fn) {
+    const seen = new Set();
+    let sum = 0;
+    rows.forEach(r => {
+      const k = `${r.partner}|||${r.city}|||${r.date}`;
+      if (seen.has(k)) return; seen.add(k);
+      sum += fn(r);
+    });
+    return sum;
+  }
+
   CITIES.forEach(city => {
-    const cData   = STATE.rawData.filter(r => r.city === city);
+    const cData = STATE._byCity?.get(city) || [];
     if (!cData.length) return;
 
-    // Aggregate last and prev date for this city
-    const lastRows = cData.filter(r => r.date === lastDate);
-    const prevRows = cData.filter(r => r.date === prevDate);
-
-    // Deduplicate by partner+city+date
-    function citySum(rows, fn) {
-      const seen = new Set();
-      let sum = 0;
-      rows.forEach(r => {
-        const k = `${r.partner}|||${r.city}|||${r.date}`;
-        if (seen.has(k)) return; seen.add(k);
-        sum += fn(r);
-      });
-      return sum;
-    }
+    // Aggregate last/prev date via _byCityDate (lookup O(1))
+    const lastRows = STATE._byCityDate?.get(`${city}|||${lastDate}`) || [];
+    const prevRows = STATE._byCityDate?.get(`${city}|||${prevDate}`) || [];
 
     const lAD = citySum(lastRows, r => r.activeDrivers);
     const pAD = citySum(prevRows, r => r.activeDrivers);
-    const lNR = STATE.rawData.filter(r => r.city === city && r.date === lastDate)
-      .reduce((s, r) => s + r.newPartner + r.newService + r.reactivated, 0);
-    const pNR = STATE.rawData.filter(r => r.city === city && r.date === prevDate)
-      .reduce((s, r) => s + r.newPartner + r.newService + r.reactivated, 0);
+    const lNR = lastRows.reduce((s, r) => s + r.newPartner + r.newService + r.reactivated, 0);
+    const pNR = prevRows.reduce((s, r) => s + r.newPartner + r.newService + r.reactivated, 0);
 
-    // Supply hours: sum over all filtered range (last 4 weeks default)
-    const last4Dates = allDates.slice(-4);
-    const lSH = STATE.rawData.filter(r => r.city === city && last4Dates.includes(r.date))
-      .reduce((s, r) => s + r.supplyHours, 0);
-    const prev4Dates = allDates.slice(-8, -4);
-    const pSH = STATE.rawData.filter(r => r.city === city && prev4Dates.includes(r.date))
-      .reduce((s, r) => s + r.supplyHours, 0);
+    // Supply hours: sum over last 4 / prev 4 dates (lookup por fecha)
+    let lSH = 0, pSH = 0;
+    last4Dates.forEach(d => {
+      const arr = STATE._byCityDate?.get(`${city}|||${d}`) || [];
+      for (const r of arr) lSH += r.supplyHours;
+    });
+    prev4Dates.forEach(d => {
+      const arr = STATE._byCityDate?.get(`${city}|||${d}`) || [];
+      for (const r of arr) pSH += r.supplyHours;
+    });
 
     const cityColor = CITY_COLORS[city] || "#888";
     const partnersInCity = [...new Set(cData.map(r => r.partner))].length;
 
-    // Decline alerts in this city
-    const apdCity = aggPD(cData);
+    // Decline alerts in this city — usa Map (corrige bug de O(n²) y array→Map)
     const decliningPartners = [...new Set(cData.map(r => r.partner))]
-      .filter(p => hasConsecutiveDecline(apdCity, p));
+      .filter(p => hasConsecutiveDecline(apdByPartner, p));
 
     html += `
       <div class="mcard" style="border-left:3px solid ${cityColor}">
@@ -113,7 +123,7 @@ function renderOps() {
     const from = document.getElementById("dateFrom")?.value || STATE.allDates[0];
     const to   = document.getElementById("dateTo")?.value   || lastDate;
     const weeksTotal = mWeeks(from, to);
-    const perfF = STATE.rawData.filter(r => r.date >= from && r.date <= to);
+    const perfF = getFilteredByDateRange(from, to);
 
     CITIES.forEach(city => {
       const cityMetas = STATE.metasData.filter(m => m.city === city);
@@ -172,7 +182,7 @@ function renderOps() {
   }
 
   // ── 3. Distribución de Leads Yango ───────────────────────────────────────
-  const leadsData = STATE.rawData.filter(r => r.date === lastDate && r.newService > 0);
+  const leadsData = (STATE._byDate?.get(lastDate) || []).filter(r => r.newService > 0);
   if (leadsData.length) {
     html += secH("★", "#f59e0b", "Distribución de Leads Yango",
       `Partners que reciben leads de Yango · ${d2s(lastDate)}`, "");

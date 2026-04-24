@@ -31,8 +31,8 @@ function renderRend() {
   // prevRows: datos de prevDate fuera del rango filtrado
   const cityFilter = document.getElementById("cityFilter").value;
   const selSet     = new Set(getSel());
-  const prevFiltered = STATE.rawData.filter(r =>
-    r.date === prevDate &&
+  const _prevAll = STATE._byDate?.get(prevDate) || [];
+  const prevFiltered = _prevAll.filter(r =>
     (cityFilter === "all" || r.city === cityFilter) &&
     selSet.has(r.partner)
   );
@@ -71,10 +71,9 @@ function renderRend() {
     if (!cr.length) return;
     const ca   = aggPD(cr);
     const cL   = ca.filter(r => r.date === lastDate);
-    // prevDate para ciudad: buscar en todos los rawData
-    const cPraw = STATE.rawData.filter(r =>
-      r.date === prevDate && r.city === city && selSet.has(r.partner)
-    );
+    // prevDate para ciudad: lookup O(1) por _byCityDate
+    const cPraw = (STATE._byCityDate?.get(`${city}|||${prevDate}`) || [])
+      .filter(r => selSet.has(r.partner));
     const cP   = aggPD(cPraw);
     const cAD  = sumR(cL,  r => r.activeDrivers);
     const cNR  = sumR(cL,  r => r.newPartner + r.newService + r.reactivated);
@@ -233,7 +232,7 @@ function mkMetricCard(label, icon, val, prevWk, apd, lastRows, prevRows, metric,
 function buildTable(apd, lastDate, prevDate, sel) {
   const selSet = new Set(sel);
   const lR    = apd.filter(r => r.date === lastDate);
-  const pRraw = STATE.rawData.filter(r => r.date === prevDate && selSet.has(r.partner));
+  const pRraw = (STATE._byDate?.get(prevDate) || []).filter(r => selSet.has(r.partner));
   const pR    = aggPD(pRraw);
   // Use full history (all dates) for decline detection, ignoring date range filter
   if (!STATE._apdFull) {
@@ -354,7 +353,7 @@ function buildPartnerCards(apd, lastDate, prevDate, partners, sel) {
   if (!grid) return;
 
   const selSet  = new Set(sel);
-  const prevRaw = STATE.rawData.filter(r => r.date === prevDate && selSet.has(r.partner));
+  const prevRaw = (STATE._byDate?.get(prevDate) || []).filter(r => selSet.has(r.partner));
   const prevAPD = aggPD(prevRaw);
   const frag    = document.createDocumentFragment();
 

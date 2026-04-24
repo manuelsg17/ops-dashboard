@@ -621,14 +621,61 @@ function updateIndexes() {
   STATE.allPartners.forEach(p => {
     if (!STATE.partnerColors[p]) STATE.partnerColors[p] = hashColor(p);
   });
-  // Índice por fecha para getFiltered O(log n) en lugar de O(n)
-  STATE._byDate = new Map();
+  // Índices secundarios — todas las consultas frecuentes evitan filter() sobre rawData
+  STATE._byDate     = new Map();
+  STATE._byPartner  = new Map();
+  STATE._byCity     = new Map();
+  STATE._byCityDate = new Map();
+  STATE._partnerKAM = new Map();
   STATE.rawData.forEach(r => {
-    let arr = STATE._byDate.get(r.date);
-    if (!arr) { arr = []; STATE._byDate.set(r.date, arr); }
-    arr.push(r);
+    // _byDate
+    let a = STATE._byDate.get(r.date);
+    if (!a) { a = []; STATE._byDate.set(r.date, a); }
+    a.push(r);
+    // _byPartner
+    let b = STATE._byPartner.get(r.partner);
+    if (!b) { b = []; STATE._byPartner.set(r.partner, b); }
+    b.push(r);
+    // _byCity
+    let c = STATE._byCity.get(r.city);
+    if (!c) { c = []; STATE._byCity.set(r.city, c); }
+    c.push(r);
+    // _byCityDate
+    const cdKey = `${r.city}|||${r.date}`;
+    let d = STATE._byCityDate.get(cdKey);
+    if (!d) { d = []; STATE._byCityDate.set(cdKey, d); }
+    d.push(r);
+    // _partnerKAM (primer kam no vacío gana)
+    if (r.kam && !STATE._partnerKAM.has(r.partner)) {
+      STATE._partnerKAM.set(r.partner, r.kam);
+    }
   });
+  STATE._apdFull = null;   // dataset cambió → invalidar agregado completo
   clearAggCache();
+}
+
+// ── HELPERS DE ACCESO ─────────────────────────────────────────────────────────
+function getKAMForPartner(partner) {
+  if (STATE._partnerKAM?.has(partner)) return STATE._partnerKAM.get(partner);
+  // Fallback: lookup inverso en CLID_MAP/KAM_MAP
+  const clid = Object.keys(STATE.CLID_MAP).find(c => STATE.CLID_MAP[c] === partner);
+  return clid ? (STATE.KAM_MAP[clid] || "") : "";
+}
+
+function getFilteredByDateRange(from, to) {
+  if (!STATE._byDate || !STATE._byDate.size) {
+    return STATE.rawData.filter(r => r.date >= from && r.date <= to);
+  }
+  const rows = [];
+  for (const [date, arr] of STATE._byDate) {
+    if (date >= from && date <= to) rows.push(...arr);
+  }
+  return rows;
+}
+
+function getApdFull() {
+  if (!STATE._apdFull) STATE._apdFull = aggPD(STATE.rawData);
+  return STATE._apdFull;
 }
 
 // ── AGGREGATION (full precision, no intermediate rounding) ────────────────────

@@ -19,7 +19,7 @@ function renderMetas() {
   const mesName = STATE.metasData[0]?.mes || "";
 
   // Build performance data by partner+city+date (full precision)
-  const perfF  = STATE.rawData.filter(r => r.date >= from && r.date <= to);
+  const perfF  = getFilteredByDateRange(from, to);
   const cpMap  = {};
   perfF.forEach(r => {
     const k = `${r.partner}|||${r.city}|||${r.date}`;
@@ -127,10 +127,9 @@ function renderMetas() {
     if (!cm.length) return;
 
     // Build city combos using actual city data from rendimiento
-    const cityPerfRows = STATE.rawData.filter(r =>
-      r.date >= from && r.date <= to &&
-      r.city === city &&
-      selSet.has(r.partner)
+    const cityRows = STATE._byCity?.get(city) || [];
+    const cityPerfRows = cityRows.filter(r =>
+      r.date >= from && r.date <= to && selSet.has(r.partner)
     );
     const cityPerfMap = {};
     cityPerfRows.forEach(r => {

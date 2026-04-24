@@ -51,6 +51,10 @@ const STATE = {
   rawDataDiario:      [],
   rawDataDiarioFull:  [],
   _apdFull:         null,
+  _byPartner:       null,   // Map<partner, Row[]>
+  _byCity:          null,   // Map<city, Row[]>
+  _byCityDate:      null,   // Map<"city|||date", Row[]>
+  _partnerKAM:      null,   // Map<partner, kam>  (lookup O(1))
   bannedWords: JSON.parse(
     localStorage.getItem("yangoBannedWords") ||
     JSON.stringify(["tuktuk", "tuk tuk", "delivery", "cargo", "mototaxi", "bikes"])

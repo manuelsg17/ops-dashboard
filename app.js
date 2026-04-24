@@ -59,6 +59,13 @@ function initApp() {
   const applyBtn = document.querySelector(".apply-btn");
   if (applyBtn) applyBtn.onclick = debounce(applyFilters, 150);
 
+  // Debounce en cambios directos a filtros (sin pasar por el botón)
+  const _debouncedApply = debounce(applyFilters, 250);
+  ["dateFrom", "dateTo", "cityFilter", "kamFilter"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("change", _debouncedApply);
+  });
+
   attachTooltipEvents(); // solo se necesita una vez
   loadFromSupabase();
 }

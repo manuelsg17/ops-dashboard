@@ -19,11 +19,11 @@ function renderUnifView() {
   const kams = [...new Set(Object.values(STATE.KAM_MAP))].sort();
 
   // ── Build performance aggregation (same logic as metas.js) ──────────────
-  const perfF = STATE.rawData.filter(r => r.date >= from && r.date <= to);
+  const perfF = getFilteredByDateRange(from, to);
   const cpMap = {};
   perfF.forEach(r => {
     const k = `${r.partner}|||${r.city}|||${r.date}`;
-    if (!cpMap[k]) cpMap[k] = { partner: r.partner, city: r.city, kam: r.kam || STATE.KAM_MAP[Object.keys(STATE.CLID_MAP).find(c => STATE.CLID_MAP[c] === r.partner)] || "", date: r.date, ad: 0, nr: 0, sh: 0 };
+    if (!cpMap[k]) cpMap[k] = { partner: r.partner, city: r.city, kam: r.kam || getKAMForPartner(r.partner), date: r.date, ad: 0, nr: 0, sh: 0 };
     cpMap[k].ad += r.activeDrivers;
     cpMap[k].nr += r.newPartner + r.newService + r.reactivated;
     cpMap[k].sh += r.supplyHours;
@@ -41,7 +41,7 @@ function renderUnifView() {
     if (!partnerMap[r.partner]) {
       partnerMap[r.partner] = {
         partner: r.partner,
-        kam: STATE.KAM_MAP[Object.keys(STATE.CLID_MAP).find(c => STATE.CLID_MAP[c] === r.partner)] || r.kam || "",
+        kam: getKAMForPartner(r.partner) || r.kam || "",
         ad: 0, nr: 0, sh: 0,
         nrV: [], shV: [],
         lastAD: 0
@@ -69,12 +69,12 @@ function renderUnifView() {
   // Build sorted vectors grouped by partner
   const datesSorted = [...new Set(cpRows.map(r => r.date))].sort();
   Object.keys(partnerMap).forEach(partner => {
-    const pd = {};
-    Object.values(byPartnerDate).filter(r => r.partner === partner).forEach(r => {
-      pd[r.date] = r;
-    });
-    partnerMap[partner].nrV = datesSorted.map(d => pd[d]?.nr || 0).filter(v => v > 0);
-    partnerMap[partner].shV = datesSorted.map(d => pd[d]?.sh || 0).filter(v => v > 0);
+    partnerMap[partner].nrV = datesSorted
+      .map(d => byPartnerDate[`${partner}|||${d}`]?.nr || 0)
+      .filter(v => v > 0);
+    partnerMap[partner].shV = datesSorted
+      .map(d => byPartnerDate[`${partner}|||${d}`]?.sh || 0)
+      .filter(v => v > 0);
   });
 
   // ── Apply sidebar filters ─────────────────────────────────────────────────

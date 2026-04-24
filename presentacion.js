@@ -21,7 +21,7 @@ function destroyPresentCharts() {
 }
 
 function getSelectedDates(from, to, mode) {
-  const all = [...new Set(STATE.rawData.map(r => r.date))].sort();
+  const all = STATE.allDates;
   if (mode === "mensual") {
     const idx = all.findIndex(d => d > to);
     const end = idx === -1 ? all.length - 1 : idx - 1;
@@ -50,17 +50,23 @@ function wowColor(pct) {
 }
 
 function getPartnerVals(partner, city, dates, metricFn) {
-  return dates.map(d =>
-    STATE.rawData.filter(r => r.partner===partner && r.city===city && r.date===d)
-      .reduce((s,r) => s + metricFn(r), 0)
-  );
+  return dates.map(d => {
+    const rows = STATE._byCityDate?.get(`${city}|||${d}`) || [];
+    let s = 0;
+    for (const r of rows) {
+      if (r.partner === partner) s += metricFn(r);
+    }
+    return s;
+  });
 }
 
 function getCityVals(city, dates, metricFn) {
-  return dates.map(d =>
-    STATE.rawData.filter(r => r.city===city && r.date===d)
-      .reduce((s,r) => s + metricFn(r), 0)
-  );
+  return dates.map(d => {
+    const rows = STATE._byCityDate?.get(`${city}|||${d}`) || [];
+    let s = 0;
+    for (const r of rows) s += metricFn(r);
+    return s;
+  });
 }
 
 function buildMiniChart(canvasId, dates, partnerVals, cityVals, color) {
@@ -312,7 +318,7 @@ function renderSlide(partner, from, to, mode) {
 function buildSlide0(partner, from, to, mode) {
   const col       = STATE.partnerColors[partner] || "#FF0000";
   const kam       = Object.entries(STATE.KAM_MAP).find(([c]) => STATE.CLID_MAP[c] === partner)?.[1] || "";
-  const cities    = [...new Set(STATE.rawData.filter(r => r.partner === partner).map(r => r.city))].join(" · ");
+  const cities    = [...new Set((STATE._byPartner?.get(partner) || []).map(r => r.city))].join(" · ");
   const es        = PRESENT_STATE.lang === "es";
   const modeLabel = mode === "mensual"
     ? (es ? "Avance Mensual" : "Monthly Update")
@@ -346,8 +352,8 @@ function buildSlide0(partner, from, to, mode) {
 // ── SLIDE 1: KPIs POR CIUDAD ──────────────────────────────────────────────────
 function buildSlide1(partner, from, to, mode) {
   const es       = PRESENT_STATE.lang === "es";
-  const cities   = [...new Set(STATE.rawData.filter(r => r.partner === partner).map(r => r.city))];
-  const allDates = [...new Set(STATE.rawData.map(r => r.date))].sort();
+  const cities   = [...new Set((STATE._byPartner?.get(partner) || []).map(r => r.city))];
+  const allDates = STATE.allDates;
   const lastDate = allDates.filter(d => d <= to).slice(-1)[0] || to;
   const lastIdx  = allDates.indexOf(lastDate);
   const prevDate = lastIdx > 0 ? allDates[lastIdx - 1] : "";
@@ -383,14 +389,16 @@ function buildSlide1(partner, from, to, mode) {
       <div style="display:grid;grid-template-columns:repeat(${cities.length},1fr);gap:10px;flex:1;min-height:0">
         ${cities.map(city => {
           const col = CITY_COLORS[city] || "#888";
+          const cdLast = STATE._byCityDate?.get(`${city}|||${lastDate}`) || [];
+          const cdPrev = STATE._byCityDate?.get(`${city}|||${prevDate}`) || [];
+          const pLast  = cdLast.filter(r => r.partner === partner);
+          const pPrev  = cdPrev.filter(r => r.partner === partner);
+          const cLast  = cdLast;
+          const cPrev  = cdPrev;
           return `
             <div style="border-top:3px solid ${col};padding-top:6px;display:flex;flex-direction:column;gap:5px;min-height:0">
               <div style="font-weight:800;font-size:.82rem;color:${col}">${city}</div>
               ${metrics.map(m => {
-                const pLast = STATE.rawData.filter(r => r.partner===partner && r.city===city && r.date===lastDate);
-                const pPrev = STATE.rawData.filter(r => r.partner===partner && r.city===city && r.date===prevDate);
-                const cLast = STATE.rawData.filter(r => r.city===city && r.date===lastDate);
-                const cPrev = STATE.rawData.filter(r => r.city===city && r.date===prevDate);
                 const pValL = pLast.reduce((s,r)=>s+m.fn(r),0);
                 const pValP = pPrev.reduce((s,r)=>s+m.fn(r),0);
                 const cValL = cLast.reduce((s,r)=>s+m.fn(r),0);
@@ -426,7 +434,7 @@ function buildSlide1(partner, from, to, mode) {
 }
 
 function buildSlide1Charts(partner, from, to, mode) {
-  const cities  = [...new Set(STATE.rawData.filter(r => r.partner === partner).map(r => r.city))];
+  const cities  = [...new Set((STATE._byPartner?.get(partner) || []).map(r => r.city))];
   const dates   = getSelectedDates(from, to, mode);
   const metrics = [
     { key:"ad", color:"#FF0000", fn: r=>r.activeDrivers },
@@ -446,13 +454,14 @@ function buildSlide1Charts(partner, from, to, mode) {
 // ── SLIDE 3: RANKING ──────────────────────────────────────────────────────────
 function buildSlide3(partner, from, to, mode) {
   const es       = PRESENT_STATE.lang === "es";
-  const allDates = [...new Set(STATE.rawData.map(r => r.date))].sort();
+  const allDates = STATE.allDates;
   const lastDate = allDates.filter(d => d <= to).slice(-1)[0] || to;
-  const cities   = [...new Set(STATE.rawData.filter(r => r.partner === partner).map(r => r.city))];
+  const cities   = [...new Set((STATE._byPartner?.get(partner) || []).map(r => r.city))];
 
   function getRanking(city, metricFn) {
     const pm = {};
-    STATE.rawData.filter(r => r.city===city && r.date===lastDate).forEach(r => {
+    const rows = STATE._byCityDate?.get(`${city}|||${lastDate}`) || [];
+    rows.forEach(r => {
       if (!pm[r.partner]) pm[r.partner] = 0;
       pm[r.partner] += metricFn(r);
     });
@@ -516,7 +525,7 @@ function buildSlide5(partner, from, to, mode) {
   const es      = PRESENT_STATE.lang === "es";
   const col     = STATE.partnerColors[partner] || "#FF0000";
   const dates   = getSelectedDates(from, to, mode);
-  const availableCities = new Set(STATE.rawData.filter(r => r.partner === partner).map(r => r.city));
+  const availableCities = new Set((STATE._byPartner?.get(partner) || []).map(r => r.city));
   const order = ["Lima", "Trujillo", "Arequipa"];
   const cities = order.filter(c => availableCities.has(c));
 
