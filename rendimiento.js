@@ -24,7 +24,7 @@ function renderRend() {
   const lastDate = dates.filter(d => d <= toDate).slice(-1)[0] || dates[dates.length - 1] || "";
 
   // prevDate = semana inmediatamente anterior a lastDate en TODOS los datos
-  const allDates = [...new Set(STATE.rawData.map(r => r.date))].sort();
+  const allDates = STATE.allDates;
   const lastIdx  = allDates.indexOf(lastDate);
   const prevDate = lastIdx > 0 ? allDates[lastIdx - 1] : "";
 
@@ -236,8 +236,17 @@ function buildTable(apd, lastDate, prevDate, sel) {
   const pRraw = STATE.rawData.filter(r => r.date === prevDate && selSet.has(r.partner));
   const pR    = aggPD(pRraw);
   // Use full history (all dates) for decline detection, ignoring date range filter
-  const apdFull = aggPD(STATE.rawData.filter(r => selSet.has(r.partner)));
+  if (!STATE._apdFull) {
+    STATE._apdFull = aggPD(STATE.rawData);
+  }
+  const apdFull = STATE._apdFull.filter(r => selSet.has(r.partner));
   const partners = [...new Set(apd.map(r => r.partner))];
+
+  const apdByPartner = new Map();
+  apdFull.forEach(r => {
+    if (!apdByPartner.has(r.partner)) apdByPartner.set(r.partner, []);
+    apdByPartner.get(r.partner).push(r);
+  });
 
   STATE.curSummaries = partners.map(p => {
     const l    = lR.filter(r => r.partner === p);
@@ -254,7 +263,7 @@ function buildTable(apd, lastDate, prevDate, sel) {
       pad:          sumR(pr, r => r.activeDrivers),
       pnr:          sumR(pr, r => r.newPartner + r.newService + r.reactivated),
       tAD:          trendI(rows.map(r => r.activeDrivers)),
-      declineAlert: hasConsecutiveDecline(apdFull, p)
+      declineAlert: hasConsecutiveDecline(apdByPartner, p)
     };
   });
   renderTable();

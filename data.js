@@ -95,11 +95,10 @@ function sumR(rows, fn) { return rows.reduce((s, r) => s + fn(r), 0); }
 
 // Detects if a partner has strictly declined for N consecutive periods.
 // Skips partners with gaps in their date sequence (missing weeks = no false positives).
-function hasConsecutiveDecline(apd, partner) {
+function hasConsecutiveDecline(apdByPartner, partner) {
   const n      = STATE.declineThreshold || 3;
   const metric = STATE.declineMetric || "activeDrivers";
-  const rows   = apd
-    .filter(r => r.partner === partner)
+  const rows   = (apdByPartner.get(partner) || [])
     .sort((a, b) => a.date.localeCompare(b.date));
   if (rows.length < n) return false;
   const last = rows.slice(-n);

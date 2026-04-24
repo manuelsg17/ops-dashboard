@@ -50,6 +50,7 @@ const STATE = {
   _diarioLoaded:    false,
   rawDataDiario:      [],
   rawDataDiarioFull:  [],
+  _apdFull:         null,
   bannedWords: JSON.parse(
     localStorage.getItem("yangoBannedWords") ||
     JSON.stringify(["tuktuk", "tuk tuk", "delivery", "cargo", "mototaxi", "bikes"])

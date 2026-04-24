@@ -184,7 +184,6 @@ async function switchMode(mode) {
   }
 
   updateIndexes();
-  rerenderSidebarPresets();
 
   if (STATE.curTab === "rend"  && STATE.rawData.length) renderRend();
   if (STATE.curTab === "metas" && STATE.metasData.length && STATE.rawData.length) renderMetas();
@@ -404,6 +403,7 @@ function _pItem(p, selSet) {
 function updateIndexes() {
   STATE.allDates    = [...new Set(STATE.rawData.map(r => r.date))].sort();
   STATE.allPartners = [...new Set(STATE.rawData.map(r => r.partner))].sort();
+  STATE._apdFull = null;
   STATE.allPartners.forEach(p => {
     if (!STATE.partnerColors[p]) STATE.partnerColors[p] = hashColor(p);
   });
