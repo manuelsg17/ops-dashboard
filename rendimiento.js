@@ -3,6 +3,10 @@
 function renderRend() {
   if (!STATE.rawData.length) return;
 
+  // Destruir charts existentes ANTES de borrar sus DIVs con innerHTML
+  // (evita instancias huérfanas y memory leak en cada re-render)
+  destroyAllCharts();
+
   const filtered  = getFiltered();
   const apd       = aggPDc(filtered);
   const byDate    = aggDatec(filtered);
@@ -18,6 +22,12 @@ function renderRend() {
   }
   empty.style.display   = "none";
   content.style.display = "";
+
+  // Cachear filtered por ciudad (se usa 3 veces: secciones 2, 4 y los charts)
+  const filteredByCity = {};
+  CITIES.forEach(city => {
+    filteredByCity[city] = filtered.filter(r => r.city === city);
+  });
 
   // lastDate = fecha "Hasta" del filtro
   const toDate   = document.getElementById("dateTo").value;
@@ -67,7 +77,7 @@ function renderRend() {
   html += secH("🏙️", "#06b6d4", "Por Ciudad", "Rendimiento y comparativo WoW", "");
   html += `<div class="section"><div class="city-grid">`;
   CITIES.forEach(city => {
-    const cr = filtered.filter(r => r.city === city);
+    const cr = filteredByCity[city];
     if (!cr.length) return;
     const ca   = aggPD(cr);
     const cL   = ca.filter(r => r.date === lastDate);
@@ -141,7 +151,7 @@ function renderRend() {
     <div class="chart-card"><div class="chart-head"><span class="chart-title">Horas de Conexion</span><button class="png-btn" onclick="dlChart('chP_sh','SH_Peru')">PNG</button></div><div id="chP_sh"></div></div>
   </div>`;
   CITIES.forEach(city => {
-    const cr = filtered.filter(r => r.city === city);
+    const cr = filteredByCity[city];
     if (!cr.length) return;
     const cid = city.toLowerCase();
     const col = CITY_COLORS[city] || "#888";
@@ -174,7 +184,7 @@ function renderRend() {
   buildMultiLine("chP_sh", dates, partners, byDate, "sh", "#8b5cf6");
 
   CITIES.forEach(city => {
-    const cr = filtered.filter(r => r.city === city);
+    const cr = filteredByCity[city];
     if (!cr.length) return;
     const cid = city.toLowerCase();
     const col = CITY_COLORS[city] || "#888";

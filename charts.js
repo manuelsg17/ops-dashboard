@@ -63,6 +63,17 @@ function buildSingleLine(elId, dates, cityByDate, metric, color, label) {
   buildLineChart(elId, dates, [{ name: label, data }], [color]);
 }
 
+// Destruye todas las instancias ApexCharts en STATE.charts.
+// Se debe llamar ANTES de innerHTML='...' para evitar instancias huérfanas
+// que retienen DOM listeners y ResizeObservers.
+function destroyAllCharts() {
+  if (!STATE.charts) return;
+  Object.keys(STATE.charts).forEach(id => {
+    try { STATE.charts[id].destroy(); } catch(e) {}
+    delete STATE.charts[id];
+  });
+}
+
 // ── BASE LINE CHART ───────────────────────────────────────────────────────────
 function buildLineChart(elId, dates, series, colors) {
   const opts = {
@@ -73,7 +84,7 @@ function buildLineChart(elId, dates, series, colors) {
       toolbar:    { show: false },
       zoom:       { enabled: false },
       fontFamily: "inherit",
-      animations: { enabled: true, speed: 300 },
+      animations: { enabled: false },
       events: {
         mouseLeave: () => hideFloatTip()
       }

@@ -179,6 +179,14 @@ async function switchMode(mode) {
     btn.classList.toggle("active", btn.dataset.mode === mode);
   });
 
+  // Mostrar feedback inmediato y ceder al browser para que pinte el toggle
+  // ANTES de empezar el trabajo pesado (destroy charts, updateIndexes, render)
+  showLoad(true, `Cambiando a ${mode}...`);
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+  // Destruir charts antiguos antes de reasignar rawData (evita huérfanos)
+  if (typeof destroyAllCharts === "function") destroyAllCharts();
+
   // Lazy load según escala; _semanalData es la referencia fija al dataset semanal filtrado
   if (mode === "mensual") {
     await loadMensualIfNeeded();
@@ -192,10 +200,14 @@ async function switchMode(mode) {
 
   updateIndexes();
 
+  // Otro yield antes del render pesado para que el browser pinte el spinner
+  await new Promise(r => requestAnimationFrame(r));
+
   if (STATE.curTab === "rend"  && STATE.rawData.length) renderRend();
   if (STATE.curTab === "metas" && STATE.metasData.length && STATE.rawData.length) renderMetas();
   if (STATE.curTab === "ops")                            renderOps();
 
+  showLoad(false);
   _inSwitchMode = false;
 }
 
