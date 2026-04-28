@@ -1,6 +1,7 @@
 // ops.js — Vista Head de Operaciones
 
 function renderOps() {
+  ensureIndexes();
   if (!STATE.rawData.length) {
     document.getElementById("opsContent").innerHTML = `
       <div class="empty">
@@ -90,17 +91,17 @@ function renderOps() {
           <div style="text-align:center">
             <div style="font-size:.65rem;color:#aaa;margin-bottom:2px">Activos</div>
             <div style="font-weight:700;font-size:1rem">${fmt(lAD)}</div>
-            <div>${bdg(lAD, pAD, "mb-badge")}</div>
+            <div>${bdgMode(lAD, pAD, "mb-badge")}</div>
           </div>
           <div style="text-align:center">
             <div style="font-size:.65rem;color:#aaa;margin-bottom:2px">N+R</div>
             <div style="font-weight:700;font-size:1rem">${fmt(lNR)}</div>
-            <div>${bdg(lNR, pNR, "mb-badge")}</div>
+            <div>${bdgMode(lNR, pNR, "mb-badge")}</div>
           </div>
           <div style="text-align:center">
             <div style="font-size:.65rem;color:#aaa;margin-bottom:2px">Hs. Conexión</div>
             <div style="font-weight:700;font-size:1rem">${fmt(lSH)}</div>
-            <div>${bdg(lSH, pSH, "mb-badge")}</div>
+            <div>${bdgMode(lSH, pSH, "mb-badge")}</div>
           </div>
         </div>
         ${decliningPartners.length > 0 ? `

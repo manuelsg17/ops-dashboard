@@ -3,6 +3,9 @@
 function renderMetas() {
   if (!STATE.metasData.length) return;
 
+  // Garantiza índices secundarios construidos antes de cualquier lookup
+  ensureIndexes();
+
   const cityFilter = document.getElementById("cityFilter").value;
   const kamFilter  = document.getElementById("kamFilter").value;
   const sel        = getSel();
@@ -215,9 +218,15 @@ function renderMetas() {
     const col  = KAM_COLORS[kam] || "#888";
     const totalAccounts = kc.length + noGoalPartners.length;
     const alertHtml = noGoalPartners.length ? `
-      <div style="font-size:.68rem;background:#fff7ed;border:1px solid #fed7aa;border-radius:5px;padding:5px 7px;margin:6px 0;color:#c2410c">
-        ⚠️ Sin meta asignada (incluido en global): <strong>${noGoalPartners.join(", ")}</strong>
-      </div>` : "";
+      <details style="margin:6px 0">
+        <summary style="font-size:.68rem;background:#fff7ed;border:1px solid #fed7aa;border-radius:5px;padding:4px 7px;color:#c2410c;cursor:pointer;list-style:none;display:flex;align-items:center;gap:4px;user-select:none">
+          ⚠️ ${noGoalPartners.length} sin meta asignada
+          <span style="margin-left:auto;font-size:.6rem;opacity:.7">click para ver</span>
+        </summary>
+        <div style="font-size:.66rem;background:#fffaf0;border:1px solid #fed7aa;border-top:none;border-radius:0 0 5px 5px;padding:5px 7px;color:#9a3412">
+          ${noGoalPartners.join(", ")}
+        </div>
+      </details>` : "";
     html += `
       <div class="city-card" style="border-top-color:${col}">
         <div class="city-name">

@@ -44,6 +44,13 @@ function bdg(c, p, cls = "mcard-badge") {
   return `<span class="${cls} ${v >= 0 ? "b-pos" : "b-neg"}">${a}${s}${v.toFixed(1)}%</span>`;
 }
 
+// Versión que respeta el modo: en diario no muestra comparativa (no aporta valor día-a-día).
+// En semanal y mensual delega a bdg() para mostrar WoW / MoM.
+function bdgMode(c, p, cls = "mcard-badge") {
+  if (STATE.curMode === "diario") return "";
+  return bdg(c, p, cls);
+}
+
 // Semaphore
 function semCls(p) { return p > 100 ? "sem-g" : p >= 80 ? "sem-g" : p >= 50 ? "sem-y" : "sem-r"; }
 function pColor(p) { return p > 100 ? "#8b5cf6" : p >= 80 ? "#10b981" : p >= 50 ? "#f59e0b" : "#FF0000"; }
@@ -63,17 +70,34 @@ function trendI(vals) {
   return { i: "→", c: "color:#888" };
 }
 
-// Calculate days elapsed and remaining using the last data date as week start.
-// The file date = start of week → add 6 days → end of that week.
-// Then compute days remaining in month from that end date.
+// Calcula días transcurridos y restantes del mes según el modo:
+// - mensual: daysRemaining = 0 (mes ya cerrado)
+// - semanal: lastDate = inicio de semana, fin = lastDate + 6 días
+// - diario:  lastDate = el día exacto, no se suma nada
 function calcProjectionDays(lastDate) {
-  if (!lastDate) return { daysElapsed: 28, daysRemaining: 0 };
-  const endOfWeek = new Date(lastDate);
-  endOfWeek.setDate(endOfWeek.getDate() + 6);
-  const daysElapsed = endOfWeek.getDate(); // day-of-month at end of current week
-  const daysInMonth = new Date(
-    endOfWeek.getFullYear(), endOfWeek.getMonth() + 1, 0
-  ).getDate();
+  if (!lastDate) return { daysElapsed: 28, daysRemaining: 0, daysInMonth: 30 };
+  const refEnd = new Date(lastDate);
+  if (STATE.curMode === "semanal") {
+    // Fin de la semana = inicio + 6 días
+    refEnd.setDate(refEnd.getDate() + 6);
+  }
+  // En diario y mensual, refEnd ya es el último día relevante
+  const daysInMonth = new Date(refEnd.getFullYear(), refEnd.getMonth() + 1, 0).getDate();
+  // Si refEnd cayó fuera del mes (semana cruza al mes siguiente), tope al final del mes
+  let daysElapsed;
+  if (STATE.curMode === "diario") {
+    daysElapsed = refEnd.getDate();
+  } else if (STATE.curMode === "mensual") {
+    daysElapsed = daysInMonth;  // mes completo
+  } else {
+    // semanal: si la semana se pasa al mes siguiente, considerar el mes completo
+    const lastDateObj = new Date(lastDate);
+    if (refEnd.getMonth() !== lastDateObj.getMonth()) {
+      daysElapsed = new Date(lastDateObj.getFullYear(), lastDateObj.getMonth() + 1, 0).getDate();
+    } else {
+      daysElapsed = refEnd.getDate();
+    }
+  }
   const daysRemaining = Math.max(daysInMonth - daysElapsed, 0);
   return { daysElapsed, daysRemaining, daysInMonth };
 }
@@ -655,6 +679,13 @@ function updateIndexes() {
 }
 
 // ── HELPERS DE ACCESO ─────────────────────────────────────────────────────────
+// Garantiza que los índices secundarios existan antes de leerlos. Si un caller
+// se ejecuta antes que updateIndexes (race condition o cache stale), construye
+// los índices on-demand. Es no-op si ya están listos.
+function ensureIndexes() {
+  if (!STATE._byCity || !STATE._byDate) updateIndexes();
+}
+
 function getKAMForPartner(partner) {
   if (STATE._partnerKAM?.has(partner)) return STATE._partnerKAM.get(partner);
   // Fallback: lookup inverso en CLID_MAP/KAM_MAP

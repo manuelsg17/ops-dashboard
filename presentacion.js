@@ -197,6 +197,7 @@ function buildBigChart(canvasId, dates, partnerVals, cityDatasets, color, label)
 
 // ── RENDER PRINCIPAL ──────────────────────────────────────────────────────────
 function renderPresent() {
+  ensureIndexes();
   destroyPresentCharts();
   const el = document.getElementById("presentContent");
   if (!STATE.rawData.length) {

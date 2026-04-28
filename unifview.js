@@ -4,6 +4,8 @@ function renderUnifView() {
   const el = document.getElementById("unifviewContent");
   if (!el) return;
 
+  ensureIndexes();
+
   if (!STATE.rawData.length) {
     el.innerHTML = `<div class="empty"><p>Carga datos de <strong>Rendimiento</strong> para usar esta vista.</p></div>`;
     return;

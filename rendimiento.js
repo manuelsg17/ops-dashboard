@@ -3,6 +3,9 @@
 function renderRend() {
   if (!STATE.rawData.length) return;
 
+  // Garantiza índices secundarios construidos (defensivo contra cache/races)
+  ensureIndexes();
+
   // Destruir charts existentes ANTES de borrar sus DIVs con innerHTML
   // (evita instancias huérfanas y memory leak en cada re-render)
   destroyAllCharts();
@@ -100,15 +103,15 @@ function renderRend() {
         </div>
         <div class="city-kpi">
           <span class="city-kpi-label">Conductores Activos</span>
-          <div class="city-kpi-right"><span class="city-kpi-val">${fmt(cAD)}</span>${bdg(cAD,cpAD,"mb-badge")}</div>
+          <div class="city-kpi-right"><span class="city-kpi-val">${fmt(cAD)}</span>${bdgMode(cAD,cpAD,"mb-badge")}</div>
         </div>
         <div class="city-kpi">
           <span class="city-kpi-label">Nuevos + Reactivados</span>
-          <div class="city-kpi-right"><span class="city-kpi-val">${fmt(cNR)}</span>${bdg(cNR,cpNR,"mb-badge")}</div>
+          <div class="city-kpi-right"><span class="city-kpi-val">${fmt(cNR)}</span>${bdgMode(cNR,cpNR,"mb-badge")}</div>
         </div>
         <div class="city-kpi">
           <span class="city-kpi-label">Horas de Conexion</span>
-          <div class="city-kpi-right"><span class="city-kpi-val">${fmt(cSH)}</span>${bdg(cSH,cpSH,"mb-badge")}</div>
+          <div class="city-kpi-right"><span class="city-kpi-val">${fmt(cSH)}</span>${bdgMode(cSH,cpSH,"mb-badge")}</div>
         </div>
       </div>`;
   });
@@ -132,9 +135,9 @@ function renderRend() {
       <div class="mcard" style="border-left:3px solid ${col}">
         <div class="mcard-label"><span style="width:8px;height:8px;border-radius:50%;background:${col};display:inline-block"></span> ${kam}</div>
         <div class="mcard-val">${fmt(kAD)}</div>
-        <div>${bdg(kAD,kpAD)} <span style="font-size:.72rem;color:#aaa;margin-left:5px">Activos</span></div>
+        <div>${bdgMode(kAD,kpAD)} <span style="font-size:.72rem;color:#aaa;margin-left:5px">Activos</span></div>
         <div class="mcard-breakdown">
-          <div class="mb-row"><span class="mb-name">N+R</span><span class="mb-val">${fmt(kNR)}</span>${bdg(kNR,kpNR,"mb-badge")}</div>
+          <div class="mb-row"><span class="mb-name">N+R</span><span class="mb-val">${fmt(kNR)}</span>${bdgMode(kNR,kpNR,"mb-badge")}</div>
           <div class="mb-row"><span class="mb-name">Hs. Conexion</span><span class="mb-val">${fmt(kSH)}</span></div>
         </div>
       </div>`;
@@ -213,7 +216,7 @@ function mkMetricCard(label, icon, val, prevWk, apd, lastRows, prevRows, metric,
       <div class="mcard-label">${icon} ${label}</div>
       <div class="mcard-sub-label">${isCum ? "acumulado rango" : "última semana"}</div>
       <div class="mcard-val">${fmt(val)}</div>
-      <div style="margin-top:4px">${bdg(lwVal, pwVal)}
+      <div style="margin-top:4px">${bdgMode(lwVal, pwVal)}
         <span style="font-size:.7rem;color:#bbb;margin-left:5px">vs ${STATE.curMode === 'mensual' ? 'mes' : 'sem.'} anterior</span>
       </div>
       <div class="mcard-breakdown">`;
@@ -230,7 +233,7 @@ function mkMetricCard(label, icon, val, prevWk, apd, lastRows, prevRows, metric,
     const dot = KAM_COLORS[kam] || "#888";
     html += `<div class="mb-row">
       <span class="mb-name"><span class="mb-dot" style="background:${dot}"></span>${kam}</span>
-      <span class="mb-val">${fmt(kv)}</span>${bdg(kv, kpv, "mb-badge")}
+      <span class="mb-val">${fmt(kv)}</span>${bdgMode(kv, kpv, "mb-badge")}
     </div>`;
   });
 
@@ -314,7 +317,7 @@ function renderTable() {
       <td class="tn">${fmt(r.ad)}</td><td class="tn">${fmt(r.nr)}</td>
       <td class="tn">${fmt(r.sh)}</td><td class="tn">${fmtK(r.co)}</td>
       <td class="tn">${nsCell}</td>
-      <td class="tn">${bdg(r.ad, r.pad, "tbadge")}</td>
+      <td class="tn">${bdgMode(r.ad, r.pad, "tbadge")}</td>
       <td style="text-align:center;font-size:.85rem"><span style="${r.tAD.c}">${r.tAD.i}</span></td>
     </tr>`;
   });
@@ -398,36 +401,36 @@ function buildPartnerCards(apd, lastDate, prevDate, partners, sel) {
         <div class="pk">
           <div class="pk-label">Cond. Activos</div>
           <div class="pk-val">${fmt(last.activeDrivers)}</div>
-          ${bdg(last.activeDrivers, prevRow?.activeDrivers ?? null, "mb-badge")}
+          ${bdgMode(last.activeDrivers, prevRow?.activeDrivers ?? null, "mb-badge")}
           <span style="${tA.c}">${tA.i}</span>
         </div>
         <div class="pk">
           <div class="pk-label">Hs. Conexion</div>
           <div class="pk-val">${fmt(last.supplyHours)}</div>
-          ${bdg(last.supplyHours, prevRow?.supplyHours ?? null, "mb-badge")}
+          ${bdgMode(last.supplyHours, prevRow?.supplyHours ?? null, "mb-badge")}
           <span style="${tH.c}">${tH.i}</span>
         </div>
         <div class="pk-wide">
           <div class="pk-label">
             Nuevos + Reactivados &nbsp;
-            ${bdg(lastNR, prevNR, "mb-badge")}
+            ${bdgMode(lastNR, prevNR, "mb-badge")}
             <span style="${tN.c}">${tN.i}</span>
           </div>
           <div class="pk-sub-grid">
             <div>
               <div class="pk-sub-label">Partner</div>
               <div class="pk-sub-val">${fmt(last.newPartner)}</div>
-              ${bdg(last.newPartner, prevRow?.newPartner ?? null, "mb-badge")}
+              ${bdgMode(last.newPartner, prevRow?.newPartner ?? null, "mb-badge")}
             </div>
             <div>
               <div class="pk-sub-label">Servicio</div>
               <div class="pk-sub-val">${fmt(last.newService)}</div>
-              ${bdg(last.newService, prevRow?.newService ?? null, "mb-badge")}
+              ${bdgMode(last.newService, prevRow?.newService ?? null, "mb-badge")}
             </div>
             <div>
               <div class="pk-sub-label">Reactivados</div>
               <div class="pk-sub-val">${fmt(last.reactivated)}</div>
-              ${bdg(last.reactivated, prevRow?.reactivated ?? null, "mb-badge")}
+              ${bdgMode(last.reactivated, prevRow?.reactivated ?? null, "mb-badge")}
             </div>
           </div>
         </div>
