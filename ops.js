@@ -47,27 +47,38 @@ function renderOps() {
     return sum;
   }
 
+  // Helper defensivo: usa indice si existe, sino filtra rawData (1 pasada por ciudad).
+  function rowsByCityDate(city, date) {
+    if (!date) return [];
+    if (STATE._byCityDate) return STATE._byCityDate.get(`${city}|||${date}`) || [];
+    return STATE.rawData.filter(r => r.city === city && r.date === date);
+  }
+  function rowsByCity(city) {
+    if (STATE._byCity) return STATE._byCity.get(city) || [];
+    return STATE.rawData.filter(r => r.city === city);
+  }
+
   CITIES.forEach(city => {
-    const cData = STATE._byCity?.get(city) || [];
+    const cData = rowsByCity(city);
     if (!cData.length) return;
 
-    // Aggregate last/prev date via _byCityDate (lookup O(1))
-    const lastRows = STATE._byCityDate?.get(`${city}|||${lastDate}`) || [];
-    const prevRows = STATE._byCityDate?.get(`${city}|||${prevDate}`) || [];
+    // Aggregate last/prev date (con fallback robusto)
+    const lastRows = rowsByCityDate(city, lastDate);
+    const prevRows = rowsByCityDate(city, prevDate);
 
     const lAD = citySum(lastRows, r => r.activeDrivers);
     const pAD = citySum(prevRows, r => r.activeDrivers);
     const lNR = lastRows.reduce((s, r) => s + r.newPartner + r.newService + r.reactivated, 0);
     const pNR = prevRows.reduce((s, r) => s + r.newPartner + r.newService + r.reactivated, 0);
 
-    // Supply hours: sum over last 4 / prev 4 dates (lookup por fecha)
+    // Supply hours: sum over last 4 / prev 4 dates
     let lSH = 0, pSH = 0;
     last4Dates.forEach(d => {
-      const arr = STATE._byCityDate?.get(`${city}|||${d}`) || [];
+      const arr = rowsByCityDate(city, d);
       for (const r of arr) lSH += r.supplyHours;
     });
     prev4Dates.forEach(d => {
-      const arr = STATE._byCityDate?.get(`${city}|||${d}`) || [];
+      const arr = rowsByCityDate(city, d);
       for (const r of arr) pSH += r.supplyHours;
     });
 
@@ -183,7 +194,9 @@ function renderOps() {
   }
 
   // ── 3. Distribución de Leads Yango ───────────────────────────────────────
-  const leadsData = (STATE._byDate?.get(lastDate) || []).filter(r => r.newService > 0);
+  const _lastAll = (STATE._byDate && STATE._byDate.get(lastDate))
+    || (lastDate ? STATE.rawData.filter(r => r.date === lastDate) : []);
+  const leadsData = _lastAll.filter(r => r.newService > 0);
   if (leadsData.length) {
     html += secH("★", "#f59e0b", "Distribución de Leads Yango",
       `Partners que reciben leads de Yango · ${d2s(lastDate)}`, "");

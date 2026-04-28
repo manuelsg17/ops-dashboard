@@ -129,10 +129,11 @@ function renderMetas() {
     });
     if (!cm.length) return;
 
-    // Build city combos using actual city data from rendimiento
-    const cityRows = STATE._byCity?.get(city) || [];
-    const cityPerfRows = cityRows.filter(r =>
-      r.date >= from && r.date <= to && selSet.has(r.partner)
+    // Build city combos: reusa perfF (ya filtrado por rango de fechas).
+    // No dependemos de STATE._byCity para que funcione aunque el indice no este
+    // construido (cache stale, race condition al cargar diario/mensual).
+    const cityPerfRows = perfF.filter(r =>
+      r.city === city && selSet.has(r.partner)
     );
     const cityPerfMap = {};
     cityPerfRows.forEach(r => {
