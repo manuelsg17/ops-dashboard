@@ -111,6 +111,31 @@ function renderMetas() {
     });
   }
 
+  // Agregar partners CON performance pero SIN meta. Su FACT y proyección
+  // suman al KAM/Ciudad/Peru aunque no tengan plan asignado. Plan = 0.
+  const partnersWithMetaSet = new Set(combos.map(c => c.partner));
+  const partnersInPerf = [...new Set(cpRows.map(r => r.partner))]
+    .filter(p => selSet.has(p) && !partnersWithMetaSet.has(p));
+
+  partnersInPerf.forEach(p => {
+    const partnerKam = getKAMForPartner(p) || "Sin KAM";
+    // Si el usuario filtra por KAM, excluir partners sin meta de otros KAMs
+    if (kamFilter !== "all" && partnerKam !== kamFilter) return;
+    const r = getRPC(p, cityFilter === "all" ? "all" : cityFilter);
+    if (r.ad === 0 && r.nr === 0 && r.sh === 0) return;
+    combos.push({
+      partner: p,
+      kam: partnerKam,
+      city: cityFilter === "all" ? "Sin Plan" : cityFilter,
+      mA: 0, mNR: 0, mH: 0,
+      ad: r.ad, nr: r.nr, sh: r.sh,
+      projAD: (STATE.curMode === "mensual" || daysRemaining === 0) ? r.lastAD : r.lastAD * 1.4,
+      projNR: projA(r.nrV, daysElapsed, daysRemaining),
+      projSH: projA(r.shV, daysElapsed, daysRemaining),
+      noMeta: true
+    });
+  });
+
   // Totals
   const tMA = metas.reduce((s, m) => s + m.mA,  0);
   const tMNR= metas.reduce((s, m) => s + m.mNR, 0);
@@ -202,8 +227,8 @@ function renderMetas() {
   html += `</div></div>`;
 
   // ── 3. Por KAM ────────────────────────────────────────────────────────────
-  // Partners assigned to KAM (from config) but without goals in metas
-  const partnersWithMeta = new Set(metas.map(m => m.partner));
+  // Partners sin meta ya estan dentro de combos con noMeta=true,
+  // suman al FACT del KAM pero no al plan.
   html += secH("👤","#f59e0b","Metas por KAM","Progreso total por responsable","");
   html += `<div class="section"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px">`;
   const allKAMs = [...new Set([
@@ -213,32 +238,23 @@ function renderMetas() {
   allKAMs.forEach(kam => {
     const kc   = combos.filter(c => c.kam === kam);
     const km   = metas.filter(m => m.kam === kam);
+    if (!kc.length) return;
 
-    // Find partners linked to this KAM (from config) but without goals
-    const kamPartnersConfig = STATE.KAM_PARTNERS[kam] ? [...STATE.KAM_PARTNERS[kam]] : [];
-    const noGoalPartners = kamPartnersConfig.filter(p =>
-      !partnersWithMeta.has(p) && cpRows.some(r => r.partner === p)
-    );
+    // Partners sin meta de este KAM: ya estan dentro de kc con noMeta=true
+    const noGoalPartners = kc.filter(c => c.noMeta).map(c => c.partner);
 
-    // Include no-goal partners' actual performance in KAM totals
-    let extraAD = 0, extraNR = 0, extraSH = 0;
-    noGoalPartners.forEach(p => {
-      const r = getRPC(p, cityFilter === "all" ? "all" : cityFilter);
-      extraAD += r.ad; extraNR += r.nr; extraSH += r.sh;
-    });
-
-    if (!kc.length && !noGoalPartners.length) return;
     const kmA  = km.reduce((s, m) => s + m.mA,  0);
     const kmNR = km.reduce((s, m) => s + m.mNR, 0);
     const kmH  = km.reduce((s, m) => s + m.mH,  0);
-    const krAD = kc.reduce((s, c) => s + c.ad,  0) + extraAD;
-    const krNR = kc.reduce((s, c) => s + c.nr,  0) + extraNR;
-    const krSH = kc.reduce((s, c) => s + c.sh,  0) + extraSH;
+    // FACT y proyeccion incluyen partners con y sin meta (todos en kc)
+    const krAD = kc.reduce((s, c) => s + c.ad,  0);
+    const krNR = kc.reduce((s, c) => s + c.nr,  0);
+    const krSH = kc.reduce((s, c) => s + c.sh,  0);
     const kpAD = kc.reduce((s, c) => s + c.projAD, 0);
     const kpNR = kc.reduce((s, c) => s + c.projNR, 0);
     const kpSH = kc.reduce((s, c) => s + c.projSH, 0);
     const col  = KAM_COLORS[kam] || "#888";
-    const totalAccounts = kc.length + noGoalPartners.length;
+    const totalAccounts = kc.length;
     const alertHtml = noGoalPartners.length ? `
       <details style="margin:6px 0">
         <summary style="font-size:.68rem;background:#fff7ed;border:1px solid #fed7aa;border-radius:5px;padding:4px 7px;color:#c2410c;cursor:pointer;list-style:none;display:flex;align-items:center;gap:4px;user-select:none">
@@ -267,23 +283,55 @@ function renderMetas() {
   // ── 4. Por Partner ────────────────────────────────────────────────────────
   html += secH("🃏","#FF0000","Metas por Partner","Progreso individual con proyección","");
   html += `<div class="section"><div class="partner-grid">`;
-  combos.forEach(c => {
+  // Ordenar: primero partners con meta, luego sin meta
+  const sortedCombos = [...combos].sort((a, b) =>
+    (a.noMeta ? 1 : 0) - (b.noMeta ? 1 : 0)
+  );
+  sortedCombos.forEach(c => {
     const col    = STATE.partnerColors[c.partner] || "#ccc";
     const kcolor = KAM_COLORS[c.kam] || "#888";
-    html += `
-      <div class="pcard" style="border-left-color:${col}">
-        <div class="pcard-name">
-          <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${col};margin-right:5px"></span>
-          ${c.partner}
-        </div>
-        <div class="pcard-sub">
-          <span style="width:7px;height:7px;border-radius:50%;background:${kcolor};display:inline-block;margin-right:3px"></span>
-          ${c.kam} &nbsp;·&nbsp; ${c.city}
-        </div>
-        ${miniBarFull("Cond. Activos", c.ad, c.mA,  c.projAD)}
-        ${miniBarFull("Nuevos+React",  c.nr, c.mNR, c.projNR)}
-        ${miniBarFull("Hs. Conexion",  c.sh, c.mH,  c.projSH)}
-      </div>`;
+    if (c.noMeta) {
+      // Partners SIN meta: mostrar solo FACT, sin plan/proyeccion %
+      html += `
+        <div class="pcard" style="border-left-color:${col};background:#fafaf9">
+          <div class="pcard-name">
+            <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${col};margin-right:5px"></span>
+            ${c.partner}
+            <span style="font-size:.6rem;font-weight:600;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;padding:1px 5px;border-radius:8px;margin-left:5px">Sin Plan</span>
+          </div>
+          <div class="pcard-sub">
+            <span style="width:7px;height:7px;border-radius:50%;background:${kcolor};display:inline-block;margin-right:3px"></span>
+            ${c.kam} &nbsp;·&nbsp; ${c.city}
+          </div>
+          <div style="margin:8px 0 4px;font-size:.74rem;color:#555;display:flex;justify-content:space-between">
+            <span>Cond. Activos</span><strong>${fmt(c.ad)}</strong>
+          </div>
+          <div style="margin:4px 0;font-size:.74rem;color:#555;display:flex;justify-content:space-between">
+            <span>Nuevos+React</span><strong>${fmt(c.nr)}</strong>
+          </div>
+          <div style="margin:4px 0;font-size:.74rem;color:#555;display:flex;justify-content:space-between">
+            <span>Hs. Conexion</span><strong>${fmt(c.sh)}</strong>
+          </div>
+          <div style="font-size:.66rem;color:#9a3412;margin-top:6px;font-style:italic">
+            * Suma al total del KAM y país aunque no tenga meta.
+          </div>
+        </div>`;
+    } else {
+      html += `
+        <div class="pcard" style="border-left-color:${col}">
+          <div class="pcard-name">
+            <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${col};margin-right:5px"></span>
+            ${c.partner}
+          </div>
+          <div class="pcard-sub">
+            <span style="width:7px;height:7px;border-radius:50%;background:${kcolor};display:inline-block;margin-right:3px"></span>
+            ${c.kam} &nbsp;·&nbsp; ${c.city}
+          </div>
+          ${miniBarFull("Cond. Activos", c.ad, c.mA,  c.projAD)}
+          ${miniBarFull("Nuevos+React",  c.nr, c.mNR, c.projNR)}
+          ${miniBarFull("Hs. Conexion",  c.sh, c.mH,  c.projSH)}
+        </div>`;
+    }
   });
   html += `</div></div>`;
 
