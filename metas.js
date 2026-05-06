@@ -24,14 +24,35 @@ function renderMetas() {
   // Build performance data by partner+city+date (full precision)
   const perfF  = getFilteredByDateRange(from, to);
   const cpMap  = {};
+  // Diagnostico: trackear breakdown de los 3 componentes de N+R
+  let _diagNP = 0, _diagNS = 0, _diagRE = 0;
   perfF.forEach(r => {
     const k = `${r.partner}|||${r.city}|||${r.date}`;
     if (!cpMap[k]) cpMap[k] = { partner: r.partner, city: r.city, date: r.date, ad: 0, nr: 0, sh: 0 };
     cpMap[k].ad += r.activeDrivers;
     cpMap[k].nr += r.newPartner + r.newService + r.reactivated;
     cpMap[k].sh += r.supplyHours;
+    _diagNP += r.newPartner   || 0;
+    _diagNS += r.newService   || 0;
+    _diagRE += r.reactivated  || 0;
   });
   const cpRows = Object.values(cpMap);
+
+  // Diagnostico de N+R: imprime breakdown y advierte si solo hay reactivados
+  // (sintoma de que el upload no capturo new_from_partner / new_from_service)
+  if (perfF.length) {
+    console.log(`[METAS ${STATE.curMode}] Breakdown N+R en rango ${from} → ${to}:`,
+      { newPartner: _diagNP, newService: _diagNS, reactivated: _diagRE,
+        total: _diagNP + _diagNS + _diagRE });
+    if ((_diagNP + _diagNS) === 0 && _diagRE > 0) {
+      console.warn(
+        "[METAS] new_from_partner y new_from_service son 0 en la BD. " +
+        "El upload del Excel no capturo esas columnas. " +
+        "Verifica los nombres de columna en el Excel (deben contener 'from partner', " +
+        "'from service' o 'new drivers')."
+      );
+    }
+  }
 
   // New projection: based on last data date + 6 days = end of current week
   const maxDate = cpRows.length ? cpRows.map(r => r.date).sort().at(-1) : to;

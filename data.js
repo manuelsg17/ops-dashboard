@@ -351,8 +351,14 @@ async function uploadRendimientoMensual(rows) {
     Object.entries(mesColMap).forEach(([mes, mc]) => {
       const v  = col => col ? toN(row[col]) : 0;
       const ad = v(pick(mc, "active driver"));
-      const np = v(pick(mc, "new profile from partner", "new profiles from partner", "from partner"));
-      const ns = v(pick(mc, "new profile from service", "new profiles from service", "from service"));
+      let   np = v(pick(mc, "new profile from partner", "new profiles from partner", "from partner"));
+      let   ns = v(pick(mc, "new profile from service", "new profiles from service", "from service"));
+      // Si no hay np ni ns separados, intentar capturar "new drivers" combinado
+      // (formato comun de region profile de Yango). Lo guardamos en np para que
+      // np + ns + re siga sumando el total correcto sin perder datos.
+      if (np === 0 && ns === 0) {
+        np = v(pick(mc, "new drivers", "nuevos conductores", "new conductor"));
+      }
       const re = v(pick(mc, "reactivat"));
       const sh = v(pick(mc, "supply hour"));
       const co = v(pick(mc, "commission", "comisi"));
