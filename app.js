@@ -538,6 +538,36 @@ function renderConfig() {
       </div>
     </div>`;
 
+  // ── Sección: Eliminar Datos ─────────────────────────────────────────────────
+  html += `
+    <div class="section" style="margin-bottom:16px;border:1px solid #fecaca;background:#fff8f8;border-radius:8px;padding:14px">
+      <div style="font-size:.8rem;font-weight:700;color:#991b1b;margin-bottom:6px">🗑️ Eliminar Datos</div>
+      <div style="font-size:.72rem;color:#888;margin-bottom:12px">
+        Borra registros de la base de datos. Útil cuando subiste un Excel con error y quieres re-subir.
+        Si dejas el mes vacío, borra <strong>TODA</strong> la tabla. <strong style="color:#991b1b">Acción irreversible.</strong>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div style="display:flex;flex-direction:column">
+          <label style="font-size:.68rem;color:#aaa;margin-bottom:3px;font-weight:600">Tabla</label>
+          <select class="crud-input" id="delTableSel" style="width:auto;min-width:140px">
+            <option value="rendimiento">Rendimiento Semanal</option>
+            <option value="rendimiento_mensual">Rendimiento Mensual</option>
+            <option value="rendimiento_diario">Rendimiento Diario</option>
+            <option value="metas">Metas</option>
+          </select>
+        </div>
+        <div style="display:flex;flex-direction:column">
+          <label style="font-size:.68rem;color:#aaa;margin-bottom:3px;font-weight:600">Mes (opcional)</label>
+          <input class="crud-input" id="delMonthInput" placeholder="2026-04 o vacío"
+            style="width:140px" maxlength="7"/>
+        </div>
+        <button class="crud-btn crud-btn-del" onclick="deleteDashboardData()"
+          style="background:#FF0000;color:#fff;font-weight:700;padding:8px 14px;margin-top:18px">
+          🗑️ Eliminar
+        </button>
+      </div>
+    </div>`;
+
   // ── Sección: Filtros de Flota (palabras prohibidas) ──────────────────────────
   const excludedCount = STATE.rawDataFull.length - STATE.rawData.length;
   const bannedBadges  = STATE.bannedWords.map(w =>
@@ -821,5 +851,78 @@ function showLoad(show, msg = "Procesando...") {
       <div style="font-weight:600;color:#555">${msg}</div>`;
   } else {
     el?.remove();
+  }
+}
+
+// ── ELIMINAR DATOS DE SUPABASE ────────────────────────────────────────────────
+async function deleteDashboardData() {
+  const tableSel = document.getElementById("delTableSel");
+  const monthInp = document.getElementById("delMonthInput");
+  if (!tableSel || !monthInp) return;
+
+  const table = tableSel.value;
+  const mes   = monthInp.value.trim();
+
+  const labels = {
+    rendimiento:         "Rendimiento Semanal",
+    rendimiento_mensual: "Rendimiento Mensual",
+    rendimiento_diario:  "Rendimiento Diario",
+    metas:               "Metas"
+  };
+
+  // Validar formato del mes si se proporciono
+  if (mes && !/^\d{4}-\d{2}$/.test(mes)) {
+    alert("Formato de mes invalido. Debe ser YYYY-MM (ej: 2026-04).");
+    return;
+  }
+
+  const scope = mes ? `del mes ${mes}` : "TODA la tabla";
+  if (!confirm(
+    `¿Confirmas borrar ${scope} de ${labels[table]}?\n\n` +
+    `Esta accion NO se puede deshacer.`
+  )) return;
+
+  showLoad(true, `Eliminando ${labels[table]}...`);
+
+  try {
+    let query = sb.from(table).delete();
+
+    if (mes) {
+      const [y, m] = mes.split("-").map(Number);
+      const lastDay = new Date(y, m, 0).getDate();
+      const monthEnd = `${mes}-${String(lastDay).padStart(2, "0")}`;
+      const monthStart = `${mes}-01`;
+
+      if (table === "rendimiento") {
+        query = query.gte("fecha", monthStart).lte("fecha", monthEnd);
+      } else if (table === "rendimiento_diario") {
+        query = query.gte("date", monthStart).lte("date", monthEnd);
+      } else if (table === "rendimiento_mensual") {
+        query = query.eq("mes", mes);
+      } else if (table === "metas") {
+        query = query.eq("mes", mes);
+      }
+    } else {
+      // Supabase requiere un WHERE para DELETE. Usar filtro tautologico.
+      query = query.neq("clid", "__NEVER_MATCH__");
+    }
+
+    const { error } = await query;
+    if (error) throw error;
+
+    showBanner(true, `Eliminado: ${labels[table]} ${mes ? `(${mes})` : "(todo)"}`);
+
+    // Resetear flags de lazy-load para forzar recarga del dataset modificado
+    if (table === "rendimiento_mensual") STATE._mensualLoaded = false;
+    if (table === "rendimiento_diario")  STATE._diarioLoaded  = false;
+
+    // Recargar desde Supabase para reflejar el estado actual
+    monthInp.value = "";
+    await loadFromSupabase();
+  } catch (err) {
+    showBanner(false, `Error al eliminar: ${err.message}`);
+    console.error(err);
+  } finally {
+    showLoad(false);
   }
 }
