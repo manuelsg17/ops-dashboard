@@ -498,18 +498,20 @@ function buildSlide3(partner, from, to, mode) {
                 const prev   = idx>0 ? ranking[idx-1] : null;
                 const next   = idx<ranking.length-1 ? ranking[idx+1] : null;
                 const pColor = pos===1?"#f59e0b":pos<=3?"#10b981":"#555";
-                // Full precision en pct; redondeo solo en el template
-                const pct    = (1-(pos-1)/total)*100;
+                // pctTop = percentil donde quedo el partner (1% = mejor, 100% = peor)
+                // pctBar = % visual de la barra (100% = mejor, 0% = peor)
+                const pctTop = (pos / total) * 100;
+                const pctBar = (1 - (pos - 1) / total) * 100;
                 return `
                   <div style="background:#fafafa;border-radius:6px;padding:7px 9px;flex:1">
                     <div style="font-size:.6rem;color:#aaa;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px">${m.label}</div>
                     <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
                       <span style="font-size:1.2rem;font-weight:900;color:${pColor}">${pos<=3 ? "TOP 3" : "#"+pos}</span>
                       <span style="font-size:.65rem;color:#aaa">${es?"de":"of"} ${total}</span>
-                      <span style="margin-left:auto;font-size:.62rem;background:${pColor}20;color:${pColor};padding:1px 5px;border-radius:6px;font-weight:700">Top ${Math.round(100-pct+1)}%</span>
+                      <span style="margin-left:auto;font-size:.62rem;background:${pColor}20;color:${pColor};padding:1px 5px;border-radius:6px;font-weight:700">Top ${Math.round(pctTop)}%</span>
                     </div>
                     <div style="background:#eee;border-radius:4px;height:3px;margin-bottom:5px">
-                      <div style="background:${pColor};height:3px;border-radius:4px;width:${pct.toFixed(2)}%"></div>
+                      <div style="background:${pColor};height:3px;border-radius:4px;width:${pctBar.toFixed(2)}%"></div>
                     </div>
                     ${prev?`<div style="font-size:.6rem;color:#aaa">▲ ${es?"ant":"prev"}: <strong>+${fmt(prev.val-myVal)}</strong></div>`:`<div style="font-size:.6rem;color:#f59e0b">⭐ ${es?"Destacado":"Top Performer"}</div>`}
                     ${next?`<div style="font-size:.6rem;color:#aaa">▼ ${es?"sig":"next"}: <strong style="color:#10b981">-${fmt(myVal-next.val)}</strong></div>`:`<div style="font-size:.6rem;color:#aaa">${es?"Último lugar":"Last place"}</div>`}
