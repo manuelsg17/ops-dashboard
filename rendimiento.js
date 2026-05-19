@@ -265,16 +265,37 @@ function buildTable(apd, lastDate, prevDate, sel) {
   const apdFull = STATE._apdFull.filter(r => selSet.has(r.partner));
   const partners = [...new Set(apd.map(r => r.partner))];
 
-  const apdByPartner = new Map();
+  // Pre-indexar lR, pR y apd por partner UNA vez. Reemplaza 3 filter()
+  // O(n) por partner = O(n × partners) → O(1) lookup por partner.
+  const lByPartner    = new Map();
+  const prByPartner   = new Map();
+  const apdByPartner  = new Map();
+  const apdFullByPartner = new Map();
+  lR.forEach(r => {
+    let a = lByPartner.get(r.partner);
+    if (!a) { a = []; lByPartner.set(r.partner, a); }
+    a.push(r);
+  });
+  pR.forEach(r => {
+    let a = prByPartner.get(r.partner);
+    if (!a) { a = []; prByPartner.set(r.partner, a); }
+    a.push(r);
+  });
+  apd.forEach(r => {
+    let a = apdByPartner.get(r.partner);
+    if (!a) { a = []; apdByPartner.set(r.partner, a); }
+    a.push(r);
+  });
   apdFull.forEach(r => {
-    if (!apdByPartner.has(r.partner)) apdByPartner.set(r.partner, []);
-    apdByPartner.get(r.partner).push(r);
+    let a = apdFullByPartner.get(r.partner);
+    if (!a) { a = []; apdFullByPartner.set(r.partner, a); }
+    a.push(r);
   });
 
   STATE.curSummaries = partners.map(p => {
-    const l    = lR.filter(r => r.partner === p);
-    const pr   = pR.filter(r => r.partner === p);
-    const rows = apd.filter(r => r.partner === p).sort((a, b) => a.date.localeCompare(b.date));
+    const l    = lByPartner.get(p) || [];
+    const pr   = prByPartner.get(p) || [];
+    const rows = (apdByPartner.get(p) || []).slice().sort((a, b) => a.date.localeCompare(b.date));
     return {
       partner:      p,
       kam:          (l[0] || {}).kam || "",
@@ -286,7 +307,7 @@ function buildTable(apd, lastDate, prevDate, sel) {
       pad:          sumR(pr, r => r.activeDrivers),
       pnr:          sumR(pr, r => r.newPartner + r.newService + r.reactivated),
       tAD:          trendI(rows.map(r => r.activeDrivers)),
-      declineAlert: hasConsecutiveDecline(apdByPartner, p)
+      declineAlert: hasConsecutiveDecline(apdFullByPartner, p)
     };
   });
   renderTable();
@@ -381,14 +402,26 @@ function buildPartnerCards(apd, lastDate, prevDate, partners, sel) {
     || (prevDate ? STATE.rawData.filter(r => r.date === prevDate) : []);
   const prevRaw = _pdAll.filter(r => selSet.has(r.partner));
   const prevAPD = aggPD(prevRaw);
+
+  // Pre-indexar apd y prevAPD por partner una sola vez.
+  // Reemplaza .filter() + .find() por partner (O(n × partners)) con lookups O(1).
+  const apdByPartner = new Map();
+  const prevByPartner = new Map();
+  for (const r of apd) {
+    let a = apdByPartner.get(r.partner);
+    if (!a) { a = []; apdByPartner.set(r.partner, a); }
+    a.push(r);
+  }
+  for (const r of prevAPD) prevByPartner.set(r.partner, r);
+
   const frag    = document.createDocumentFragment();
 
   partners.forEach(partner => {
-    const rows = apd.filter(r => r.partner === partner)
-                    .sort((a, b) => a.date.localeCompare(b.date));
+    const rows = (apdByPartner.get(partner) || [])
+      .slice().sort((a, b) => a.date.localeCompare(b.date));
     if (!rows.length) return;
     const last    = rows[rows.length - 1];
-    const prevRow = prevAPD.find(r => r.partner === partner) || null;
+    const prevRow = prevByPartner.get(partner) || null;
     const col     = STATE.partnerColors[partner] || "#FF0000";
     const kc      = KAM_COLORS[last.kam] || "#888";
 

@@ -72,28 +72,36 @@ function renderOps() {
   CITIES.forEach(city => {
     if (cityFilter !== "all" && cityFilter !== city) return;
 
+    // Filtrar UNA vez por ciudad y luego indexar por fecha.
+    // Antes passSelection se llamaba 10+ veces (lastDate, prevDate, 4× last4, 4× prev4).
     const cData = rowsByCity(city).filter(passSelection);
     if (!cData.length) return;
 
-    // Aggregate last/prev date (con fallback robusto)
-    const lastRows = rowsByCityDate(city, lastDate).filter(passSelection);
-    const prevRows = rowsByCityDate(city, prevDate).filter(passSelection);
+    const cDataByDate = new Map();
+    for (const r of cData) {
+      let arr = cDataByDate.get(r.date);
+      if (!arr) { arr = []; cDataByDate.set(r.date, arr); }
+      arr.push(r);
+    }
+
+    const lastRows = cDataByDate.get(lastDate) || [];
+    const prevRows = cDataByDate.get(prevDate) || [];
 
     const lAD = citySum(lastRows, r => r.activeDrivers);
     const pAD = citySum(prevRows, r => r.activeDrivers);
     const lNR = lastRows.reduce((s, r) => s + r.newPartner + r.newService + r.reactivated, 0);
     const pNR = prevRows.reduce((s, r) => s + r.newPartner + r.newService + r.reactivated, 0);
 
-    // Supply hours: sum over last 4 / prev 4 dates
+    // Supply hours: sum over last 4 / prev 4 dates (lookup O(1) por fecha)
     let lSH = 0, pSH = 0;
-    last4Dates.forEach(d => {
-      const arr = rowsByCityDate(city, d).filter(passSelection);
-      for (const r of arr) lSH += r.supplyHours;
-    });
-    prev4Dates.forEach(d => {
-      const arr = rowsByCityDate(city, d).filter(passSelection);
-      for (const r of arr) pSH += r.supplyHours;
-    });
+    for (const d of last4Dates) {
+      const arr = cDataByDate.get(d);
+      if (arr) for (const r of arr) lSH += r.supplyHours;
+    }
+    for (const d of prev4Dates) {
+      const arr = cDataByDate.get(d);
+      if (arr) for (const r of arr) pSH += r.supplyHours;
+    }
 
     const cityColor = CITY_COLORS[city] || "#888";
     const partnersInCity = [...new Set(cData.map(r => r.partner))].length;
