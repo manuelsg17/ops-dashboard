@@ -18,6 +18,11 @@ function renderOps() {
   const lastDate = allDates[allDates.length - 1] || "";
   const prevDate = allDates.length > 1 ? allDates[allDates.length - 2] : "";
 
+  // Filtros del sidebar para respetar selección de partners, KAM y ciudad
+  const selSet     = new Set(getSel());
+  const kamFilter  = document.getElementById("kamFilter")?.value || "all";
+  const cityFilter = document.getElementById("cityFilter")?.value || "all";
+
   let html = modeToggleHTML();
 
   // ── 1. Resumen por Ciudad ──────────────────────────────────────────────────
@@ -58,13 +63,21 @@ function renderOps() {
     return STATE.rawData.filter(r => r.city === city);
   }
 
+  // Filtro centralizado: respeta selSet (partners), kamFilter (KAM seleccionado)
+  // y cityFilter (si esta restringido a una ciudad especifica)
+  const passSelection = r =>
+    selSet.has(r.partner) &&
+    (kamFilter === "all" || r.kam === kamFilter || getKAMForPartner(r.partner) === kamFilter);
+
   CITIES.forEach(city => {
-    const cData = rowsByCity(city);
+    if (cityFilter !== "all" && cityFilter !== city) return;
+
+    const cData = rowsByCity(city).filter(passSelection);
     if (!cData.length) return;
 
     // Aggregate last/prev date (con fallback robusto)
-    const lastRows = rowsByCityDate(city, lastDate);
-    const prevRows = rowsByCityDate(city, prevDate);
+    const lastRows = rowsByCityDate(city, lastDate).filter(passSelection);
+    const prevRows = rowsByCityDate(city, prevDate).filter(passSelection);
 
     const lAD = citySum(lastRows, r => r.activeDrivers);
     const pAD = citySum(prevRows, r => r.activeDrivers);
@@ -74,18 +87,18 @@ function renderOps() {
     // Supply hours: sum over last 4 / prev 4 dates
     let lSH = 0, pSH = 0;
     last4Dates.forEach(d => {
-      const arr = rowsByCityDate(city, d);
+      const arr = rowsByCityDate(city, d).filter(passSelection);
       for (const r of arr) lSH += r.supplyHours;
     });
     prev4Dates.forEach(d => {
-      const arr = rowsByCityDate(city, d);
+      const arr = rowsByCityDate(city, d).filter(passSelection);
       for (const r of arr) pSH += r.supplyHours;
     });
 
     const cityColor = CITY_COLORS[city] || "#888";
     const partnersInCity = [...new Set(cData.map(r => r.partner))].length;
 
-    // Decline alerts in this city — usa Map (corrige bug de O(n²) y array→Map)
+    // Decline alerts in this city — solo entre partners seleccionados
     const decliningPartners = [...new Set(cData.map(r => r.partner))]
       .filter(p => hasConsecutiveDecline(apdByPartner, p));
 
@@ -137,23 +150,49 @@ function renderOps() {
     const weeksTotal = mWeeks(from, to);
     const perfF = getFilteredByDateRange(from, to);
 
+    // Pre-indexar perfF en partner+city → date → metrics. Reemplaza el O(n²)
+    // anterior (filter dentro de map dentro de forEach) por O(1) lookup.
+    const perfByPartnerCity = new Map();
+    perfF.filter(passSelection).forEach(r => {
+      const k = `${r.partner}|||${r.city}`;
+      let dateMap = perfByPartnerCity.get(k);
+      if (!dateMap) { dateMap = new Map(); perfByPartnerCity.set(k, dateMap); }
+      let e = dateMap.get(r.date);
+      if (!e) { e = { ad: 0, nr: 0, sh: 0 }; dateMap.set(r.date, e); }
+      e.ad += r.activeDrivers;
+      e.nr += r.newPartner + r.newService + r.reactivated;
+      e.sh += r.supplyHours;
+    });
+
     CITIES.forEach(city => {
-      const cityMetas = STATE.metasData.filter(m => m.city === city);
+      if (cityFilter !== "all" && cityFilter !== city) return;
+      // Metas filtradas por KAM, partner seleccionado y ciudad
+      const cityMetas = STATE.metasData.filter(m => {
+        if (kamFilter !== "all" && m.kam !== kamFilter) return false;
+        if (!selSet.has(m.partner)) return false;
+        return m.city === city;
+      });
       if (!cityMetas.length) return;
 
       const partners = [...new Set(cityMetas.map(m => m.partner))];
       const results  = partners.map(p => {
-        const m   = cityMetas.filter(x => x.partner === p);
-        const perf = perfF.filter(r => r.partner === p && r.city === city);
-        const mAD  = m.reduce((s, x) => s + x.mA, 0);
-        const mNR  = m.reduce((s, x) => s + x.mNR, 0);
-        const mSH  = m.reduce((s, x) => s + x.mH, 0);
-        const rAD  = perf.length ? Math.max(...[...new Set(perf.map(r=>r.date))].map(d => perf.filter(r=>r.date===d).reduce((s,r)=>s+r.activeDrivers,0))) : 0;
-        const rNR  = perf.reduce((s, r) => s + r.newPartner + r.newService + r.reactivated, 0);
-        const rSH  = perf.reduce((s, r) => s + r.supplyHours, 0);
-        const pAD  = mAD > 0 ? Math.min((rAD / mAD) * 100, 100) : null;
-        const pNR  = mNR > 0 ? Math.min((rNR / mNR) * 100, 100) : null;
-        const pSH  = mSH > 0 ? Math.min((rSH / mSH) * 100, 100) : null;
+        const m = cityMetas.filter(x => x.partner === p);
+        const mAD = m.reduce((s, x) => s + x.mA, 0);
+        const mNR = m.reduce((s, x) => s + x.mNR, 0);
+        const mSH = m.reduce((s, x) => s + x.mH, 0);
+        // AD = max across dates (snapshot, no acumulativo). NR/SH = sum.
+        let rAD = 0, rNR = 0, rSH = 0;
+        const dateMap = perfByPartnerCity.get(`${p}|||${city}`);
+        if (dateMap) {
+          for (const e of dateMap.values()) {
+            if (e.ad > rAD) rAD = e.ad;
+            rNR += e.nr;
+            rSH += e.sh;
+          }
+        }
+        const pAD = mAD > 0 ? Math.min((rAD / mAD) * 100, 100) : null;
+        const pNR = mNR > 0 ? Math.min((rNR / mNR) * 100, 100) : null;
+        const pSH = mSH > 0 ? Math.min((rSH / mSH) * 100, 100) : null;
         const minP = [pAD, pNR, pSH].filter(x => x !== null);
         const avg  = minP.length ? minP.reduce((a, b) => a + b, 0) / minP.length : null;
         return { p, pAD, pNR, pSH, avg };

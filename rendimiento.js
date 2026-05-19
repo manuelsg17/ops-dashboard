@@ -124,7 +124,12 @@ function renderRend() {
   // ── 3. Por KAM ────────────────────────────────────────────────────────────
   html += secH("👤", "#f59e0b", "Por KAM", "Rendimiento por responsable", "");
   html += `<div class="section"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px">`;
-  [...new Set(Object.values(STATE.KAM_MAP))].sort().forEach(kam => {
+  // Respetar kamFilter: si el usuario filtra por un KAM, solo mostrar ese
+  const kamFilterVal = document.getElementById("kamFilter")?.value || "all";
+  const kamsToShow = [...new Set(Object.values(STATE.KAM_MAP))]
+    .filter(k => kamFilterVal === "all" || k === kamFilterVal)
+    .sort();
+  kamsToShow.forEach(kam => {
     const kpSet = new Set(STATE.KAM_PARTNERS[kam] || []);
     const kL  = lastRows.filter(r => kpSet.has(r.partner));
     const kP  = prevRows.filter(r => kpSet.has(r.partner));

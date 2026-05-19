@@ -404,18 +404,19 @@ function buildSlide1(partner, from, to, mode) {
                 const pValP = pPrev.reduce((s,r)=>s+m.fn(r),0);
                 const cValL = cLast.reduce((s,r)=>s+m.fn(r),0);
                 const cValP = cPrev.reduce((s,r)=>s+m.fn(r),0);
-                const pWoW  = pValP>0 ? ((pValL-pValP)/pValP*100).toFixed(1) : null;
-                const cWoW  = cValP>0 ? ((cValL-cValP)/cValP*100).toFixed(1) : null;
-                const pColor = pWoW===null?"#aaa":+pWoW>=0?"#10b981":"#FF0000";
-                const cColor = cWoW===null?"#aaa":+cWoW>=0?"#10b981":"#FF0000";
-                const pSign  = pWoW!==null&&+pWoW>=0?"+":"";
-                const cSign  = cWoW!==null&&+cWoW>=0?"+":"";
+                // Full precision en variables; redondeo solo en el template HTML
+                const pWoW  = pValP>0 ? ((pValL-pValP)/pValP*100) : null;
+                const cWoW  = cValP>0 ? ((cValL-cValP)/cValP*100) : null;
+                const pColor = pWoW===null?"#aaa":pWoW>=0?"#10b981":"#FF0000";
+                const cColor = cWoW===null?"#aaa":cWoW>=0?"#10b981":"#FF0000";
+                const pSign  = pWoW!==null && pWoW>=0?"+":"";
+                const cSign  = cWoW!==null && cWoW>=0?"+":"";
                 return `
                   <div style="flex:1;min-height:0;background:#fafafa;border-radius:6px;padding:5px 7px;display:flex;flex-direction:column">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
                       <span style="font-size:.6rem;color:#aaa;font-weight:700;text-transform:uppercase;letter-spacing:.3px">${m.label}</span>
                       <span style="font-size:.66rem;font-weight:700;color:${pColor};background:${pColor}18;padding:1px 5px;border-radius:6px">
-                        ${pWoW!==null?pSign+pWoW+"%":"NEW"}
+                        ${pWoW!==null?pSign+pWoW.toFixed(1)+"%":"NEW"}
                       </span>
                     </div>
                     <div style="font-weight:900;font-size:.88rem;color:#111;margin-bottom:3px">${fmt(pValL)}</div>
@@ -424,7 +425,7 @@ function buildSlide1(partner, from, to, mode) {
                     </div>
                     <div style="font-size:.58rem;color:#aaa;margin-top:2px;display:flex;justify-content:space-between">
                       <span>${wowLabel} ${es?"ciudad":"city"}:</span>
-                      <span style="color:${cColor};font-weight:700">${cWoW!==null?cSign+cWoW+"%":"N/A"}</span>
+                      <span style="color:${cColor};font-weight:700">${cWoW!==null?cSign+cWoW.toFixed(1)+"%":"N/A"}</span>
                     </div>
                   </div>`;
               }).join("")}
@@ -497,17 +498,18 @@ function buildSlide3(partner, from, to, mode) {
                 const prev   = idx>0 ? ranking[idx-1] : null;
                 const next   = idx<ranking.length-1 ? ranking[idx+1] : null;
                 const pColor = pos===1?"#f59e0b":pos<=3?"#10b981":"#555";
-                const pct    = Math.round((1-(pos-1)/total)*100);
+                // Full precision en pct; redondeo solo en el template
+                const pct    = (1-(pos-1)/total)*100;
                 return `
                   <div style="background:#fafafa;border-radius:6px;padding:7px 9px;flex:1">
                     <div style="font-size:.6rem;color:#aaa;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px">${m.label}</div>
                     <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
                       <span style="font-size:1.2rem;font-weight:900;color:${pColor}">${pos<=3 ? "TOP 3" : "#"+pos}</span>
                       <span style="font-size:.65rem;color:#aaa">${es?"de":"of"} ${total}</span>
-                      <span style="margin-left:auto;font-size:.62rem;background:${pColor}20;color:${pColor};padding:1px 5px;border-radius:6px;font-weight:700">Top ${100-pct+1}%</span>
+                      <span style="margin-left:auto;font-size:.62rem;background:${pColor}20;color:${pColor};padding:1px 5px;border-radius:6px;font-weight:700">Top ${Math.round(100-pct+1)}%</span>
                     </div>
                     <div style="background:#eee;border-radius:4px;height:3px;margin-bottom:5px">
-                      <div style="background:${pColor};height:3px;border-radius:4px;width:${pct}%"></div>
+                      <div style="background:${pColor};height:3px;border-radius:4px;width:${pct.toFixed(2)}%"></div>
                     </div>
                     ${prev?`<div style="font-size:.6rem;color:#aaa">▲ ${es?"ant":"prev"}: <strong>+${fmt(prev.val-myVal)}</strong></div>`:`<div style="font-size:.6rem;color:#f59e0b">⭐ ${es?"Destacado":"Top Performer"}</div>`}
                     ${next?`<div style="font-size:.6rem;color:#aaa">▼ ${es?"sig":"next"}: <strong style="color:#10b981">-${fmt(myVal-next.val)}</strong></div>`:`<div style="font-size:.6rem;color:#aaa">${es?"Último lugar":"Last place"}</div>`}

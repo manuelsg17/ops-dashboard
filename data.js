@@ -8,13 +8,51 @@ function hashColor(s) {
 }
 
 // Full-precision number parser — never rounds internally.
-// Registra en STATE.parseWarnings cuando una celda no es numérica.
+// Maneja formato ES ("1.234,56") y US ("1,234.56"). Si solo hay un tipo
+// de separador, decide por la cantidad de digitos despues del ultimo:
+// exactamente 3 = separador de miles; 1-2 = decimal.
+// Registra en STATE.parseWarnings cuando una celda no es numerica.
 function toN(v, label) {
   if (v === null || v === undefined || v === "") return 0;
-  const s = String(v).trim();
+  let s = String(v).trim();
   if (s === "0") return 0;
-  if (s.toUpperCase().endsWith("K")) return (parseFloat(s.slice(0, -1)) || 0) * 1000;
-  const n = parseFloat(s.replace(/[,%\s]/g, ""));
+
+  // Sufijo K → multiplicar por 1000 (case-insensitive)
+  if (s.toUpperCase().endsWith("K")) {
+    return toN(s.slice(0, -1), label) * 1000;
+  }
+
+  // Eliminar % y espacios (incluido espacio fino)
+  s = s.replace(/[%\s ]/g, "");
+
+  const hasDot   = s.indexOf(".") > -1;
+  const hasComma = s.indexOf(",") > -1;
+
+  if (hasDot && hasComma) {
+    // Ambos: el ultimo separador es el decimal
+    if (s.lastIndexOf(",") > s.lastIndexOf(".")) {
+      s = s.replace(/\./g, "").replace(",", ".");          // 1.234,56 → 1234.56
+    } else {
+      s = s.replace(/,/g, "");                              // 1,234.56 → 1234.56
+    }
+  } else if (hasComma) {
+    const commaCount = (s.match(/,/g) || []).length;
+    const digitsAfter = s.length - s.lastIndexOf(",") - 1;
+    if (commaCount > 1 || digitsAfter === 3) {
+      s = s.replace(/,/g, "");                              // 1,234,567 o 1,234 → 1234567 / 1234
+    } else {
+      s = s.replace(",", ".");                              // 12,5 → 12.5
+    }
+  } else if (hasDot) {
+    const dotCount = (s.match(/\./g) || []).length;
+    const digitsAfter = s.length - s.lastIndexOf(".") - 1;
+    if (dotCount > 1 || (digitsAfter === 3 && s.indexOf(".") > 0)) {
+      s = s.replace(/\./g, "");                              // 1.234.567 o 1.234 → 1234567 / 1234
+    }
+    // else dejar el punto como decimal
+  }
+
+  const n = parseFloat(s);
   if (isNaN(n) && label && STATE?.parseWarnings !== undefined) {
     STATE.parseWarnings.add(label);
   }
@@ -119,6 +157,7 @@ function sumR(rows, fn) { return rows.reduce((s, r) => s + fn(r), 0); }
 
 // Detects if a partner has strictly declined for N consecutive periods.
 // Skips partners with gaps in their date sequence (missing weeks = no false positives).
+// Soporta metric "nr" como suma de newPartner + newService + reactivated.
 function hasConsecutiveDecline(apdByPartner, partner) {
   const n      = STATE.declineThreshold || 3;
   const metric = STATE.declineMetric || "activeDrivers";
@@ -133,8 +172,12 @@ function hasConsecutiveDecline(apdByPartner, partner) {
       if ((new Date(last[i].date) - new Date(last[i - 1].date)) !== interval) return false;
     }
   }
+  // Resolver el valor por metric (soporta "nr" como composite)
+  const getVal = r => metric === "nr"
+    ? (r.newPartner + r.newService + r.reactivated)
+    : r[metric];
   for (let i = 1; i < last.length; i++) {
-    if (last[i][metric] >= last[i - 1][metric]) return false;
+    if (getVal(last[i]) >= getVal(last[i - 1])) return false;
   }
   return true;
 }
