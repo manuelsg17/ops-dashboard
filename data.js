@@ -71,15 +71,20 @@ function d2s(d) { return d ? d.split("-").reverse().join("/") : "--"; }
 
 // Badge HTML
 function bdg(c, p, cls = "mcard-badge") {
+  // Tooltip: contexto del modo para que el usuario sepa contra que se compara
+  const compLabel = STATE.curMode === "mensual" ? "mes anterior"
+                  : STATE.curMode === "diario"  ? "dia anterior"
+                  : "sem. anterior";
   if (p === null || p === undefined)
-    return `<span class="${cls} b-neu">N/A</span>`;
+    return `<span class="${cls} b-neu" title="Sin dato previo (N/A)">N/A</span>`;
   if (p === 0)
-    return c > 0 ? `<span class="${cls} b-pos">NEW</span>`
-                 : `<span class="${cls} b-neu">--</span>`;
+    return c > 0 ? `<span class="${cls} b-pos" title="Primer periodo con dato (no hay ${compLabel})">NEW</span>`
+                 : `<span class="${cls} b-neu" title="Sin movimiento">--</span>`;
   const v = ((c - p) / p) * 100;
   const s = v >= 0 ? "+" : "";
   const a = v >= 0 ? "↑" : "↓";
-  return `<span class="${cls} ${v >= 0 ? "b-pos" : "b-neg"}">${a}${s}${v.toFixed(1)}%</span>`;
+  const tooltip = `Actual: ${fmt(c)} vs ${compLabel}: ${fmt(p)} → ${s}${v.toFixed(1)}%`;
+  return `<span class="${cls} ${v >= 0 ? "b-pos" : "b-neg"}" title="${tooltip}">${a}${s}${v.toFixed(1)}%</span>`;
 }
 
 // Versión que respeta el modo: en diario no muestra comparativa (no aporta valor día-a-día).

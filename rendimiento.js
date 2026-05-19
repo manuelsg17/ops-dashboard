@@ -69,14 +69,18 @@ function renderRend() {
   let html = modeToggleHTML();
 
   // ── 1. Peru General ────────────────────────────────────────────────────────
+  // Subtitulo segun modo: en diario/semanal/mensual contextualiza el dato
+  const periodLabel = STATE.curMode === "mensual" ? "último mes"
+                    : STATE.curMode === "diario"  ? "último día"
+                    : "última semana";
   html += secH("🇵🇪", "#FF0000",
     "Peru - Vista General",
-    "Activos: última semana  |  N+R y Horas: acumulado del rango",
+    `Activos: snapshot ${periodLabel}  ·  N+R y Horas: acumulado del rango`,
     d2s(lastDate));
   html += `<div class="section"><div class="metric-row">
-    ${mkMetricCard("Conductores Activos","📊",tAD,pAD,apd,lastRows,prevRows,"ad","#FF0000",false)}
-    ${mkMetricCard("Nuevos + Reactivados","🆕",tNR,lNR,apd,lastRows,prevRows,"nr","#f97316",true)}
-    ${mkMetricCard("Horas de Conexion","⏱️",tSH,lSH,apd,lastRows,prevRows,"sh","#8b5cf6",true)}
+    ${mkMetricCard(METRICS.ad.label,"📊",tAD,pAD,apd,lastRows,prevRows,"ad",METRICS.ad.color,false)}
+    ${mkMetricCard(METRICS.nr.label,"🆕",tNR,lNR,apd,lastRows,prevRows,"nr",METRICS.nr.color,true)}
+    ${mkMetricCard(METRICS.sh.label,"⏱️",tSH,lSH,apd,lastRows,prevRows,"sh",METRICS.sh.color,true)}
   </div></div>`;
 
   // ── 2. Por Ciudad ──────────────────────────────────────────────────────────
@@ -114,7 +118,7 @@ function renderRend() {
           <div class="city-kpi-right"><span class="city-kpi-val">${fmt(cNR)}</span>${bdgMode(cNR,cpNR,"mb-badge")}</div>
         </div>
         <div class="city-kpi">
-          <span class="city-kpi-label">Horas de Conexion</span>
+          <span class="city-kpi-label">Horas de Conexión</span>
           <div class="city-kpi-right"><span class="city-kpi-val">${fmt(cSH)}</span>${bdgMode(cSH,cpSH,"mb-badge")}</div>
         </div>
       </div>`;
@@ -147,7 +151,7 @@ function renderRend() {
         <div>${bdgMode(kAD,kpAD)} <span style="font-size:.72rem;color:#aaa;margin-left:5px">Activos</span></div>
         <div class="mcard-breakdown">
           <div class="mb-row"><span class="mb-name">N+R</span><span class="mb-val">${fmt(kNR)}</span>${bdgMode(kNR,kpNR,"mb-badge")}</div>
-          <div class="mb-row"><span class="mb-name">Hs. Conexion</span><span class="mb-val">${fmt(kSH)}</span></div>
+          <div class="mb-row"><span class="mb-name">Hs. Conexión</span><span class="mb-val">${fmt(kSH)}</span></div>
         </div>
       </div>`;
   });
@@ -160,7 +164,7 @@ function renderRend() {
   html += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px">
     <div class="chart-card"><div class="chart-head"><span class="chart-title">Conductores Activos</span><button class="png-btn" onclick="dlChart('chP_ad','AD_Peru')">PNG</button></div><div id="chP_ad"></div></div>
     <div class="chart-card"><div class="chart-head"><span class="chart-title">Nuevos + Reactivados</span><button class="png-btn" onclick="dlChart('chP_nr','NR_Peru')">PNG</button></div><div id="chP_nr"></div></div>
-    <div class="chart-card"><div class="chart-head"><span class="chart-title">Horas de Conexion</span><button class="png-btn" onclick="dlChart('chP_sh','SH_Peru')">PNG</button></div><div id="chP_sh"></div></div>
+    <div class="chart-card"><div class="chart-head"><span class="chart-title">Horas de Conexión</span><button class="png-btn" onclick="dlChart('chP_sh','SH_Peru')">PNG</button></div><div id="chP_sh"></div></div>
   </div>`;
   CITIES.forEach(city => {
     const cr = filteredByCity[city];
@@ -171,7 +175,7 @@ function renderRend() {
     html += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px">
       <div class="chart-card"><div class="chart-head"><span class="chart-title">Conductores Activos</span><button class="png-btn" onclick="dlChart('ch_${cid}_ad','AD_${city}')">PNG</button></div><div id="ch_${cid}_ad"></div></div>
       <div class="chart-card"><div class="chart-head"><span class="chart-title">Nuevos + Reactivados</span><button class="png-btn" onclick="dlChart('ch_${cid}_nr','NR_${city}')">PNG</button></div><div id="ch_${cid}_nr"></div></div>
-      <div class="chart-card"><div class="chart-head"><span class="chart-title">Horas de Conexion</span><button class="png-btn" onclick="dlChart('ch_${cid}_sh','SH_${city}')">PNG</button></div><div id="ch_${cid}_sh"></div></div>
+      <div class="chart-card"><div class="chart-head"><span class="chart-title">Horas de Conexión</span><button class="png-btn" onclick="dlChart('ch_${cid}_sh','SH_${city}')">PNG</button></div><div id="ch_${cid}_sh"></div></div>
     </div>`;
   });
   html += `</div>`;
@@ -324,7 +328,7 @@ function renderTable() {
   const cols = [
     { k: "partner", l: "Partner" }, { k: "kam", l: "KAM" },
     { k: "ad", l: "Cond. Activos" }, { k: "nr", l: "Nuevos+React" },
-    { k: "sh", l: "Hs. Conexion" },  { k: "co", l: "Comision" },
+    { k: "sh", l: "Hs. Conexión" },  { k: "co", l: "Comision" },
     { k: "ns", l: "Leads Yango" }
   ];
 
@@ -451,7 +455,7 @@ function buildPartnerCards(apd, lastDate, prevDate, partners, sel) {
           <span style="${tA.c}">${tA.i}</span>
         </div>
         <div class="pk">
-          <div class="pk-label">Hs. Conexion</div>
+          <div class="pk-label">Hs. Conexión</div>
           <div class="pk-val">${fmt(last.supplyHours)}</div>
           ${bdgMode(last.supplyHours, prevRow?.supplyHours ?? null, "mb-badge")}
           <span style="${tH.c}">${tH.i}</span>

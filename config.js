@@ -24,6 +24,35 @@ const CITY_COLORS = {
 
 const CITIES = ["Lima", "Trujillo", "Arequipa"];
 
+// Nombres canonicos de metricas. Usar METRICS.ad.label en lugar de strings
+// hardcodeados para mantener consistencia entre tabs.
+const METRICS = {
+  ad: {
+    key:    "ad",
+    label:  "Conductores Activos",
+    short:  "Cond. Activos",
+    color:  "#FF0000",
+    type:   "snapshot",  // valor instantaneo (no acumulativo)
+    desc:   "Maximo de conductores activos en una semana del rango"
+  },
+  nr: {
+    key:    "nr",
+    label:  "Nuevos + Reactivados",
+    short:  "Nuevos+React",
+    color:  "#f97316",
+    type:   "cumulative",  // suma del rango
+    desc:   "Suma de conductores nuevos (from partner + from service) y reactivados"
+  },
+  sh: {
+    key:    "sh",
+    label:  "Horas de Conexión",
+    short:  "Hs. Conexión",
+    color:  "#8b5cf6",
+    type:   "cumulative",  // suma del rango
+    desc:   "Suma de horas de conexion en el rango"
+  }
+};
+
 // Estado global de la aplicación
 const STATE = {
   rawData:             [],

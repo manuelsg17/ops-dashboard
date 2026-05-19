@@ -186,7 +186,7 @@ function renderMetas() {
   html += `<div class="section"><div class="metric-row">
     ${metaResCard("Conductores Activos","máx semana",  tAD, tMA, tPAD, "#8b5cf6")}
     ${metaResCard("Nuevos + Reactivados","acumulado mes", tNR, tMNR, tPNR, "#f97316")}
-    ${metaResCard("Horas de Conexion","acumulado mes",  tSH, tMH,  tPSH, "#06b6d4")}
+    ${metaResCard("Horas de Conexión","acumulado mes",  tSH, tMH,  tPSH, "#06b6d4")}
   </div></div>`;
 
   // ── 2. Por Ciudad ─────────────────────────────────────────────────────────
@@ -247,7 +247,7 @@ function renderMetas() {
         </div>
         ${miniBar("Cond. Activos",  crAD, cmA,  cpAD)}
         ${miniBar("Nuevos+React",   crNR, cmNR, cpNR)}
-        ${miniBar("Hs. Conexion",   crSH, cmH,  cpSH)}
+        ${miniBar("Hs. Conexión",   crSH, cmH,  cpSH)}
       </div>`;
   });
   html += `</div></div>`;
@@ -301,7 +301,7 @@ function renderMetas() {
         ${alertHtml}
         ${miniBar("Cond. Activos", krAD, kmA,  kpAD)}
         ${miniBar("Nuevos+React",  krNR, kmNR, kpNR)}
-        ${miniBar("Hs. Conexion",  krSH, kmH,  kpSH)}
+        ${miniBar("Hs. Conexión",  krSH, kmH,  kpSH)}
       </div>`;
   });
   html += `</div></div>`;
@@ -336,7 +336,7 @@ function renderMetas() {
             <span>Nuevos+React</span><strong>${fmt(c.nr)}</strong>
           </div>
           <div style="margin:4px 0;font-size:.74rem;color:#555;display:flex;justify-content:space-between">
-            <span>Hs. Conexion</span><strong>${fmt(c.sh)}</strong>
+            <span>Hs. Conexión</span><strong>${fmt(c.sh)}</strong>
           </div>
           <div style="font-size:.66rem;color:#9a3412;margin-top:6px;font-style:italic">
             * Suma al total del KAM y país aunque no tenga meta.
@@ -355,7 +355,7 @@ function renderMetas() {
           </div>
           ${miniBarFull("Cond. Activos", c.ad, c.mA,  c.projAD)}
           ${miniBarFull("Nuevos+React",  c.nr, c.mNR, c.projNR)}
-          ${miniBarFull("Hs. Conexion",  c.sh, c.mH,  c.projSH)}
+          ${miniBarFull("Hs. Conexión",  c.sh, c.mH,  c.projSH)}
         </div>`;
     }
   });
@@ -370,21 +370,25 @@ function metaResCard(label, sub, real, meta, proj, color) {
   const pV  = Math.min(p,  100); // visual bar width
   const ppV = Math.min(pp, 100);
   const overBadge = p > 100
-    ? `<span style="font-size:.68rem;font-weight:700;color:#fff;background:#8b5cf6;border-radius:4px;padding:1px 5px;margin-left:4px">🏆 Overachievement</span>`
+    ? `<span style="font-size:.68rem;font-weight:700;color:#fff;background:#8b5cf6;border-radius:4px;padding:1px 5px;margin-left:4px" title="Superas el plan (>100%)">🏆 Overachievement</span>`
     : "";
+  const cumplTip = `Cumplimiento = Fact / Plan × 100. Fact: ${fmt(real)} de Plan: ${fmt(meta)}`;
+  const projTip = STATE.curMode === "mensual"
+    ? `Proyección = valor actual (mes ya cerrado)`
+    : `Proyección = total acumulado + (ritmo último 3 períodos / días por período) × días restantes del mes`;
   return `
     <div class="meta-sum-card">
       <div class="mcard-label">${label}</div>
       <div class="mcard-sub-label">${sub}</div>
       <div class="mcard-val">${fmt(real)}</div>
-      <div style="margin:4px 0">
+      <div style="margin:4px 0" title="${cumplTip}">
         <span style="font-size:.85rem;font-weight:700;color:${pColor(p)}">${p.toFixed(1)}% </span>
         <span class="sem ${semCls(p)}"></span>
         ${overBadge}
         <span style="font-size:.72rem;color:#aaa"> de plan ${fmt(meta)}</span>
       </div>
       <div style="margin:8px 0 4px">${barProj(pV, ppV)}</div>
-      <div style="font-size:.72rem;color:${pColor(pp)};margin-top:4px">
+      <div style="font-size:.72rem;color:${pColor(pp)};margin-top:4px" title="${projTip}">
         Proyección: <strong>${fmt(proj)}</strong> (${pp.toFixed(1)}%)
       </div>
     </div>`;
