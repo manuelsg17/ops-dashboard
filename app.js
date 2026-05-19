@@ -268,6 +268,7 @@ function switchTab(tab) {
   if (tab === "rawdata")                                                      renderRawData();
   if (tab === "config")                                                       renderConfig();
   if (tab === "present")                                                      renderPresent();
+  if (tab === "insights"  && STATE.rawData.length)                            renderInsights();
 }
 // ── SIDEBAR: DATES ────────────────────────────────────────────────────────────
 function popDates() {

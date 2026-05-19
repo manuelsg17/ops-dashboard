@@ -66,6 +66,7 @@
     </button>
     <div class="nav-dropdown-menu" id="analisisMenu">
       <button class="nav-dd-item active" data-tab="rend"      onclick="switchTabFromMenu('rend')">Rendimiento</button>
+      <button class="nav-dd-item"        data-tab="insights"  onclick="switchTabFromMenu('insights')">💡 Insights</button>
       <button class="nav-dd-item"        data-tab="metas"     onclick="switchTabFromMenu('metas')">Metas</button>
       <button class="nav-dd-item"        data-tab="ops"       onclick="switchTabFromMenu('ops')">Operaciones</button>
       <button class="nav-dd-item"        data-tab="proyectos" onclick="switchTabFromMenu('proyectos')">Proyectos</button>
@@ -224,6 +225,11 @@
         <div id="opsContent"></div>
       </div>
 
+      <!-- Insights / Análisis para reuniones -->
+      <div class="tab-panel" id="tab-insights">
+        <div id="insightsContent"></div>
+      </div>
+
       <!-- Proyectos -->
       <div class="tab-panel" id="tab-proyectos">
         <div id="proyectosContent"></div>
@@ -275,5 +281,6 @@
 <script src="unifview.js"></script>
 <script src="rawdata.js"></script>
 <script src="presentacion.js"></script>
+<script src="insights.js"></script>
 </body>
 </html>
