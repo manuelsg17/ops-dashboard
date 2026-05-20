@@ -8,7 +8,8 @@ let PRESENT_STATE = {
   partner:   null,
   slide:     0,
   lang:      "es",
-  charts:    []
+  charts:    [],
+  _renderId: 0
 };
 
 const SLIDE_NAMES_ES = ["Carátula", "KPIs", "vs Ciudad", "Ranking"];
@@ -306,10 +307,17 @@ function goSlide(i)  { _navSlide(i); }
 function renderSlide(partner, from, to, mode) {
   const el = document.getElementById("slideInner");
   if (!el) return;
+  // Token de render: si llega otro renderSlide antes de que dispare el setTimeout,
+  // este token cambia y la callback se ignora (evita build de charts sobre DOM obsoleto).
+  const renderId = ++PRESENT_STATE._renderId;
   switch (PRESENT_STATE.slide) {
     case 0: el.innerHTML = buildSlide0(partner, from, to, mode); break;
     case 1: el.innerHTML = buildSlide1(partner, from, to, mode);
-            setTimeout(() => buildSlide1Charts(partner, from, to, mode), 100); break;
+            setTimeout(() => {
+              if (renderId !== PRESENT_STATE._renderId) return;
+              if (STATE.curTab !== "present") return;
+              buildSlide1Charts(partner, from, to, mode);
+            }, 100); break;
     case 2: el.innerHTML = buildSlide5(partner, from, to, mode); break;
     case 3: el.innerHTML = buildSlide3(partner, from, to, mode); break;
   }
@@ -654,6 +662,7 @@ async function downloadPresentPDF() {
       setProgress(15 + Math.round(i * (85 / allSlides.length)), `${es?"Renderizando":"Rendering"}: ${s.name}...`);
 
 const div = document.createElement("div");
+      div.setAttribute("data-pdfslide", "1"); // marker para cleanup en catch
       if (s.hasCharts) {
         div.style.cssText = "position:fixed;left:0;top:0;width:1280px;height:720px;overflow:hidden;background:#fff;z-index:99998;";
       } else {
@@ -673,8 +682,13 @@ const div = document.createElement("div");
 
       if (s.hasCharts) {
         div.querySelectorAll("canvas").forEach(c => { const ch = Chart.getChart(c); if(ch) ch.destroy(); });
+        // Limpiar el registry de PRESENT_STATE para evitar referencias muertas
+        // que destroyPresentCharts() intente destruir despues (no falla, pero
+        // ensucia el array y crece sin limite cross-renders).
+        PRESENT_STATE.charts = [];
       }
-      document.body.removeChild(div);
+      // Garantizar que el div temporal se remueva incluso si algo falla
+      try { if (div.parentNode) document.body.removeChild(div); } catch(e) {}
 
       if (pageNum > 0) pdf.addPage();
       pdf.addImage(canvas.toDataURL("image/jpeg", 0.98), "JPEG", 0, 0, 1280, 720);
@@ -689,6 +703,10 @@ const div = document.createElement("div");
   } catch(err) {
     console.error(err);
     alert(es?"Error al generar PDF: "+err.message:"Error generating PDF: "+err.message);
+    // Sanity cleanup: barrer cualquier div temporal huerfano que haya quedado
+    document.querySelectorAll('div[data-pdfslide="1"]').forEach(d => {
+      try { d.remove(); } catch(e) {}
+    });
   }
 
   document.body.removeChild(prog);

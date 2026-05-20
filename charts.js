@@ -131,7 +131,10 @@ function buildLineChart(elId, dates, series, colors) {
       prev.updateOptions({ series, colors: opts.colors }, false, false, false);
       return;
     }
-    // Elemento fue destruido por innerHTML — orphan, no necesita destroy()
+    // Elemento fue destruido por innerHTML — el chart quedo huerfano con su
+    // ResizeObserver/listeners vivos. Forzar destroy() para liberarlos (NO es
+    // gratis: si no llamamos destroy, el observer sigue disparando en window.resize).
+    try { prev.destroy(); } catch(e) {}
     delete STATE.charts[elId];
   }
 

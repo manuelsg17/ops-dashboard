@@ -1,8 +1,25 @@
 // rendimiento.js — Pestaña Rendimiento
 
-function renderRend() {
-  if (!STATE.rawData.length) return;
+// Guard de reentrancia: evita que dos renderRend() concurrentes se pisen.
+// Si llega un segundo render mientras el primero corre, se descarta.
+let _renderRendBusy  = false;
+// Token incremental: la cola de charts diferidos verifica este token. Si llega
+// un nuevo renderRend, el pump de charts del render anterior se aborta.
+let _renderRendToken = 0;
 
+function renderRend() {
+  if (_renderRendBusy) return;
+  if (!STATE.rawData.length) return;
+  _renderRendBusy  = true;
+  _renderRendToken++;
+  try {
+    _renderRendImpl();
+  } finally {
+    _renderRendBusy = false;
+  }
+}
+
+function _renderRendImpl() {
   // Garantiza índices secundarios construidos (defensivo contra cache/races)
   ensureIndexes();
 
@@ -195,23 +212,42 @@ function renderRend() {
 
   content.innerHTML = html;
 
-  buildMultiLine("chP_ad", dates, partners, byDate, "ad", "#FF0000");
-  buildMultiLine("chP_nr", dates, partners, byDate, "nr", "#f97316");
-  buildMultiLine("chP_sh", dates, partners, byDate, "sh", "#8b5cf6");
+  // Renders sincronos de tablas (datos, no charts) — relativamente baratos
+  buildTable(apd, lastDate, prevDate, partners);
+  buildPartnerCards(apd, lastDate, prevDate, partners, partners);
 
+  // ── DIFERIR CHARTS con RAF ─────────────────────────────────────────────────
+  // Cada ApexCharts.render() bloquea 30-80ms. Construir 12 en serie congela
+  // el main thread ~600ms. Yieldeando entre cada uno: la UI aparece instantanea
+  // y los charts pop-in progresivamente sin freezar inputs/scroll del usuario.
+  const tokenAtSchedule = _renderRendToken;
+  const tabTokenAtSched = STATE._tabRenderId;
+  const chartJobs = [
+    () => buildMultiLine("chP_ad", dates, partners, byDate, "ad", "#FF0000"),
+    () => buildMultiLine("chP_nr", dates, partners, byDate, "nr", "#f97316"),
+    () => buildMultiLine("chP_sh", dates, partners, byDate, "sh", "#8b5cf6"),
+  ];
   CITIES.forEach(city => {
     const cr = filteredByCity[city];
     if (!cr.length) return;
     const cid = city.toLowerCase();
     const col = CITY_COLORS[city] || "#888";
     const cbd = aggCityDatec(cr, city);
-    buildSingleLine(`ch_${cid}_ad`, dates, cbd, "ad", col, city);
-    buildSingleLine(`ch_${cid}_nr`, dates, cbd, "nr", col, city);
-    buildSingleLine(`ch_${cid}_sh`, dates, cbd, "sh", col, city);
+    chartJobs.push(() => buildSingleLine(`ch_${cid}_ad`, dates, cbd, "ad", col, city));
+    chartJobs.push(() => buildSingleLine(`ch_${cid}_nr`, dates, cbd, "nr", col, city));
+    chartJobs.push(() => buildSingleLine(`ch_${cid}_sh`, dates, cbd, "sh", col, city));
   });
 
-  buildTable(apd, lastDate, prevDate, partners);
-  buildPartnerCards(apd, lastDate, prevDate, partners, partners);
+  function pumpCharts(i) {
+    if (i >= chartJobs.length) return;
+    // Abort si otro renderRend arranco, cambio el tab, o salio de "rend"
+    if (_renderRendToken !== tokenAtSchedule)   return;
+    if (STATE._tabRenderId !== tabTokenAtSched) return;
+    if (STATE.curTab !== "rend")                return;
+    try { chartJobs[i](); } catch(e) { console.warn("Chart job", i, "failed:", e); }
+    requestAnimationFrame(() => pumpCharts(i + 1));
+  }
+  requestAnimationFrame(() => pumpCharts(0));
 }
 
 // ── METRIC CARD ───────────────────────────────────────────────────────────────

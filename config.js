@@ -84,6 +84,11 @@ const STATE = {
   _byCity:          null,   // Map<city, Row[]>
   _byCityDate:      null,   // Map<"city|||date", Row[]>
   _partnerKAM:      null,   // Map<partner, kam>  (lookup O(1))
+  _tabRenderId:     0,      // Token global: se incrementa en cada switchTab.
+                            // Cualquier render asincrono captura el id al inicio
+                            // y aborta si !==STATE._tabRenderId.
+  _switchingTab:    false,  // Guard de reentrancia: evita que doble-click rapido
+                            // lance dos secuencias destroy+render concurrentes.
   bannedWords: JSON.parse(
     localStorage.getItem("yangoBannedWords") ||
     JSON.stringify(["tuktuk", "tuk tuk", "delivery", "cargo", "mototaxi", "bikes"])

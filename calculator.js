@@ -42,7 +42,7 @@ function _calcLastNMonths(rows, n) {
 }
 
 // Agrega por partner+city sobre un set de meses específicos
-// Devuelve Map<"partner|||city", { trips, sh, ad, np, ns, re, partner, city, kam }>
+// Devuelve Map<"partner|||city", { clid, trips, sh, ad, np, ns, re, partner, city, kam }>
 function _calcAggByPartnerCity(rows, monthsSet) {
   const out = new Map();
   rows.forEach(r => {
@@ -50,10 +50,12 @@ function _calcAggByPartnerCity(rows, monthsSet) {
     const k = `${r.partner}|||${r.city}`;
     let e = out.get(k);
     if (!e) {
-      e = { partner: r.partner, city: r.city, kam: r.kam,
+      e = { clid: r.clid || "", partner: r.partner, city: r.city, kam: r.kam,
             trips: 0, sh: 0, ad: 0, np: 0, ns: 0, re: 0 };
       out.set(k, e);
     }
+    // Si el primer row no traia CLID y un row posterior si, capturarlo
+    if (!e.clid && r.clid) e.clid = r.clid;
     e.trips += r.trips || 0;
     e.sh    += r.supplyHours || 0;
     // AD: max across months (snapshot)
@@ -65,8 +67,27 @@ function _calcAggByPartnerCity(rows, monthsSet) {
   return out;
 }
 
+// Fallback: busca el CLID de un partner+city en STATE.rawData si la fila
+// agregada no lo tiene (caso: el row vino de un dataset que no incluye clid).
+function _calcLookupClid(partner, city) {
+  const datasets = [STATE.rawDataMensual, STATE.rawData, STATE.rawDataDiario];
+  for (const ds of datasets) {
+    if (!ds || !ds.length) continue;
+    const row = ds.find(r => r.partner === partner && r.city === city && r.clid);
+    if (row) return row.clid;
+  }
+  // Ultimo fallback: scan inverso de CLID_MAP por partner (toma el primero)
+  for (const [clid, p] of Object.entries(STATE.CLID_MAP || {})) {
+    if (p === partner) return clid;
+  }
+  return "";
+}
+
 // ── RENDER PRINCIPAL ──────────────────────────────────────────────────────────
 function renderCalculator() {
+  // Guard: si por algun motivo (timer reentrante, RAF tardio) se invoca cuando
+  // ya no estamos en Calculadora, abortar. Evita reflow pesado en DOM oculto.
+  if (STATE.curTab !== "calculator") return;
   const el = document.getElementById("calculatorContent");
   if (!el) return;
   ensureIndexes();
@@ -528,6 +549,28 @@ function calcOnMultiplierChange(v) {
   renderCalculator();
 }
 
+function _calcScheduleRerender() {
+  // Guard temprano: si ya no estamos en Calculadora, no encolar.
+  if (STATE.curTab !== "calculator") return;
+  clearTimeout(CALC_STATE._editDeb);
+  // Capturamos el token global. Si el usuario cambia de tab antes del disparo,
+  // el token cambiara y el render se aborta.
+  const tokenAtSchedule = STATE._tabRenderId;
+  CALC_STATE._editDeb = setTimeout(() => {
+    CALC_STATE._editDeb = null;
+    if (STATE._tabRenderId !== tokenAtSchedule) return;
+    if (STATE.curTab !== "calculator") return;
+    renderCalculator();
+  }, 400);
+}
+
+function calcCancelPendingRender() {
+  if (CALC_STATE._editDeb) {
+    clearTimeout(CALC_STATE._editDeb);
+    CALC_STATE._editDeb = null;
+  }
+}
+
 function calcOnGoalEdit(input) {
   const partner = input.dataset.pk;
   const city    = input.dataset.city;
@@ -536,17 +579,13 @@ function calcOnGoalEdit(input) {
   const k = `${partner}|||${city}|||${metric}`;
   if (isNaN(val)) delete CALC_STATE.edits[k];
   else CALC_STATE.edits[k] = val;
-  // No re-render para no perder foco; los cambios surten efecto en próximo render
-  // PERO para validación KAM (sec 4) y export (sec 5), debemos re-renderizar.
-  // Hacemos render diferido:
-  clearTimeout(window._calcEditDeb);
-  window._calcEditDeb = setTimeout(renderCalculator, 400);
+  // Render diferido (sólo si seguimos en Calculadora)
+  _calcScheduleRerender();
 }
 
 function calcOnKamGoalChange(metric, val) {
   CALC_STATE.kamGoals[metric] = parseFloat(val) || 0;
-  clearTimeout(window._calcEditDeb);
-  window._calcEditDeb = setTimeout(renderCalculator, 400);
+  _calcScheduleRerender();
 }
 
 function calcOnExportPartnerChange(v) {
@@ -571,7 +610,7 @@ function calcExportExcel() {
   const agg = _calcAggByPartnerCity(rows, monthsSet);
   const m = CALC_STATE.multiplier || 1.1;
 
-  const lines = ["PARTNER,CIUDAD,MES,ACTIVE_DRIVERS,SUPPLY_HOURS,N+R"];
+  const lines = ["CLID,PARTNER,CIUDAD,MES,ACTIVE_DRIVERS,SUPPLY_HOURS,N+R"];
   const nextMonth = _calcNextMonth(last1[0]);
 
   [...agg.values()].forEach(e => {
@@ -583,7 +622,8 @@ function calcExportExcel() {
     const adGoal = CALC_STATE.edits[`${e.partner}|||${e.city}|||ad`] ?? Math.round(e.ad * m);
     const shGoal = CALC_STATE.edits[`${e.partner}|||${e.city}|||sh`] ?? Math.round(e.sh * m);
     const nrGoal = CALC_STATE.edits[`${e.partner}|||${e.city}|||nr`] ?? Math.round(nrBase * m);
-    lines.push(`"${e.partner}","${e.city}","${nextMonth}",${adGoal},${shGoal},${nrGoal}`);
+    const clid = e.clid || _calcLookupClid(e.partner, e.city);
+    lines.push(`"${clid}","${e.partner}","${e.city}","${nextMonth}",${adGoal},${shGoal},${nrGoal}`);
   });
 
   const csv = lines.join("\n");

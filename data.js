@@ -252,6 +252,7 @@ async function loadFromSupabase() {
     STATE._partnerKAM = null;
 
     STATE.rawData = (rend || []).map(r => ({
+      clid:          (r.clid || "").trim(),
       partner:       STATE.CLID_MAP[r.clid] || r.partner,
       kam:           STATE.KAM_MAP[r.clid] || r.kam || "",
       city:          r.city || "",
@@ -297,7 +298,12 @@ async function loadFromSupabase() {
     STATE._semanalData = STATE.rawData;
 
     STATE.parseWarnings.clear();
-    updateIndexes();
+    updateIndexes();          // construye indices secundarios sobre rawData
+    // popSidebarUI > restoreFilters > onKAMChange dispararia un render aqui;
+    // suprimimos para hacer un render unico ordenado abajo.
+    STATE._suppressRestoreRender = true;
+    if (typeof popSidebarUI === "function") popSidebarUI();
+    STATE._suppressRestoreRender = false;
     const warnSuffix = STATE.parseWarnings.size
       ? ` · ⚠ ${STATE.parseWarnings.size} campo(s) inválido(s)` : "";
     showBanner(true, "Datos cargados · " + new Date().toLocaleTimeString("es-PE") + warnSuffix);
@@ -319,6 +325,7 @@ async function loadMensualIfNeeded() {
   try {
     const rendM = await fetchAllPages("rendimiento_mensual", "mes");
     STATE.rawDataMensual = rendM.map(r => ({
+      clid:          (r.clid || "").trim(),
       partner:       STATE.CLID_MAP[r.clid] || r.partner,
       kam:           STATE.KAM_MAP[r.clid]  || r.kam || "",
       city:          r.city || "",
@@ -351,6 +358,7 @@ async function loadDiarioIfNeeded() {
   try {
     const rendD = await fetchAllPages("rendimiento_diario", "date");
     STATE.rawDataDiario = rendD.map(r => ({
+      clid:          (r.clid || "").trim(),
       partner:       STATE.CLID_MAP[r.clid] || r.partner || r.clid,
       kam:           STATE.KAM_MAP[r.clid]  || r.kam || "",
       city:          r.city || "",

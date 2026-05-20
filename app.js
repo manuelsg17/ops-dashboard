@@ -17,6 +17,10 @@ function debounce(fn, ms) {
   return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
 }
 
+// Timers a nivel modulo para que switchTab pueda cancelarlos al salir del tab
+let _pSearchTimer = null;
+let _sidebarResizeTimer = null;
+
 // ── APP INIT ──────────────────────────────────────────────────────────────────
 function initApp() {
   // Restaurar configuración de alerta de declive
@@ -28,8 +32,7 @@ function initApp() {
 
   initFileHandlers();
 
-  // Debounce en búsqueda de partners
-  let _pSearchTimer;
+  // Debounce en búsqueda de partners (timer a nivel modulo para cancelar al cambiar tab)
   document.getElementById("partnerSearch").addEventListener("input", () => {
     clearTimeout(_pSearchTimer);
     _pSearchTimer = setTimeout(filterPList, 300);
@@ -59,9 +62,12 @@ function initApp() {
   const applyBtn = document.querySelector(".apply-btn");
   if (applyBtn) applyBtn.onclick = debounce(applyFilters, 150);
 
-  // Debounce en cambios directos a filtros (sin pasar por el botón)
+  // Debounce en cambios directos a filtros (sin pasar por el botón).
+  // kamFilter NO se incluye: ya tiene su propio handler inline onchange="onKAMChange()"
+  // que es mas completo (actualiza checkboxes ademas de renderizar). Agregarlo aqui
+  // causa DOBLE render: onKAMChange sincrono + applyFilters debounced 250ms despues.
   const _debouncedApply = debounce(applyFilters, 250);
-  ["dateFrom", "dateTo", "cityFilter", "kamFilter"].forEach(id => {
+  ["dateFrom", "dateTo", "cityFilter"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener("change", _debouncedApply);
   });
@@ -100,8 +106,9 @@ function toggleSidebar() {
   const collapsed = sb.classList.toggle("collapsed");
   btn.innerHTML = collapsed ? _SVG_EXPAND : _SVG_COLLAPSE;
   lsSet("yangoSidebarCollapsed", collapsed ? "1" : "0");
-  // Reajustar gráficas ApexCharts al cambiar ancho
-  setTimeout(() => window.dispatchEvent(new Event("resize")), 220);
+  // Reajustar gráficas ApexCharts al cambiar ancho (timer cancelable desde switchTab)
+  clearTimeout(_sidebarResizeTimer);
+  _sidebarResizeTimer = setTimeout(() => window.dispatchEvent(new Event("resize")), 220);
 }
 
 // ── FILTROS EN localStorage ───────────────────────────────────────────────────
@@ -198,14 +205,28 @@ async function switchMode(mode) {
     if (STATE._semanalData) STATE.rawData = STATE._semanalData;
   }
 
+  // CRITICO: updateIndexes() es la de data.js — reconstruye _byDate, _byPartner,
+  // _byCity, _byCityDate, _partnerKAM sobre el NUEVO rawData. Sin esto, los
+  // indices apuntarian a rows del dataset anterior (causa de freeze al filtrar).
   updateIndexes();
+  if (typeof clearAggCache === "function") clearAggCache(); // purgar cache _C
+  // restoreFilters dentro de popSidebarUI puede disparar onKAMChange → render.
+  // Marcamos para evitar el doble render al final de switchMode.
+  STATE._suppressRestoreRender = true;
+  popSidebarUI();
+  STATE._suppressRestoreRender = false;
 
   // Otro yield antes del render pesado para que el browser pinte el spinner
   await new Promise(r => requestAnimationFrame(r));
 
-  if (STATE.curTab === "rend"  && STATE.rawData.length) renderRend();
-  if (STATE.curTab === "metas" && STATE.metasData.length && STATE.rawData.length) renderMetas();
-  if (STATE.curTab === "ops")                            renderOps();
+  // Render unico del tab activo (restoreFilters no rendero por _suppressRestoreRender)
+  if (STATE.curTab === "rend"        && STATE.rawData.length) renderRend();
+  if (STATE.curTab === "metas"       && STATE.metasData.length && STATE.rawData.length) renderMetas();
+  if (STATE.curTab === "ops")                                  renderOps();
+  if (STATE.curTab === "insights"    && STATE.rawData.length) renderInsights();
+  if (STATE.curTab === "unifview"    && STATE.rawData.length) renderUnifView();
+  if (STATE.curTab === "partnerview" && STATE.rawData.length) renderPartnerView();
+  if (STATE.curTab === "calculator"  && STATE.rawData.length) renderCalculator();
 
   showLoad(false);
   _inSwitchMode = false;
@@ -213,64 +234,115 @@ async function switchMode(mode) {
 
 // ── TAB NAVIGATION ────────────────────────────────────────────────────────────
 function switchTab(tab) {
-// Pantalla completa en presentación
-  document.body.classList.toggle("present-mode", tab === "present");
-  // Guardar filtros actuales antes de cambiar
-  STATE.savedFilters = {
-    dateFrom:      document.getElementById("dateFrom")?.value,
-    dateTo:        document.getElementById("dateTo")?.value,
-    city:          document.getElementById("cityFilter")?.value,
-    kam:           document.getElementById("kamFilter")?.value,
-    partnerSearch: document.getElementById("partnerSearch")?.value,
-    selected:      getSel()
-  };
+  const prevTab = STATE.curTab;
 
-  STATE.curTab = tab;
+  // Guard reentrancia: doble-click rapido o nav simultaneo no debe lanzar
+  // dos secuencias destroy+render concurrentes.
+  if (STATE._switchingTab) return;
+  // Si clickearon el mismo tab, ignorar (sin cleanup ni re-render redundante)
+  if (prevTab === tab) return;
+  STATE._switchingTab = true;
 
-  const ANALISIS_TABS = ["rend", "metas", "ops", "proyectos", "unifview", "rawdata"];
-  const navAnalisis = document.getElementById("navAnalisis");
-  if (navAnalisis) navAnalisis.classList.toggle("active", ANALISIS_TABS.includes(tab));
-  document.querySelectorAll(".nav-tab[data-tab]").forEach(btn => {
-    btn.classList.toggle("active", btn.dataset.tab === tab);
-  });
-  document.querySelectorAll(".nav-dd-item").forEach(btn => {
-    btn.classList.toggle("active", btn.dataset.tab === tab);
-  });
-  document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
-  document.getElementById(`tab-${tab}`).classList.add("active");
+  try {
+    // ── 1. Marcar nuevo tab + incrementar token ANTES del blur ──────────────
+    // Asi, cualquier onchange/oninput que dispare el blur vera el nuevo curTab.
+    // El handler guarda su estado (CALC_STATE.edits/kamGoals/etc) pero los
+    // guards de renderCalculator y _calcScheduleRerender abortan, evitando
+    // render sincrono pesado durante la transicion.
+    STATE.curTab = tab;
+    STATE._tabRenderId++;
 
-  // Restaurar filtros guardados
-  if (STATE.savedFilters) {
-    const f = STATE.savedFilters;
-    if (f.dateFrom && document.getElementById("dateFrom"))
-      document.getElementById("dateFrom").value = f.dateFrom;
-    if (f.dateTo && document.getElementById("dateTo"))
-      document.getElementById("dateTo").value = f.dateTo;
-    if (f.city && document.getElementById("cityFilter"))
-      document.getElementById("cityFilter").value = f.city;
-    if (f.kam && document.getElementById("kamFilter"))
-      document.getElementById("kamFilter").value = f.kam;
-    if (f.partnerSearch && document.getElementById("partnerSearch"))
-      document.getElementById("partnerSearch").value = f.partnerSearch;
-    if (f.selected) {
-      document.querySelectorAll("#pList input").forEach(c => {
-        c.checked = f.selected.includes(c.value);
-      });
+    // ── 2. BLUR sincronico del input editado ────────────────────────────────
+    // Fuerza el `onchange`/`oninput` final del input que tenia foco para que
+    // el handler corra y persista su edicion en CALC_STATE antes del cleanup.
+    const ae = document.activeElement;
+    if (ae && ae !== document.body && typeof ae.blur === "function") {
+      try { ae.blur(); } catch(e) {}
     }
-  }
 
-  // Renderizar con datos ya en memoria, sin recargar Supabase
-  if (tab === "rend"      && STATE.rawData.length)                           renderRend();
-  if (tab === "metas"     && STATE.metasData.length && STATE.rawData.length) renderMetas();
-  if (tab === "ops")                                                          renderOps();
-  if (tab === "proyectos")                                                    renderProyectos();
-  if (tab === "unifview")                                                     renderUnifView();
-  if (tab === "rawdata")                                                      renderRawData();
-  if (tab === "config")                                                       renderConfig();
-  if (tab === "present")                                                      renderPresent();
-  if (tab === "insights"    && STATE.rawData.length)                          renderInsights();
-  if (tab === "partnerview" && STATE.rawData.length)                          renderPartnerView();
-  if (tab === "calculator"  && STATE.rawData.length)                          renderCalculator();
+    // ── 3. CLEANUP del tab anterior ─────────────────────────────────────────
+    if (prevTab && prevTab !== tab) {
+      if (prevTab === "calculator"  && typeof calcCancelPendingRender === "function") calcCancelPendingRender();
+      if (prevTab === "partnerview" && typeof _pvDestroyCharts === "function")        _pvDestroyCharts();
+      if (prevTab === "present"     && typeof destroyPresentCharts === "function")    destroyPresentCharts();
+      const apexConsumers = new Set(["rend","metas","ops","insights","unifview"]);
+      if (apexConsumers.has(prevTab) && !apexConsumers.has(tab) && typeof destroyAllCharts === "function") {
+        destroyAllCharts();
+      }
+      // Cancelar timers de sidebar para que no disparen trabajo cross-tab
+      clearTimeout(_pSearchTimer);    _pSearchTimer    = null;
+      clearTimeout(_sidebarResizeTimer); _sidebarResizeTimer = null;
+    }
+
+    // Pantalla completa en presentación
+    document.body.classList.toggle("present-mode", tab === "present");
+    // Guardar filtros actuales antes de cambiar
+    STATE.savedFilters = {
+      dateFrom:      document.getElementById("dateFrom")?.value,
+      dateTo:        document.getElementById("dateTo")?.value,
+      city:          document.getElementById("cityFilter")?.value,
+      kam:           document.getElementById("kamFilter")?.value,
+      partnerSearch: document.getElementById("partnerSearch")?.value,
+      selected:      getSel()
+    };
+
+    const ANALISIS_TABS = ["rend", "metas", "ops", "proyectos", "unifview", "rawdata"];
+    const navAnalisis = document.getElementById("navAnalisis");
+    if (navAnalisis) navAnalisis.classList.toggle("active", ANALISIS_TABS.includes(tab));
+    document.querySelectorAll(".nav-tab[data-tab]").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.tab === tab);
+    });
+    document.querySelectorAll(".nav-dd-item").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.tab === tab);
+    });
+    document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+    document.getElementById(`tab-${tab}`).classList.add("active");
+
+    // Restaurar filtros guardados
+    if (STATE.savedFilters) {
+      const f = STATE.savedFilters;
+      if (f.dateFrom && document.getElementById("dateFrom"))
+        document.getElementById("dateFrom").value = f.dateFrom;
+      if (f.dateTo && document.getElementById("dateTo"))
+        document.getElementById("dateTo").value = f.dateTo;
+      if (f.city && document.getElementById("cityFilter"))
+        document.getElementById("cityFilter").value = f.city;
+      if (f.kam && document.getElementById("kamFilter"))
+        document.getElementById("kamFilter").value = f.kam;
+      if (f.partnerSearch && document.getElementById("partnerSearch"))
+        document.getElementById("partnerSearch").value = f.partnerSearch;
+      if (f.selected) {
+        document.querySelectorAll("#pList input").forEach(c => {
+          c.checked = f.selected.includes(c.value);
+        });
+      }
+    }
+
+    // ── DISPATCH RENDER con DOBLE RAF ───────────────────────────────────────
+    // El browser pinta primero la activacion visual del tab (clase .active,
+    // chips, etc) y SOLO DESPUES corre el render pesado. Resultado: el cambio
+    // de tab se siente instantaneo aunque el render demore 500ms.
+    const tokenAtDispatch = STATE._tabRenderId;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      // Si en los 2 frames intermedios el usuario ya cambio otra vez, abortar.
+      if (STATE._tabRenderId !== tokenAtDispatch) return;
+      if (STATE.curTab !== tab) return;
+
+      if (tab === "rend"        && STATE.rawData.length)                           renderRend();
+      if (tab === "metas"       && STATE.metasData.length && STATE.rawData.length) renderMetas();
+      if (tab === "ops")                                                            renderOps();
+      if (tab === "proyectos")                                                      renderProyectos();
+      if (tab === "unifview")                                                       renderUnifView();
+      if (tab === "rawdata")                                                        renderRawData();
+      if (tab === "config")                                                         renderConfig();
+      if (tab === "present")                                                        renderPresent();
+      if (tab === "insights"    && STATE.rawData.length)                            renderInsights();
+      if (tab === "partnerview" && STATE.rawData.length)                            renderPartnerView();
+      if (tab === "calculator"  && STATE.rawData.length)                            renderCalculator();
+    }));
+  } finally {
+    STATE._switchingTab = false;
+  }
 }
 // ── SIDEBAR: DATES ────────────────────────────────────────────────────────────
 function popDates() {
@@ -422,13 +494,12 @@ function _pItem(p, selSet) {
     </div>`;
 }
 
-function updateIndexes() {
-  STATE.allDates    = [...new Set(STATE.rawData.map(r => r.date))].sort();
-  STATE.allPartners = [...new Set(STATE.rawData.map(r => r.partner))].sort();
-  STATE._apdFull = null;
-  STATE.allPartners.forEach(p => {
-    if (!STATE.partnerColors[p]) STATE.partnerColors[p] = hashColor(p);
-  });
+// ── SIDEBAR UI REFRESH ────────────────────────────────────────────────────────
+// SOLO refresca elementos del sidebar (dates/KAM/partners + restore filtros).
+// La construccion de indices secundarios (_byDate, _byPartner, _byCity,
+// _byCityDate, _partnerKAM) la hace updateIndexes() en data.js — debe llamarse
+// ANTES de popSidebarUI() porque restoreFilters > onKAMChange leen los indices.
+function popSidebarUI() {
   popDates();
   rerenderSidebarPresets();
   popKAM();
@@ -470,11 +541,18 @@ function onKAMChange() {
   // El debounce de applyFilters dispara renders con 250ms de retraso. Forzamos
   // un re-render inmediato del tab activo para que el cambio se vea al instante.
   saveFilters();
-  if (STATE.curTab === "rend"     && STATE.rawData.length)                           renderRend();
-  if (STATE.curTab === "metas"    && STATE.metasData.length && STATE.rawData.length) renderMetas();
-  if (STATE.curTab === "ops"      && STATE.rawData.length)                           renderOps();
-  if (STATE.curTab === "insights" && STATE.rawData.length)                           renderInsights();
-  if (STATE.curTab === "unifview" && STATE.rawData.length)                           renderUnifView();
+  // Si la invocacion viene desde restoreFilters() dentro de switchMode/loadFromSupabase,
+  // suprimimos el render porque el caller orquestara el render final una sola vez.
+  // Evita double-render (ej. switchMode: updateIndexes→popSidebarUI→restoreFilters→onKAMChange
+  // renderizaba ANTES, y luego switchMode renderizaba OTRA VEZ al final).
+  if (STATE._suppressRestoreRender) return;
+  if (STATE.curTab === "rend"        && STATE.rawData.length)                           renderRend();
+  if (STATE.curTab === "metas"       && STATE.metasData.length && STATE.rawData.length) renderMetas();
+  if (STATE.curTab === "ops"         && STATE.rawData.length)                           renderOps();
+  if (STATE.curTab === "insights"    && STATE.rawData.length)                           renderInsights();
+  if (STATE.curTab === "unifview"    && STATE.rawData.length)                           renderUnifView();
+  if (STATE.curTab === "partnerview" && STATE.rawData.length)                           renderPartnerView();
+  if (STATE.curTab === "calculator"  && STATE.rawData.length)                           renderCalculator();
 }
 
 function getSel() {
