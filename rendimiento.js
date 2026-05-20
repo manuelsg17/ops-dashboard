@@ -146,7 +146,7 @@ function renderRend() {
     const col  = KAM_COLORS[kam] || "#888";
     html += `
       <div class="mcard" style="border-left:3px solid ${col}">
-        <div class="mcard-label"><span style="width:8px;height:8px;border-radius:50%;background:${col};display:inline-block"></span> ${kam}</div>
+        <div class="mcard-label"><span style="width:8px;height:8px;border-radius:50%;background:${col};display:inline-block"></span> ${escapeHTML(kam)}</div>
         <div class="mcard-val">${fmt(kAD)}</div>
         <div>${bdgMode(kAD,kpAD)} <span style="font-size:.72rem;color:#aaa;margin-left:5px">Activos</span></div>
         <div class="mcard-breakdown">

@@ -237,12 +237,19 @@ async function loadFromSupabase() {
       STATE.CLID_MAP = {};
       STATE.KAM_MAP  = {};
       partners.forEach(r => {
-        STATE.CLID_MAP[r.clid] = r.partner;
-        STATE.KAM_MAP[r.clid]  = r.kam;
-        if (!KAM_COLORS[r.kam]) KAM_COLORS[r.kam] = hashColor(r.kam);
+        // Trim defensivo: si la BD tiene "Manuel " con espacio, se normaliza al cargar
+        // (evita KAMs duplicados visualmente identicos pero distintos por whitespace)
+        const clidT    = (r.clid    || "").trim();
+        const partnerT = (r.partner || "").trim();
+        const kamT     = (r.kam     || "").trim();
+        STATE.CLID_MAP[clidT] = partnerT;
+        STATE.KAM_MAP[clidT]  = kamT;
+        if (kamT && !KAM_COLORS[kamT]) KAM_COLORS[kamT] = hashColor(kamT);
       });
       rebuildKAMPartners();
     }
+    // Invalidar caches que dependen de KAM_MAP/CLID_MAP tras un CRUD
+    STATE._partnerKAM = null;
 
     STATE.rawData = (rend || []).map(r => ({
       partner:       STATE.CLID_MAP[r.clid] || r.partner,
@@ -754,9 +761,19 @@ function ensureIndexes() {
 
 function getKAMForPartner(partner) {
   if (STATE._partnerKAM?.has(partner)) return STATE._partnerKAM.get(partner);
-  // Fallback: lookup inverso en CLID_MAP/KAM_MAP
-  const clid = Object.keys(STATE.CLID_MAP).find(c => STATE.CLID_MAP[c] === partner);
-  return clid ? (STATE.KAM_MAP[clid] || "") : "";
+  // Lazy-build _partnerKAM si fue invalidado o aun no construido (O(n) una sola vez,
+  // luego O(1) en lookups subsecuentes). Evita el find() lineal en hot paths.
+  if (!STATE._partnerKAM) {
+    STATE._partnerKAM = new Map();
+    Object.entries(STATE.KAM_MAP).forEach(([clid, kam]) => {
+      const p = STATE.CLID_MAP[clid];
+      const kamT = (kam || "").trim();
+      if (p && kamT && !STATE._partnerKAM.has(p)) {
+        STATE._partnerKAM.set(p, kamT);
+      }
+    });
+  }
+  return STATE._partnerKAM.get(partner) || "";
 }
 
 function getFilteredByDateRange(from, to) {

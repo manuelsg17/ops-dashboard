@@ -94,7 +94,9 @@ function rebuildKAMPartners() {
   Object.entries(STATE.KAM_MAP).forEach(([clid, kam]) => {
     const p = STATE.CLID_MAP[clid];
     if (!p) return;
-    if (!STATE.KAM_PARTNERS[kam]) STATE.KAM_PARTNERS[kam] = new Set();
-    STATE.KAM_PARTNERS[kam].add(p);
+    const kamT = (kam || "").trim();
+    if (!kamT) return;  // skip CLIDs sin KAM asignado
+    if (!STATE.KAM_PARTNERS[kamT]) STATE.KAM_PARTNERS[kamT] = new Set();
+    STATE.KAM_PARTNERS[kamT].add(p);
   });
 }

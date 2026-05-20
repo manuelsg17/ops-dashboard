@@ -457,11 +457,22 @@ function deselectAll(){ document.querySelectorAll("#pList input").forEach(c => c
 
 function onKAMChange() {
   const k = document.getElementById("kamFilter").value;
-  if (k === "all") { selectAll(); return; }
-  const ps = STATE.KAM_PARTNERS[k] ? [...STATE.KAM_PARTNERS[k]] : [];
-  document.querySelectorAll("#pList input").forEach(c => {
-    c.checked = ps.includes(c.value);
-  });
+  if (k === "all") {
+    selectAll();
+  } else {
+    const ps = STATE.KAM_PARTNERS[k] ? [...STATE.KAM_PARTNERS[k]] : [];
+    document.querySelectorAll("#pList input").forEach(c => {
+      c.checked = ps.includes(c.value);
+    });
+  }
+  // El debounce de applyFilters dispara renders con 250ms de retraso. Forzamos
+  // un re-render inmediato del tab activo para que el cambio se vea al instante.
+  saveFilters();
+  if (STATE.curTab === "rend"     && STATE.rawData.length)                           renderRend();
+  if (STATE.curTab === "metas"    && STATE.metasData.length && STATE.rawData.length) renderMetas();
+  if (STATE.curTab === "ops"      && STATE.rawData.length)                           renderOps();
+  if (STATE.curTab === "insights" && STATE.rawData.length)                           renderInsights();
+  if (STATE.curTab === "unifview" && STATE.rawData.length)                           renderUnifView();
 }
 
 function getSel() {
@@ -657,26 +668,32 @@ function renderConfig() {
       const kam   = STATE.KAM_MAP[clid] || "";
       const color = KAM_COLORS[kam] || "#888";
       const pdot  = STATE.partnerColors[partner] || "#ccc";
+      // Escapar valores para evitar XSS (CLID con apostrofes/HTML)
+      const clidH    = escapeHTML(clid);
+      const partnerH = escapeHTML(partner);
+      const kamH     = escapeHTML(kam);
+      // Para uso dentro de comillas simples de onclick, escapar apostrofes
+      const clidJS   = clid.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
       html += `
-        <tr data-clid="${clid}">
-          <td style="font-size:.75rem;color:#aaa;font-family:monospace">${clid}</td>
+        <tr data-clid="${clidH}">
+          <td style="font-size:.75rem;color:#aaa;font-family:monospace">${clidH}</td>
           <td>
             <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${pdot};margin-right:5px"></span>
-            ${partner}
+            ${partnerH}
           </td>
           <td>
             <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${color};margin-right:4px"></span>
-            ${kam}
+            ${kamH}
           </td>
           <td style="text-align:center">
-            <button class="crud-btn crud-btn-edit" onclick="kamMakeEditable('${clid}')">Editar</button>
-            <button class="crud-btn crud-btn-del"  onclick="kamCrudDelete('${clid}')">Eliminar</button>
+            <button class="crud-btn crud-btn-edit" onclick="kamMakeEditable('${clidJS}')">Editar</button>
+            <button class="crud-btn crud-btn-del"  onclick="kamCrudDelete('${clidJS}')">Eliminar</button>
           </td>
         </tr>`;
     });
 
   // Fila para agregar nuevo
-  const kamOpts = kams.map(k => `<option value="${k}">${k}</option>`).join("");
+  const kamOpts = kams.map(k => `<option value="${escapeHTML(k)}">${escapeHTML(k)}</option>`).join("");
   html += `
         <tr id="newClidRow" style="background:#f9fffe">
           <td><input class="crud-input" id="newClid"    placeholder="CLID"/></td>
