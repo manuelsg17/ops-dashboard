@@ -1,5 +1,41 @@
 // metas.js — Pestaña Metas
 
+// Ordena meses por valor temporal. Acepta nombres ("MAYO","Mayo","may"),
+// numeros ("5","05"), o fechas ("2026-05","2026-05-11").
+const _METAS_MES_ORDER = {
+  enero:1, ene:1, jan:1, january:1,
+  febrero:2, feb:2, february:2,
+  marzo:3, mar:3, march:3,
+  abril:4, abr:4, apr:4, april:4,
+  mayo:5, may:5,
+  junio:6, jun:6, june:6,
+  julio:7, jul:7, july:7,
+  agosto:8, ago:8, aug:8, august:8,
+  septiembre:9, setiembre:9, sep:9, sept:9, september:9,
+  octubre:10, oct:10, october:10,
+  noviembre:11, nov:11, november:11,
+  diciembre:12, dic:12, dec:12, december:12
+};
+function _metasMesOrden(mes) {
+  if (!mes) return 0;
+  const m = String(mes).trim().toLowerCase();
+  // Formato "YYYY-MM" o "YYYY-MM-DD"
+  const ymMatch = m.match(/^(\d{4})-(\d{1,2})/);
+  if (ymMatch) return parseInt(ymMatch[1]) * 100 + parseInt(ymMatch[2]);
+  // Nombre de mes
+  if (_METAS_MES_ORDER[m]) return 2000 + _METAS_MES_ORDER[m]; // sin año, asumir actual
+  // Numero simple "5" o "05"
+  const n = parseInt(m);
+  if (!isNaN(n) && n >= 1 && n <= 12) return 2000 + n;
+  return 0;
+}
+
+// Handler del selector de mes. Cambia el mes activo y re-renderiza.
+function setMetasMes(mes) {
+  STATE.metasMesSel = mes;
+  if (STATE.curTab === "metas") renderMetas();
+}
+
 function renderMetas() {
   if (!STATE.metasData.length) return;
 
@@ -13,13 +49,23 @@ function renderMetas() {
   const to         = document.getElementById("dateTo").value;
   const selSet     = new Set(sel);
 
+  // Detectar el mes MAS RECIENTE de metasData y limitar el render a ese mes.
+  // Antes: mostraba metasData[0].mes (primer registro = mes mas antiguo) y
+  // sumaba metas de TODOS los meses, inflando %% de cumplimiento.
+  const mesesDisponibles = [...new Set(STATE.metasData.map(m => m.mes))]
+    .filter(Boolean)
+    .sort((a, b) => _metasMesOrden(b) - _metasMesOrden(a));
+  // Permitir override manual via STATE.metasMesSel (selector futuro)
+  const mesName = STATE.metasMesSel && mesesDisponibles.includes(STATE.metasMesSel)
+    ? STATE.metasMesSel
+    : (mesesDisponibles[0] || "");
+
   const metas = STATE.metasData.filter(m => {
+    if (m.mes !== mesName)                        return false;
     if (kamFilter !== "all" && m.kam !== kamFilter) return false;
     if (sel.length && !selSet.has(m.partner))     return false;
     return true;
   });
-
-  const mesName = STATE.metasData[0]?.mes || "";
 
   // Build performance data by partner+city+date (full precision)
   const perfF  = getFilteredByDateRange(from, to);
@@ -177,8 +223,18 @@ function renderMetas() {
   document.getElementById("metasContent").style.display = "";
 
   let html = modeToggleHTML();
-  html += `<div style="display:flex;justify-content:flex-end;margin-bottom:8px">
-    <button class="apply-btn" onclick="downloadMetasPDF()" style="width:auto;padding:7px 16px;font-size:.8rem">⬇ Descargar PDF</button>
+  // Selector de mes (solo se muestra si hay 2+ meses cargados)
+  const mesSelectorHTML = mesesDisponibles.length > 1
+    ? `<div style="display:flex;align-items:center;gap:8px;background:#fff8f8;border:1px solid #fecaca;border-radius:8px;padding:6px 12px">
+         <label style="font-size:.72rem;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Mes:</label>
+         <select onchange="setMetasMes(this.value)" style="border:1px solid #ddd;border-radius:6px;padding:4px 10px;font-size:.82rem;font-weight:600;background:#fff;cursor:pointer">
+           ${mesesDisponibles.map(m => `<option value="${m}" ${m===mesName?"selected":""}>${m}</option>`).join("")}
+         </select>
+       </div>`
+    : "";
+  html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:12px;flex-wrap:wrap">
+    ${mesSelectorHTML}
+    <button class="apply-btn" onclick="downloadMetasPDF()" style="width:auto;padding:7px 16px;font-size:.8rem;margin-left:auto">⬇ Descargar PDF</button>
   </div>`;
 
   // ── 1. Peru Summary ───────────────────────────────────────────────────────
@@ -195,6 +251,7 @@ function renderMetas() {
   CITIES.forEach(city => {
     // Use all metas for this city (ignore cityFilter here to always show all cities)
     const cm = STATE.metasData.filter(m => {
+      if (m.mes !== mesName)                        return false;
       if (kamFilter !== "all" && m.kam !== kamFilter) return false;
       if (sel.length && !selSet.has(m.partner))     return false;
       return m.city === city;
@@ -498,7 +555,13 @@ async function downloadMetasPDF() {
       offsetY += pdfPageH;
       pageNum++;
     }
-    const mes = STATE.metasData[0]?.mes || "metas";
+    // Usar el mismo mes que muestra renderMetas (mas reciente o seleccion manual)
+    const mesesDisp = [...new Set(STATE.metasData.map(m => m.mes))]
+      .filter(Boolean)
+      .sort((a, b) => _metasMesOrden(b) - _metasMesOrden(a));
+    const mes = (STATE.metasMesSel && mesesDisp.includes(STATE.metasMesSel))
+      ? STATE.metasMesSel
+      : (mesesDisp[0] || "metas");
     pdf.save(`Metas_${mes}.pdf`);
   } catch(err) {
     alert("Error al generar PDF: " + err.message);
