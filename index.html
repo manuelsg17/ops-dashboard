@@ -65,13 +65,15 @@
       </svg>
     </button>
     <div class="nav-dropdown-menu" id="analisisMenu">
-      <button class="nav-dd-item active" data-tab="rend"      onclick="switchTabFromMenu('rend')">Rendimiento</button>
-      <button class="nav-dd-item"        data-tab="insights"  onclick="switchTabFromMenu('insights')">💡 Insights</button>
-      <button class="nav-dd-item"        data-tab="metas"     onclick="switchTabFromMenu('metas')">Metas</button>
-      <button class="nav-dd-item"        data-tab="ops"       onclick="switchTabFromMenu('ops')">Operaciones</button>
-      <button class="nav-dd-item"        data-tab="proyectos" onclick="switchTabFromMenu('proyectos')">Proyectos</button>
-      <button class="nav-dd-item"        data-tab="unifview"  onclick="switchTabFromMenu('unifview')">Rend + Metas</button>
-      <button class="nav-dd-item"        data-tab="rawdata"   onclick="switchTabFromMenu('rawdata')">Data Raw</button>
+      <button class="nav-dd-item active" data-tab="rend"        onclick="switchTabFromMenu('rend')">Rendimiento</button>
+      <button class="nav-dd-item"        data-tab="insights"    onclick="switchTabFromMenu('insights')">💡 Insights</button>
+      <button class="nav-dd-item"        data-tab="partnerview" onclick="switchTabFromMenu('partnerview')">📊 Vista Partner</button>
+      <button class="nav-dd-item"        data-tab="calculator"  onclick="switchTabFromMenu('calculator')">🎯 Calculadora</button>
+      <button class="nav-dd-item"        data-tab="metas"       onclick="switchTabFromMenu('metas')">Metas</button>
+      <button class="nav-dd-item"        data-tab="ops"         onclick="switchTabFromMenu('ops')">Operaciones</button>
+      <button class="nav-dd-item"        data-tab="proyectos"   onclick="switchTabFromMenu('proyectos')">Proyectos</button>
+      <button class="nav-dd-item"        data-tab="unifview"    onclick="switchTabFromMenu('unifview')">Rend + Metas</button>
+      <button class="nav-dd-item"        data-tab="rawdata"     onclick="switchTabFromMenu('rawdata')">Data Raw</button>
     </div>
   </div>
   <button class="nav-tab" data-tab="present" onclick="switchTab('present')">Presentación</button>
@@ -230,6 +232,16 @@
         <div id="insightsContent"></div>
       </div>
 
+      <!-- Vista Partner Individual -->
+      <div class="tab-panel" id="tab-partnerview">
+        <div id="partnerViewContent"></div>
+      </div>
+
+      <!-- Calculadora de Metas -->
+      <div class="tab-panel" id="tab-calculator">
+        <div id="calculatorContent"></div>
+      </div>
+
       <!-- Proyectos -->
       <div class="tab-panel" id="tab-proyectos">
         <div id="proyectosContent"></div>
@@ -282,5 +294,7 @@
 <script src="rawdata.js"></script>
 <script src="presentacion.js"></script>
 <script src="insights.js"></script>
+<script src="partnerView.js"></script>
+<script src="calculator.js"></script>
 </body>
 </html>

@@ -268,7 +268,9 @@ function switchTab(tab) {
   if (tab === "rawdata")                                                      renderRawData();
   if (tab === "config")                                                       renderConfig();
   if (tab === "present")                                                      renderPresent();
-  if (tab === "insights"  && STATE.rawData.length)                            renderInsights();
+  if (tab === "insights"    && STATE.rawData.length)                          renderInsights();
+  if (tab === "partnerview" && STATE.rawData.length)                          renderPartnerView();
+  if (tab === "calculator"  && STATE.rawData.length)                          renderCalculator();
 }
 // ── SIDEBAR: DATES ────────────────────────────────────────────────────────────
 function popDates() {
@@ -487,11 +489,13 @@ function applyFilters() {
     [elFrom.value, elTo.value] = [elTo.value, elFrom.value];
   }
   saveFilters();
-  if (STATE.curTab === "rend"     && STATE.rawData.length)                           renderRend();
-  if (STATE.curTab === "metas"    && STATE.metasData.length && STATE.rawData.length) renderMetas();
-  if (STATE.curTab === "unifview" && STATE.rawData.length)                           renderUnifView();
-  if (STATE.curTab === "ops"      && STATE.rawData.length)                           renderOps();
-  if (STATE.curTab === "insights" && STATE.rawData.length)                           renderInsights();
+  if (STATE.curTab === "rend"        && STATE.rawData.length)                           renderRend();
+  if (STATE.curTab === "metas"       && STATE.metasData.length && STATE.rawData.length) renderMetas();
+  if (STATE.curTab === "unifview"    && STATE.rawData.length)                           renderUnifView();
+  if (STATE.curTab === "ops"         && STATE.rawData.length)                           renderOps();
+  if (STATE.curTab === "insights"    && STATE.rawData.length)                           renderInsights();
+  if (STATE.curTab === "partnerview" && STATE.rawData.length)                           renderPartnerView();
+  if (STATE.curTab === "calculator"  && STATE.rawData.length)                           renderCalculator();
 }
 
 function updateDeclineSettings() {
