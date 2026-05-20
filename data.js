@@ -704,10 +704,15 @@ async function uploadRendimiento(rows) {
 async function uploadMetas(rows) {
   const skippedNoCity = [];
   const data = rows.map(row => {
-    const clid    = String(row["CLID"] || row["clid"] || "").trim();
-    const partner = STATE.CLID_MAP[clid]
-      || String(row["Partner"] || row["partner"] || "").trim() || clid;
-    const kam  = STATE.KAM_MAP[clid] || "";
+    const clid       = String(row["CLID"] || row["clid"] || "").trim();
+    // Captura PARTNER en cualquier casing del Excel
+    const partnerXls = String(row["PARTNER"] || row["Partner"] || row["partner"] || "").trim();
+    const partner    = STATE.CLID_MAP[clid] || partnerXls || clid;
+    // KAM: 1) lookup en partners (canonico), 2) columna KAM del Excel, 3) vacio.
+    // Antes solo se usaba (1) -> partners nuevos sin registro en tabla partners
+    // quedaban con kam="" en BD y aparecian como "sin meta asignada" por KAM.
+    const kamXls     = String(row["KAM"] || row["Kam"] || row["kam"] || "").trim();
+    const kam        = STATE.KAM_MAP[clid] || kamXls || "";
     return {
       clid, partner, kam,
       // Mes en UPPERCASE para evitar duplicados "mayo"/"Mayo"/"MAYO" en BD
