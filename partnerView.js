@@ -42,7 +42,8 @@ function _pvSeriesByPartnerCity(partner, city, dates) {
       npPartner: 0, npService: 0, reactivated: 0
     };
     const e = byDate[r.date];
-    e.ad += r.activeDrivers;
+    // AD es snapshot: max entre CLIDs duplicados del mismo partner+ciudad+fecha
+    if ((r.activeDrivers || 0) > e.ad) e.ad = r.activeDrivers || 0;
     e.npPartner   += r.newPartner;
     e.npService   += r.newService;
     e.reactivated += r.reactivated;
@@ -133,7 +134,8 @@ function renderPartnerView() {
         <div>
           <label style="font-size:.68rem;color:#666;font-weight:700;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px">Partner</label>
           <input type="text" id="pvSearch" class="sb-inp" placeholder="Buscar partner..." style="width:200px;margin-bottom:4px"
-            oninput="pvFilterPartners(this.value)"/>
+            oninput="pvFilterPartners(this.value)"
+            onkeydown="if(event.key==='Enter'){const s=document.getElementById('pvPartnerSel');if(s&&s.options.length){pvOnPartnerChange(s.options[0].value)}}"/>
           <select id="pvPartnerSel" class="sb-sel" style="width:220px" onchange="pvOnPartnerChange(this.value)">
             ${partners.map(p => `<option value="${escapeHTML(p)}" ${p===partner?"selected":""}>${escapeHTML(p)}</option>`).join("")}
           </select>
@@ -179,16 +181,32 @@ function renderPartnerView() {
       <!-- Sección por ciudad -->
       ${_secH("🏙️", "#06b6d4", "Detalle por Ciudad", `${citiesOf.length} ciudad${citiesOf.length>1?"es":""} · ${periodLabel}`)}
       <div class="section">
-        ${citiesOf.map(city => _pvCitySection(partner, city, dates, recibeLeads)).join("")}
+        ${citiesOf.map(city => {
+          // Cachear series por ciudad para no recalcular en buildCharts
+          if (!PARTNER_VIEW_STATE._seriesCache) PARTNER_VIEW_STATE._seriesCache = {};
+          const ck = `${partner}|||${city}|||${dates.join(",")}`;
+          if (!PARTNER_VIEW_STATE._seriesCache[ck]) {
+            PARTNER_VIEW_STATE._seriesCache[ck] = _pvSeriesByPartnerCity(partner, city, dates);
+          }
+          return _pvCitySection(partner, city, dates, recibeLeads, PARTNER_VIEW_STATE._seriesCache[ck]);
+        }).join("")}
       </div>
     </div>`;
 
+  // Marca de render unica para evitar race conditions de setTimeout
+  const renderId = (PARTNER_VIEW_STATE._renderId = (PARTNER_VIEW_STATE._renderId || 0) + 1);
   el.innerHTML = html;
 
-  // Construir charts despues de innerHTML (los canvas/divs deben existir)
+  // Construir charts despues de innerHTML. Si llega otro render antes,
+  // el renderId cambia y el setTimeout previo se ignora.
   setTimeout(() => {
-    citiesOf.forEach(city => _pvBuildCityCharts(partner, city, dates, recibeLeads));
-  }, 50);
+    if (renderId !== PARTNER_VIEW_STATE._renderId) return;
+    citiesOf.forEach(city => {
+      const ck = `${partner}|||${city}|||${dates.join(",")}`;
+      const series = PARTNER_VIEW_STATE._seriesCache?.[ck] || _pvSeriesByPartnerCity(partner, city, dates);
+      _pvBuildCityCharts(partner, city, dates, recibeLeads, series);
+    });
+  }, 100);
 }
 
 function _pvKpiCard(label, cur, prev, color, isMoney = false) {
@@ -204,9 +222,9 @@ function _pvKpiCard(label, cur, prev, color, isMoney = false) {
     </div>`;
 }
 
-function _pvCitySection(partner, city, dates, recibeLeads) {
+function _pvCitySection(partner, city, dates, recibeLeads, seriesCached) {
   const cityColor = CITY_COLORS[city] || "#888";
-  const series = _pvSeriesByPartnerCity(partner, city, dates);
+  const series = seriesCached || _pvSeriesByPartnerCity(partner, city, dates);
   // Tendencia: comparar promedio últimos 3 vs anteriores 3 (si hay datos)
   let trendTxt = "—", trendCol = "#888";
   if (series.length >= 6) {
@@ -241,10 +259,10 @@ function _pvCitySection(partner, city, dates, recibeLeads) {
     </div>`;
 }
 
-function _pvBuildCityCharts(partner, city, dates, recibeLeads) {
+function _pvBuildCityCharts(partner, city, dates, recibeLeads, seriesCached) {
   const id = city.toLowerCase().replace(/[^a-z0-9]/g, "");
   const cityColor = CITY_COLORS[city] || "#888";
-  const series = _pvSeriesByPartnerCity(partner, city, dates);
+  const series = seriesCached || _pvSeriesByPartnerCity(partner, city, dates);
   const labels = dates.map(d2s);
 
   // Chart 1: AD (línea simple)

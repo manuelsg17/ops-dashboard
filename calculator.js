@@ -81,6 +81,20 @@ function renderCalculator() {
     return;
   }
 
+  // Validar formato YYYY-MM en las dates. Si no, no es data mensual valida.
+  const hasMonthFormat = rows.some(r => /^\d{4}-\d{2}$/.test(r.date || ""));
+  if (!hasMonthFormat) {
+    el.innerHTML = `
+      <div class="empty">
+        <p>La calculadora requiere datos en formato <strong>mensual</strong> (YYYY-MM).</p>
+        <p style="font-size:.75rem;color:#888;margin-top:4px">
+          El dataset actual está en escala <strong>${STATE.curMode}</strong>.
+          Cambia a <strong>Mensual</strong> en el sidebar, o sube datos mensuales desde Configuración.
+        </p>
+      </div>`;
+    return;
+  }
+
   const allKAMs = [...new Set(Object.values(STATE.KAM_MAP).map(k => (k||"").trim()).filter(Boolean))].sort();
 
   // Filtrar por KAM (si CALC_STATE.kam !== "all")
@@ -91,9 +105,17 @@ function renderCalculator() {
         return k === CALC_STATE.kam;
       });
 
-  // Últimos 3 meses
-  const last3 = _calcLastNMonths(rows, 3);
-  const last1 = _calcLastNMonths(rows, 1);
+  // Bug #6+7: cachear meses y aggregaciones (1 sola pasada por dataset)
+  const allMonths = [...new Set(rows.map(r => r.date))].sort();
+  const last3 = allMonths.slice(-3);
+  const last1 = allMonths.slice(-1);
+  const last3Set = new Set(last3);
+  const last1Set = new Set(last1);
+
+  // Aggregaciones cacheadas para esta render
+  const aggLast3 = _calcAggByPartnerCity(filteredRows, last3Set);
+  const aggLast1 = _calcAggByPartnerCity(filteredRows, last1Set);
+  const aggAllLast3 = _calcAggByPartnerCity(rows, last3Set);  // sin filtro KAM para totales de ciudad
 
   let html = `
     <div style="padding:0 8px 16px">
@@ -116,20 +138,18 @@ function renderCalculator() {
         </div>
       </div>
 
-      ${_calcSec1_promedio3m(filteredRows, last3)}
-      ${_calcSec2_pctCiudad(rows, last3)}
-      ${_calcSec3_generador(filteredRows, last1)}
-      ${_calcSec4_validacionKAM(filteredRows, last1)}
-      ${_calcSec5_exportPartner(filteredRows, last1)}
+      ${_calcSec1_promedio3m(aggLast3, last3)}
+      ${_calcSec2_pctCiudad(aggAllLast3, last3)}
+      ${_calcSec3_generador(aggLast1, last1)}
+      ${_calcSec4_validacionKAM(aggLast1, last1)}
+      ${_calcSec5_exportPartner(aggLast1, last1)}
     </div>`;
 
   el.innerHTML = html;
 }
 
 // ── SECCION 1: Promedio 3 últimos meses ───────────────────────────────────────
-function _calcSec1_promedio3m(rows, months) {
-  const monthsSet = new Set(months);
-  const agg = _calcAggByPartnerCity(rows, monthsSet);
+function _calcSec1_promedio3m(agg, months) {
   const n = months.length || 1;
 
   // Sort partners by partner+city
@@ -191,10 +211,7 @@ function _calcSec1_promedio3m(rows, months) {
 }
 
 // ── SECCION 2: % Representación vs Ciudad (heatmap) ───────────────────────────
-function _calcSec2_pctCiudad(allRows, months) {
-  const monthsSet = new Set(months);
-  // Agregamos TODOS los partners (no filtramos por KAM) para calcular totales de ciudad
-  const aggAll = _calcAggByPartnerCity(allRows, monthsSet);
+function _calcSec2_pctCiudad(aggAll, months) {
 
   // Total por ciudad por métrica
   const cityTotals = {};
@@ -268,9 +285,7 @@ function _calcSec2_pctCiudad(allRows, months) {
 }
 
 // ── SECCION 3: Generador de Metas ─────────────────────────────────────────────
-function _calcSec3_generador(rows, months) {
-  const monthsSet = new Set(months);
-  const agg = _calcAggByPartnerCity(rows, monthsSet);
+function _calcSec3_generador(agg, months) {
   const m = CALC_STATE.multiplier || 1.1;
 
   const items = [...agg.values()].sort((a, b) =>
@@ -288,7 +303,7 @@ function _calcSec3_generador(rows, months) {
     const val = _calcGoal(partner, city, metric, base);
     return `<input type="number" step="1" min="0" class="calc-inp" value="${val}"
       data-pk="${escapeHTML(partner)}" data-city="${escapeHTML(city)}" data-metric="${metric}"
-      oninput="calcOnGoalEdit(this)"
+      onchange="calcOnGoalEdit(this)"
       style="width:90px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;font-size:.74rem;text-align:right"/>`;
   }
 
@@ -331,15 +346,12 @@ function _calcSec3_generador(rows, months) {
 }
 
 // ── SECCION 4: Validación contra meta KAM ─────────────────────────────────────
-function _calcSec4_validacionKAM(rows, months) {
+function _calcSec4_validacionKAM(agg, months) {
   if (CALC_STATE.kam === "all") {
     return `
       ${_secH("🎯", "#FF0000", "4. Validación contra meta KAM", "Selecciona un KAM arriba para validar contra sus metas")}
       <div class="section"><div style="font-size:.78rem;color:#aaa;padding:8px 0">⚠️ Filtra por un KAM específico arriba para usar esta sección.</div></div>`;
   }
-
-  const monthsSet = new Set(months);
-  const agg = _calcAggByPartnerCity(rows, monthsSet);
   const m = CALC_STATE.multiplier || 1.1;
 
   // Suma de las metas propuestas (usa edits o base * m)
@@ -430,13 +442,18 @@ function _kamGoalInput(metric, label, weight, val) {
 }
 
 // ── SECCION 5: Vista exportable por partner ──────────────────────────────────
-function _calcSec5_exportPartner(rows, months) {
-  const monthsSet = new Set(months);
-  const agg = _calcAggByPartnerCity(rows, monthsSet);
+function _calcSec5_exportPartner(agg, months) {
   const partners = [...new Set([...agg.values()].map(e => e.partner))].sort();
-  if (!partners.length) return "";
-
-  const sel = CALC_STATE.selPartnerExport || partners[0];
+  if (!partners.length) {
+    return `
+      ${_secH("📤", "#10b981", "5. Vista exportable por partner", "Sin partners en este filtro")}
+      <div class="section"><div style="font-size:.78rem;color:#aaa;padding:8px 0">No hay partners en el KAM seleccionado con datos en el último mes.</div></div>`;
+  }
+  // Bug #5: validar que selPartnerExport esté en partners filtrados.
+  // Si el partner antiguo no existe en el nuevo KAM, fallback al primero.
+  const sel = (CALC_STATE.selPartnerExport && partners.includes(CALC_STATE.selPartnerExport))
+    ? CALC_STATE.selPartnerExport
+    : partners[0];
   CALC_STATE.selPartnerExport = sel;
 
   const partnerItems = [...agg.values()].filter(e => e.partner === sel);
