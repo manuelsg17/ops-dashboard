@@ -593,7 +593,13 @@ async function handleFile(file, type) {
           ? sheetNames.indexOf("METAS") : 0];
       }
 
-      const json = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { raw: false, defval: "" });
+      // raw:true para metas/partners: conserva precision de CLID (12 digitos).
+      // Con raw:false Excel a veces formatea CLIDs largos en notacion cientifica
+      // ("4.00005E+11") perdiendo digitos -> CLID degradado en BD.
+      // Para rendimiento mantenemos raw:false por compatibilidad con formatos de fecha.
+      const useRaw = type === "data" || type === "metas";
+      const json = XLSX.utils.sheet_to_json(wb.Sheets[sheetName],
+        { raw: useRaw, defval: "" });
 
       if      (type === "data")               await uploadPartners(json);
       else if (type === "rendimiento")       await uploadRendimiento(json);
@@ -700,19 +706,36 @@ async function uploadRendimiento(rows) {
     if (error) throw error;
   }
 }
+// Normaliza un valor de CLID a string entero. Maneja: number (raw),
+// string entero, string con decimal trailing, string en notacion cientifica.
+// Si detecta cientifica devuelve null (CLID degradado, no usable).
+function _clidStr(v) {
+  if (v == null || v === "") return "";
+  if (typeof v === "number") {
+    if (!Number.isFinite(v)) return "";
+    return String(Math.trunc(v));
+  }
+  const s = String(v).trim();
+  if (/^-?\d+$/.test(s)) return s;
+  if (/^-?\d+\.\d+$/.test(s)) return s.split(".")[0];
+  if (/^-?\d+(\.\d+)?[eE][+-]?\d+$/.test(s)) return null; // degradado
+  return s;
+}
+
 // ── UPLOAD METAS ──────────────────────────────────────────────────────────────
 async function uploadMetas(rows) {
   const skippedNoCity = [];
+  const skippedBadClid = [];
   const data = rows.map(row => {
-    const clid       = String(row["CLID"] || row["clid"] || "").trim();
+    const clid       = _clidStr(row["CLID"] || row["clid"] || "");
     // Captura PARTNER en cualquier casing del Excel
     const partnerXls = String(row["PARTNER"] || row["Partner"] || row["partner"] || "").trim();
-    const partner    = STATE.CLID_MAP[clid] || partnerXls || clid;
+    const partner    = (clid && STATE.CLID_MAP[clid]) || partnerXls || clid || "";
     // KAM: 1) lookup en partners (canonico), 2) columna KAM del Excel, 3) vacio.
     // Antes solo se usaba (1) -> partners nuevos sin registro en tabla partners
     // quedaban con kam="" en BD y aparecian como "sin meta asignada" por KAM.
     const kamXls     = String(row["KAM"] || row["Kam"] || row["kam"] || "").trim();
-    const kam        = STATE.KAM_MAP[clid] || kamXls || "";
+    const kam        = (clid && STATE.KAM_MAP[clid]) || kamXls || "";
     return {
       clid, partner, kam,
       // Mes en UPPERCASE para evitar duplicados "mayo"/"Mayo"/"MAYO" en BD
@@ -723,15 +746,27 @@ async function uploadMetas(rows) {
       meta_supply_hours:   toN(row["SUPPLY HOURS"] || row["Supply Hours"] || 0)
     };
   }).filter(r => {
+    if (r.clid === null) {
+      // CLID en notacion cientifica -> degradado, no recuperable
+      skippedBadClid.push({ row: r });
+      return false;
+    }
     if (!r.partner || !r.mes) return false;
+    if (!r.clid) return false;
     if (!r.city) {
-      // Fila sin ciudad: no se puede deduplicar correctamente. Descartar.
       skippedNoCity.push({ partner: r.partner, clid: r.clid, mes: r.mes });
       return false;
     }
     return true;
   });
 
+  if (skippedBadClid.length) {
+    showBanner(false,
+      `${skippedBadClid.length} fila(s) con CLID en notacion cientifica DESCARTADAS. ` +
+      `Formatea la columna CLID como TEXTO en el Excel y resube.`
+    );
+    console.error("uploadMetas: CLIDs degradados:", skippedBadClid);
+  }
   if (skippedNoCity.length) {
     const sample = skippedNoCity.slice(0, 3).map(s => `${s.partner}·${s.mes}`).join("  |  ");
     showBanner(false,
