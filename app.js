@@ -14,12 +14,19 @@ function lsGet(key) {
 // ── DEBOUNCE ──────────────────────────────────────────────────────────────────
 function debounce(fn, ms) {
   let t;
-  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  const wrapped = (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  wrapped.cancel = () => { clearTimeout(t); t = null; };
+  return wrapped;
 }
 
 // Timers a nivel modulo para que switchTab pueda cancelarlos al salir del tab
 let _pSearchTimer = null;
 let _sidebarResizeTimer = null;
+// Debounce de applyFilters expuesto a nivel modulo (se inicializa en initApp).
+// setDatePreset() lo cancela antes de llamar applyFilters() directo para no
+// solapar dos renders.
+let _debouncedApply       = null;
+function _debouncedApplyCancel() { if (_debouncedApply && _debouncedApply.cancel) _debouncedApply.cancel(); }
 
 // ── APP INIT ──────────────────────────────────────────────────────────────────
 function initApp() {
@@ -66,7 +73,7 @@ function initApp() {
   // kamFilter NO se incluye: ya tiene su propio handler inline onchange="onKAMChange()"
   // que es mas completo (actualiza checkboxes ademas de renderizar). Agregarlo aqui
   // causa DOBLE render: onKAMChange sincrono + applyFilters debounced 250ms despues.
-  const _debouncedApply = debounce(applyFilters, 250);
+  _debouncedApply = debounce(applyFilters, 250);
   ["dateFrom", "dateTo", "cityFilter"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener("change", _debouncedApply);
@@ -415,6 +422,9 @@ function setDatePreset(type) {
   const elTo   = document.getElementById("dateTo");
   if (elFrom) elFrom.value = from;
   if (elTo)   elTo.value   = to;
+  // Cancelar cualquier debounce de applyFilters pendiente del listener change
+  // de dateFrom/dateTo (250ms) para evitar doble render solapado.
+  if (typeof _debouncedApplyCancel === "function") _debouncedApplyCancel();
   applyFilters();
 }
 

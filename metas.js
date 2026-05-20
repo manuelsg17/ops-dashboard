@@ -31,7 +31,14 @@ function _metasMesOrden(mes) {
 }
 
 // Handler del selector de mes. Cambia el mes activo y re-renderiza.
+// Valida contra los meses realmente disponibles en STATE.metasData.
 function setMetasMes(mes) {
+  const disp = [...new Set(STATE.metasData.map(m => (m.mes || "").trim()))]
+    .filter(Boolean);
+  if (!disp.includes(mes)) {
+    console.warn("setMetasMes: mes no disponible", mes, "disp:", disp);
+    return;
+  }
   STATE.metasMesSel = mes;
   if (STATE.curTab === "metas") renderMetas();
 }
@@ -238,8 +245,17 @@ function renderMetas() {
   </div>`;
 
   // ── 1. Peru Summary ───────────────────────────────────────────────────────
+  // Contador de partners en perf SIN meta asignada (sus fact suma al total
+  // pero no tienen plan -> %% pueden verse altos sin contexto).
+  const noMetaCount = combos.filter(c => c.noMeta).length;
+  const noMetaBanner = noMetaCount > 0
+    ? `<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:6px 10px;margin:0 0 8px;font-size:.72rem;color:#9a3412">
+         ⚠️ <strong>${noMetaCount}</strong> partner${noMetaCount>1?"s":""} con performance pero <strong>sin meta asignada</strong> en ${escapeHTML(mesName)}.
+         Su FACT suma al total pero el % de cumplimiento puede verse alto.
+       </div>`
+    : "";
   html += secH("🎯","#8b5cf6","Cumplimiento de Metas - "+mesName,"Progreso actual vs meta del mes","Peru");
-  html += `<div class="section"><div class="metric-row">
+  html += `<div class="section">${noMetaBanner}<div class="metric-row">
     ${metaResCard(METRICS.ad.label, "máx semana",     tAD, tMA,  tPAD, "#8b5cf6")}
     ${metaResCard(METRICS.nr.label, "acumulado mes",  tNR, tMNR, tPNR, "#f97316")}
     ${metaResCard(METRICS.sh.label, "acumulado mes",  tSH, tMH,  tPSH, "#06b6d4")}

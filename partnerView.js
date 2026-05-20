@@ -65,6 +65,9 @@ function renderPartnerView() {
   if (!el) return;
   ensureIndexes();
   _pvDestroyCharts();
+  // Reset _seriesCache: la siguiente seccion lo repuebla solo para el render
+  // actual. Evita acumulacion sin limite si el usuario navega muchos partners.
+  PARTNER_VIEW_STATE._seriesCache = {};
 
   if (!STATE.rawData.length) {
     el.innerHTML = `<div class="empty"><p>Carga datos de <strong>Rendimiento</strong> para usar Vista Partner.</p></div>`;
