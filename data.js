@@ -274,8 +274,11 @@ async function loadFromSupabase() {
     STATE.metasData = (metas || []).map(m => ({
       partner: STATE.CLID_MAP[m.clid] || m.partner,
       kam:     STATE.KAM_MAP[m.clid] || m.kam || "",
-      city:    m.city || "",
-      mes:     m.mes,
+      city:    (m.city || "").trim(),
+      // Normalizar mes a UPPERCASE en cliente: la BD tiene mezcla de "mayo",
+      // "Mayo", "MAYO" por uploads viejos. Sin esto, m.mes !== mesName falla
+      // por casing y los %% de cumplimiento salen inflados/incompletos.
+      mes:     (m.mes || "").trim().toUpperCase(),
       mA:      +m.meta_active_drivers,
       mNR:     +m.meta_nr,
       mH:      +m.meta_supply_hours
@@ -699,6 +702,7 @@ async function uploadRendimiento(rows) {
 }
 // ── UPLOAD METAS ──────────────────────────────────────────────────────────────
 async function uploadMetas(rows) {
+  const skippedNoCity = [];
   const data = rows.map(row => {
     const clid    = String(row["CLID"] || row["clid"] || "").trim();
     const partner = STATE.CLID_MAP[clid]
@@ -706,13 +710,31 @@ async function uploadMetas(rows) {
     const kam  = STATE.KAM_MAP[clid] || "";
     return {
       clid, partner, kam,
-      mes:  String(row["MES"]    || row["Mes"]    || "").trim(),
+      // Mes en UPPERCASE para evitar duplicados "mayo"/"Mayo"/"MAYO" en BD
+      mes:  String(row["MES"]    || row["Mes"]    || "").trim().toUpperCase(),
       city: String(row["CIUDAD"] || row["Ciudad"] || "").trim(),
       meta_active_drivers: toN(row["ACTIVE DRIVERS"] || row["Active Drivers"] || 0),
       meta_nr:             toN(row["N+R"] || row["n+r"] || 0),
       meta_supply_hours:   toN(row["SUPPLY HOURS"] || row["Supply Hours"] || 0)
     };
-  }).filter(r => r.partner && r.mes);
+  }).filter(r => {
+    if (!r.partner || !r.mes) return false;
+    if (!r.city) {
+      // Fila sin ciudad: no se puede deduplicar correctamente. Descartar.
+      skippedNoCity.push({ partner: r.partner, clid: r.clid, mes: r.mes });
+      return false;
+    }
+    return true;
+  });
+
+  if (skippedNoCity.length) {
+    const sample = skippedNoCity.slice(0, 3).map(s => `${s.partner}·${s.mes}`).join("  |  ");
+    showBanner(false,
+      `Aviso: ${skippedNoCity.length} fila(s) sin CIUDAD ignorada(s). Ej: ${sample}` +
+      (skippedNoCity.length > 3 ? "  (ver consola)" : "")
+    );
+    console.warn("uploadMetas: filas sin city descartadas:", skippedNoCity);
+  }
 
   // Dedupe por (clid, city, mes): mantener la ULTIMA ocurrencia. Postgres falla
   // con "ON CONFLICT DO UPDATE command cannot affect row a second time" si el
