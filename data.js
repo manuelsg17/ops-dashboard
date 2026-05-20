@@ -714,9 +714,44 @@ async function uploadMetas(rows) {
     };
   }).filter(r => r.partner && r.mes);
 
+  // Dedupe por (clid, city, mes): mantener la ULTIMA ocurrencia. Postgres falla
+  // con "ON CONFLICT DO UPDATE command cannot affect row a second time" si el
+  // batch envia 2+ rows que mapean al mismo registro destino (sea por duplicado
+  // exacto en el Excel o por constraint UNIQUE en la BD que no incluye `city`).
+  const seen     = new Map();   // key -> { row, originalIdx }
+  const dupKeys  = [];
+  data.forEach((r, idx) => {
+    const key = `${r.clid}|||${r.city}|||${r.mes}`;
+    if (seen.has(key)) dupKeys.push({ key, partner: r.partner, city: r.city, mes: r.mes });
+    seen.set(key, r);   // ultima gana
+  });
+  const deduped = [...seen.values()];
+
+  if (dupKeys.length) {
+    const sample = dupKeys.slice(0, 3)
+      .map(d => `${d.partner}·${d.city}·${d.mes}`).join("  |  ");
+    showBanner(false,
+      `Aviso: ${dupKeys.length} fila(s) duplicada(s) consolidada(s). Ej: ${sample}` +
+      (dupKeys.length > 3 ? "  (ver consola para lista completa)" : "")
+    );
+    console.warn("uploadMetas: duplicados consolidados:", dupKeys);
+  }
+
   const { error } = await sb.from("metas")
-    .upsert(data, { onConflict: "clid,city,mes" });
-  if (error) throw error;
+    .upsert(deduped, { onConflict: "clid,city,mes" });
+  if (error) {
+    // Si el constraint en BD es solo (clid,mes) sin city, el error de Postgres
+    // sera "cannot affect row a second time". Damos un mensaje accionable.
+    if ((error.message || "").includes("affect row a second time")) {
+      throw new Error(
+        "El UNIQUE constraint de la tabla `metas` no incluye `city`. " +
+        "Ejecuta en Supabase SQL:\n" +
+        "  ALTER TABLE metas DROP CONSTRAINT IF EXISTS metas_clid_mes_key;\n" +
+        "  ALTER TABLE metas ADD CONSTRAINT metas_clid_city_mes_key UNIQUE (clid, city, mes);"
+      );
+    }
+    throw error;
+  }
 }
 
 // ── UPDATE STATE INDEXES ──────────────────────────────────────────────────────
