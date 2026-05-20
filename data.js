@@ -161,13 +161,17 @@ function calcProjectionDays(lastDate) {
 function projA(vals, daysElapsed, daysRemaining) {
   const v = vals.filter(x => x > 0);
   if (!v.length) return 0;
-  const total      = v.reduce((s, x) => s + x, 0);
+  const total = v.reduce((s, x) => s + x, 0);
   if (STATE.curMode === "mensual" || daysRemaining === 0) return total;
-  const last3      = v.slice(-3);
-  const periodRate = last3.reduce((s, x) => s + x, 0) / last3.length;
-  // Diario: cada período = 1 día; Semanal: cada período = 7 días
-  const dailyRate  = periodRate / (STATE.curMode === "diario" ? 1 : 7);
-  return total + dailyRate * daysRemaining;
+  // Proyeccion lineal:
+  //   proyeccion = (total acumulado * daysInMonth) / daysElapsed
+  // Interpretacion: "si en daysElapsed dias del mes acumule `total`,
+  // al ritmo actual acumulare `total * daysInMonth/daysElapsed` al cierre".
+  // Mas robusto que promediar las ultimas 3 semanas porque depende del avance
+  // real del mes, no del numero de filas en el rango.
+  if (daysElapsed <= 0) return total;
+  const daysInMonth = daysElapsed + daysRemaining;
+  return (total * daysInMonth) / daysElapsed;
 }
 
 function sumR(rows, fn) { return rows.reduce((s, r) => s + fn(r), 0); }
