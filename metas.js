@@ -184,9 +184,9 @@ function renderMetas() {
   // ── 1. Peru Summary ───────────────────────────────────────────────────────
   html += secH("🎯","#8b5cf6","Cumplimiento de Metas - "+mesName,"Progreso actual vs meta del mes","Peru");
   html += `<div class="section"><div class="metric-row">
-    ${metaResCard("Conductores Activos","máx semana",  tAD, tMA, tPAD, "#8b5cf6")}
-    ${metaResCard("Nuevos + Reactivados","acumulado mes", tNR, tMNR, tPNR, "#f97316")}
-    ${metaResCard("Horas de Conexión","acumulado mes",  tSH, tMH,  tPSH, "#06b6d4")}
+    ${metaResCard(METRICS.ad.label, "máx semana",     tAD, tMA,  tPAD, "#8b5cf6")}
+    ${metaResCard(METRICS.nr.label, "acumulado mes",  tNR, tMNR, tPNR, "#f97316")}
+    ${metaResCard(METRICS.sh.label, "acumulado mes",  tSH, tMH,  tPSH, "#06b6d4")}
   </div></div>`;
 
   // ── 2. Por Ciudad ─────────────────────────────────────────────────────────

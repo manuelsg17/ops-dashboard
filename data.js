@@ -7,6 +7,18 @@ function hashColor(s) {
   return `hsl(${Math.abs(h) % 360},62%,46%)`;
 }
 
+// Escapa caracteres HTML peligrosos en strings de input (partner names, tooltips, etc.).
+// Usar SIEMPRE al interpolar valores no controlados en HTML.
+function escapeHTML(s) {
+  if (s === null || s === undefined) return "";
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 // Full-precision number parser — never rounds internally.
 // Maneja formato ES ("1.234,56") y US ("1,234.56"). Si solo hay un tipo
 // de separador, decide por la cantidad de digitos despues del ultimo:
@@ -83,7 +95,7 @@ function bdg(c, p, cls = "mcard-badge") {
   const v = ((c - p) / p) * 100;
   const s = v >= 0 ? "+" : "";
   const a = v >= 0 ? "↑" : "↓";
-  const tooltip = `Actual: ${fmt(c)} vs ${compLabel}: ${fmt(p)} → ${s}${v.toFixed(1)}%`;
+  const tooltip = escapeHTML(`Actual: ${fmt(c)} vs ${compLabel}: ${fmt(p)} → ${s}${v.toFixed(1)}%`);
   return `<span class="${cls} ${v >= 0 ? "b-pos" : "b-neg"}" title="${tooltip}">${a}${s}${v.toFixed(1)}%</span>`;
 }
 

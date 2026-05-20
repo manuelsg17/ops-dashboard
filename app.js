@@ -479,6 +479,8 @@ function applyFilters() {
   if (STATE.curTab === "rend"     && STATE.rawData.length)                           renderRend();
   if (STATE.curTab === "metas"    && STATE.metasData.length && STATE.rawData.length) renderMetas();
   if (STATE.curTab === "unifview" && STATE.rawData.length)                           renderUnifView();
+  if (STATE.curTab === "ops"      && STATE.rawData.length)                           renderOps();
+  if (STATE.curTab === "insights" && STATE.rawData.length)                           renderInsights();
 }
 
 function updateDeclineSettings() {
