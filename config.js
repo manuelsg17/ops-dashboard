@@ -98,24 +98,25 @@ const STATE = {
 };
 function rebuildKAMPartners() {
   STATE.KAM_PARTNERS = {};
-  // 1) Base: lo que dice la tabla `partners` (KAM_MAP)
+  // FUENTE DE VERDAD: tabla `partners` (CLID_MAP + KAM_MAP). Lo que el equipo
+  // configuro alli manda. `flotas` solo aporta cuando el CLID NO esta en partners.
   Object.entries(STATE.KAM_MAP).forEach(([clid, kam]) => {
     const p = STATE.CLID_MAP[clid];
     if (!p) return;
-    // Si el CLID tiene override en flotas, usar el nombre asignado en su lugar
-    const f  = STATE.flotasMap && STATE.flotasMap[clid];
-    const pN = (f && f.nombre_asignado) ? f.nombre_asignado : p;
-    // KAM efectivo: override de flotas tiene prioridad sobre KAM_MAP
-    const kamEff = (f && f.kam) ? f.kam : kam;
-    const kamT = (kamEff || "").trim();
+    // Excluir si la flota tiene activo=false
+    const f = STATE.flotasMap && STATE.flotasMap[clid];
+    if (f && f.activo === false) return;
+    const kamT = (kam || "").trim();
     if (!kamT) return;
     if (!STATE.KAM_PARTNERS[kamT]) STATE.KAM_PARTNERS[kamT] = new Set();
-    STATE.KAM_PARTNERS[kamT].add(pN);
+    STATE.KAM_PARTNERS[kamT].add(p);
   });
-  // 2) Tambien agregar partners que aparecen en flotas pero no en KAM_MAP
+  // Fallback: agregar partners que estan en flotas pero NO en partners
   if (STATE.flotasMap) {
-    Object.values(STATE.flotasMap).forEach(f => {
+    Object.entries(STATE.flotasMap).forEach(([clid, f]) => {
       if (!f || !f.kam || !f.nombre_asignado) return;
+      if (f.activo === false) return;
+      if (STATE.CLID_MAP && STATE.CLID_MAP[clid]) return;  // ya cubierto por partners
       if (!STATE.KAM_PARTNERS[f.kam]) STATE.KAM_PARTNERS[f.kam] = new Set();
       STATE.KAM_PARTNERS[f.kam].add(f.nombre_asignado);
     });

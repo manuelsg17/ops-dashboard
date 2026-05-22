@@ -20,10 +20,15 @@ function cityLabel(c) {
 }
 
 // Aplica el mapeo de flotas (STATE.flotasMap) a un array de rows con `clid`.
-// - Sobreescribe `partner` con nombre_asignado (guarda original en _partnerOriginal)
-// - Sobreescribe `kam`  con el de la flota (si tiene)
-// - Filtra rows cuya flota tiene activo=false
-// Llamar despues de cualquier carga/upload que toque rawData, metas, mensual o diario.
+//
+// CONTRATO (importante):
+// - La tabla `partners` (Configuracion) es la FUENTE DE VERDAD para nombre y KAM.
+// - La tabla `flotas` solo se usa para:
+//     1) Excluir CLIDs del dashboard (activo=false)
+//     2) Fallback de nombre/KAM SOLO si el CLID no esta configurado en `partners`
+// Si un CLID esta en partners, su nombre y KAM vienen de alli y `flotas` no
+// los puede sobrescribir. Esto evita que el upload de un Excel de Flotas pise
+// la configuracion manual del equipo.
 function applyFlotasOverride(rows) {
   const map = STATE && STATE.flotasMap;
   if (!map || !Object.keys(map).length) return rows;
@@ -31,11 +36,15 @@ function applyFlotasOverride(rows) {
     const f = map[r.clid];
     if (f && f.activo === false) return acc;   // flota inactiva → excluir
     if (f) {
-      if (f.nombre_asignado) {
+      // Nombre: solo fallback si el CLID NO esta en CLID_MAP (partners)
+      const enPartners = !!(STATE.CLID_MAP && STATE.CLID_MAP[r.clid]);
+      if (f.nombre_asignado && !enPartners) {
         if (!r._partnerOriginal) r._partnerOriginal = r.partner;
         r.partner = f.nombre_asignado;
       }
-      if (f.kam) r.kam = f.kam;
+      // KAM: solo fallback si el CLID NO tiene KAM en KAM_MAP (partners)
+      const kamConfig = (STATE.KAM_MAP && STATE.KAM_MAP[r.clid] || "").trim();
+      if (f.kam && !kamConfig) r.kam = f.kam;
     }
     acc.push(r);
     return acc;
