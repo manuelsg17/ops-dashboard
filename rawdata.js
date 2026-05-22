@@ -9,13 +9,20 @@ const RAW_STATE = {
   dateTo:     "",
   showBanned: true,    // true = incluir flotas excluidas del dashboard
   sortCol:    "date",
-  sortDir:    "asc"
+  sortDir:    "asc",
+  view:       "data"   // "data" = registros de rendimiento, "flotas" = mapeo CLID→flota
 };
 
 // ── ENTRY POINT ───────────────────────────────────────────────────────────────
 function renderRawData() {
   const content = document.getElementById("rawdataContent");
   if (!content) return;
+
+  // Si la vista es "flotas", renderizamos un panel distinto
+  if (RAW_STATE.view === "flotas") {
+    content.innerHTML = _renderFlotasView();
+    return;
+  }
 
   const src = STATE.curMode === "mensual" ? STATE.rawDataMensualFull
             : STATE.curMode === "diario"  ? STATE.rawDataDiarioFull
@@ -104,6 +111,9 @@ function renderRawData() {
   // ── Build HTML ───────────────────────────────────────────────────────────
   let html = secH("🗂️", "#6366f1", "Data Raw",
     `Todos los registros cargados · ${fmt(src.length)} total · ${fmt(STATE.rawData.length)} en dashboard · ${fmt(src.length - STATE.rawData.length)} excluidos`, "");
+
+  // Toggle Data Raw / Flotas
+  html += _rawViewToggle();
 
   // Controles de filtro
   html += `
@@ -268,6 +278,203 @@ function exportRawCSV() {
   const a    = document.createElement("a");
   a.href     = url;
   a.download = `data_raw_${RAW_STATE.dateFrom}_${RAW_STATE.dateTo}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// \u2500\u2500 TOGGLE ENTRE VISTA REGISTROS Y VISTA FLOTAS \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function _rawViewToggle() {
+  const isData   = RAW_STATE.view !== "flotas";
+  const btn = (v, label) => `
+    <button onclick="rawSwitchView('${v}')"
+      style="padding:6px 14px;font-size:.78rem;font-weight:700;border:1px solid #ddd;cursor:pointer;
+        background:${RAW_STATE.view===v?'#FF0000':'#fff'};color:${RAW_STATE.view===v?'#fff':'#555'};
+        border-radius:6px">${label}</button>`;
+  return `
+    <div style="display:flex;gap:6px;margin-bottom:12px">
+      ${btn("data",   "\uD83D\uDCCA Registros")}
+      ${btn("flotas", "\uD83D\uDE9A Flotas (CLID \u2192 Nombre)")}
+    </div>`;
+}
+
+function rawSwitchView(v) {
+  RAW_STATE.view = v;
+  RAW_STATE.page = 0;
+  renderRawData();
+}
+
+// \u2500\u2500 VISTA FLOTAS \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+// Muestra mapeo CLID \u2192 flota (de la tabla `flotas`) cruzado con datos del raw
+// para mostrar: CLID, Ciudad, Nombre original (del Excel), Nombre asignado, KAM,
+// y si esta excluida por bannedWords o por activo=false.
+function _renderFlotasView() {
+  const flotasMap = STATE.flotasMap || {};
+  const clids = Object.keys(flotasMap);
+
+  // Construir el universo de CLIDs: union de los que estan en flotas y los que
+  // aparecen en rawDataFull. Asi vemos tambien CLIDs sin flota asignada.
+  const bannedLower = (STATE.bannedWords || []).map(w => w.toLowerCase());
+  const isBanned = name => bannedLower.some(w => (name || "").toLowerCase().includes(w));
+
+  const fromRawAll = new Map(); // clid -> { nombre_original, ciudad, kam }
+  STATE.rawDataFull.forEach(r => {
+    if (!r.clid) return;
+    if (!fromRawAll.has(r.clid)) {
+      const original = r._partnerOriginal || r.partner;
+      fromRawAll.set(r.clid, {
+        nombre_original: original,
+        ciudad: r.city,
+        kam: r.kam || getKAMForPartner(original) || ""
+      });
+    }
+  });
+
+  const allCLIDs = new Set([...clids, ...fromRawAll.keys()]);
+
+  // Aplicar filtro de busqueda y ciudad
+  const q = (RAW_STATE.search || "").toLowerCase().trim();
+  const ciudadF = RAW_STATE.city;
+  const rows = [...allCLIDs].map(clid => {
+    const f = flotasMap[clid];
+    const raw = fromRawAll.get(clid);
+    const ciudad         = (f && f.ciudad)         || (raw && raw.ciudad)         || "";
+    const nombre_original= (raw && raw.nombre_original) || (f && f.nombre_original) || "";
+    const nombre_asignado= (f && f.nombre_asignado) || "";
+    const kam            = (f && f.kam)            || (raw && raw.kam)            || "";
+    const tieneFlota     = !!f;
+    const activo         = !f || f.activo !== false;
+    const banned         = isBanned(nombre_original) || isBanned(nombre_asignado);
+    return { clid, ciudad, nombre_original, nombre_asignado, kam, tieneFlota, activo, banned };
+  })
+  .filter(r => {
+    if (ciudadF !== "all" && r.ciudad !== ciudadF) return false;
+    if (q) {
+      const hay = [r.clid, r.nombre_original, r.nombre_asignado, r.kam, r.ciudad]
+        .some(s => (s || "").toLowerCase().includes(q));
+      if (!hay) return false;
+    }
+    return true;
+  })
+  .sort((a, b) => (a.nombre_asignado || a.nombre_original || a.clid)
+                    .localeCompare(b.nombre_asignado || b.nombre_original || b.clid));
+
+  // Stats
+  const conFlota   = rows.filter(r => r.tieneFlota).length;
+  const sinFlota   = rows.filter(r => !r.tieneFlota).length;
+  const excluidas  = rows.filter(r => r.banned || !r.activo).length;
+
+  const allCities = [...new Set([...STATE.rawDataFull.map(r => r.city), ...Object.values(flotasMap).map(f => f.ciudad)].filter(Boolean))].sort();
+  const cityOpts = allCities.map(c => `<option value="${c}"${RAW_STATE.city===c?" selected":""}>${cityLabel(c)}</option>`).join("");
+
+  let html = secH("\uD83D\uDE9A", "#FF0000", "Vista Flotas",
+    `Mapeo CLID \u2192 Nombre asignado \u00B7 ${fmt(rows.length)} CLID(s) \u00B7 ${fmt(conFlota)} con flota \u00B7 ${fmt(sinFlota)} sin flota \u00B7 ${fmt(excluidas)} excluida(s)`, "");
+
+  html += _rawViewToggle();
+
+  html += `
+    <div class="section" style="margin-bottom:12px">
+      <div style="font-size:.75rem;color:#888;margin-bottom:10px">
+        Mostr\u00E1 <strong>todos</strong> los CLIDs que aparecen en tu base, con su nombre original del Excel y el nombre que vos asignaste en la tabla <code>flotas</code>.
+        Marca \uD83D\uDEAB si est\u00E1 excluido por palabra prohibida o si <code>activo=false</code>.
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+        <input class="crud-input" placeholder="Buscar CLID, partner, KAM, ciudad..."
+          value="${(RAW_STATE.search || "").replace(/"/g, "&quot;")}"
+          oninput="RAW_STATE.search=this.value;renderRawData()"
+          style="flex:1;min-width:200px;max-width:340px"/>
+        <select class="sb-sel" onchange="RAW_STATE.city=this.value;renderRawData()">
+          <option value="all"${RAW_STATE.city==="all"?" selected":""}>Todas las ciudades</option>
+          ${cityOpts}
+        </select>
+        <button class="crud-btn" onclick="exportFlotasCSV()"
+          style="margin-left:auto;background:#f0fdf4;border-color:#86efac;color:#166534">\u2B07 Exportar CSV</button>
+      </div>
+    </div>
+    <div class="tbl-wrap">
+      <table class="dtbl">
+        <thead>
+          <tr>
+            <th>CLID</th><th>Ciudad</th>
+            <th>Nombre original (Excel)</th>
+            <th>Nombre asignado</th>
+            <th>KAM</th>
+            <th style="text-align:center">Estado</th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+  rows.slice(0, 500).forEach(r => {
+    const badge = !r.tieneFlota
+      ? `<span style="background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:8px;font-size:.7rem;font-weight:700">Sin flota</span>`
+      : !r.activo
+        ? `<span style="background:#fee;color:#991b1b;padding:2px 7px;border-radius:8px;font-size:.7rem;font-weight:700">\uD83D\uDEAB Inactiva</span>`
+        : r.banned
+          ? `<span style="background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:8px;font-size:.7rem;font-weight:700">\uD83D\uDEAB Palabra prohibida</span>`
+          : `<span style="background:#dcfce7;color:#166534;padding:2px 7px;border-radius:8px;font-size:.7rem;font-weight:700">\u2713 Activa</span>`;
+    html += `
+      <tr>
+        <td style="font-family:monospace;font-size:.75rem;color:#666">${escapeHTML(r.clid)}</td>
+        <td>${cityLabel(r.ciudad)}</td>
+        <td>${escapeHTML(r.nombre_original || "\u2014")}</td>
+        <td style="font-weight:600">${escapeHTML(r.nombre_asignado || "\u2014")}</td>
+        <td>${escapeHTML(r.kam || "\u2014")}</td>
+        <td style="text-align:center">${badge}</td>
+      </tr>`;
+  });
+
+  if (rows.length > 500) {
+    html += `<tr><td colspan="6" style="text-align:center;color:#aaa;padding:10px;font-size:.75rem;font-style:italic">Mostrando primeros 500 de ${fmt(rows.length)}. Us\u00E1 el buscador para filtrar.</td></tr>`;
+  }
+
+  html += `</tbody></table></div>`;
+
+  if (!Object.keys(flotasMap).length) {
+    html += `
+      <div style="margin-top:14px;padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:.78rem;color:#92400e">
+        \uD83D\uDCA1 A\u00FAn no subiste ninguna flota. Sub\u00ED un Excel con columnas <code>CLID | CIUDAD | NOMBRE_ASIGNADO | KAM | ACTIVO</code> desde <strong>Actualizar informaci\u00F3n \u2192 Flotas</strong>.
+      </div>`;
+  }
+
+  return html;
+}
+
+function exportFlotasCSV() {
+  const flotasMap = STATE.flotasMap || {};
+  const fromRawAll = new Map();
+  STATE.rawDataFull.forEach(r => {
+    if (!r.clid) return;
+    if (!fromRawAll.has(r.clid)) {
+      fromRawAll.set(r.clid, {
+        nombre_original: r._partnerOriginal || r.partner,
+        ciudad: r.city,
+        kam: r.kam || getKAMForPartner(r.partner) || ""
+      });
+    }
+  });
+  const allCLIDs = new Set([...Object.keys(flotasMap), ...fromRawAll.keys()]);
+  const headers = ["CLID","CIUDAD","NOMBRE_ORIGINAL","NOMBRE_ASIGNADO","KAM","ACTIVO"];
+  const lines = [headers.join(",")];
+  [...allCLIDs].forEach(clid => {
+    const f = flotasMap[clid];
+    const raw = fromRawAll.get(clid);
+    const row = [
+      clid,
+      (f && f.ciudad) || (raw && raw.ciudad) || "",
+      (raw && raw.nombre_original) || (f && f.nombre_original) || "",
+      (f && f.nombre_asignado) || "",
+      (f && f.kam) || (raw && raw.kam) || "",
+      (f ? (f.activo !== false ? "true" : "false") : "true")
+    ].map(v => {
+      const s = String(v ?? "");
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    });
+    lines.push(row.join(","));
+  });
+  const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `flotas_${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }

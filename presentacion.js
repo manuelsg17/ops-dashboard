@@ -113,6 +113,9 @@ function buildMiniChart(canvasId, dates, partnerVals, cityVals, color) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      // Animacion deshabilitada: critico para PDF (html2canvas captura el canvas
+      // ANTES de que termine la animacion → quedaba vacio).
+      animation: false,
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -175,6 +178,7 @@ function buildBigChart(canvasId, dates, partnerVals, cityDatasets, color, label)
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      animation: false,  // Critico para PDF (ver buildMiniChart)
       plugins: {
         legend: { display: true, position: "bottom", labels: { font:{size:9}, boxWidth:12 } },
         tooltip: {
@@ -428,7 +432,7 @@ function buildSlide1(partner, from, to, mode) {
                       </span>
                     </div>
                     <div style="font-weight:900;font-size:.88rem;color:#111;margin-bottom:3px">${fmt(pValL)}</div>
-                    <div style="height:80px;position:relative;width:100%;margin-top:auto">
+                    <div style="flex:1;min-height:120px;position:relative;width:100%">
                       <canvas id="mc_${city}_${m.key}" style="width:100%;height:100%"></canvas>
                     </div>
                     <div style="font-size:.58rem;color:#aaa;margin-top:2px;display:flex;justify-content:space-between">

@@ -134,25 +134,23 @@ function renderPartnerView() {
     <div style="padding:0 8px 16px">
       <!-- Controles -->
       <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin:8px 0 16px">
-        <div>
+        <div style="position:relative">
           <label style="font-size:.68rem;color:#666;font-weight:700;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px">Partner</label>
-          <input type="text" id="pvSearch" class="sb-inp" placeholder="Buscar partner..." style="width:200px;margin-bottom:4px"
+          <input type="text" id="pvSearch" class="sb-inp" placeholder="Buscar partner..." style="width:240px" autocomplete="off"
+            value="${escapeHTML(partner)}"
             oninput="pvFilterPartners(this.value)"
-            onkeydown="if(event.key==='Enter'){const s=document.getElementById('pvPartnerSel');if(s&&s.options.length){pvOnPartnerChange(s.options[0].value)}}"/>
-          <select id="pvPartnerSel" class="sb-sel" style="width:220px" onchange="pvOnPartnerChange(this.value)">
-            ${partners.map(p => `<option value="${escapeHTML(p)}" ${p===partner?"selected":""}>${escapeHTML(p)}</option>`).join("")}
-          </select>
+            onfocus="pvShowPartnerList()"
+            onblur="setTimeout(pvHidePartnerList, 200)"
+            onkeydown="pvSearchKeydown(event)"/>
+          <div id="pvPartnerList" style="display:none;position:absolute;top:100%;left:0;width:240px;max-height:280px;overflow-y:auto;background:#fff;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:100;margin-top:2px"></div>
         </div>
         <div>
           <label style="font-size:.68rem;color:#666;font-weight:700;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px">Período</label>
-          <select id="pvPeriodSel" class="sb-sel" style="width:160px" onchange="pvOnPeriodChange(this.value)">
-            <option value="auto" ${period==="auto"?"selected":""}>Auto (${periodLabel})</option>
-            <option value="3m"   ${period==="3m"?"selected":""}>Últimos 3 (cortos)</option>
-            <option value="6m"   ${period==="6m"?"selected":""}>Últimos 6</option>
-            <option value="12m"  ${period==="12m"?"selected":""}>Últimos 12</option>
+          <select id="pvPeriodSel" class="sb-sel" style="width:200px" onchange="pvOnPeriodChange(this.value)">
+            ${_pvPeriodOptions(period, periodLabel)}
           </select>
         </div>
-        <button class="apply-btn" style="width:auto;padding:8px 16px;margin-left:auto" onclick="pvDownloadPDF()">
+        <button style="padding:8px 16px;margin-left:auto;background:#FF0000;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:.85rem" onclick="pvDownloadPDF()">
           📤 Descargar PDF
         </button>
       </div>
@@ -304,6 +302,14 @@ function _pvSimpleLine(elId, labels, series, colors) {
     stroke: { curve: "smooth", width: 2.5 },
     colors,
     markers: { size: 3 },
+    // dataLabels: muestra valores sobre puntos para que el PDF sea legible.
+    dataLabels: {
+      enabled: true,
+      formatter: v => fmt(v),
+      style: { fontSize: "9px", colors: ["#333"], fontWeight: 600 },
+      background: { enabled: true, foreColor: "#333", padding: 2, borderRadius: 3, borderWidth: 0, opacity: .85 },
+      offsetY: -6
+    },
     xaxis: { categories: labels, labels: { style: { fontSize: "9px" }, rotate: -30 }, axisBorder: { show: false }, axisTicks: { show: false } },
     yaxis: { labels: { formatter: v => fmt(v), style: { fontSize: "10px" } } },
     grid: { borderColor: "#f0f0f0", strokeDashArray: 4 },
@@ -320,8 +326,16 @@ function _pvStackedColumn(elId, labels, series, colors) {
   const ch = new ApexCharts(el, {
     series,
     chart: { type: "bar", height: 180, stacked: true, toolbar: { show: false }, animations: { enabled: false }, fontFamily: "inherit" },
-    plotOptions: { bar: { columnWidth: "60%" } },
+    plotOptions: { bar: { columnWidth: "60%", dataLabels: { position: "center" } } },
     colors,
+    // dataLabels chicos para que entren dentro de cada segmento de la barra.
+    // Solo se muestran si el valor es >= 3 (evita ruido en segmentos minusculos).
+    dataLabels: {
+      enabled: true,
+      formatter: v => (v >= 3 ? fmt(v) : ""),
+      style: { fontSize: "8px", colors: ["#fff"], fontWeight: 700 },
+      dropShadow: { enabled: true, top: 1, left: 1, blur: 1, opacity: .35 }
+    },
     xaxis: { categories: labels, labels: { style: { fontSize: "9px" }, rotate: -30 } },
     yaxis: { labels: { formatter: v => fmt(v), style: { fontSize: "10px" } } },
     grid: { borderColor: "#f0f0f0", strokeDashArray: 4 },
@@ -341,6 +355,14 @@ function _pvDualLine(elId, labels, series, colors) {
     stroke: { curve: "smooth", width: [2.5, 2.5] },
     colors,
     markers: { size: 3 },
+    dataLabels: {
+      enabled: true,
+      enabledOnSeries: [0, 1],
+      formatter: (v, opts) => opts.seriesIndex === 1 ? "$" + fmt(v) : fmt(v),
+      style: { fontSize: "9px", colors: ["#333"], fontWeight: 600 },
+      background: { enabled: true, foreColor: "#333", padding: 2, borderRadius: 3, borderWidth: 0, opacity: .85 },
+      offsetY: -6
+    },
     xaxis: { categories: labels, labels: { style: { fontSize: "9px" }, rotate: -30 } },
     yaxis: [
       { seriesName: "Viajes", labels: { formatter: v => fmt(v), style: { fontSize: "10px" } } },
@@ -365,16 +387,85 @@ function pvOnPeriodChange(p) {
   renderPartnerView();
 }
 
+// ── COMBOBOX FLOTANTE DE PARTNERS ─────────────────────────────────────────────
+// Reemplaza el <select> nativo que se cerraba en cada keystroke. La lista es
+// un <div> flotante que NO se re-renderiza (solo cambian items visibles),
+// asi que el input nunca pierde focus y se puede hacer click en una opcion.
 function pvFilterPartners(q) {
-  const sel = document.getElementById("pvPartnerSel");
-  if (!sel) return;
+  pvShowPartnerList();
+  _pvPaintPartnerList(q);
+}
+
+function pvShowPartnerList() {
+  const list = document.getElementById("pvPartnerList");
+  if (!list) return;
+  list.style.display = "block";
+  if (!list.innerHTML) {
+    const inp = document.getElementById("pvSearch");
+    _pvPaintPartnerList(inp ? inp.value : "");
+  }
+}
+
+function pvHidePartnerList() {
+  const list = document.getElementById("pvPartnerList");
+  if (list) list.style.display = "none";
+}
+
+function _pvPaintPartnerList(q) {
+  const list = document.getElementById("pvPartnerList");
+  if (!list) return;
   const lower = (q || "").toLowerCase().trim();
   const filtered = lower
     ? STATE.allPartners.filter(p => p.toLowerCase().includes(lower))
     : STATE.allPartners;
-  sel.innerHTML = filtered.map(p =>
-    `<option value="${escapeHTML(p)}" ${p === PARTNER_VIEW_STATE.partner ? "selected" : ""}>${escapeHTML(p)}</option>`
-  ).join("");
+  if (!filtered.length) {
+    list.innerHTML = `<div style="padding:8px 12px;font-size:.78rem;color:#aaa">Sin coincidencias</div>`;
+    return;
+  }
+  list.innerHTML = filtered.slice(0, 100).map(p => {
+    const c = STATE.partnerColors[p] || "#888";
+    const sel = p === PARTNER_VIEW_STATE.partner;
+    return `<div class="pv-opt" onmousedown="pvSelectPartner('${p.replace(/'/g,"\\'")}')"
+      style="padding:7px 12px;font-size:.78rem;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid #f3f3f3;${sel?'background:#fff0f0;font-weight:700':''}">
+      <span style="width:7px;height:7px;border-radius:50%;background:${c};flex-shrink:0"></span>
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(p)}</span>
+    </div>`;
+  }).join("");
+}
+
+function pvSelectPartner(p) {
+  // onmousedown asegura que esto corra ANTES del onblur del input (que oculta la lista)
+  const inp = document.getElementById("pvSearch");
+  if (inp) inp.value = p;
+  pvHidePartnerList();
+  pvOnPartnerChange(p);
+}
+
+function pvSearchKeydown(e) {
+  if (e.key === "Enter") {
+    const list = document.getElementById("pvPartnerList");
+    const first = list && list.querySelector(".pv-opt");
+    if (first) {
+      // Reusar el handler del onmousedown
+      first.dispatchEvent(new MouseEvent("mousedown"));
+    }
+    e.preventDefault();
+  } else if (e.key === "Escape") {
+    pvHidePartnerList();
+  }
+}
+
+// ── OPCIONES DINAMICAS DE PERIODO ─────────────────────────────────────────────
+// Etiquetas claras segun el modo actual (semanal/mensual/diario). Antes decian
+// "Ultimos 3 (cortos)", "Ultimos 6" sin unidad — confuso.
+function _pvPeriodOptions(period, periodLabel) {
+  const mode = STATE.curMode;
+  const unit = mode === "mensual" ? "meses" : mode === "diario" ? "días" : "semanas";
+  return `
+    <option value="auto" ${period==="auto"?"selected":""}>Auto (${periodLabel})</option>
+    <option value="3m"   ${period==="3m" ?"selected":""}>Últim${unit==="meses"?"os 3":unit==="días"?"os 3":"as 3"} ${unit}</option>
+    <option value="6m"   ${period==="6m" ?"selected":""}>Últim${unit==="meses"?"os 6":unit==="días"?"os 6":"as 6"} ${unit}</option>
+    <option value="12m"  ${period==="12m"?"selected":""}>Últim${unit==="meses"?"os 12":unit==="días"?"os 12":"as 12"} ${unit}</option>`;
 }
 
 // ── EXPORT PDF ────────────────────────────────────────────────────────────────

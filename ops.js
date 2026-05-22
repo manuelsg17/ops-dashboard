@@ -167,7 +167,6 @@ function _renderOpsImpl() {
 
     const from = document.getElementById("dateFrom")?.value || STATE.allDates[0];
     const to   = document.getElementById("dateTo")?.value   || lastDate;
-    const weeksTotal = mWeeks(from, to);
     const perfF = getFilteredByDateRange(from, to);
 
     // Pre-indexar perfF en partner+city → date → metrics. Reemplaza el O(n²)

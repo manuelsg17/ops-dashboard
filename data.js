@@ -306,6 +306,46 @@ async function loadFromSupabase() {
       STATE.proyectosData = proyectos || [];
     } catch (_) { STATE.proyectosData = []; }
 
+    // 5b. Flotas (tabla puede no existir aún — fallo silencioso, no es critico)
+    // STATE.flotasMap[clid] = { nombre_asignado, kam, ciudad, activo, nombre_original }
+    // Si existe, se aplica override: el partner del rendimiento se reemplaza por
+    // nombre_asignado, y el KAM tambien si la flota tiene uno propio.
+    STATE.flotasMap = {};
+    try {
+      const { data: flotas } = await sb.from("flotas").select("*");
+      (flotas || []).forEach(f => {
+        const clidT = (f.clid || "").trim();
+        if (!clidT) return;
+        STATE.flotasMap[clidT] = {
+          nombre_asignado: (f.nombre_asignado || "").trim(),
+          nombre_original: (f.nombre_original || "").trim(),
+          kam:             (f.kam || "").trim(),
+          ciudad:          normCity(f.ciudad),
+          activo:          f.activo !== false
+        };
+      });
+    } catch (_) { /* tabla no existe aún */ }
+
+    // Aplicar override de flotas: el rendimiento ahora muestra `nombre_asignado`
+    // cuando el CLID esta en `flotas`. Tambien override de KAM si la flota lo define.
+    if (Object.keys(STATE.flotasMap).length) {
+      STATE.rawData.forEach(r => {
+        const f = STATE.flotasMap[r.clid];
+        if (!f) return;
+        if (f.nombre_asignado) {
+          // Guardar original para mostrar en raw view
+          r._partnerOriginal = r.partner;
+          r.partner = f.nombre_asignado;
+        }
+        if (f.kam) r.kam = f.kam;
+      });
+      // Si una flota está marcada activo=false, excluirla del dashboard
+      STATE.rawData = STATE.rawData.filter(r => {
+        const f = STATE.flotasMap[r.clid];
+        return !f || f.activo !== false;
+      });
+    }
+
     // 6. Guardar copia completa y aplicar filtro de palabras prohibidas
     STATE.rawDataFull = [...STATE.rawData];
     if (STATE.bannedWords && STATE.bannedWords.length) {
@@ -572,6 +612,8 @@ function initFileHandlers() {
     .addEventListener("change", e => handleFile(e.target.files[0], "rendimientoMensual"));
   document.getElementById("fileRendDiario")
     .addEventListener("change", e => handleFile(e.target.files[0], "rendimientoDiario"));
+  const fF = document.getElementById("fileFlotas");
+  if (fF) fF.addEventListener("change", e => handleFile(e.target.files[0], "flotas"));
 }
 
 // Classifies upload errors into user-friendly messages
@@ -579,7 +621,7 @@ function describeUploadError(type, err) {
   const base = err.message || "Error desconocido";
   const typeLabel = { rendimiento: "Rendimiento Semanal", rendimientoMensual: "Rendimiento Mensual",
                       rendimientoDiario: "Rendimiento Diario",
-                      metas: "Metas", data: "Partners" }[type] || type;
+                      metas: "Metas", data: "Partners", flotas: "Flotas" }[type] || type;
   if (base.includes("duplicate") || base.includes("unico") || base.includes("unique"))
     return `Ya existen filas con las mismas claves en ${typeLabel}. Los datos existentes fueron actualizados (upsert).`;
   if (base.includes("JWT") || base.includes("auth") || base.includes("401"))
@@ -633,6 +675,7 @@ async function handleFile(file, type) {
       else if (type === "rendimiento")       await uploadRendimiento(json);
       else if (type === "rendimientoMensual") await uploadRendimientoMensual(json);
       else if (type === "rendimientoDiario") await uploadRendimientoDiario(json);
+      else if (type === "flotas")            await uploadFlotas(json);
       else                                   await uploadMetas(json);
 
       await loadFromSupabase();
@@ -666,6 +709,38 @@ async function uploadPartners(rows) {
   const { error } = await sb.from("partners").upsert(data, { onConflict: "clid" });
   if (error) throw error;
 }
+
+// ── UPLOAD FLOTAS ─────────────────────────────────────────────────────────────
+// Excel con columnas: CLID | CIUDAD | NOMBRE_ASIGNADO (opcional) | KAM (opcional) | ACTIVO (opcional)
+// Si NOMBRE_ASIGNADO esta vacio, se conserva el nombre original del Excel de rendimiento.
+async function uploadFlotas(rows) {
+  if (!rows.length) throw new Error("Archivo vacío");
+
+  const seen = new Set();
+  const data = rows.map(r => {
+    const clid = _clidStr(r["CLID"] || r["clid"]);
+    if (!clid) return null;
+    const ciudad           = normCity(r["CIUDAD"] || r["Ciudad"] || r["CITY"] || r["city"]);
+    const nombre_asignado  = String(r["NOMBRE_ASIGNADO"] || r["Nombre Asignado"] || r["nombre_asignado"] || r["NOMBRE"] || r["Nombre"] || "").trim();
+    const nombre_original  = String(r["NOMBRE_ORIGINAL"] || r["Nombre Original"] || r["nombre_original"] || r["PARTNER"] || r["Partner"] || "").trim();
+    const kam              = String(r["KAM"] || r["Kam"] || r["kam"] || "").trim();
+    const activoRaw        = r["ACTIVO"] ?? r["Activo"] ?? r["activo"];
+    const activo           = activoRaw === undefined || activoRaw === ""
+                              ? true
+                              : !/^(0|no|false|inactivo)$/i.test(String(activoRaw).trim());
+    return { clid, ciudad, nombre_asignado: nombre_asignado || nombre_original || clid, nombre_original, kam, activo };
+  })
+  .filter(r => r && !seen.has(r.clid) && seen.add(r.clid));
+
+  if (!data.length) throw new Error("No se encontraron CLIDs validos en el archivo");
+
+  for (let i = 0; i < data.length; i += 500) {
+    const { error } = await sb.from("flotas")
+      .upsert(data.slice(i, i + 500), { onConflict: "clid" });
+    if (error) throw error;
+  }
+}
+
 // ── UPLOAD RENDIMIENTO (pivot → flat rows) ────────────────────────────────────
 async function uploadRendimiento(rows) {
   if (!rows.length) throw new Error("Archivo vacío");

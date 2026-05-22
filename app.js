@@ -58,18 +58,17 @@ function initApp() {
   });
 
   // Cerrar dropdown al seleccionar un archivo
-  ["fileRend", "fileRendMensual", "fileRendDiario", "fileMetas", "fileData"].forEach(id => {
-    document.getElementById(id).addEventListener("change", () => {
+  ["fileRend", "fileRendMensual", "fileRendDiario", "fileMetas", "fileData", "fileFlotas"].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("change", () => {
       const m = document.getElementById("uploadMenu");
       if (m) m.classList.remove("open");
     });
   });
 
-  // Debounce del botón Aplicar Filtros: evita renders en ráfaga
-  const applyBtn = document.querySelector(".apply-btn");
-  if (applyBtn) applyBtn.onclick = debounce(applyFilters, 150);
-
-  // Debounce en cambios directos a filtros (sin pasar por el botón).
+  // Filtros reactivos: cualquier cambio dispara applyFilters() debounced.
+  // No hay boton "Aplicar Filtros" — se elimino porque era redundante.
   // kamFilter NO se incluye: ya tiene su propio handler inline onchange="onKAMChange()"
   // que es mas completo (actualiza checkboxes ademas de renderizar). Agregarlo aqui
   // causa DOBLE render: onKAMChange sincrono + applyFilters debounced 250ms despues.
@@ -78,6 +77,15 @@ function initApp() {
     const el = document.getElementById(id);
     if (el) el.addEventListener("change", _debouncedApply);
   });
+
+  // Cambios en checkboxes de partners (#pList) tambien deben disparar render.
+  // Listener delegado: funciona aunque la lista se re-renderice (virtualizacion).
+  const pList = document.getElementById("pList");
+  if (pList) {
+    pList.addEventListener("change", e => {
+      if (e.target.matches('input[type="checkbox"]')) _debouncedApply();
+    });
+  }
 
   loadFromSupabase();
 }
@@ -393,7 +401,11 @@ function setDatePreset(type) {
     }
   } else if (type === 'month') {
     const m = today.toISOString().slice(0, 7);
-    from = dates.find(d => d >= `${m}-01`) || dates[0];
+    // En modo mensual los dates son "YYYY-MM" (7 chars). En diario/semanal son
+    // "YYYY-MM-DD" (10 chars). La comparacion string "2026-05" >= "2026-05-01"
+    // es FALSE, asi que en mensual hay que comparar contra m directo.
+    const monthKey = STATE.curMode === "mensual" ? m : `${m}-01`;
+    from = dates.find(d => d >= monthKey) || dates[dates.length - 1];
     to   = dates[dates.length - 1];
 
   // ── Presets para escala diaria ───────────────────────────────────────────
@@ -409,6 +421,7 @@ function setDatePreset(type) {
   // ── Presets para escala mensual ──────────────────────────────────────────
   } else if (type === '3m' || type === '6m') {
     const nMonths = type === '3m' ? 3 : 6;
+    // En mensual, dates son "YYYY-MM". slice(0,7) sigue funcionando.
     const cutoff  = new Date(dates[dates.length - 1].slice(0, 7) + "-01");
     cutoff.setMonth(cutoff.getMonth() - nMonths + 1);
     const cutoffStr = cutoff.toISOString().slice(0, 7);
@@ -535,11 +548,21 @@ function filterPList() {
   });
 }
 
-function selectAll()  { document.querySelectorAll("#pList input").forEach(c => c.checked = true); }
-function deselectAll(){ document.querySelectorAll("#pList input").forEach(c => c.checked = false); }
+// _skipApply: cuando es true (set por onKAMChange y restore), selectAll/deselectAll
+// NO disparan el _debouncedApply para evitar double-render con el caller.
+let _skipApply = false;
+function selectAll()  {
+  document.querySelectorAll("#pList input").forEach(c => c.checked = true);
+  if (!_skipApply && _debouncedApply) _debouncedApply();
+}
+function deselectAll(){
+  document.querySelectorAll("#pList input").forEach(c => c.checked = false);
+  if (!_skipApply && _debouncedApply) _debouncedApply();
+}
 
 function onKAMChange() {
   const k = document.getElementById("kamFilter").value;
+  _skipApply = true;
   if (k === "all") {
     selectAll();
   } else {
@@ -548,6 +571,7 @@ function onKAMChange() {
       c.checked = ps.includes(c.value);
     });
   }
+  _skipApply = false;
   // El debounce de applyFilters dispara renders con 250ms de retraso. Forzamos
   // un re-render inmediato del tab activo para que el cambio se vea al instante.
   saveFilters();
@@ -684,22 +708,63 @@ function renderConfig() {
     </span>`
   ).join("");
 
+  // Calcular qué partners fueron excluidos y por qué (qué palabra disparó la exclusion)
+  const bannedLower = (STATE.bannedWords || []).map(w => w.toLowerCase());
+  const excludedPartners = new Map(); // partner -> { matchedWord, rows, kam }
+  STATE.rawDataFull.forEach(r => {
+    const nameLower = (r.partner || "").toLowerCase();
+    const matched = bannedLower.find(w => nameLower.includes(w));
+    if (!matched) return;
+    if (!excludedPartners.has(r.partner)) {
+      excludedPartners.set(r.partner, { matchedWord: matched, rows: 0, kam: r.kam || getKAMForPartner(r.partner) || "—" });
+    }
+    excludedPartners.get(r.partner).rows++;
+  });
+  const excludedList = [...excludedPartners.entries()].sort((a,b) => b[1].rows - a[1].rows);
+
   html += `
     <div class="section" style="margin-bottom:16px">
       <div style="font-size:.8rem;font-weight:700;color:#555;margin-bottom:10px">🚫 Filtros de Flota — Palabras Prohibidas</div>
       <div style="font-size:.75rem;color:#888;margin-bottom:10px">
         Los partners cuyo nombre contenga alguna de estas palabras (sin importar mayúsculas) quedan excluidos del dashboard.
-        Actualmente excluidos: <strong style="color:#FF0000">${excludedCount}</strong> registro(s) en el período cargado.
+        Actualmente excluidos: <strong style="color:#FF0000">${excludedCount}</strong> registro(s) · <strong>${excludedPartners.size}</strong> partner(s) en el período cargado.
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
         ${bannedBadges || `<span style="font-size:.75rem;color:#aaa">Sin palabras prohibidas configuradas.</span>`}
       </div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
         <input class="crud-input" id="newBannedWord" placeholder="Nueva palabra (ej: mototaxi)"
           style="flex:1;min-width:180px;max-width:280px"
           onkeydown="if(event.key==='Enter') addBannedWord()"/>
         <button class="crud-btn crud-btn-add" onclick="addBannedWord()">+ Agregar</button>
       </div>
+      ${excludedList.length ? `
+        <details style="border:1px solid #fecaca;border-radius:6px;background:#fffafa;margin-top:8px">
+          <summary style="cursor:pointer;padding:8px 12px;font-size:.78rem;font-weight:700;color:#991b1b">
+            Ver partners actualmente excluidos (${excludedPartners.size})
+          </summary>
+          <div style="max-height:280px;overflow-y:auto;border-top:1px solid #fecaca">
+            <table style="width:100%;border-collapse:collapse;font-size:.75rem">
+              <thead style="background:#fff5f5;position:sticky;top:0">
+                <tr>
+                  <th style="text-align:left;padding:6px 10px;border-bottom:1px solid #fecaca">Partner</th>
+                  <th style="text-align:left;padding:6px 10px;border-bottom:1px solid #fecaca">KAM</th>
+                  <th style="text-align:left;padding:6px 10px;border-bottom:1px solid #fecaca">Palabra que aplicó</th>
+                  <th style="text-align:right;padding:6px 10px;border-bottom:1px solid #fecaca">Filas</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${excludedList.map(([p, info]) => `
+                  <tr>
+                    <td style="padding:5px 10px;border-bottom:1px solid #fee">${escapeHTML(p)}</td>
+                    <td style="padding:5px 10px;border-bottom:1px solid #fee;color:#666">${escapeHTML(info.kam)}</td>
+                    <td style="padding:5px 10px;border-bottom:1px solid #fee"><code style="background:#fff0f0;padding:1px 5px;border-radius:3px;color:#991b1b">${escapeHTML(info.matchedWord)}</code></td>
+                    <td style="padding:5px 10px;border-bottom:1px solid #fee;text-align:right;color:#888">${info.rows}</td>
+                  </tr>`).join("")}
+              </tbody>
+            </table>
+          </div>
+        </details>` : ""}
     </div>`;
 
   // Stats per KAM

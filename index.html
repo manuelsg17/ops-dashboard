@@ -115,6 +115,10 @@
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
             Partners
           </label>
+          <label class="upload-menu-item" for="fileFlotas">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="13" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
+            Flotas
+          </label>
         </div>
       </div>
 
@@ -124,6 +128,7 @@
       <input type="file" id="fileRendDiario"  accept=".xlsx,.xls"/>
       <input type="file" id="fileMetas"       accept=".xlsx,.xls"/>
       <input type="file" id="fileData"        accept=".xlsx,.xls"/>
+      <input type="file" id="fileFlotas"      accept=".xlsx,.xls"/>
 
       <span id="userBadge" class="user-badge"></span>
       <button class="logout-btn" onclick="handleLogout()">Salir →</button>
@@ -178,14 +183,6 @@
         <button onclick="deselectAll()">Ninguno</button>
       </div>
       <div class="plist" id="pList"></div>
-
-      <button class="apply-btn" onclick="applyFilters()">
-        <svg width="14" height="14" viewBox="0 0 24 24"
-             fill="none" stroke="currentColor" stroke-width="2.5">
-          <polyline points="20 6 9 17 4 12"/>
-        </svg>
-        Aplicar Filtros
-      </button>
     </div>
     <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()" title="Ocultar/mostrar filtros">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>

@@ -359,9 +359,13 @@ function _calcSec3_generador(agg, months) {
           <tbody>${rowsHtml || `<tr><td colspan="8" style="text-align:center;color:#aaa;padding:20px">Sin datos.</td></tr>`}</tbody>
         </table>
       </div>
-      <div style="display:flex;gap:10px;margin-top:10px">
-        <button class="apply-btn" style="width:auto;padding:7px 14px;font-size:.78rem;background:#666" onclick="calcResetEdits()">↺ Reset ediciones</button>
-        <button class="apply-btn" style="width:auto;padding:7px 14px;font-size:.78rem" onclick="calcExportExcel()">📥 Exportar Excel para subir</button>
+      <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
+        <button id="calcApplyBtn" style="padding:7px 14px;font-size:.78rem;background:#10b981;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer" onclick="calcApplyChanges()">✓ Aplicar cambios</button>
+        <button style="padding:7px 14px;font-size:.78rem;background:#666;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer" onclick="calcResetEdits()">↺ Reset ediciones</button>
+        <button style="padding:7px 14px;font-size:.78rem;background:#FF0000;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer" onclick="calcExportExcel()">📥 Exportar Excel para subir</button>
+      </div>
+      <div style="font-size:.7rem;color:#888;margin-top:6px;font-style:italic">
+        💡 Editá los valores libremente — los cambios se guardan al salir de cada celda. Presioná <strong>"Aplicar cambios"</strong> para refrescar la sección de validación KAM y la vista exportable.
       </div>
     </div>`;
 }
@@ -457,7 +461,7 @@ function _kamGoalInput(metric, label, weight, val) {
     <div>
       <label style="font-size:.66rem;color:#666;font-weight:700;display:block;margin-bottom:3px">${escapeHTML(label)} <span style="color:#aaa">(${weight}%)</span></label>
       <input type="number" step="1" min="0" value="${+val || 0}"
-        oninput="calcOnKamGoalChange('${metric}', this.value)"
+        onchange="calcOnKamGoalChange('${metric}', this.value)"
         class="sb-inp" style="width:100%;padding:5px 8px;font-size:.78rem"/>
     </div>`;
 }
@@ -497,14 +501,18 @@ function _calcSec5_exportPartner(agg, months) {
   return `
     ${_secH("📤", "#10b981", "5. Vista exportable por partner", "Tarjeta compartible (sin mezclar otros partners)")}
     <div class="section">
-      <div style="display:flex;gap:10px;align-items:end;margin-bottom:10px">
-        <div>
+      <div style="display:flex;gap:10px;align-items:end;margin-bottom:10px;flex-wrap:wrap">
+        <div style="position:relative">
           <label style="font-size:.68rem;color:#666;font-weight:700;display:block;margin-bottom:3px">Partner</label>
-          <select id="calcExportPartner" class="sb-sel" style="width:220px" onchange="calcOnExportPartnerChange(this.value)">
-            ${partners.map(p => `<option value="${escapeHTML(p)}" ${p===sel?"selected":""}>${escapeHTML(p)}</option>`).join("")}
-          </select>
+          <input type="text" id="calcExportSearch" class="sb-inp" placeholder="Buscar partner..." autocomplete="off"
+            value="${escapeHTML(sel)}" style="width:240px"
+            oninput="calcFilterExportPartners(this.value)"
+            onfocus="calcShowExportList()"
+            onblur="setTimeout(calcHideExportList, 200)"
+            onkeydown="calcExportKeydown(event)"/>
+          <div id="calcExportList" style="display:none;position:absolute;top:100%;left:0;width:240px;max-height:280px;overflow-y:auto;background:#fff;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:100;margin-top:2px"></div>
         </div>
-        <button class="apply-btn" style="width:auto;padding:7px 14px;font-size:.78rem" onclick="calcDownloadPartnerImage()">📥 Descargar Imagen/PDF</button>
+        <button style="padding:7px 14px;font-size:.78rem;background:#10b981;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer" onclick="calcDownloadPartnerImage()">📥 Descargar Imagen/PDF</button>
       </div>
 
       <div id="calcExportCard" style="background:linear-gradient(135deg,#fff 0%,#fff8f8 100%);border:2px solid #FF0000;border-radius:12px;padding:20px;max-width:560px">
@@ -579,13 +587,31 @@ function calcOnGoalEdit(input) {
   const k = `${partner}|||${city}|||${metric}`;
   if (isNaN(val)) delete CALC_STATE.edits[k];
   else CALC_STATE.edits[k] = val;
-  // Render diferido (sólo si seguimos en Calculadora)
-  _calcScheduleRerender();
+  // NO re-renderizar aqui: causaba que el input perdiera focus al editar.
+  // El usuario hace todos los cambios libremente y luego presiona "Aplicar cambios"
+  // (boton en seccion 3 que llama calcApplyChanges()).
+  _calcMarkDirty();
 }
 
 function calcOnKamGoalChange(metric, val) {
   CALC_STATE.kamGoals[metric] = parseFloat(val) || 0;
-  _calcScheduleRerender();
+  // Idem: re-render solo bajo demanda con "Aplicar cambios".
+  _calcMarkDirty();
+}
+
+// Marca visualmente que hay cambios sin aplicar, sin re-renderizar.
+function _calcMarkDirty() {
+  const btn = document.getElementById("calcApplyBtn");
+  if (btn) {
+    btn.style.background = "#FF0000";
+    btn.textContent = "✓ Aplicar cambios (pendiente)";
+  }
+}
+
+// Re-renderiza Calculadora con los edits acumulados. Llamado por el boton
+// "Aplicar cambios" en la seccion 3.
+function calcApplyChanges() {
+  renderCalculator();
 }
 
 function calcOnExportPartnerChange(v) {
@@ -667,4 +693,87 @@ async function calcDownloadPartnerImage() {
   } finally {
     showLoad(false);
   }
+}
+
+// ── COMBOBOX FLOTANTE PARA VISTA EXPORTABLE (Sec 5) ───────────────────────────
+// Mismo patron que pvFilterPartners: lista flotante para evitar perder focus.
+function calcFilterExportPartners(q) {
+  calcShowExportList();
+  _calcPaintExportList(q);
+}
+
+function calcShowExportList() {
+  const list = document.getElementById("calcExportList");
+  if (!list) return;
+  list.style.display = "block";
+  if (!list.innerHTML) {
+    const inp = document.getElementById("calcExportSearch");
+    _calcPaintExportList(inp ? inp.value : "");
+  }
+}
+
+function calcHideExportList() {
+  const list = document.getElementById("calcExportList");
+  if (list) list.style.display = "none";
+}
+
+function _calcPaintExportList(q) {
+  const list = document.getElementById("calcExportList");
+  if (!list) return;
+  // Universo: partners disponibles en el filtro actual (mismo set que el render genera)
+  const all = [...new Set([...(_calcCurrentAgg() || []).values()].map(e => e.partner))].sort();
+  const lower = (q || "").toLowerCase().trim();
+  const filtered = lower ? all.filter(p => p.toLowerCase().includes(lower)) : all;
+  if (!filtered.length) {
+    list.innerHTML = `<div style="padding:8px 12px;font-size:.78rem;color:#aaa">Sin coincidencias</div>`;
+    return;
+  }
+  list.innerHTML = filtered.slice(0, 100).map(p => {
+    const c = STATE.partnerColors[p] || "#888";
+    const sel = p === CALC_STATE.selPartnerExport;
+    return `<div class="pv-opt" onmousedown="calcSelectExportPartner('${p.replace(/'/g,"\\'")}')"
+      style="padding:7px 12px;font-size:.78rem;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid #f3f3f3;${sel?'background:#fff0f0;font-weight:700':''}">
+      <span style="width:7px;height:7px;border-radius:50%;background:${c};flex-shrink:0"></span>
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(p)}</span>
+    </div>`;
+  }).join("");
+}
+
+function calcSelectExportPartner(p) {
+  const inp = document.getElementById("calcExportSearch");
+  if (inp) inp.value = p;
+  calcHideExportList();
+  calcOnExportPartnerChange(p);
+}
+
+function calcExportKeydown(e) {
+  if (e.key === "Enter") {
+    const list = document.getElementById("calcExportList");
+    const first = list && list.querySelector(".pv-opt");
+    if (first) first.dispatchEvent(new MouseEvent("mousedown"));
+    e.preventDefault();
+  } else if (e.key === "Escape") {
+    calcHideExportList();
+  }
+}
+
+// Helper para acceder al agregado actual (recomputa con los mismos filtros que el render).
+// renderCalculator() construye `agg` y lo pasa a las secciones; aqui replicamos esa logica.
+function _calcCurrentAgg() {
+  if (!STATE.rawData || !STATE.rawData.length) return new Map();
+  // Reusa la logica de agrupacion sin re-renderizar
+  const months = STATE.allDates.slice(-1);
+  const lastDate = months[months.length - 1];
+  if (!lastDate) return new Map();
+  const monthRows = STATE._byDate?.get(lastDate) || STATE.rawData.filter(r => r.date === lastDate);
+  const agg = new Map();
+  monthRows.forEach(r => {
+    if (CALC_STATE.kam !== "all" && getKAMForPartner(r.partner) !== CALC_STATE.kam) return;
+    const k = `${r.partner}|||${r.city}`;
+    if (!agg.has(k)) agg.set(k, { partner:r.partner, city:r.city, ad:0, np:0, ns:0, re:0, sh:0 });
+    const e = agg.get(k);
+    e.ad += r.activeDrivers; e.np += r.newPartner; e.ns += r.newService;
+    e.re += r.reactivated;   e.sh += r.supplyHours;
+  });
+  return agg;
 }

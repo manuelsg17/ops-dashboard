@@ -223,12 +223,17 @@ input[type="file"]  { display: none; }
 }
 .sb-row button:hover { background: #FF0000; color: #fff; border-color: #FF0000; }
 
+/* Combobox flotante Vista Partner */
+.pv-opt:hover { background: #fff5f5 !important; }
+
+/* Boton de accion principal (rojo, alto contraste). Usado en varias secciones
+   - antes era el "Aplicar Filtros" del sidebar (ya eliminado); ahora se reutiliza
+   en presentacion/metas/insights como CTA. */
 .apply-btn {
-  width: 100%; margin-top: 14px;
   background: #FF0000; color: #fff;
   border: none; border-radius: 8px;
   padding: 10px; font-size: .85rem; font-weight: 700;
-  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
+  cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   transition: opacity .15s;
 }
 .apply-btn:hover { opacity: .88; }
