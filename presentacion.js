@@ -678,8 +678,13 @@ const div = document.createElement("div");
 
      if (s.hasCharts && s.chartFn) {
         s.chartFn();
-        const waitTime = i === 1 ? 4000 : 2500;
-        await new Promise(r => setTimeout(r, waitTime));
+        // Con animation:false los charts pintan inmediato, pero igual esperamos
+        // 2 RAFs + un timeout corto para garantizar layout + paint en el browser.
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        await new Promise(r => setTimeout(r, 400));
+      } else {
+        // Tambien 2 RAFs para slides sin charts (tablas con muchas filas)
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
       }
 
       const canvas = await html2canvas(div, { width:1280, height:720, scale:6, useCORS:true, logging:false });
