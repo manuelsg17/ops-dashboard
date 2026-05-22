@@ -226,30 +226,36 @@ input[type="file"]  { display: none; }
 /* Combobox flotante Vista Partner */
 .pv-opt:hover { background: #fff5f5 !important; }
 
-/* ApexCharts dataLabels en Vista Partner: forzar fondo blanco/claro.
-   ApexCharts hereda el color del background del color de la serie
-   (negro/oscuro), lo cual hace ilegible el texto oscuro. Esta regla overridea
-   el <rect class="apexcharts-datalabel-background"> generado por ApexCharts. */
-.pv-chart .apexcharts-datalabel-background {
-  fill: #ffffff !important;
-  fill-opacity: 0.95 !important;
-  stroke: #e5e5e5 !important;
+/* ApexCharts dataLabels en Vista Partner:
+   Approach: deshabilitar el background (que heredaba color oscuro de la serie)
+   y dar legibilidad con un HALO blanco grueso alrededor del texto via
+   paint-order: stroke. El stroke se dibuja primero, el fill encima, asi el
+   numero queda "rodeado de blanco" sobre cualquier fondo (linea, grilla, etc). */
+.pv-chart .apexcharts-datalabels text,
+.pv-chart text.apexcharts-datalabel,
+.pv-chart .apexcharts-data-labels text {
+  fill: #111 !important;
+  stroke: #ffffff !important;
+  stroke-width: 4px !important;
+  paint-order: stroke fill !important;
+  font-weight: 800 !important;
+  letter-spacing: -.2px;
 }
-/* En charts de lineas, ademas forzamos el color del texto a oscuro */
-.pv-chart .apexcharts-data-labels text,
-.pv-chart text.apexcharts-datalabel {
-  fill: #222 !important;
-}
-/* Excepcion: en barras apiladas el texto es blanco sobre la barra de color.
-   El selector mas especifico arriba lo pinta negro; este lo revierte solo
-   cuando es un bar/column. */
-.pv-chart .apexcharts-bar-series .apexcharts-data-labels text,
-.pv-chart .apexcharts-bar-series text.apexcharts-datalabel {
-  fill: #ffffff !important;
-}
-.pv-chart .apexcharts-bar-series .apexcharts-datalabel-background {
+/* Si quedo algun background residual de versiones anteriores: transparentar */
+.pv-chart .apexcharts-datalabel-background,
+.pv-chart rect.apexcharts-datalabel-background {
   fill: transparent !important;
   stroke: transparent !important;
+}
+/* Excepcion para barras apiladas: el texto va BLANCO sobre la barra de color,
+   con un halo oscuro fino para legibilidad sin parecer flotante. */
+.pv-chart .apexcharts-bar-series .apexcharts-datalabels text,
+.pv-chart .apexcharts-bar-series text.apexcharts-datalabel,
+.pv-chart .apexcharts-bar-series .apexcharts-data-labels text {
+  fill: #ffffff !important;
+  stroke: rgba(0,0,0,0.45) !important;
+  stroke-width: 1.5px !important;
+  paint-order: stroke fill !important;
 }
 
 /* Boton de accion principal (rojo, alto contraste). Usado en varias secciones

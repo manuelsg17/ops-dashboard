@@ -5,8 +5,164 @@
 const PARTNER_VIEW_STATE = {
   partner: null,
   period:  "auto",   // auto | 3m | 6m | 12m | custom
+  lang:    "es",     // "es" | "en"  — afecta panel ejecutivo, headers y PDF
   charts:  []        // ApexCharts instances
 };
+
+// ── i18n (español / inglés) ───────────────────────────────────────────────────
+// Diccionario centralizado de todos los textos visibles que se exportan al PDF.
+// Usar _t("key") para resolverlos segun PARTNER_VIEW_STATE.lang.
+const PV_I18N = {
+  // Controles
+  partner:        { es: "Partner",                 en: "Partner" },
+  searchPartner:  { es: "Buscar partner...",       en: "Search partner..." },
+  noMatch:        { es: "Sin coincidencias",       en: "No matches" },
+  period:         { es: "Período",                 en: "Period" },
+  downloadPDF:    { es: "📤 Descargar PDF",        en: "📤 Download PDF" },
+  language:       { es: "Idioma",                  en: "Language" },
+  // Header del partner
+  cities:         { es: "Ciudades",                en: "Cities" },
+  receivesLeads:  { es: "★ Recibe leads Yango",    en: "★ Receives Yango leads" },
+  periodPrefix:   { es: "Período:",                en: "Period:" },
+  scalePrefix:    { es: "Escala:",                 en: "Scale:" },
+  scaleWeekly:    { es: "semanal",                 en: "weekly" },
+  scaleMonthly:   { es: "mensual",                 en: "monthly" },
+  scaleDaily:     { es: "diaria",                  en: "daily" },
+  // Secciones
+  execSummary:    { es: "Análisis Ejecutivo",      en: "Executive Summary" },
+  execSummarySub: { es: "Mirada de KAM senior sobre el partner",
+                    en: "Senior KAM perspective on this partner" },
+  kpisTitle:      { es: "KPIs del último período", en: "Latest period KPIs" },
+  cityDetail:     { es: "Detalle por Ciudad",      en: "City breakdown" },
+  cityCount:      { es: "ciudad",                  en: "city" },
+  cityCountPlural:{ es: "ciudades",                en: "cities" },
+  // KPIs
+  activeDrivers:  { es: "Conductores Activos",     en: "Active Drivers" },
+  newReact:       { es: "Nuevos + Reactivados",    en: "New + Reactivated" },
+  newReactShort:  { es: "Nuevos+React",            en: "New+React" },
+  supplyHours:    { es: "Horas de Conexión",       en: "Supply Hours" },
+  trips:          { es: "Viajes",                  en: "Trips" },
+  commission:     { es: "Comisión",                en: "Commission" },
+  // Periodos (palabras sueltas)
+  week:           { es: "semana",                  en: "week" },
+  month:          { es: "mes",                     en: "month" },
+  day:            { es: "día",                     en: "day" },
+  weeks:          { es: "semanas",                 en: "weeks" },
+  months:         { es: "meses",                   en: "months" },
+  days:           { es: "días",                    en: "days" },
+  // Análisis ejecutivo — encabezados y fallback
+  findingsOne:    { es: "hallazgo priorizado",     en: "priority finding" },
+  findingsMany:   { es: "hallazgos priorizados",   en: "priority findings" },
+  actionLabel:    { es: "Acción:",                 en: "Action:" },
+  // Bullets — titulos
+  declineTitle:           { es: "Declive consecutivo en {city}",
+                            en: "Consecutive decline in {city}" },
+  declineBody:            { es: "{metric} cayó {n} {periods} seguidos.",
+                            en: "{metric} dropped {n} {periods} in a row." },
+  declineAction:          { es: "Visitar al partner esta {period}. Auditar conductores activos vs registrados, revisar incidencias recientes y plan de incentivos.",
+                            en: "Visit the partner this {period}. Audit active vs registered drivers, review recent incidents and the incentives plan." },
+  adDropSharpTitle:       { es: "Caída fuerte en Conductores Activos",
+                            en: "Sharp drop in Active Drivers" },
+  adDropSharpBody:        { es: "Bajó {prev} → {cur} ({pct}% vs {period} anterior).",
+                            en: "Down {prev} → {cur} ({pct}% vs previous {period})." },
+  adDropSharpAction:      { es: "Acción inmediata: cruzar lista de conductores desconectados y lanzar campaña de reactivación. Confirmar si hay problemas operativos (app, comisión, pago).",
+                            en: "Immediate action: cross-reference disconnected drivers and launch a re-activation campaign. Confirm there are no operational issues (app, commission, payments)." },
+  adDropModTitle:         { es: "Caída moderada en AD ({pct}%)",
+                            en: "Moderate drop in AD ({pct}%)" },
+  adDropModBody:          { es: "Tendencia negativa de {prev} → {cur}.",
+                            en: "Negative trend {prev} → {cur}." },
+  adDropModAction:        { es: "Monitorear próximas 2 {periods}. Revisar mix de turnos y desconexiones recientes con el partner.",
+                            en: "Monitor next 2 {periods}. Review shift mix and recent disconnections with the partner." },
+  adGrowTitle:            { es: "Crecimiento fuerte en AD (+{pct}%)",
+                            en: "Strong AD growth (+{pct}%)" },
+  adGrowBody:             { es: "Aumentó {prev} → {cur}.",
+                            en: "Up {prev} → {cur}." },
+  adGrowAction:           { es: "Aprovechar momentum: validar capacidad operativa, dar más visibilidad a leads Yango y considerar ampliar metas del próximo {period}.",
+                            en: "Leverage the momentum: validate operational capacity, increase Yango lead visibility and consider raising targets for next {period}." },
+  nrZeroTitle:            { es: "Cero ingresos de conductores este {period}",
+                            en: "No new drivers this {period}" },
+  nrZeroBody:             { es: "Había {prev} nuevos/reactivados el {period} anterior — esta vez 0.",
+                            en: "Last {period} had {prev} new/reactivated — this time 0." },
+  nrZeroAction:           { es: "Revisar pipeline de onboarding. ¿Está trabado el proceso de documentación? ¿Algún CLID dejó de cargar drivers?",
+                            en: "Review the onboarding pipeline. Is documentation stuck? Did any CLID stop loading drivers?" },
+  nrDropTitle:            { es: "Ingresos N+R bajaron fuerte ({cur} vs {prev})",
+                            en: "New+React income dropped sharply ({cur} vs {prev})" },
+  nrDropBody:             { es: "Reducción de más del 60% en nuevos drivers.",
+                            en: "More than 60% drop in new drivers." },
+  nrDropAction:           { es: "Confirmar si fue por estacionalidad o problema operativo. Revisar capacidad de onboarding del partner.",
+                            en: "Confirm if seasonal or operational. Review the partner's onboarding capacity." },
+  leadsTitle:             { es: "{leads} leads Yango sin reflejarse en AD",
+                            en: "{leads} Yango leads not reflected in AD" },
+  leadsBody:              { es: "El partner está recibiendo leads pero su base de conductores no crece.",
+                            en: "The partner is receiving leads but the driver base isn't growing." },
+  leadsAction:            { es: "Revisar tiempo y tasa de conversión lead→activación. Posible cuello de botella en documentación o capacitación inicial. Comparar con benchmark de partners similares.",
+                            en: "Check lead→activation time and conversion rate. Possible bottleneck in documentation or initial training. Compare against similar-partner benchmarks." },
+  metaLowTitle:           { es: "{label}: cumplimiento {pct}% (crítico)",
+                            en: "{label}: {pct}% of target (critical)" },
+  metaLowBody:            { es: "{cur} de {meta} comprometidos. Gap de {gap}.",
+                            en: "{cur} of {meta} committed. Gap of {gap}." },
+  metaMidTitle:           { es: "{label}: cumplimiento {pct}%",
+                            en: "{label}: {pct}% of target" },
+  metaMidBody:            { es: "{cur} de {meta}. Falta {gap} para llegar al 100%.",
+                            en: "{cur} of {meta}. {gap} short of 100%." },
+  metaMidAction:          { es: "Acelerar las próximas {periods}. Confirmar con el partner si la meta sigue siendo realista o necesita ajuste.",
+                            en: "Accelerate over the next {periods}. Confirm with the partner whether the target is still realistic or needs adjustment." },
+  metaHighTitle:          { es: "{label}: sobre-cumplimiento {pct}%",
+                            en: "{label}: {pct}% over target" },
+  metaHighBody:           { es: "{cur} vs {meta} comprometidos (+{over}).",
+                            en: "{cur} vs {meta} committed (+{over})." },
+  metaAdLowAction:        { es: "Plan de aceleración: identificar conductores con potencial de reactivación y agendar reunión esta {period}.",
+                            en: "Acceleration plan: identify drivers with re-activation potential and schedule a meeting this {period}." },
+  metaAdHighAction:       { es: "Caso de éxito. Documentar qué está funcionando y replicarlo en otros partners del mismo KAM.",
+                            en: "Success case. Document what's working and replicate it across other partners under the same KAM." },
+  metaNrLowAction:        { es: "Revisar pipeline de inducción y velocidad de procesamiento de nuevos drivers.",
+                            en: "Review the induction pipeline and processing speed for new drivers." },
+  metaNrHighAction:       { es: "Excelente captación. Confirmar que el partner tiene capacidad operativa para sostener el ritmo.",
+                            en: "Excellent acquisition. Confirm the partner has operational capacity to sustain the pace." },
+  metaShLowAction:        { es: "Revisar turnos y motivar a conductores con bajo % de online. Posible problema de incentivos.",
+                            en: "Review shifts and motivate drivers with low online %. Possible incentive issue." },
+  metaShHighAction:       { es: "Excelente productividad por conductor. Evaluar incrementar leads Yango asignados.",
+                            en: "Excellent productivity per driver. Consider increasing assigned Yango leads." },
+  noMetasTitle:           { es: "Partner sin metas asignadas",
+                            en: "Partner with no targets assigned" },
+  noMetasBody:            { es: "El sistema tiene metas para otros partners pero no para este.",
+                            en: "The system has targets for other partners but not for this one." },
+  noMetasAction:          { es: "Definir metas mensuales con el partner para tener métricas claras de seguimiento.",
+                            en: "Define monthly targets with the partner to track clear KPIs." },
+  cityGapTitle:           { es: "Brecha grande entre ciudades",
+                            en: "Large gap across cities" },
+  cityGapBody:            { es: "{best}: {bestAd} AD vs {worst}: {worstAd} AD ({ratio}x diferencia).",
+                            en: "{best}: {bestAd} AD vs {worst}: {worstAd} AD ({ratio}x difference)." },
+  cityGapAction:          { es: "Replicar el modelo de operación de {best} en {worst}. Preguntar al partner qué hacen distinto en la mejor ciudad.",
+                            en: "Replicate the operating model from {best} in {worst}. Ask the partner what they do differently in their best city." },
+  commTitle:              { es: "Comisión baja sin caer viajes",
+                            en: "Commission down without trips dropping" },
+  commBody:               { es: "Viajes {trPct}%, comisión {coPct}%.",
+                            en: "Trips {trPct}%, commission {coPct}%." },
+  commAction:             { es: "Posible cambio en tarifa promedio o mix de servicios. Revisar tipos de viaje predominantes y promociones activas.",
+                            en: "Possible change in average fare or service mix. Review predominant trip types and active promotions." },
+  noAlertsTitle:          { es: "Sin alertas críticas",
+                            en: "No critical alerts" },
+  noAlertsBody:           { es: "Métricas dentro de parámetros normales en el último período.",
+                            en: "Metrics within normal range for the latest period." },
+  noAlertsAction:         { es: "Mantener seguimiento regular. Buen momento para revisar metas del próximo {period} con el partner.",
+                            en: "Keep regular follow-up. Good moment to review next {period}'s targets with the partner." },
+  // Decline metric labels
+  metricActiveDrivers:    { es: "Conductores Activos",      en: "Active Drivers" },
+  metricSupplyHours:      { es: "Horas de Conexión",        en: "Supply Hours" },
+  metricNR:               { es: "Nuevos+Reactivados",       en: "New+Reactivated" }
+};
+
+// Resolver i18n: devuelve string en el lang actual.
+// Soporta interpolacion estilo "{name}" -> opts.name.
+function _t(key, opts) {
+  const lang = PARTNER_VIEW_STATE.lang || "es";
+  const entry = PV_I18N[key];
+  if (!entry) return key;
+  let s = entry[lang] || entry.es || key;
+  if (opts) Object.keys(opts).forEach(k => { s = s.split(`{${k}}`).join(opts[k]); });
+  return s;
+}
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 function _pvDestroyCharts() {
@@ -126,17 +282,23 @@ function renderPartnerView() {
 
   // Building HTML
   const partnerColor = STATE.partnerColors[partner] || "#FF0000";
-  const periodLabel = STATE.curMode === "mensual" ? `${nPoints} meses`
-                    : STATE.curMode === "diario"  ? `${nPoints} días`
-                    : `${nPoints} semanas`;
+  const unitKey = STATE.curMode === "mensual" ? "months"
+                : STATE.curMode === "diario"  ? "days"
+                : "weeks";
+  const periodLabel = `${nPoints} ${_t(unitKey)}`;
+  const scaleLabel  = STATE.curMode === "mensual" ? _t("scaleMonthly")
+                    : STATE.curMode === "diario"  ? _t("scaleDaily")
+                    : _t("scaleWeekly");
+  const isEN = PARTNER_VIEW_STATE.lang === "en";
+  const langBtnStyle = on => `padding:6px 11px;font-size:.74rem;font-weight:700;border:1px solid #ddd;cursor:pointer;background:${on?'#0ea5e9':'#fff'};color:${on?'#fff':'#555'};border-radius:6px`;
 
   let html = `
     <div style="padding:0 8px 16px">
       <!-- Controles -->
       <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin:8px 0 16px">
         <div style="position:relative">
-          <label style="font-size:.68rem;color:#666;font-weight:700;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px">Partner</label>
-          <input type="text" id="pvSearch" class="sb-inp" placeholder="Buscar partner..." style="width:240px" autocomplete="off"
+          <label style="font-size:.68rem;color:#666;font-weight:700;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px">${_t("partner")}</label>
+          <input type="text" id="pvSearch" class="sb-inp" placeholder="${_t("searchPartner")}" style="width:240px" autocomplete="off"
             value="${escapeHTML(partner)}"
             oninput="pvFilterPartners(this.value)"
             onfocus="pvShowPartnerList()"
@@ -145,13 +307,20 @@ function renderPartnerView() {
           <div id="pvPartnerList" style="display:none;position:absolute;top:100%;left:0;width:240px;max-height:280px;overflow-y:auto;background:#fff;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:100;margin-top:2px"></div>
         </div>
         <div>
-          <label style="font-size:.68rem;color:#666;font-weight:700;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px">Período</label>
+          <label style="font-size:.68rem;color:#666;font-weight:700;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px">${_t("period")}</label>
           <select id="pvPeriodSel" class="sb-sel" style="width:200px" onchange="pvOnPeriodChange(this.value)">
             ${_pvPeriodOptions(period, periodLabel)}
           </select>
         </div>
+        <div>
+          <label style="font-size:.68rem;color:#666;font-weight:700;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px">${_t("language")}</label>
+          <div style="display:flex;gap:4px">
+            <button onclick="pvSetLang('es')" style="${langBtnStyle(!isEN)}">ES</button>
+            <button onclick="pvSetLang('en')" style="${langBtnStyle(isEN)}">EN</button>
+          </div>
+        </div>
         <button style="padding:8px 16px;margin-left:auto;background:#FF0000;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:.85rem" onclick="pvDownloadPDF()">
-          📤 Descargar PDF
+          ${_t("downloadPDF")}
         </button>
       </div>
 
@@ -163,9 +332,9 @@ function renderPartnerView() {
           <span style="background:${KAM_COLORS[kam]||"#888"};color:#fff;font-size:.7rem;font-weight:700;padding:3px 8px;border-radius:12px;margin-left:8px">${escapeHTML(kam)}</span>
         </div>
         <div style="font-size:.78rem;color:#666">
-          Ciudades: <strong>${citiesOf.map(escapeHTML).join(" · ")}</strong>
-          ${recibeLeads ? ` <span style="margin-left:10px;font-size:.7rem;background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:8px">★ Recibe leads Yango</span>` : ""}
-          <br>Período: ${d2s(dates[0])} → ${d2s(lastDate)} · Escala: <strong>${STATE.curMode}</strong>
+          ${_t("cities")}: <strong>${citiesOf.map(escapeHTML).join(" · ")}</strong>
+          ${recibeLeads ? ` <span style="margin-left:10px;font-size:.7rem;background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:8px">${_t("receivesLeads")}</span>` : ""}
+          <br>${_t("periodPrefix")} ${d2s(dates[0])} → ${d2s(lastDate)} · ${_t("scalePrefix")} <strong>${scaleLabel}</strong>
         </div>
       </div>
 
@@ -177,17 +346,17 @@ function renderPartnerView() {
       })}
 
       <!-- KPIs globales -->
-      ${_secH("⚡", "#FF0000", "KPIs del último período", `${d2s(lastDate)}`)}
+      ${_secH("⚡", "#FF0000", _t("kpisTitle"), `${d2s(lastDate)}`)}
       <div class="section" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px">
-        ${_pvKpiCard(METRICS.ad.label, tADsum, pADsum, METRICS.ad.color)}
-        ${_pvKpiCard(METRICS.nr.label, tNR,    pNR,    METRICS.nr.color)}
-        ${_pvKpiCard(METRICS.sh.label, tSH,    pSH,    METRICS.sh.color)}
-        ${_pvKpiCard("Viajes",         tTr,    null,   "#10b981")}
-        ${_pvKpiCard("Comisión",       tCo,    null,   "#06b6d4", true)}
+        ${_pvKpiCard(_t("activeDrivers"), tADsum, pADsum, METRICS.ad.color)}
+        ${_pvKpiCard(_t("newReact"),      tNR,    pNR,    METRICS.nr.color)}
+        ${_pvKpiCard(_t("supplyHours"),   tSH,    pSH,    METRICS.sh.color)}
+        ${_pvKpiCard(_t("trips"),         tTr,    null,   "#10b981")}
+        ${_pvKpiCard(_t("commission"),    tCo,    null,   "#06b6d4", true)}
       </div>
 
       <!-- Sección por ciudad -->
-      ${_secH("🏙️", "#06b6d4", "Detalle por Ciudad", `${citiesOf.length} ciudad${citiesOf.length>1?"es":""} · ${periodLabel}`)}
+      ${_secH("🏙️", "#06b6d4", _t("cityDetail"), `${citiesOf.length} ${citiesOf.length>1?_t("cityCountPlural"):_t("cityCount")} · ${periodLabel}`)}
       <div class="section">
         ${citiesOf.map(city => {
           // Cachear series por ciudad para no recalcular en buildCharts
@@ -230,17 +399,18 @@ function _pvExecutiveSummary(ctx) {
   } = ctx;
 
   const findings = [];
-  const periodoWord = STATE.curMode === "mensual" ? "mes"
-                    : STATE.curMode === "diario"  ? "día"
-                    : "semana";
-  const periodoWordPlural = STATE.curMode === "mensual" ? "meses"
-                          : STATE.curMode === "diario"  ? "días"
-                          : "semanas";
+  const periodKey = STATE.curMode === "mensual" ? "month"
+                  : STATE.curMode === "diario"  ? "day"
+                  : "week";
+  const periodsKey = STATE.curMode === "mensual" ? "months"
+                   : STATE.curMode === "diario"  ? "days"
+                   : "weeks";
+  const period  = _t(periodKey);
+  const periods = _t(periodsKey);
 
   // ── 1. Declive consecutivo por ciudad (rojo) ──────────────────────────────
   if (STATE.curMode !== "diario") {
     citiesOf.forEach(city => {
-      // Construir apdMap solo para este partner+ciudad
       const cityRows = partnerRows.filter(r => r.city === city);
       const apdMap = new Map();
       const dedup = new Map();
@@ -257,13 +427,13 @@ function _pvExecutiveSummary(ctx) {
       apdMap.set(partner, [...dedup.values()]);
       if (hasConsecutiveDecline(apdMap, partner)) {
         const n = STATE.declineThreshold || 3;
-        const metricLabel = { activeDrivers: "Conductores Activos", supplyHours: "Horas de Conexión", nr: "Nuevos+Reactivados" }[STATE.declineMetric] || STATE.declineMetric;
+        const metricKey = { activeDrivers: "metricActiveDrivers", supplyHours: "metricSupplyHours", nr: "metricNR" }[STATE.declineMetric] || "metricActiveDrivers";
+        const metric = _t(metricKey);
         findings.push({
-          sev: "red",
-          icon: "🔴",
-          title: `Declive consecutivo en ${cityLabel(city)}`,
-          body: `${metricLabel} cayó ${n} ${periodoWordPlural} seguidos.`,
-          action: `Visitar al partner esta ${periodoWord}. Auditar conductores activos vs registrados, revisar incidencias recientes y plan de incentivos.`
+          sev: "red", icon: "🔴",
+          title:  _t("declineTitle",  { city: cityLabel(city) }),
+          body:   _t("declineBody",   { metric, n, periods }),
+          action: _t("declineAction", { period })
         });
       }
     });
@@ -275,23 +445,23 @@ function _pvExecutiveSummary(ctx) {
     if (wowAD <= -15) {
       findings.push({
         sev: "red", icon: "🔴",
-        title: `Caída fuerte en Conductores Activos`,
-        body: `Bajó ${pADsum.toLocaleString()} → ${tADsum.toLocaleString()} (${wowAD.toFixed(1)}% vs ${periodoWord} anterior).`,
-        action: `Acción inmediata: cruzar lista de conductores desconectados y lanzar campaña de reactivación. Confirmar si hay problemas operativos (app, comisión, pago).`
+        title:  _t("adDropSharpTitle"),
+        body:   _t("adDropSharpBody",  { prev: pADsum.toLocaleString(), cur: tADsum.toLocaleString(), pct: wowAD.toFixed(1), period }),
+        action: _t("adDropSharpAction")
       });
     } else if (wowAD <= -5) {
       findings.push({
         sev: "yellow", icon: "🟡",
-        title: `Caída moderada en AD (${wowAD.toFixed(1)}%)`,
-        body: `Tendencia negativa de ${pADsum} → ${tADsum}.`,
-        action: `Monitorear próximas 2 ${periodoWordPlural}. Revisar mix de turnos y desconexiones recientes con el partner.`
+        title:  _t("adDropModTitle",  { pct: wowAD.toFixed(1) }),
+        body:   _t("adDropModBody",   { prev: pADsum, cur: tADsum }),
+        action: _t("adDropModAction", { periods })
       });
     } else if (wowAD >= 15) {
       findings.push({
         sev: "green", icon: "🟢",
-        title: `Crecimiento fuerte en AD (+${wowAD.toFixed(1)}%)`,
-        body: `Aumentó ${pADsum.toLocaleString()} → ${tADsum.toLocaleString()}.`,
-        action: `Aprovechar momentum: validar capacidad operativa, dar más visibilidad a leads Yango y considerar ampliar metas del próximo ${periodoWord}.`
+        title:  _t("adGrowTitle",  { pct: wowAD.toFixed(1) }),
+        body:   _t("adGrowBody",   { prev: pADsum.toLocaleString(), cur: tADsum.toLocaleString() }),
+        action: _t("adGrowAction", { period })
       });
     }
   }
@@ -300,16 +470,16 @@ function _pvExecutiveSummary(ctx) {
   if (tNR === 0 && pNR > 0) {
     findings.push({
       sev: "red", icon: "🔴",
-      title: `Cero ingresos de conductores este ${periodoWord}`,
-      body: `Había ${pNR} nuevos/reactivados el ${periodoWord} anterior — esta vez 0.`,
-      action: `Revisar pipeline de onboarding. ¿Está trabado el proceso de documentación? ¿Algún CLID dejó de cargar drivers?`
+      title:  _t("nrZeroTitle",  { period }),
+      body:   _t("nrZeroBody",   { period, prev: pNR }),
+      action: _t("nrZeroAction")
     });
   } else if (pNR > 0 && tNR / pNR < 0.4 && pNR >= 5) {
     findings.push({
       sev: "yellow", icon: "🟡",
-      title: `Ingresos N+R bajaron fuerte (${tNR} vs ${pNR})`,
-      body: `Reducción de más del 60% en nuevos drivers.`,
-      action: `Confirmar si fue por estacionalidad o problema operativo. Revisar capacidad de onboarding del partner.`
+      title:  _t("nrDropTitle",  { cur: tNR, prev: pNR }),
+      body:   _t("nrDropBody"),
+      action: _t("nrDropAction")
     });
   }
 
@@ -319,9 +489,9 @@ function _pvExecutiveSummary(ctx) {
     if (leadsLast >= 5 && wowAD !== null && wowAD < 3 && wowAD > -5) {
       findings.push({
         sev: "yellow", icon: "🟡",
-        title: `${leadsLast} leads Yango sin reflejarse en AD`,
-        body: `El partner está recibiendo leads pero su base de conductores no crece.`,
-        action: `Revisar tiempo y tasa de conversión lead→activación. Posible cuello de botella en documentación o capacitación inicial. Comparar con benchmark de partners similares.`
+        title:  _t("leadsTitle",  { leads: leadsLast }),
+        body:   _t("leadsBody"),
+        action: _t("leadsAction")
       });
     }
   }
@@ -329,52 +499,44 @@ function _pvExecutiveSummary(ctx) {
   // ── 5. Cumplimiento de metas ──────────────────────────────────────────────
   const metasPartner = (STATE.metasData || []).filter(m => m.partner === partner);
   if (metasPartner.length) {
-    // Suma de metas y de actuales (snapshot del último periodo del rango)
     const meta_ad = metasPartner.reduce((s, m) => s + (m.mA  || 0), 0);
     const meta_nr = metasPartner.reduce((s, m) => s + (m.mNR || 0), 0);
     const meta_sh = metasPartner.reduce((s, m) => s + (m.mH  || 0), 0);
-    const checkCumpl = (label, actual, meta, accionBaja, accionAlta) => {
+    const checkCumpl = (label, actual, meta, lowActionKey, highActionKey) => {
       if (meta <= 0) return;
       const pct = (actual / meta) * 100;
       if (pct < 50) {
         findings.push({
           sev: "red", icon: "🔴",
-          title: `${label}: cumplimiento ${pct.toFixed(0)}% (crítico)`,
-          body: `${fmt(actual)} de ${fmt(meta)} comprometidos. Gap de ${fmt(meta - actual)}.`,
-          action: accionBaja
+          title:  _t("metaLowTitle",  { label, pct: pct.toFixed(0) }),
+          body:   _t("metaLowBody",   { cur: fmt(actual), meta: fmt(meta), gap: fmt(meta - actual) }),
+          action: _t(lowActionKey,    { period })
         });
       } else if (pct < 80) {
         findings.push({
           sev: "yellow", icon: "🟡",
-          title: `${label}: cumplimiento ${pct.toFixed(0)}%`,
-          body: `${fmt(actual)} de ${fmt(meta)}. Falta ${fmt(meta - actual)} para llegar al 100%.`,
-          action: `Acelerar las próximas ${periodoWordPlural}. Confirmar con el partner si la meta sigue siendo realista o necesita ajuste.`
+          title:  _t("metaMidTitle",  { label, pct: pct.toFixed(0) }),
+          body:   _t("metaMidBody",   { cur: fmt(actual), meta: fmt(meta), gap: fmt(meta - actual) }),
+          action: _t("metaMidAction", { periods })
         });
       } else if (pct >= 110) {
         findings.push({
           sev: "green", icon: "🟢",
-          title: `${label}: sobre-cumplimiento ${pct.toFixed(0)}%`,
-          body: `${fmt(actual)} vs ${fmt(meta)} comprometidos (+${fmt(actual - meta)}).`,
-          action: accionAlta
+          title:  _t("metaHighTitle", { label, pct: pct.toFixed(0) }),
+          body:   _t("metaHighBody",  { cur: fmt(actual), meta: fmt(meta), over: fmt(actual - meta) }),
+          action: _t(highActionKey)
         });
       }
     };
-    checkCumpl("Conductores Activos", tADsum, meta_ad,
-      `Plan de aceleración: identificar conductores con potencial de reactivación y agendar reunión esta ${periodoWord}.`,
-      `Caso de éxito. Documentar qué está funcionando y replicarlo en otros partners del mismo KAM.`);
-    checkCumpl("Nuevos+Reactivados", tNR, meta_nr,
-      `Revisar pipeline de inducción y velocidad de procesamiento de nuevos drivers.`,
-      `Excelente captación. Confirmar que el partner tiene capacidad operativa para sostener el ritmo.`);
-    checkCumpl("Horas de Conexión", tSH, meta_sh,
-      `Revisar turnos y motivar a conductores con bajo % de online. Posible problema de incentivos.`,
-      `Excelente productividad por conductor. Evaluar incrementar leads Yango asignados.`);
+    checkCumpl(_t("activeDrivers"), tADsum, meta_ad, "metaAdLowAction", "metaAdHighAction");
+    checkCumpl(_t("newReactShort"),  tNR,    meta_nr, "metaNrLowAction", "metaNrHighAction");
+    checkCumpl(_t("supplyHours"),    tSH,    meta_sh, "metaShLowAction", "metaShHighAction");
   } else if (STATE.metasData && STATE.metasData.length) {
-    // Hay metas en el sistema pero este partner no tiene
     findings.push({
       sev: "info", icon: "💡",
-      title: `Partner sin metas asignadas`,
-      body: `El sistema tiene metas para otros partners pero no para este.`,
-      action: `Definir metas mensuales con el partner para tener métricas claras de seguimiento.`
+      title:  _t("noMetasTitle"),
+      body:   _t("noMetasBody"),
+      action: _t("noMetasAction")
     });
   }
 
@@ -390,11 +552,12 @@ function _pvExecutiveSummary(ctx) {
       const worst = cityPerf[cityPerf.length - 1];
       const ratio = best.ad / worst.ad;
       if (ratio >= 2.5) {
+        const opts = { best: cityLabel(best.city), bestAd: best.ad, worst: cityLabel(worst.city), worstAd: worst.ad, ratio: ratio.toFixed(1) };
         findings.push({
           sev: "yellow", icon: "🟡",
-          title: `Brecha grande entre ciudades`,
-          body: `${cityLabel(best.city)}: ${best.ad} AD vs ${cityLabel(worst.city)}: ${worst.ad} AD (${ratio.toFixed(1)}x diferencia).`,
-          action: `Replicar el modelo de operación de ${cityLabel(best.city)} en ${cityLabel(worst.city)}. Preguntar al partner qué hacen distinto en la mejor ciudad.`
+          title:  _t("cityGapTitle"),
+          body:   _t("cityGapBody", opts),
+          action: _t("cityGapAction", opts)
         });
       }
     }
@@ -409,21 +572,20 @@ function _pvExecutiveSummary(ctx) {
     if (wowCo < -10 && wowTr > -3) {
       findings.push({
         sev: "yellow", icon: "🟡",
-        title: `Comisión baja sin caer viajes`,
-        body: `Viajes ${wowTr >= 0 ? "+" : ""}${wowTr.toFixed(1)}%, comisión ${wowCo.toFixed(1)}%.`,
-        action: `Posible cambio en tarifa promedio o mix de servicios. Revisar tipos de viaje predominantes y promociones activas.`
+        title:  _t("commTitle"),
+        body:   _t("commBody",   { trPct: (wowTr >= 0 ? "+" : "") + wowTr.toFixed(1), coPct: wowCo.toFixed(1) }),
+        action: _t("commAction")
       });
     }
   }
 
   // ── 8. Si no hay alertas, mostrar mensaje positivo ────────────────────────
-  // Pero solo si hay datos suficientes para juzgar
   if (!findings.length && pADsum > 0) {
     findings.push({
       sev: "green", icon: "✅",
-      title: "Sin alertas críticas",
-      body: "Métricas dentro de parámetros normales en el último período.",
-      action: `Mantener seguimiento regular. Buen momento para revisar metas del próximo ${periodoWord} con el partner.`
+      title:  _t("noAlertsTitle"),
+      body:   _t("noAlertsBody"),
+      action: _t("noAlertsAction", { period })
     });
   }
 
@@ -450,14 +612,15 @@ function _pvExecutiveSummary(ctx) {
         </div>
         <div style="font-size:.78rem;color:#333;margin-bottom:6px;line-height:1.4">${escapeHTML(f.body)}</div>
         <div style="font-size:.76rem;color:#555;line-height:1.45">
-          <strong style="color:${s.tc}">Acción:</strong> ${escapeHTML(f.action)}
+          <strong style="color:${s.tc}">${_t("actionLabel")}</strong> ${escapeHTML(f.action)}
         </div>
       </div>`;
   }).join("");
 
-  const headerSub = `${top.length} ${top.length === 1 ? "hallazgo" : "hallazgos"} priorizados · Mirada de KAM senior sobre el partner`;
+  const findingsWord = top.length === 1 ? _t("findingsOne") : _t("findingsMany");
+  const headerSub = `${top.length} ${findingsWord} · ${_t("execSummarySub")}`;
   return `
-    ${_secH("💼", "#0ea5e9", "Análisis Ejecutivo", headerSub)}
+    ${_secH("💼", "#0ea5e9", _t("execSummary"), headerSub)}
     <div class="section" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px">
       ${items}
     </div>`;
@@ -488,27 +651,32 @@ function _pvCitySection(partner, city, dates, recibeLeads, seriesCached) {
     const avgP = prev3.reduce((s, x) => s + x.ad, 0) / 3;
     if (avgP > 0) {
       const chg = ((avgL - avgP) / avgP) * 100;
-      trendTxt = `${chg >= 0 ? "↑" : "↓"} ${chg >= 0 ? "+" : ""}${chg.toFixed(1)}% AD (últ. 3 vs ant. 3)`;
+      const trendSuffix = PARTNER_VIEW_STATE.lang === "en"
+        ? "AD (last 3 vs prev 3)"
+        : "AD (últ. 3 vs ant. 3)";
+      trendTxt = `${chg >= 0 ? "↑" : "↓"} ${chg >= 0 ? "+" : ""}${chg.toFixed(1)}% ${trendSuffix}`;
       trendCol = chg >= 0 ? "#10b981" : "#FF0000";
     }
   }
 
   const id = city.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const breakdownLabel = PARTNER_VIEW_STATE.lang === "en" ? "(breakdown)" : "(desglose)";
+  const tripsCommLabel = PARTNER_VIEW_STATE.lang === "en" ? "Trips & Commission" : "Viajes & Comisión";
 
   return `
     <div style="border:1px solid #eee;border-top:3px solid ${cityColor};border-radius:10px;padding:14px;margin-bottom:14px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
         <div style="display:flex;align-items:center;gap:8px">
           <span style="width:12px;height:12px;border-radius:50%;background:${cityColor}"></span>
-          <span style="font-size:1rem;font-weight:800;color:#111">${escapeHTML(city)}</span>
+          <span style="font-size:1rem;font-weight:800;color:#111">${escapeHTML(cityLabel(city))}</span>
         </div>
         <span style="font-size:.72rem;color:${trendCol};font-weight:700">${trendTxt}</span>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px">
-        <div class="chart-card"><div class="chart-head"><span class="chart-title">${escapeHTML(METRICS.ad.label)}</span></div><div id="pv_${id}_ad"></div></div>
-        <div class="chart-card"><div class="chart-head"><span class="chart-title">${escapeHTML(METRICS.sh.label)}</span></div><div id="pv_${id}_sh"></div></div>
-        <div class="chart-card"><div class="chart-head"><span class="chart-title">${escapeHTML(METRICS.nr.label)} ${recibeLeads ? "(desglose)" : ""}</span></div><div id="pv_${id}_nr"></div></div>
-        <div class="chart-card"><div class="chart-head"><span class="chart-title">Viajes & Comisión</span></div><div id="pv_${id}_tc"></div></div>
+        <div class="chart-card"><div class="chart-head"><span class="chart-title">${escapeHTML(_t("activeDrivers"))}</span></div><div id="pv_${id}_ad"></div></div>
+        <div class="chart-card"><div class="chart-head"><span class="chart-title">${escapeHTML(_t("supplyHours"))}</span></div><div id="pv_${id}_sh"></div></div>
+        <div class="chart-card"><div class="chart-head"><span class="chart-title">${escapeHTML(_t("newReact"))} ${recibeLeads ? breakdownLabel : ""}</span></div><div id="pv_${id}_nr"></div></div>
+        <div class="chart-card"><div class="chart-head"><span class="chart-title">${escapeHTML(tripsCommLabel)}</span></div><div id="pv_${id}_tc"></div></div>
       </div>
     </div>`;
 }
@@ -526,23 +694,27 @@ function _pvBuildCityCharts(partner, city, dates, recibeLeads, seriesCached) {
   _pvSimpleLine(`pv_${id}_sh`, labels, [{ name: "SH", data: series.map(s => s.sh) }], ["#8b5cf6"]);
 
   // Chart 3: N+R desglosado o agregado
+  const isEN = PARTNER_VIEW_STATE.lang === "en";
+  const lblNewPartner = isEN ? "New (Partner)" : "Nuevos (Partner)";
+  const lblNewYango   = isEN ? "New (Yango)"   : "Nuevos (Yango)";
+  const lblReact      = isEN ? "Reactivated"   : "Reactivados";
   const nrSeries = recibeLeads
     ? [
-        { name: "Nuevos (Partner)",  data: series.map(s => s.npPartner) },
-        { name: "Nuevos (Yango)",    data: series.map(s => s.npService) },
-        { name: "Reactivados",       data: series.map(s => s.reactivated) }
+        { name: lblNewPartner, data: series.map(s => s.npPartner) },
+        { name: lblNewYango,   data: series.map(s => s.npService) },
+        { name: lblReact,      data: series.map(s => s.reactivated) }
       ]
     : [
-        { name: "Nuevos (Partner)",  data: series.map(s => s.npPartner) },
-        { name: "Reactivados",       data: series.map(s => s.reactivated) }
+        { name: lblNewPartner, data: series.map(s => s.npPartner) },
+        { name: lblReact,      data: series.map(s => s.reactivated) }
       ];
   const nrColors = recibeLeads ? ["#3b82f6", "#f59e0b", "#10b981"] : ["#3b82f6", "#10b981"];
   _pvStackedColumn(`pv_${id}_nr`, labels, nrSeries, nrColors);
 
   // Chart 4: Trips & Commission (mixed)
   _pvDualLine(`pv_${id}_tc`, labels,
-    [{ name: "Viajes", data: series.map(s => s.trips) },
-     { name: "Comisión", data: series.map(s => s.commission) }],
+    [{ name: _t("trips"),      data: series.map(s => s.trips) },
+     { name: _t("commission"), data: series.map(s => s.commission) }],
     ["#10b981", "#06b6d4"]);
 }
 
@@ -558,15 +730,15 @@ function _pvSimpleLine(elId, labels, series, colors) {
     stroke: { curve: "smooth", width: 2.5 },
     colors,
     markers: { size: 3 },
-    // dataLabels: numeros visibles sobre la linea. El FILL del background lo
-    // setea ApexCharts segun la serie (negro/oscuro por default) y NO se puede
-    // cambiar via API. Forzamos blanco con CSS en styles.css.
+    // dataLabels: numeros visibles sobre la linea SIN background (el background
+    // de ApexCharts hereda el color de la serie y queda negro). Usamos un halo
+    // blanco grueso via CSS (paint-order: stroke) para garantizar legibilidad.
     dataLabels: {
       enabled: true,
       formatter: v => fmt(v),
-      style: { fontSize: "9px", colors: ["#222"], fontWeight: 700 },
-      background: { enabled: true, foreColor: "#222", padding: 3, borderRadius: 3, borderColor: "#e5e5e5", borderWidth: 1, opacity: 1 },
-      offsetY: -8
+      style: { fontSize: "10px", colors: ["#111"], fontWeight: 700 },
+      background: { enabled: false },
+      offsetY: -10
     },
     xaxis: { categories: labels, labels: { style: { fontSize: "9px" }, rotate: -30 }, axisBorder: { show: false }, axisTicks: { show: false } },
     yaxis: { labels: { formatter: v => fmt(v), style: { fontSize: "10px" } } },
@@ -619,9 +791,9 @@ function _pvDualLine(elId, labels, series, colors) {
       enabled: true,
       enabledOnSeries: [0, 1],
       formatter: (v, opts) => opts.seriesIndex === 1 ? "$" + fmt(v) : fmt(v),
-      style: { fontSize: "9px", colors: ["#222"], fontWeight: 700 },
-      background: { enabled: true, foreColor: "#222", padding: 3, borderRadius: 3, borderColor: "#e5e5e5", borderWidth: 1, opacity: 1 },
-      offsetY: -8
+      style: { fontSize: "10px", colors: ["#111"], fontWeight: 700 },
+      background: { enabled: false },
+      offsetY: -10
     },
     xaxis: { categories: labels, labels: { style: { fontSize: "9px" }, rotate: -30 } },
     yaxis: [
@@ -644,6 +816,14 @@ function pvOnPartnerChange(p) {
 
 function pvOnPeriodChange(p) {
   PARTNER_VIEW_STATE.period = p;
+  renderPartnerView();
+}
+
+// Cambia el idioma de la Vista Partner (afecta panel ejecutivo, headers y PDF)
+function pvSetLang(lang) {
+  if (lang !== "es" && lang !== "en") return;
+  if (PARTNER_VIEW_STATE.lang === lang) return;
+  PARTNER_VIEW_STATE.lang = lang;
   renderPartnerView();
 }
 
@@ -743,7 +923,8 @@ async function pvDownloadPDF() {
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ orientation: "portrait", unit: "px", format: [canvas.width, canvas.height] });
     pdf.addImage(imgData, "JPEG", 0, 0, canvas.width, canvas.height);
-    pdf.save(`${partner}_${STATE.curMode}_${(new Date()).toISOString().slice(0,10)}.pdf`);
+    const langSfx = (PARTNER_VIEW_STATE.lang || "es").toUpperCase();
+    pdf.save(`${partner}_${STATE.curMode}_${(new Date()).toISOString().slice(0,10)}_${langSfx}.pdf`);
     showBanner(true, "PDF descargado");
   } catch (err) {
     alert("Error al generar PDF: " + err.message);
