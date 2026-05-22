@@ -15,14 +15,16 @@ const KAM_COLORS = {
   Diego:   "#f59e0b"
 };
 
-// Colores fijos por ciudad
+// Colores fijos por ciudad. Keys en UPPERCASE: la BD y memoria normalizan a
+// UPPERCASE para evitar fragmentacion "Lima" vs "lima" vs "LIMA". Para display
+// usar cityLabel() (definida en data.js).
 const CITY_COLORS = {
-  Lima:     "#FF0000",
-  Trujillo: "#06b6d4",
-  Arequipa: "#f97316"
+  LIMA:     "#FF0000",
+  TRUJILLO: "#06b6d4",
+  AREQUIPA: "#f97316"
 };
 
-const CITIES = ["Lima", "Trujillo", "Arequipa"];
+const CITIES = ["LIMA", "TRUJILLO", "AREQUIPA"];
 
 // Nombres canonicos de metricas. Usar METRICS.ad.label en lugar de strings
 // hardcodeados para mantener consistencia entre tabs.

@@ -141,8 +141,6 @@ body {
 .up-btn:hover       { background: #fff5f5; }
 .up-btn.metas-btn   { border-color: #8b5cf6; color: #8b5cf6; }
 .up-btn.metas-btn:hover { background: #f5f3ff; }
-.up-btn.data-btn    { border-color: #10b981; color: #10b981; }
-.up-btn.data-btn:hover  { background: #f0fdf4; }
 input[type="file"]  { display: none; }
 
 .user-badge {

@@ -406,7 +406,7 @@ function buildSlide1(partner, from, to, mode) {
           const cPrev  = cdPrev;
           return `
             <div style="border-top:3px solid ${col};padding-top:6px;display:flex;flex-direction:column;gap:5px;min-height:0">
-              <div style="font-weight:800;font-size:.82rem;color:${col}">${city}</div>
+              <div style="font-weight:800;font-size:.82rem;color:${col}">${cityLabel(city)}</div>
               ${metrics.map(m => {
                 const pValL = pLast.reduce((s,r)=>s+m.fn(r),0);
                 const pValP = pPrev.reduce((s,r)=>s+m.fn(r),0);
@@ -495,7 +495,7 @@ function buildSlide3(partner, from, to, mode) {
           const col = CITY_COLORS[city] || "#888";
           return `
             <div style="border-top:3px solid ${col};padding-top:6px;display:flex;flex-direction:column;gap:6px">
-              <div style="font-weight:800;font-size:.82rem;color:${col}">${city}</div>
+              <div style="font-weight:800;font-size:.82rem;color:${col}">${cityLabel(city)}</div>
               ${metrics.map(m => {
                 const ranking = getRanking(city, m.fn);
                 const idx     = ranking.findIndex(r => r.partner===partner);
@@ -539,7 +539,7 @@ function buildSlide5(partner, from, to, mode) {
   const col     = STATE.partnerColors[partner] || "#FF0000";
   const dates   = getSelectedDates(from, to, mode);
   const availableCities = new Set((STATE._byPartner?.get(partner) || []).map(r => r.city));
-  const order = ["Lima", "Trujillo", "Arequipa"];
+  const order = ["LIMA", "TRUJILLO", "AREQUIPA"];
   const cities = order.filter(c => availableCities.has(c));
 
   const metrics = [
@@ -585,7 +585,7 @@ function buildSlide5(partner, from, to, mode) {
       <div style="flex:1;min-width:0">
         <div style="font-size:.8rem;font-weight:700;color:${cityColor};margin-bottom:8px;display:flex;align-items:center;gap:6px">
           <span style="width:8px;height:8px;border-radius:50%;background:${cityColor};display:inline-block"></span>
-          ${city}
+          ${cityLabel(city)}
         </div>
         <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08)">
           <colgroup><col style="width:38%"/>${dates.map(()=>'<col/>').join("")}</colgroup>

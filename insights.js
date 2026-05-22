@@ -62,7 +62,19 @@ function _fmtPct(p) {
 }
 
 // ── RENDER PRINCIPAL ──────────────────────────────────────────────────────────
+// Guard de reentrancia (mismo patron que rendimiento.js).
+let _renderInsightsBusy = false;
 function renderInsights() {
+  if (_renderInsightsBusy) return;
+  _renderInsightsBusy = true;
+  try {
+    _renderInsightsImpl();
+  } finally {
+    _renderInsightsBusy = false;
+  }
+}
+
+function _renderInsightsImpl() {
   const el = document.getElementById("insightsContent");
   if (!el) return;
   ensureIndexes();

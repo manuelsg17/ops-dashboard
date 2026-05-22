@@ -7,6 +7,18 @@ function hashColor(s) {
   return `hsl(${Math.abs(h) % 360},62%,46%)`;
 }
 
+// Normaliza ciudad: trim + UPPERCASE. Llamar SIEMPRE al leer/escribir ciudad
+// (BD, uploads, comparaciones). Evita fragmentacion "Lima"/"lima"/"LIMA".
+function normCity(c) {
+  return String(c || "").trim().toUpperCase();
+}
+// Para display amigable: "LIMA" -> "Lima". Usar al renderizar en UI.
+function cityLabel(c) {
+  const s = String(c || "").trim();
+  if (!s) return "";
+  return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+}
+
 // Escapa caracteres HTML peligrosos en strings de input (partner names, tooltips, etc.).
 // Usar SIEMPRE al interpolar valores no controlados en HTML.
 function escapeHTML(s) {
@@ -259,7 +271,7 @@ async function loadFromSupabase() {
       clid:          (r.clid || "").trim(),
       partner:       STATE.CLID_MAP[r.clid] || r.partner,
       kam:           STATE.KAM_MAP[r.clid] || r.kam || "",
-      city:          r.city || "",
+      city:          normCity(r.city),
       date:          r.fecha,
       activeDrivers: +r.active_drivers,
       newPartner:    +r.new_from_partner,
@@ -278,7 +290,7 @@ async function loadFromSupabase() {
     STATE.metasData = (metas || []).map(m => ({
       partner: STATE.CLID_MAP[m.clid] || m.partner,
       kam:     STATE.KAM_MAP[m.clid] || m.kam || "",
-      city:    (m.city || "").trim(),
+      city:    normCity(m.city),
       // Normalizar mes a UPPERCASE en cliente: la BD tiene mezcla de "mayo",
       // "Mayo", "MAYO" por uploads viejos. Sin esto, m.mes !== mesName falla
       // por casing y los %% de cumplimiento salen inflados/incompletos.
@@ -315,8 +327,20 @@ async function loadFromSupabase() {
       ? ` · ⚠ ${STATE.parseWarnings.size} campo(s) inválido(s)` : "";
     showBanner(true, "Datos cargados · " + new Date().toLocaleTimeString("es-PE") + warnSuffix);
 
-    if (STATE.rawData.length)   renderRend();
-    if (STATE.metasData.length) renderMetas();
+    // Render solo el tab activo (mismo patron que applyFilters/switchMode).
+    // Antes se llamaba renderRend()+renderMetas() incondicional: trabajo
+    // desperdiciado si el usuario estaba en otro tab al terminar el upload,
+    // y race condition con applyFilters() debounced.
+    if (STATE.rawData.length) {
+      if (STATE.curTab === "rend")                                        renderRend();
+      if (STATE.curTab === "metas"       && STATE.metasData.length)       renderMetas();
+      if (STATE.curTab === "ops"         && typeof renderOps === "function")         renderOps();
+      if (STATE.curTab === "insights"    && typeof renderInsights === "function")    renderInsights();
+      if (STATE.curTab === "unifview"    && typeof renderUnifView === "function")    renderUnifView();
+      if (STATE.curTab === "partnerview" && typeof renderPartnerView === "function") renderPartnerView();
+      if (STATE.curTab === "calculator"  && typeof renderCalculator === "function")  renderCalculator();
+      if (STATE.curTab === "rawdata"     && typeof renderRawData === "function")     renderRawData();
+    }
 
   } catch (err) {
     showBanner(false, "Error al cargar: " + err.message);
@@ -335,7 +359,7 @@ async function loadMensualIfNeeded() {
       clid:          (r.clid || "").trim(),
       partner:       STATE.CLID_MAP[r.clid] || r.partner,
       kam:           STATE.KAM_MAP[r.clid]  || r.kam || "",
-      city:          r.city || "",
+      city:          normCity(r.city),
       date:          r.mes,
       activeDrivers: +r.active_drivers,
       newPartner:    +r.new_from_partner,
@@ -368,7 +392,7 @@ async function loadDiarioIfNeeded() {
       clid:          (r.clid || "").trim(),
       partner:       STATE.CLID_MAP[r.clid] || r.partner || r.clid,
       kam:           STATE.KAM_MAP[r.clid]  || r.kam || "",
-      city:          r.city || "",
+      city:          normCity(r.city),
       date:          r.date,
       activeDrivers: +r.active_drivers || 0,
       newPartner:    +r.new_partner    || 0,
@@ -428,7 +452,7 @@ async function uploadRendimientoMensual(rows) {
       || String(row["Partner"] || row["partner"] || "").trim()
       || clid || "Unknown";
     const kam  = STATE.KAM_MAP[clid] || "";
-    const city = String(row["City"] || row["city"] || row["Ciudad"] || "").trim();
+    const city = normCity(row["City"] || row["city"] || row["Ciudad"]);
 
     Object.entries(mesColMap).forEach(([mes, mc]) => {
       const v  = col => col ? toN(row[col]) : 0;
@@ -497,7 +521,7 @@ async function uploadRendimientoDiario(rows) {
   const agg = {};
   rows.forEach(row => {
     const clid = String(row["CLID"] || row["clid"] || "").trim();
-    const city = String(row["City"] || row["city"] || row["Ciudad"] || "").trim();
+    const city = normCity(row["City"] || row["city"] || row["Ciudad"]);
 
     Object.entries(dateColMap).forEach(([date, mc]) => {
       const v  = col => col ? toN(row[col]) : 0;
@@ -672,7 +696,7 @@ async function uploadRendimiento(rows) {
       || String(row["Partner"] || row["partner"] || "").trim()
       || clid || "Unknown";
     const kam  = STATE.KAM_MAP[clid] || "";
-    const city = String(row["City"] || row["city"] || row["Ciudad"] || "").trim();
+    const city = normCity(row["City"] || row["city"] || row["Ciudad"]);
 
     Object.entries(dateColMap).forEach(([fecha, mc]) => {
       const v   = col => col ? toN(row[col]) : 0;
@@ -744,7 +768,7 @@ async function uploadMetas(rows) {
       clid, partner, kam,
       // Mes en UPPERCASE para evitar duplicados "mayo"/"Mayo"/"MAYO" en BD
       mes:  String(row["MES"]    || row["Mes"]    || "").trim().toUpperCase(),
-      city: String(row["CIUDAD"] || row["Ciudad"] || "").trim(),
+      city: normCity(row["CIUDAD"] || row["Ciudad"]),
       meta_active_drivers: toN(row["ACTIVE DRIVERS"] || row["Active Drivers"] || 0),
       meta_nr:             toN(row["N+R"] || row["n+r"] || 0),
       meta_supply_hours:   toN(row["SUPPLY HOURS"] || row["Supply Hours"] || 0)
@@ -902,17 +926,9 @@ function getApdFull() {
 }
 
 // ── AGGREGATION (full precision, no intermediate rounding) ────────────────────
-function getFiltered() {
-  const city = document.getElementById("cityFilter").value;
-  const from = document.getElementById("dateFrom").value;
-  const to   = document.getElementById("dateTo").value;
-  const selSet = new Set(getSel());
-  return STATE.rawData.filter(r =>
-    (city === "all" || r.city === city) &&
-    r.date >= from && r.date <= to &&
-    selSet.has(r.partner)
-  );
-}
+// getFiltered() definido mas abajo (version cacheada). La version sin cache fue
+// removida porque era sobrescrita silenciosamente por la cacheada al final del
+// archivo, causando confusion al editar.
 
 // Step 1: dedup by partner+city+date (consolidates multiple CLIDs)
 // Step 2: collapse into partner+date (sums across cities)
@@ -981,56 +997,91 @@ function aggCityDate(data) {
   return m;
 }
 
-// ── AGGREGATION CACHE ─────────────────────────────────────────────────────────
-// Cache de un solo slot: evita re-computar cuando el filtro no cambió
-// (ej. al volver a la misma tab, o al hacer applyFilters sin cambios reales).
-const _C = { key: null, filtered: null, pd: null, byDate: null, cityByDate: {} };
-
-function _filterKey() {
-  const city = document.getElementById("cityFilter")?.value  || "";
-  const from = document.getElementById("dateFrom")?.value    || "";
-  const to   = document.getElementById("dateTo")?.value      || "";
-  return `${STATE.curMode}|${city}|${from}|${to}|${getSel().sort().join(",")}`;
+// ── FILTROS CENTRALIZADOS ─────────────────────────────────────────────────────
+// Lectura unica de los inputs del sidebar. Usar SIEMPRE en lugar de leer el DOM
+// directo desde cada modulo: si cambia el HTML, solo se actualiza aqui.
+function getCurrentFilters() {
+  return {
+    city: document.getElementById("cityFilter")?.value || "all",
+    from: document.getElementById("dateFrom")?.value   || "",
+    to:   document.getElementById("dateTo")?.value     || "",
+    kam:  document.getElementById("kamFilter")?.value  || "all",
+    selected: getSel()
+  };
 }
 
-function clearAggCache() { _C.key = null; }
+// ── AGGREGATION CACHE ─────────────────────────────────────────────────────────
+// LRU de 4 slots. Evita re-computar cuando se alterna entre filtros recientes
+// (ej. usuario cambia ciudad A -> B -> A, o vuelve a un tab con filtros previos).
+// El slot 0 es el "actual" — aggPDc/aggDatec/aggCityDatec lo usan para sub-caches.
+const _CACHE_SIZE = 4;
+const _CACHE = [];   // [{ key, filtered, pd, byDate, cityByDate }, ...] (slot 0 = most recent)
+
+function _filterKey() {
+  const f = getCurrentFilters();
+  return `${STATE.curMode}|${f.city}|${f.from}|${f.to}|${f.selected.slice().sort().join(",")}`;
+}
+
+function clearAggCache() { _CACHE.length = 0; }
+
+// Slot "current" (top of LRU). Mantiene compatibilidad con aggPDc/aggDatec/aggCityDatec
+// que comparaban contra _C.filtered. Se actualiza al final de getFiltered().
+const _C = { filtered: null, pd: null, byDate: null, cityByDate: {} };
 
 function getFiltered() {
   const key = _filterKey();
-  if (_C.key === key) return _C.filtered;
-  const city   = document.getElementById("cityFilter").value;
-  const from   = document.getElementById("dateFrom").value;
-  const to     = document.getElementById("dateTo").value;
-  const selSet = new Set(getSel());
+  // Hit en LRU: promover a slot 0 y restaurar _C
+  const hitIdx = _CACHE.findIndex(s => s.key === key);
+  if (hitIdx >= 0) {
+    const slot = _CACHE[hitIdx];
+    if (hitIdx > 0) {
+      _CACHE.splice(hitIdx, 1);
+      _CACHE.unshift(slot);
+    }
+    _C.filtered   = slot.filtered;
+    _C.pd         = slot.pd;
+    _C.byDate     = slot.byDate;
+    _C.cityByDate = slot.cityByDate;
+    return slot.filtered;
+  }
+
+  const f = getCurrentFilters();
+  const selSet = new Set(f.selected);
 
   // Usar índice por fecha si está disponible (O(log n) en lugar de O(n))
   let rows;
   if (STATE._byDate && STATE._byDate.size) {
     rows = [];
     for (const [date, arr] of STATE._byDate) {
-      if (date >= from && date <= to) rows.push(...arr);
+      if (date >= f.from && date <= f.to) rows.push(...arr);
     }
-    if (city !== "all") rows = rows.filter(r => r.city === city);
+    if (f.city !== "all") rows = rows.filter(r => r.city === f.city);
     rows = rows.filter(r => selSet.has(r.partner));
   } else {
     rows = STATE.rawData.filter(r =>
-      (city === "all" || r.city === city) &&
-      r.date >= from && r.date <= to &&
+      (f.city === "all" || r.city === f.city) &&
+      r.date >= f.from && r.date <= f.to &&
       selSet.has(r.partner)
     );
   }
 
-  _C.filtered  = rows;
-  _C.key       = key;
-  _C.pd        = null;
-  _C.byDate    = null;
+  // Crear nuevo slot y meterlo al frente
+  const slot = { key, filtered: rows, pd: null, byDate: null, cityByDate: {} };
+  _CACHE.unshift(slot);
+  if (_CACHE.length > _CACHE_SIZE) _CACHE.length = _CACHE_SIZE;
+
+  _C.filtered   = rows;
+  _C.pd         = null;
+  _C.byDate     = null;
   _C.cityByDate = {};
-  return _C.filtered;
+  return rows;
 }
 
 function aggPDc(data) {
   if (data === _C.filtered) {
     if (!_C.pd) _C.pd = aggPD(data);
+    // Sincronizar con el slot 0 para que el LRU conserve los sub-caches
+    if (_CACHE[0]) _CACHE[0].pd = _C.pd;
     return _C.pd;
   }
   return aggPD(data);
@@ -1039,6 +1090,7 @@ function aggPDc(data) {
 function aggDatec(data) {
   if (data === _C.filtered) {
     if (!_C.byDate) _C.byDate = aggDate(data);
+    if (_CACHE[0]) _CACHE[0].byDate = _C.byDate;
     return _C.byDate;
   }
   return aggDate(data);
@@ -1047,6 +1099,7 @@ function aggDatec(data) {
 function aggCityDatec(data, cityKey) {
   if (data === _C.filtered) {
     if (!_C.cityByDate[cityKey]) _C.cityByDate[cityKey] = aggCityDate(data);
+    if (_CACHE[0]) _CACHE[0].cityByDate = _C.cityByDate;
     return _C.cityByDate[cityKey];
   }
   return aggCityDate(data);

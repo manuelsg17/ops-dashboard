@@ -124,7 +124,7 @@ function _renderRendImpl() {
       <div class="city-card" style="border-top-color:${col}">
         <div class="city-name">
           <span style="width:10px;height:10px;border-radius:50%;background:${col};display:inline-block"></span>
-          ${city}
+          ${cityLabel(city)}
         </div>
         <div class="city-kpi">
           <span class="city-kpi-label">Conductores Activos</span>

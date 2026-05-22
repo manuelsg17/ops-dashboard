@@ -13,8 +13,6 @@ function _onTipMouseMove(e) {
   ft.style.top  = y + "px";
 }
 
-function attachTooltipEvents() { /* listener se registra en showFloatTip/hideFloatTip */ }
-
 function showFloatTip(date, rows) {
   const ft = document.getElementById("floatTip");
   document.getElementById("ftDate").textContent = date;

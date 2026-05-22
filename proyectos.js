@@ -53,7 +53,7 @@ function renderProyectos() {
           <label class="proj-label">Ciudad</label>
           <select class="sb-sel" id="pj_city">
             <option value="">Todas</option>
-            ${CITIES.map(c => `<option value="${c}">${c}</option>`).join("")}
+            ${CITIES.map(c => `<option value="${c}">${cityLabel(c)}</option>`).join("")}
           </select>
         </div>
         <div>

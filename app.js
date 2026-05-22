@@ -79,7 +79,6 @@ function initApp() {
     if (el) el.addEventListener("change", _debouncedApply);
   });
 
-  attachTooltipEvents(); // solo se necesita una vez
   loadFromSupabase();
 }
 
@@ -496,10 +495,11 @@ function _pItem(p, selSet) {
   const chk = selSet.has(p) ? "checked" : "";
   const c   = STATE.partnerColors[p] || "#FF0000";
   const id  = "c_" + p.replace(/[^a-z0-9]/gi, "_");
-  return `<div class="pi" data-p="${p}" style="height:${VIRT_ITEM_H}px">
-      <input type="checkbox" id="${id}" value="${p}" ${chk}/>
+  const pH  = escapeHTML(p);
+  return `<div class="pi" data-p="${pH}" style="height:${VIRT_ITEM_H}px">
+      <input type="checkbox" id="${id}" value="${pH}" ${chk}/>
       <label for="${id}">
-        <span class="pdot" style="background:${c}"></span>${p}
+        <span class="pdot" style="background:${c}"></span>${pH}
       </label>
     </div>`;
 }
@@ -824,19 +824,22 @@ function kamMakeEditable(clid) {
   const kams    = [...new Set(Object.values(STATE.KAM_MAP))].sort();
   // Include current KAM even if not in list (safety)
   if (kam && !kams.includes(kam)) kams.push(kam);
-  const editKamOpts = kams.map(k => `<option value="${k}"${k===kam?" selected":""}>${k}</option>`).join("");
+  const editKamOpts = kams.map(k => `<option value="${escapeHTML(k)}"${k===kam?" selected":""}>${escapeHTML(k)}</option>`).join("");
+  const clidH    = escapeHTML(clid);
+  const partnerH = escapeHTML(partner);
+  const clidJS   = clid.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
   row.innerHTML = `
-    <td style="font-size:.75rem;color:#aaa;font-family:monospace">${clid}</td>
-    <td><input class="crud-input" id="edit_partner_${clid}" value="${partner}"/></td>
+    <td style="font-size:.75rem;color:#aaa;font-family:monospace">${clidH}</td>
+    <td><input class="crud-input" id="edit_partner_${clidH}" value="${partnerH}"/></td>
     <td>
-      <select class="crud-input" id="edit_kam_${clid}" onchange="kamEditKamChange('${clid}')" style="width:100%">
+      <select class="crud-input" id="edit_kam_${clidH}" onchange="kamEditKamChange('${clidJS}')" style="width:100%">
         ${editKamOpts}
         <option value="__new__">+ Añadir nuevo KAM...</option>
       </select>
-      <input class="crud-input" id="edit_kam_custom_${clid}" placeholder="Nuevo nombre de KAM" style="display:none;margin-top:4px"/>
+      <input class="crud-input" id="edit_kam_custom_${clidH}" placeholder="Nuevo nombre de KAM" style="display:none;margin-top:4px"/>
     </td>
     <td style="text-align:center">
-      <button class="crud-btn crud-btn-save"   onclick="kamCrudEdit('${clid}')">Guardar</button>
+      <button class="crud-btn crud-btn-save"   onclick="kamCrudEdit('${clidJS}')">Guardar</button>
       <button class="crud-btn crud-btn-cancel" onclick="renderConfig()">Cancelar</button>
     </td>`;
 }

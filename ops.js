@@ -1,6 +1,18 @@
 // ops.js — Vista Head de Operaciones
 
+// Guard de reentrancia (mismo patron que rendimiento.js).
+let _renderOpsBusy = false;
 function renderOps() {
+  if (_renderOpsBusy) return;
+  _renderOpsBusy = true;
+  try {
+    _renderOpsImpl();
+  } finally {
+    _renderOpsBusy = false;
+  }
+}
+
+function _renderOpsImpl() {
   ensureIndexes();
   if (!STATE.rawData.length) {
     document.getElementById("opsContent").innerHTML = `
@@ -115,7 +127,7 @@ function renderOps() {
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
           <div style="font-weight:700;font-size:.9rem;color:#111;display:flex;align-items:center;gap:6px">
             <span style="width:8px;height:8px;border-radius:50%;background:${cityColor};display:inline-block"></span>
-            ${city}
+            ${cityLabel(city)}
           </div>
           <div style="font-size:.72rem;color:#aaa">${partnersInCity} partners</div>
         </div>
@@ -213,7 +225,7 @@ function renderOps() {
         <div style="margin-bottom:16px">
           <div style="font-size:.78rem;font-weight:700;color:${cityColor};margin-bottom:8px;display:flex;align-items:center;gap:6px">
             <span style="width:7px;height:7px;border-radius:50%;background:${cityColor};display:inline-block"></span>
-            ${city} — ${underperforming.length > 0 ? `<span style="color:#FF0000">${underperforming.length} partners por debajo del 50%</span>` : `<span style="color:#10b981">Todos ≥ 50% ✓</span>`}
+            ${cityLabel(city)} — ${underperforming.length > 0 ? `<span style="color:#FF0000">${underperforming.length} partners por debajo del 50%</span>` : `<span style="color:#10b981">Todos ≥ 50% ✓</span>`}
           </div>`;
 
       if (underperforming.length) {
@@ -263,7 +275,7 @@ function renderOps() {
       const sorted = partners.sort((a, b) => b.ns - a.ns);
       html += `
         <div class="mcard" style="border-left:3px solid ${cityColor}">
-          <div style="font-weight:700;font-size:.82rem;margin-bottom:8px;color:${cityColor}">${city}</div>
+          <div style="font-weight:700;font-size:.82rem;margin-bottom:8px;color:${cityColor}">${cityLabel(city)}</div>
           ${sorted.map(p => `
             <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #f5f5f5;font-size:.78rem">
               <span style="color:#333">${p.partner}</span>

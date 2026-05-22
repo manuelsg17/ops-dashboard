@@ -43,9 +43,21 @@ function setMetasMes(mes) {
   if (STATE.curTab === "metas") renderMetas();
 }
 
+// Guard de reentrancia: doble-click o filtros solapados no deben lanzar dos
+// renders concurrentes (mismo patron que rendimiento.js).
+let _renderMetasBusy = false;
 function renderMetas() {
+  if (_renderMetasBusy) return;
   if (!STATE.metasData.length) return;
+  _renderMetasBusy = true;
+  try {
+    _renderMetasImpl();
+  } finally {
+    _renderMetasBusy = false;
+  }
+}
 
+function _renderMetasImpl() {
   // Garantiza índices secundarios construidos antes de cualquier lookup
   ensureIndexes();
 
@@ -316,7 +328,7 @@ function renderMetas() {
       <div class="city-card" style="border-top-color:${col}">
         <div class="city-name">
           <span style="width:10px;height:10px;border-radius:50%;background:${col};display:inline-block"></span>
-          ${city}
+          ${cityLabel(city)}
         </div>
         ${miniBar("Cond. Activos",  crAD, cmA,  cpAD)}
         ${miniBar("Nuevos+React",   crNR, cmNR, cpNR)}
