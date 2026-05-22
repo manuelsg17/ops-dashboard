@@ -169,6 +169,13 @@ function renderPartnerView() {
         </div>
       </div>
 
+      <!-- Análisis Ejecutivo (KAM Senior) -->
+      ${_pvExecutiveSummary({
+        partner, citiesOf, dates, recibeLeads, lastDate, prevDate,
+        partnerRows, lastRows, prevRows,
+        tADsum, pADsum, tNR, pNR, tSH, pSH, tTr, tCo
+      })}
+
       <!-- KPIs globales -->
       ${_secH("⚡", "#FF0000", "KPIs del último período", `${d2s(lastDate)}`)}
       <div class="section" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px">
@@ -208,6 +215,252 @@ function renderPartnerView() {
       _pvBuildCityCharts(partner, city, dates, recibeLeads, series);
     });
   }, 100);
+}
+
+// ── ANALISIS EJECUTIVO (KAM SENIOR) ───────────────────────────────────────────
+// Detecta señales relevantes y produce bullets accionables. Pensado para que el
+// KAM tenga un "primer vistazo" de qué pasa con el partner y qué hacer esta
+// semana. No es IA — son reglas determinísticas basadas en thresholds que un
+// KAM senior aplicaria mentalmente. Severidad: red > yellow > green > info.
+function _pvExecutiveSummary(ctx) {
+  const {
+    partner, citiesOf, dates, recibeLeads, lastDate, prevDate,
+    partnerRows, lastRows, prevRows,
+    tADsum, pADsum, tNR, pNR, tSH, pSH, tTr, tCo
+  } = ctx;
+
+  const findings = [];
+  const periodoWord = STATE.curMode === "mensual" ? "mes"
+                    : STATE.curMode === "diario"  ? "día"
+                    : "semana";
+  const periodoWordPlural = STATE.curMode === "mensual" ? "meses"
+                          : STATE.curMode === "diario"  ? "días"
+                          : "semanas";
+
+  // ── 1. Declive consecutivo por ciudad (rojo) ──────────────────────────────
+  if (STATE.curMode !== "diario") {
+    citiesOf.forEach(city => {
+      // Construir apdMap solo para este partner+ciudad
+      const cityRows = partnerRows.filter(r => r.city === city);
+      const apdMap = new Map();
+      const dedup = new Map();
+      cityRows.forEach(r => {
+        const k = `${r.date}`;
+        const ex = dedup.get(k) || { partner, date: r.date, activeDrivers: 0, newPartner: 0, newService: 0, reactivated: 0, supplyHours: 0 };
+        if (r.activeDrivers > ex.activeDrivers) ex.activeDrivers = r.activeDrivers;
+        ex.newPartner   += r.newPartner;
+        ex.newService   += r.newService;
+        ex.reactivated  += r.reactivated;
+        ex.supplyHours  += r.supplyHours;
+        dedup.set(k, ex);
+      });
+      apdMap.set(partner, [...dedup.values()]);
+      if (hasConsecutiveDecline(apdMap, partner)) {
+        const n = STATE.declineThreshold || 3;
+        const metricLabel = { activeDrivers: "Conductores Activos", supplyHours: "Horas de Conexión", nr: "Nuevos+Reactivados" }[STATE.declineMetric] || STATE.declineMetric;
+        findings.push({
+          sev: "red",
+          icon: "🔴",
+          title: `Declive consecutivo en ${cityLabel(city)}`,
+          body: `${metricLabel} cayó ${n} ${periodoWordPlural} seguidos.`,
+          action: `Visitar al partner esta ${periodoWord}. Auditar conductores activos vs registrados, revisar incidencias recientes y plan de incentivos.`
+        });
+      }
+    });
+  }
+
+  // ── 2. Variacion fuerte en AD global ──────────────────────────────────────
+  const wowAD = pADsum > 0 ? ((tADsum - pADsum) / pADsum) * 100 : null;
+  if (wowAD !== null) {
+    if (wowAD <= -15) {
+      findings.push({
+        sev: "red", icon: "🔴",
+        title: `Caída fuerte en Conductores Activos`,
+        body: `Bajó ${pADsum.toLocaleString()} → ${tADsum.toLocaleString()} (${wowAD.toFixed(1)}% vs ${periodoWord} anterior).`,
+        action: `Acción inmediata: cruzar lista de conductores desconectados y lanzar campaña de reactivación. Confirmar si hay problemas operativos (app, comisión, pago).`
+      });
+    } else if (wowAD <= -5) {
+      findings.push({
+        sev: "yellow", icon: "🟡",
+        title: `Caída moderada en AD (${wowAD.toFixed(1)}%)`,
+        body: `Tendencia negativa de ${pADsum} → ${tADsum}.`,
+        action: `Monitorear próximas 2 ${periodoWordPlural}. Revisar mix de turnos y desconexiones recientes con el partner.`
+      });
+    } else if (wowAD >= 15) {
+      findings.push({
+        sev: "green", icon: "🟢",
+        title: `Crecimiento fuerte en AD (+${wowAD.toFixed(1)}%)`,
+        body: `Aumentó ${pADsum.toLocaleString()} → ${tADsum.toLocaleString()}.`,
+        action: `Aprovechar momentum: validar capacidad operativa, dar más visibilidad a leads Yango y considerar ampliar metas del próximo ${periodoWord}.`
+      });
+    }
+  }
+
+  // ── 3. N+R: caída a cero ──────────────────────────────────────────────────
+  if (tNR === 0 && pNR > 0) {
+    findings.push({
+      sev: "red", icon: "🔴",
+      title: `Cero ingresos de conductores este ${periodoWord}`,
+      body: `Había ${pNR} nuevos/reactivados el ${periodoWord} anterior — esta vez 0.`,
+      action: `Revisar pipeline de onboarding. ¿Está trabado el proceso de documentación? ¿Algún CLID dejó de cargar drivers?`
+    });
+  } else if (pNR > 0 && tNR / pNR < 0.4 && pNR >= 5) {
+    findings.push({
+      sev: "yellow", icon: "🟡",
+      title: `Ingresos N+R bajaron fuerte (${tNR} vs ${pNR})`,
+      body: `Reducción de más del 60% en nuevos drivers.`,
+      action: `Confirmar si fue por estacionalidad o problema operativo. Revisar capacidad de onboarding del partner.`
+    });
+  }
+
+  // ── 4. Recibe leads Yango pero AD no crece ────────────────────────────────
+  if (recibeLeads) {
+    const leadsLast = lastRows.reduce((s, r) => s + (r.newService || 0), 0);
+    if (leadsLast >= 5 && wowAD !== null && wowAD < 3 && wowAD > -5) {
+      findings.push({
+        sev: "yellow", icon: "🟡",
+        title: `${leadsLast} leads Yango sin reflejarse en AD`,
+        body: `El partner está recibiendo leads pero su base de conductores no crece.`,
+        action: `Revisar tiempo y tasa de conversión lead→activación. Posible cuello de botella en documentación o capacitación inicial. Comparar con benchmark de partners similares.`
+      });
+    }
+  }
+
+  // ── 5. Cumplimiento de metas ──────────────────────────────────────────────
+  const metasPartner = (STATE.metasData || []).filter(m => m.partner === partner);
+  if (metasPartner.length) {
+    // Suma de metas y de actuales (snapshot del último periodo del rango)
+    const meta_ad = metasPartner.reduce((s, m) => s + (m.mA  || 0), 0);
+    const meta_nr = metasPartner.reduce((s, m) => s + (m.mNR || 0), 0);
+    const meta_sh = metasPartner.reduce((s, m) => s + (m.mH  || 0), 0);
+    const checkCumpl = (label, actual, meta, accionBaja, accionAlta) => {
+      if (meta <= 0) return;
+      const pct = (actual / meta) * 100;
+      if (pct < 50) {
+        findings.push({
+          sev: "red", icon: "🔴",
+          title: `${label}: cumplimiento ${pct.toFixed(0)}% (crítico)`,
+          body: `${fmt(actual)} de ${fmt(meta)} comprometidos. Gap de ${fmt(meta - actual)}.`,
+          action: accionBaja
+        });
+      } else if (pct < 80) {
+        findings.push({
+          sev: "yellow", icon: "🟡",
+          title: `${label}: cumplimiento ${pct.toFixed(0)}%`,
+          body: `${fmt(actual)} de ${fmt(meta)}. Falta ${fmt(meta - actual)} para llegar al 100%.`,
+          action: `Acelerar las próximas ${periodoWordPlural}. Confirmar con el partner si la meta sigue siendo realista o necesita ajuste.`
+        });
+      } else if (pct >= 110) {
+        findings.push({
+          sev: "green", icon: "🟢",
+          title: `${label}: sobre-cumplimiento ${pct.toFixed(0)}%`,
+          body: `${fmt(actual)} vs ${fmt(meta)} comprometidos (+${fmt(actual - meta)}).`,
+          action: accionAlta
+        });
+      }
+    };
+    checkCumpl("Conductores Activos", tADsum, meta_ad,
+      `Plan de aceleración: identificar conductores con potencial de reactivación y agendar reunión esta ${periodoWord}.`,
+      `Caso de éxito. Documentar qué está funcionando y replicarlo en otros partners del mismo KAM.`);
+    checkCumpl("Nuevos+Reactivados", tNR, meta_nr,
+      `Revisar pipeline de inducción y velocidad de procesamiento de nuevos drivers.`,
+      `Excelente captación. Confirmar que el partner tiene capacidad operativa para sostener el ritmo.`);
+    checkCumpl("Horas de Conexión", tSH, meta_sh,
+      `Revisar turnos y motivar a conductores con bajo % de online. Posible problema de incentivos.`,
+      `Excelente productividad por conductor. Evaluar incrementar leads Yango asignados.`);
+  } else if (STATE.metasData && STATE.metasData.length) {
+    // Hay metas en el sistema pero este partner no tiene
+    findings.push({
+      sev: "info", icon: "💡",
+      title: `Partner sin metas asignadas`,
+      body: `El sistema tiene metas para otros partners pero no para este.`,
+      action: `Definir metas mensuales con el partner para tener métricas claras de seguimiento.`
+    });
+  }
+
+  // ── 6. Brecha entre ciudades (multi-ciudad) ───────────────────────────────
+  if (citiesOf.length >= 2) {
+    const cityPerf = citiesOf.map(c => {
+      const last = lastRows.filter(r => r.city === c);
+      const ad = last.reduce((s, r) => s + r.activeDrivers, 0);
+      return { city: c, ad };
+    }).filter(x => x.ad > 0).sort((a, b) => b.ad - a.ad);
+    if (cityPerf.length >= 2) {
+      const best = cityPerf[0];
+      const worst = cityPerf[cityPerf.length - 1];
+      const ratio = best.ad / worst.ad;
+      if (ratio >= 2.5) {
+        findings.push({
+          sev: "yellow", icon: "🟡",
+          title: `Brecha grande entre ciudades`,
+          body: `${cityLabel(best.city)}: ${best.ad} AD vs ${cityLabel(worst.city)}: ${worst.ad} AD (${ratio.toFixed(1)}x diferencia).`,
+          action: `Replicar el modelo de operación de ${cityLabel(best.city)} en ${cityLabel(worst.city)}. Preguntar al partner qué hacen distinto en la mejor ciudad.`
+        });
+      }
+    }
+  }
+
+  // ── 7. Comisión baja sin caída en viajes ─────────────────────────────────
+  const pTr = prevRows.reduce((s, r) => s + (r.trips || 0), 0);
+  const pCo = prevRows.reduce((s, r) => s + (r.commission || 0), 0);
+  if (pTr > 0 && pCo > 0) {
+    const wowTr = ((tTr - pTr) / pTr) * 100;
+    const wowCo = ((tCo - pCo) / pCo) * 100;
+    if (wowCo < -10 && wowTr > -3) {
+      findings.push({
+        sev: "yellow", icon: "🟡",
+        title: `Comisión baja sin caer viajes`,
+        body: `Viajes ${wowTr >= 0 ? "+" : ""}${wowTr.toFixed(1)}%, comisión ${wowCo.toFixed(1)}%.`,
+        action: `Posible cambio en tarifa promedio o mix de servicios. Revisar tipos de viaje predominantes y promociones activas.`
+      });
+    }
+  }
+
+  // ── 8. Si no hay alertas, mostrar mensaje positivo ────────────────────────
+  // Pero solo si hay datos suficientes para juzgar
+  if (!findings.length && pADsum > 0) {
+    findings.push({
+      sev: "green", icon: "✅",
+      title: "Sin alertas críticas",
+      body: "Métricas dentro de parámetros normales en el último período.",
+      action: `Mantener seguimiento regular. Buen momento para revisar metas del próximo ${periodoWord} con el partner.`
+    });
+  }
+
+  // ── Ordenar y limitar a 6 hallazgos máximo ────────────────────────────────
+  const sevOrder = { red: 0, yellow: 1, info: 2, green: 3 };
+  findings.sort((a, b) => sevOrder[a.sev] - sevOrder[b.sev]);
+  const top = findings.slice(0, 6);
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  const sevStyle = {
+    red:    { bg:"#fff5f5", bd:"#fecaca", tc:"#991b1b" },
+    yellow: { bg:"#fffbeb", bd:"#fde68a", tc:"#92400e" },
+    green:  { bg:"#f0fdf4", bd:"#86efac", tc:"#166534" },
+    info:   { bg:"#f0f9ff", bd:"#bae6fd", tc:"#075985" }
+  };
+
+  const items = top.map(f => {
+    const s = sevStyle[f.sev] || sevStyle.info;
+    return `
+      <div style="background:${s.bg};border:1px solid ${s.bd};border-left:4px solid ${s.tc};border-radius:8px;padding:12px 14px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:1rem">${f.icon}</span>
+          <span style="font-weight:800;color:${s.tc};font-size:.88rem">${escapeHTML(f.title)}</span>
+        </div>
+        <div style="font-size:.78rem;color:#333;margin-bottom:6px;line-height:1.4">${escapeHTML(f.body)}</div>
+        <div style="font-size:.76rem;color:#555;line-height:1.45">
+          <strong style="color:${s.tc}">Acción:</strong> ${escapeHTML(f.action)}
+        </div>
+      </div>`;
+  }).join("");
+
+  const headerSub = `${top.length} ${top.length === 1 ? "hallazgo" : "hallazgos"} priorizados · Mirada de KAM senior sobre el partner`;
+  return `
+    ${_secH("💼", "#0ea5e9", "Análisis Ejecutivo", headerSub)}
+    <div class="section" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px">
+      ${items}
+    </div>`;
 }
 
 function _pvKpiCard(label, cur, prev, color, isMoney = false) {
