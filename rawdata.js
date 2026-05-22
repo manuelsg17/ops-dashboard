@@ -10,7 +10,8 @@ const RAW_STATE = {
   showBanned: true,    // true = incluir flotas excluidas del dashboard
   sortCol:    "date",
   sortDir:    "asc",
-  view:       "data"   // "data" = registros de rendimiento, "flotas" = mapeo CLID→flota
+  view:       "data",  // "data" = registros de rendimiento, "flotas" = mapeo CLID→flota
+  editingClid: null    // CLID de la fila en modo edicion en la vista Flotas
 };
 
 // ── ENTRY POINT ───────────────────────────────────────────────────────────────
@@ -394,36 +395,82 @@ function _renderFlotasView() {
       <table class="dtbl">
         <thead>
           <tr>
-            <th>CLID</th><th>Ciudad</th>
+            <th>CLID</th>
+            <th>Ciudad</th>
             <th>Nombre original (Excel)</th>
             <th>Nombre asignado</th>
             <th>KAM</th>
-            <th style="text-align:center">Estado</th>
+            <th style="text-align:center">Activa</th>
+            <th style="text-align:center;width:80px">Acci\u00F3n</th>
           </tr>
         </thead>
         <tbody>`;
 
+  // Opciones para selects (ciudades y KAMs disponibles)
+  const cityOptList = ["LIMA","TRUJILLO","AREQUIPA"];
+  const kamOptList  = [...new Set([...Object.values(STATE.KAM_MAP), ...Object.values(STATE.flotasMap || {}).map(f => f.kam)].filter(Boolean))].sort();
+
   rows.slice(0, 500).forEach(r => {
-    const badge = !r.tieneFlota
-      ? `<span style="background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:8px;font-size:.7rem;font-weight:700">Sin flota</span>`
-      : !r.activo
-        ? `<span style="background:#fee;color:#991b1b;padding:2px 7px;border-radius:8px;font-size:.7rem;font-weight:700">\uD83D\uDEAB Inactiva</span>`
-        : r.banned
-          ? `<span style="background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:8px;font-size:.7rem;font-weight:700">\uD83D\uDEAB Palabra prohibida</span>`
-          : `<span style="background:#dcfce7;color:#166534;padding:2px 7px;border-radius:8px;font-size:.7rem;font-weight:700">\u2713 Activa</span>`;
-    html += `
-      <tr>
-        <td style="font-family:monospace;font-size:.75rem;color:#666">${escapeHTML(r.clid)}</td>
-        <td>${cityLabel(r.ciudad)}</td>
-        <td>${escapeHTML(r.nombre_original || "\u2014")}</td>
-        <td style="font-weight:600">${escapeHTML(r.nombre_asignado || "\u2014")}</td>
-        <td>${escapeHTML(r.kam || "\u2014")}</td>
-        <td style="text-align:center">${badge}</td>
-      </tr>`;
+    const clidJS = r.clid.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    const clidH  = escapeHTML(r.clid);
+    const isEditing = RAW_STATE.editingClid === r.clid;
+
+    if (isEditing) {
+      // \u2500\u2500\u2500 FILA EN MODO EDICION \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+      const cityOpts = cityOptList.map(c =>
+        `<option value="${c}"${r.ciudad===c?" selected":""}>${cityLabel(c)}</option>`).join("");
+      const kamOpts  = `<option value="">\u2014 sin KAM \u2014</option>` +
+        kamOptList.map(k => `<option value="${escapeHTML(k)}"${r.kam===k?" selected":""}>${escapeHTML(k)}</option>`).join("");
+      html += `
+        <tr data-flota-clid="${clidH}" style="background:#fff8f8">
+          <td style="font-family:monospace;font-size:.75rem;color:#666">${clidH}</td>
+          <td><select id="flEdCity_${clidH}" class="crud-input" style="min-width:110px"><option value=""${r.ciudad?"":" selected"}>\u2014 sin ciudad \u2014</option>${cityOpts}</select></td>
+          <td style="color:#999;font-size:.75rem">${escapeHTML(r.nombre_original || "\u2014")}</td>
+          <td><input id="flEdName_${clidH}" class="crud-input" style="min-width:160px" value="${escapeHTML(r.nombre_asignado || "")}"/></td>
+          <td><select id="flEdKam_${clidH}" class="crud-input" style="min-width:110px">${kamOpts}</select></td>
+          <td style="text-align:center">
+            <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:.72rem">
+              <input id="flEdActivo_${clidH}" type="checkbox"${r.activo?" checked":""}/>
+              <span>${r.activo?"S\u00ED":"No"}</span>
+            </label>
+          </td>
+          <td style="text-align:center;white-space:nowrap">
+            <button onclick="flotaSaveEdit('${clidJS}')"  style="padding:3px 8px;font-size:.7rem;background:#10b981;color:#fff;border:none;border-radius:5px;font-weight:700;cursor:pointer;margin-right:3px">\u2713</button>
+            <button onclick="flotaCancelEdit()"           style="padding:3px 8px;font-size:.7rem;background:#888;color:#fff;border:none;border-radius:5px;font-weight:700;cursor:pointer">\u2715</button>
+          </td>
+        </tr>`;
+    } else {
+      // \u2500\u2500\u2500 FILA EN MODO LECTURA \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+      const badge = !r.tieneFlota
+        ? `<span style="background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:8px;font-size:.7rem;font-weight:700">Sin flota</span>`
+        : !r.activo
+          ? `<span style="background:#fee;color:#991b1b;padding:2px 7px;border-radius:8px;font-size:.7rem;font-weight:700">\uD83D\uDEAB Inactiva</span>`
+          : r.banned
+            ? `<span style="background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:8px;font-size:.7rem;font-weight:700">\uD83D\uDEAB Palabra prohibida</span>`
+            : `<span style="background:#dcfce7;color:#166534;padding:2px 7px;border-radius:8px;font-size:.7rem;font-weight:700">\u2713 Activa</span>`;
+      const cityCell = r.ciudad
+        ? cityLabel(r.ciudad)
+        : `<span style="color:#aaa;font-style:italic">\u2014 sin ciudad \u2014</span>`;
+      html += `
+        <tr>
+          <td style="font-family:monospace;font-size:.75rem;color:#666">${clidH}</td>
+          <td>${cityCell}</td>
+          <td style="color:#666">${escapeHTML(r.nombre_original || "\u2014")}</td>
+          <td style="font-weight:600">${escapeHTML(r.nombre_asignado || "\u2014")}</td>
+          <td>${escapeHTML(r.kam || "\u2014")}</td>
+          <td style="text-align:center">${badge}</td>
+          <td style="text-align:center;white-space:nowrap">
+            <button onclick="flotaStartEdit('${clidJS}')" title="Editar" style="padding:3px 8px;font-size:.7rem;background:#fff;border:1px solid #ddd;border-radius:5px;cursor:pointer;margin-right:3px">\u270F\uFE0F</button>
+            ${r.tieneFlota
+              ? `<button onclick="flotaToggleActivo('${clidJS}', ${!r.activo})" title="${r.activo?'Marcar inactiva':'Reactivar'}" style="padding:3px 8px;font-size:.7rem;background:${r.activo?'#fff5f5':'#f0fdf4'};border:1px solid ${r.activo?'#fecaca':'#86efac'};color:${r.activo?'#991b1b':'#166534'};border-radius:5px;cursor:pointer">${r.activo?'\uD83D\uDEAB':'\u2713'}</button>`
+              : ""}
+          </td>
+        </tr>`;
+    }
   });
 
   if (rows.length > 500) {
-    html += `<tr><td colspan="6" style="text-align:center;color:#aaa;padding:10px;font-size:.75rem;font-style:italic">Mostrando primeros 500 de ${fmt(rows.length)}. Us\u00E1 el buscador para filtrar.</td></tr>`;
+    html += `<tr><td colspan="7" style="text-align:center;color:#aaa;padding:10px;font-size:.75rem;font-style:italic">Mostrando primeros 500 de ${fmt(rows.length)}. Us\u00E1 el buscador para filtrar.</td></tr>`;
   }
 
   html += `</tbody></table></div>`;
@@ -436,6 +483,78 @@ function _renderFlotasView() {
   }
 
   return html;
+}
+
+// ── EDICION INLINE DE FLOTAS ──────────────────────────────────────────────────
+// Entrar en modo edicion para una fila (se renderiza con inputs)
+function flotaStartEdit(clid) {
+  RAW_STATE.editingClid = clid;
+  renderRawData();
+}
+
+function flotaCancelEdit() {
+  RAW_STATE.editingClid = null;
+  renderRawData();
+}
+
+// Guardar la edicion: lee los inputs de la fila y hace UPDATE en Supabase.
+// Si el CLID no tenia registro en `flotas`, hace INSERT.
+async function flotaSaveEdit(clid) {
+  const clidH = clid.replace(/'/g, "\\'");
+  const safe = id => id.replace(/[^a-zA-Z0-9_]/g, "");
+  // Los IDs en el HTML usan el clid escapeado, pero como solo son digitos, esto es directo
+  const elCity   = document.getElementById(`flEdCity_${clid}`);
+  const elName   = document.getElementById(`flEdName_${clid}`);
+  const elKam    = document.getElementById(`flEdKam_${clid}`);
+  const elActivo = document.getElementById(`flEdActivo_${clid}`);
+  if (!elName) { showBanner(false, "No se pudo leer la fila editada."); return; }
+
+  const ciudad = elCity ? elCity.value : "";
+  const nombre = (elName.value || "").trim();
+  const kam    = elKam ? elKam.value : "";
+  const activo = elActivo ? elActivo.checked : true;
+
+  if (!nombre) { showBanner(false, "El nombre asignado no puede estar vacío."); return; }
+
+  showLoad(true, "Guardando...");
+  try {
+    const yaExiste = !!(STATE.flotasMap && STATE.flotasMap[clid]);
+    if (yaExiste) {
+      await updateFlotaField(clid, {
+        ciudad, nombre_asignado: nombre, kam, activo
+      });
+    } else {
+      await createFlota(clid, {
+        ciudad, nombre_asignado: nombre, kam, activo,
+        nombre_original: STATE.flotasMap?.[clid]?.nombre_original || ""
+      });
+    }
+    RAW_STATE.editingClid = null;
+    showBanner(true, "Flota actualizada ✓");
+    await loadFromSupabase();   // reload completo para que el override se reaplique en todas las pestañas
+    renderRawData();
+  } catch (err) {
+    showBanner(false, "Error al guardar: " + err.message);
+    console.error(err);
+  } finally {
+    showLoad(false);
+  }
+}
+
+// Toggle rapido del flag `activo` sin entrar en modo edicion
+async function flotaToggleActivo(clid, nuevoEstado) {
+  showLoad(true, nuevoEstado ? "Reactivando..." : "Marcando inactiva...");
+  try {
+    await updateFlotaField(clid, { activo: nuevoEstado });
+    showBanner(true, nuevoEstado ? "Flota reactivada ✓" : "Flota marcada inactiva ✓");
+    await loadFromSupabase();
+    renderRawData();
+  } catch (err) {
+    showBanner(false, "Error: " + err.message);
+    console.error(err);
+  } finally {
+    showLoad(false);
+  }
 }
 
 function exportFlotasCSV() {

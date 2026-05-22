@@ -19,6 +19,29 @@ function cityLabel(c) {
   return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 }
 
+// Aplica el mapeo de flotas (STATE.flotasMap) a un array de rows con `clid`.
+// - Sobreescribe `partner` con nombre_asignado (guarda original en _partnerOriginal)
+// - Sobreescribe `kam`  con el de la flota (si tiene)
+// - Filtra rows cuya flota tiene activo=false
+// Llamar despues de cualquier carga/upload que toque rawData, metas, mensual o diario.
+function applyFlotasOverride(rows) {
+  const map = STATE && STATE.flotasMap;
+  if (!map || !Object.keys(map).length) return rows;
+  return rows.reduce((acc, r) => {
+    const f = map[r.clid];
+    if (f && f.activo === false) return acc;   // flota inactiva → excluir
+    if (f) {
+      if (f.nombre_asignado) {
+        if (!r._partnerOriginal) r._partnerOriginal = r.partner;
+        r.partner = f.nombre_asignado;
+      }
+      if (f.kam) r.kam = f.kam;
+    }
+    acc.push(r);
+    return acc;
+  }, []);
+}
+
 // Escapa caracteres HTML peligrosos en strings de input (partner names, tooltips, etc.).
 // Usar SIEMPRE al interpolar valores no controlados en HTML.
 function escapeHTML(s) {
@@ -309,7 +332,7 @@ async function loadFromSupabase() {
     // 5b. Flotas (tabla puede no existir aún — fallo silencioso, no es critico)
     // STATE.flotasMap[clid] = { nombre_asignado, kam, ciudad, activo, nombre_original }
     // Si existe, se aplica override: el partner del rendimiento se reemplaza por
-    // nombre_asignado, y el KAM tambien si la flota tiene uno propio.
+    // nombre_asignado, y el KAM tambien si la flota lo define.
     STATE.flotasMap = {};
     try {
       const { data: flotas } = await sb.from("flotas").select("*");
@@ -326,25 +349,13 @@ async function loadFromSupabase() {
       });
     } catch (_) { /* tabla no existe aún */ }
 
-    // Aplicar override de flotas: el rendimiento ahora muestra `nombre_asignado`
-    // cuando el CLID esta en `flotas`. Tambien override de KAM si la flota lo define.
-    if (Object.keys(STATE.flotasMap).length) {
-      STATE.rawData.forEach(r => {
-        const f = STATE.flotasMap[r.clid];
-        if (!f) return;
-        if (f.nombre_asignado) {
-          // Guardar original para mostrar en raw view
-          r._partnerOriginal = r.partner;
-          r.partner = f.nombre_asignado;
-        }
-        if (f.kam) r.kam = f.kam;
-      });
-      // Si una flota está marcada activo=false, excluirla del dashboard
-      STATE.rawData = STATE.rawData.filter(r => {
-        const f = STATE.flotasMap[r.clid];
-        return !f || f.activo !== false;
-      });
-    }
+    // Aplicar override de flotas a rawData (semanal) + metasData
+    STATE.rawData    = applyFlotasOverride(STATE.rawData);
+    STATE.metasData  = applyFlotasOverride(STATE.metasData);
+    // Reconstruir KAM_PARTNERS para que el sidebar refleje override de flotas
+    // (el primer rebuild que corrio dentro del bloque de partners no tenia
+    // flotasMap todavia).
+    rebuildKAMPartners();
 
     // 6. Guardar copia completa y aplicar filtro de palabras prohibidas
     STATE.rawDataFull = [...STATE.rawData];
@@ -415,6 +426,8 @@ async function loadMensualIfNeeded() {
       const isBanned = name => banned.some(w => (name || "").toLowerCase().includes(w));
       STATE.rawDataMensual = STATE.rawDataMensual.filter(r => !isBanned(r.partner));
     }
+    // Aplicar mapeo de flotas tambien al dataset mensual
+    STATE.rawDataMensual = applyFlotasOverride(STATE.rawDataMensual);
     STATE._mensualLoaded = true;
   } catch(err) {
     showBanner(false, "Error al cargar mensual: " + err.message);
@@ -448,6 +461,8 @@ async function loadDiarioIfNeeded() {
       const isBanned = name => banned.some(w => (name || "").toLowerCase().includes(w));
       STATE.rawDataDiario = STATE.rawDataDiario.filter(r => !isBanned(r.partner));
     }
+    // Aplicar mapeo de flotas tambien al dataset diario
+    STATE.rawDataDiario = applyFlotasOverride(STATE.rawDataDiario);
     STATE._diarioLoaded = true;
   } catch (err) {
     showBanner(false, "Error al cargar diario: " + err.message);
@@ -713,24 +728,72 @@ async function uploadPartners(rows) {
 // ── UPLOAD FLOTAS ─────────────────────────────────────────────────────────────
 // Excel con columnas: CLID | CIUDAD | NOMBRE_ASIGNADO (opcional) | KAM (opcional) | ACTIVO (opcional)
 // Si NOMBRE_ASIGNADO esta vacio, se conserva el nombre original del Excel de rendimiento.
+//
+// Variantes de columna aceptadas (case-insensitive de hecho via fallback list):
+//   CLID:            CLID, clid
+//   Ciudad:          CIUDAD, Ciudad, CITY, City, city
+//   Nombre asignado: NOMBRE_ASIGNADO, Nombre Asignado, nombre_asignado, NOMBRE,
+//                    Nombre, ALIAS, Alias, FLOTA, Flota, PARTNER, Partner, partner
+//   KAM:             KAM, Kam, kam
+//   Activo:          ACTIVO, Activo, activo  (true / false / 1 / 0 / si / no)
 async function uploadFlotas(rows) {
   if (!rows.length) throw new Error("Archivo vacío");
 
-  const seen = new Set();
-  const data = rows.map(r => {
-    const clid = _clidStr(r["CLID"] || r["clid"]);
-    if (!clid) return null;
-    const ciudad           = normCity(r["CIUDAD"] || r["Ciudad"] || r["CITY"] || r["city"]);
-    const nombre_asignado  = String(r["NOMBRE_ASIGNADO"] || r["Nombre Asignado"] || r["nombre_asignado"] || r["NOMBRE"] || r["Nombre"] || "").trim();
-    const nombre_original  = String(r["NOMBRE_ORIGINAL"] || r["Nombre Original"] || r["nombre_original"] || r["PARTNER"] || r["Partner"] || "").trim();
-    const kam              = String(r["KAM"] || r["Kam"] || r["kam"] || "").trim();
-    const activoRaw        = r["ACTIVO"] ?? r["Activo"] ?? r["activo"];
-    const activo           = activoRaw === undefined || activoRaw === ""
+  // Helper local: busca en row el primer valor no vacio entre varias keys
+  const pick = (r, ...keys) => {
+    for (const k of keys) {
+      if (r[k] !== undefined && r[k] !== null && String(r[k]).trim() !== "") return r[k];
+    }
+    return "";
+  };
+
+  // Primera pasada: parsear todas las filas (sin dedup aun)
+  const skippedNoClid = [];
+  const allParsed = rows.map((r, idx) => {
+    const clid = _clidStr(pick(r, "CLID", "clid"));
+    if (!clid) {
+      skippedNoClid.push({ idx: idx + 2 }); // +2: 1 por header, 1 por 0-based
+      return null;
+    }
+    const ciudad          = normCity(pick(r, "CIUDAD", "Ciudad", "CITY", "City", "city"));
+    const nombre_asignado = String(pick(r, "NOMBRE_ASIGNADO", "Nombre Asignado", "nombre_asignado", "NOMBRE", "Nombre", "ALIAS", "Alias", "FLOTA", "Flota", "PARTNER", "Partner", "partner")).trim();
+    const kam             = String(pick(r, "KAM", "Kam", "kam")).trim();
+    const activoRaw       = pick(r, "ACTIVO", "Activo", "activo");
+    const activo          = activoRaw === undefined || activoRaw === ""
                               ? true
-                              : !/^(0|no|false|inactivo)$/i.test(String(activoRaw).trim());
-    return { clid, ciudad, nombre_asignado: nombre_asignado || nombre_original || clid, nombre_original, kam, activo };
-  })
-  .filter(r => r && !seen.has(r.clid) && seen.add(r.clid));
+                              : !/^(0|no|false|inactivo|inactiva)$/i.test(String(activoRaw).trim());
+    return {
+      clid,
+      ciudad,
+      nombre_asignado: nombre_asignado || clid,   // si no hay nombre, usar CLID como fallback
+      nombre_original: nombre_asignado,           // hoy el Excel solo trae el nombre; el "original" lo infiere rawdata.js
+      kam,
+      activo
+    };
+  }).filter(Boolean);
+
+  if (skippedNoClid.length) {
+    showBanner(false, `Aviso: ${skippedNoClid.length} fila(s) sin CLID descartada(s).`);
+    console.warn("uploadFlotas: filas sin CLID:", skippedNoClid);
+  }
+
+  // Dedup por CLID: ultima fila gana (igual que uploadMetas)
+  const seen    = new Map();
+  const dupKeys = [];
+  allParsed.forEach(r => {
+    if (seen.has(r.clid)) dupKeys.push({ clid: r.clid, nombre: r.nombre_asignado, ciudad: r.ciudad });
+    seen.set(r.clid, r);
+  });
+  const data = [...seen.values()];
+
+  if (dupKeys.length) {
+    const sample = dupKeys.slice(0, 5).map(d => `${d.clid}·${d.nombre || "?"}·${d.ciudad || "?"}`).join("  |  ");
+    showBanner(false,
+      `Aviso: ${dupKeys.length} fila(s) con CLID duplicado consolidada(s). Se conservo la ULTIMA ocurrencia. Ej: ${sample}` +
+      (dupKeys.length > 5 ? "  (ver consola)" : "")
+    );
+    console.warn("uploadFlotas: duplicados consolidados:", dupKeys);
+  }
 
   if (!data.length) throw new Error("No se encontraron CLIDs validos en el archivo");
 
@@ -739,6 +802,33 @@ async function uploadFlotas(rows) {
       .upsert(data.slice(i, i + 500), { onConflict: "clid" });
     if (error) throw error;
   }
+}
+
+// ── ACTUALIZAR UN CAMPO DE UNA FLOTA (edicion inline desde la vista) ──────────
+async function updateFlotaField(clid, patch) {
+  if (!clid) throw new Error("Falta CLID");
+  // Normalizaciones defensivas
+  const upd = { ...patch };
+  if (upd.ciudad !== undefined) upd.ciudad = normCity(upd.ciudad);
+  if (upd.kam    !== undefined) upd.kam    = String(upd.kam || "").trim();
+  if (upd.nombre_asignado !== undefined) upd.nombre_asignado = String(upd.nombre_asignado || "").trim();
+  const { error } = await sb.from("flotas").update(upd).eq("clid", clid);
+  if (error) throw error;
+}
+
+// ── CREAR UNA FLOTA NUEVA (cuando no existe registro en la tabla) ─────────────
+async function createFlota(clid, partial) {
+  if (!clid) throw new Error("Falta CLID");
+  const row = {
+    clid,
+    ciudad:          normCity(partial.ciudad || ""),
+    nombre_asignado: String(partial.nombre_asignado || partial.nombre_original || clid).trim(),
+    nombre_original: String(partial.nombre_original || "").trim(),
+    kam:             String(partial.kam || "").trim(),
+    activo:          partial.activo !== false
+  };
+  const { error } = await sb.from("flotas").insert(row);
+  if (error) throw error;
 }
 
 // ── UPLOAD RENDIMIENTO (pivot → flat rows) ────────────────────────────────────
