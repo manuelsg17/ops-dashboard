@@ -301,7 +301,10 @@ async function loadFromSupabase() {
 
     STATE.rawData = (rend || []).map(r => ({
       clid:          (r.clid || "").trim(),
+      // Nombre efectivo: Configuracion (partners) gana, sino el que vino de la BD
       partner:       STATE.CLID_MAP[r.clid] || r.partner,
+      // Nombre original del Excel: lo que esta en la BD (siempre lo crudo del upload)
+      _partnerExcel: r.partner || "",
       kam:           STATE.KAM_MAP[r.clid] || r.kam || "",
       city:          normCity(r.city),
       date:          r.fecha,
@@ -418,6 +421,7 @@ async function loadMensualIfNeeded() {
     STATE.rawDataMensual = rendM.map(r => ({
       clid:          (r.clid || "").trim(),
       partner:       STATE.CLID_MAP[r.clid] || r.partner,
+      _partnerExcel: r.partner || "",
       kam:           STATE.KAM_MAP[r.clid]  || r.kam || "",
       city:          normCity(r.city),
       date:          r.mes,
@@ -453,6 +457,7 @@ async function loadDiarioIfNeeded() {
     STATE.rawDataDiario = rendD.map(r => ({
       clid:          (r.clid || "").trim(),
       partner:       STATE.CLID_MAP[r.clid] || r.partner || r.clid,
+      _partnerExcel: r.partner || "",
       kam:           STATE.KAM_MAP[r.clid]  || r.kam || "",
       city:          normCity(r.city),
       date:          r.date,
@@ -512,9 +517,11 @@ async function uploadRendimientoMensual(rows) {
   const agg = {};
   rows.forEach(row => {
     const clid    = String(row["CLID"] || row["clid"] || "").trim();
-    const partner = STATE.CLID_MAP[clid]
-      || String(row["Partner"] || row["partner"] || "").trim()
-      || clid || "Unknown";
+    // IMPORTANTE: guardamos el partner TAL CUAL viene del Excel (no lo pisamos con
+    // CLID_MAP). La resolucion al "nombre configurado" se hace al CARGAR a memoria
+    // desde Supabase, no al escribir. Asi la BD siempre tiene la verdad del Excel
+    // y la vista Flotas puede mostrar "Nombre Excel" vs "Nombre Configurado".
+    const partner = String(row["Partner"] || row["partner"] || "").trim() || clid || "Unknown";
     const kam  = STATE.KAM_MAP[clid] || "";
     const city = normCity(row["City"] || row["city"] || row["Ciudad"]);
 
@@ -866,9 +873,10 @@ async function uploadRendimiento(rows) {
   const agg = {};
   rows.forEach(row => {
     const clid    = String(row["CLID"] || row["clid"] || "").trim();
-    const partner = STATE.CLID_MAP[clid]
-      || String(row["Partner"] || row["partner"] || "").trim()
-      || clid || "Unknown";
+    // IMPORTANTE: guardamos el partner TAL CUAL del Excel. La resolucion al
+    // nombre configurado se hace al cargar desde BD a memoria. Ver comentario
+    // en uploadRendimientoMensual.
+    const partner = String(row["Partner"] || row["partner"] || "").trim() || clid || "Unknown";
     const kam  = STATE.KAM_MAP[clid] || "";
     const city = normCity(row["City"] || row["city"] || row["Ciudad"]);
 

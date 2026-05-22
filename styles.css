@@ -226,6 +226,32 @@ input[type="file"]  { display: none; }
 /* Combobox flotante Vista Partner */
 .pv-opt:hover { background: #fff5f5 !important; }
 
+/* ApexCharts dataLabels en Vista Partner: forzar fondo blanco/claro.
+   ApexCharts hereda el color del background del color de la serie
+   (negro/oscuro), lo cual hace ilegible el texto oscuro. Esta regla overridea
+   el <rect class="apexcharts-datalabel-background"> generado por ApexCharts. */
+.pv-chart .apexcharts-datalabel-background {
+  fill: #ffffff !important;
+  fill-opacity: 0.95 !important;
+  stroke: #e5e5e5 !important;
+}
+/* En charts de lineas, ademas forzamos el color del texto a oscuro */
+.pv-chart .apexcharts-data-labels text,
+.pv-chart text.apexcharts-datalabel {
+  fill: #222 !important;
+}
+/* Excepcion: en barras apiladas el texto es blanco sobre la barra de color.
+   El selector mas especifico arriba lo pinta negro; este lo revierte solo
+   cuando es un bar/column. */
+.pv-chart .apexcharts-bar-series .apexcharts-data-labels text,
+.pv-chart .apexcharts-bar-series text.apexcharts-datalabel {
+  fill: #ffffff !important;
+}
+.pv-chart .apexcharts-bar-series .apexcharts-datalabel-background {
+  fill: transparent !important;
+  stroke: transparent !important;
+}
+
 /* Boton de accion principal (rojo, alto contraste). Usado en varias secciones
    - antes era el "Aplicar Filtros" del sidebar (ya eliminado); ahora se reutiliza
    en presentacion/metas/insights como CTA. */

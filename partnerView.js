@@ -296,19 +296,24 @@ function _pvBuildCityCharts(partner, city, dates, recibeLeads, seriesCached) {
 function _pvSimpleLine(elId, labels, series, colors) {
   const el = document.getElementById(elId);
   if (!el || typeof ApexCharts === "undefined") return;
+  // Marcar el contenedor con clase para que las reglas CSS de fondo claro
+  // (styles.css .pv-chart .apexcharts-datalabel-background) apliquen.
+  el.classList.add("pv-chart");
   const ch = new ApexCharts(el, {
     series,
     chart: { type: "line", height: 180, toolbar: { show: false }, animations: { enabled: false }, fontFamily: "inherit" },
     stroke: { curve: "smooth", width: 2.5 },
     colors,
     markers: { size: 3 },
-    // dataLabels: muestra valores sobre puntos para que el PDF sea legible.
+    // dataLabels: numeros visibles sobre la linea. El FILL del background lo
+    // setea ApexCharts segun la serie (negro/oscuro por default) y NO se puede
+    // cambiar via API. Forzamos blanco con CSS en styles.css.
     dataLabels: {
       enabled: true,
       formatter: v => fmt(v),
-      style: { fontSize: "9px", colors: ["#333"], fontWeight: 600 },
-      background: { enabled: true, foreColor: "#333", padding: 2, borderRadius: 3, borderWidth: 0, opacity: .85 },
-      offsetY: -6
+      style: { fontSize: "9px", colors: ["#222"], fontWeight: 700 },
+      background: { enabled: true, foreColor: "#222", padding: 3, borderRadius: 3, borderColor: "#e5e5e5", borderWidth: 1, opacity: 1 },
+      offsetY: -8
     },
     xaxis: { categories: labels, labels: { style: { fontSize: "9px" }, rotate: -30 }, axisBorder: { show: false }, axisTicks: { show: false } },
     yaxis: { labels: { formatter: v => fmt(v), style: { fontSize: "10px" } } },
@@ -323,6 +328,7 @@ function _pvSimpleLine(elId, labels, series, colors) {
 function _pvStackedColumn(elId, labels, series, colors) {
   const el = document.getElementById(elId);
   if (!el || typeof ApexCharts === "undefined") return;
+  el.classList.add("pv-chart");
   const ch = new ApexCharts(el, {
     series,
     chart: { type: "bar", height: 180, stacked: true, toolbar: { show: false }, animations: { enabled: false }, fontFamily: "inherit" },
@@ -349,6 +355,7 @@ function _pvStackedColumn(elId, labels, series, colors) {
 function _pvDualLine(elId, labels, series, colors) {
   const el = document.getElementById(elId);
   if (!el || typeof ApexCharts === "undefined") return;
+  el.classList.add("pv-chart");
   const ch = new ApexCharts(el, {
     series,
     chart: { type: "line", height: 180, toolbar: { show: false }, animations: { enabled: false }, fontFamily: "inherit" },
@@ -359,9 +366,9 @@ function _pvDualLine(elId, labels, series, colors) {
       enabled: true,
       enabledOnSeries: [0, 1],
       formatter: (v, opts) => opts.seriesIndex === 1 ? "$" + fmt(v) : fmt(v),
-      style: { fontSize: "9px", colors: ["#333"], fontWeight: 600 },
-      background: { enabled: true, foreColor: "#333", padding: 2, borderRadius: 3, borderWidth: 0, opacity: .85 },
-      offsetY: -6
+      style: { fontSize: "9px", colors: ["#222"], fontWeight: 700 },
+      background: { enabled: true, foreColor: "#222", padding: 3, borderRadius: 3, borderColor: "#e5e5e5", borderWidth: 1, opacity: 1 },
+      offsetY: -8
     },
     xaxis: { categories: labels, labels: { style: { fontSize: "9px" }, rotate: -30 } },
     yaxis: [

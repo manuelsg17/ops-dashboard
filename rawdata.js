@@ -326,13 +326,17 @@ function _renderFlotasView() {
   const bannedLower = (STATE.bannedWords || []).map(w => w.toLowerCase());
   const isBanned = name => bannedLower.some(w => (name || "").toLowerCase().includes(w));
 
-  // Mapa por CLID con la info del rendimiento (nombre original del Excel y ciudad observada)
+  // Mapa por CLID con la info del rendimiento.
+  // `nombre_excel` = lo que vino crudo del Excel (campo `_partnerExcel`,
+  // preservado al cargar desde BD). Si no esta, usa `_partnerOriginal` o
+  // `partner` como ultimo fallback (compatibilidad con datos viejos donde el
+  // upload pisaba el partner con CLID_MAP).
   const fromRawAll = new Map();
   STATE.rawDataFull.forEach(r => {
     if (!r.clid) return;
     if (!fromRawAll.has(r.clid)) {
-      const original = r._partnerOriginal || r.partner;
-      fromRawAll.set(r.clid, { nombre_excel: original, ciudad: r.city });
+      const excel = r._partnerExcel || r._partnerOriginal || r.partner;
+      fromRawAll.set(r.clid, { nombre_excel: excel, ciudad: r.city });
     }
   });
 
