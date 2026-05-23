@@ -145,12 +145,68 @@ const PV_I18N = {
                             en: "No critical alerts" },
   noAlertsBody:           { es: "Métricas dentro de parámetros normales en el último período.",
                             en: "Metrics within normal range for the latest period." },
-  noAlertsAction:         { es: "Mantener seguimiento regular. Buen momento para revisar metas del próximo {period} con el partner.",
-                            en: "Keep regular follow-up. Good moment to review next {period}'s targets with the partner." },
+  noAlertsAction:         { es: "Mantener seguimiento regular. Continuar conversando objetivos del próximo {period} con el partner.",
+                            en: "Keep regular follow-up. Continue discussing next {period}'s objectives with the partner." },
   // Decline metric labels
   metricActiveDrivers:    { es: "Conductores Activos",      en: "Active Drivers" },
   metricSupplyHours:      { es: "Horas de Conexión",        en: "Supply Hours" },
-  metricNR:               { es: "Nuevos+Reactivados",       en: "New+Reactivated" }
+  metricNR:               { es: "Nuevos+Reactivados",       en: "New+Reactivated" },
+
+  // ── 9 hallazgos nuevos basados en metricas puras (sin metas) ─────────────
+  trendDownTitle:         { es: "Tendencia AD negativa a largo plazo",
+                            en: "Long-term negative AD trend" },
+  trendDownBody:          { es: "Promedio últimos 3 {periods} cayó {pct}% vs los 3 {periods} anteriores ({prevAvg} → {curAvg} AD).",
+                            en: "Average of last 3 {periods} dropped {pct}% vs prior 3 {periods} ({prevAvg} → {curAvg} AD)." },
+  trendDownAction:        { es: "No es ruido puntual: es una caída sostenida. Revisar plan estructural — incentivos, calidad del servicio, retención de conductores.",
+                            en: "Not noise: it's a sustained decline. Review the structural plan — incentives, service quality, driver retention." },
+  trendUpTitle:           { es: "Crecimiento sostenido en AD",
+                            en: "Sustained AD growth" },
+  trendUpBody:            { es: "Promedio últimos 3 {periods} subió {pct}% vs los 3 {periods} anteriores ({prevAvg} → {curAvg} AD).",
+                            en: "Average of last 3 {periods} grew {pct}% vs prior 3 {periods} ({prevAvg} → {curAvg} AD)." },
+  trendUpAction:          { es: "Tracción real, no rebote puntual. Validar capacidad operativa del partner para sostener el ritmo y conversar próximos pasos de expansión.",
+                            en: "Real traction, not a one-off bounce. Validate the partner's operational capacity to sustain it and discuss next expansion steps." },
+  prodLowTitle:           { es: "Baja productividad por conductor",
+                            en: "Low productivity per driver" },
+  prodLowBody:            { es: "Promedio de {hours}h por conductor en el último {period}. Esperado: >20h.",
+                            en: "Average of {hours}h per driver in the last {period}. Expected: >20h." },
+  prodLowAction:          { es: "Conductores presentes pero subutilizados. Revisar mix de turnos, ofertas de pico, calidad del despacho y motivación. Posible falta de incentivos para horas pico.",
+                            en: "Drivers present but underutilized. Review shift mix, peak-hour offers, dispatch quality and motivation. Possible lack of peak-hour incentives." },
+  prodHighTitle:           { es: "Excelente productividad por conductor",
+                            en: "Excellent productivity per driver" },
+  prodHighBody:            { es: "Promedio de {hours}h por conductor en el último {period}. Top tier (>35h).",
+                            en: "Average of {hours}h per driver in the last {period}. Top tier (>35h)." },
+  prodHighAction:          { es: "Caso de éxito: el partner está exprimiendo bien su base. Documentar prácticas (turnos, incentivos, comunicación) y replicar en otros partners del mismo KAM.",
+                            en: "Success case: the partner is leveraging its base well. Document practices (shifts, incentives, communication) and replicate across other partners under the same KAM." },
+  volatilityTitle:         { es: "Alta volatilidad operativa",
+                            en: "High operational volatility" },
+  volatilityBody:          { es: "AD oscila >25% entre {periods} consecutivos. Inestabilidad por encima del promedio.",
+                            en: "AD swings >25% between consecutive {periods}. Above-average instability." },
+  volatilityAction:        { es: "Identificar qué causa los picos y valles (eventos, cambios de turno, llegada/baja masiva). Estabilizar para hacer la operación predecible y poder pronosticar.",
+                            en: "Identify what causes peaks and valleys (events, shift changes, mass arrivals/departures). Stabilize to make operations predictable and forecast-friendly." },
+  commPerTripTitle:        { es: "Comisión por viaje en caída",
+                            en: "Commission per trip dropping" },
+  commPerTripBody:         { es: "Ratio comisión/viaje bajó de {prev} a {cur} (-{pct}%).",
+                            en: "Commission-per-trip ratio dropped from {prev} to {cur} (-{pct}%)." },
+  commPerTripAction:       { es: "Cambió el mix de tarifas o tipo de servicio. Revisar predominio de viajes cortos vs largos, promociones activas y tarifa base. Si es persistente, impacta ingresos.",
+                            en: "Trip fare mix or service type changed. Review short vs long trip share, active promotions and base fares. If persistent, it impacts revenue." },
+  peakBestTitle:           { es: "Partner en su mejor momento histórico",
+                            en: "Partner at its all-time best" },
+  peakBestBody:            { es: "AD actual ({cur}) está al {pct}% de su pico histórico ({peak}). Es un momento de máxima.",
+                            en: "Current AD ({cur}) is at {pct}% of all-time peak ({peak}). This is a peak moment." },
+  peakBestAction:          { es: "Aprovechar este nivel para pedir compromisos: ampliar metas, abrir nuevas zonas, sumar más conductores. El partner tiene momentum.",
+                            en: "Leverage this level to ask for commitments: expand goals, open new zones, add more drivers. The partner has momentum." },
+  peakLowTitle:            { es: "Muy por debajo del pico histórico",
+                            en: "Far below all-time peak" },
+  peakLowBody:             { es: "AD actual ({cur}) está al {pct}% de su pico histórico ({peak}). Capacidad demostrada NO está siendo usada.",
+                            en: "Current AD ({cur}) is at {pct}% of all-time peak ({peak}). Demonstrated capacity is NOT being used." },
+  peakLowAction:           { es: "Hay potencial probado de hacer {peak} conductores activos. Revisar qué cambió desde entonces: rotación, competencia, calidad del servicio, comisión, app.",
+                            en: "There is proven capacity to reach {peak} active drivers. Review what changed since then: turnover, competition, service quality, commission, app." },
+  leadDepTitle:            { es: "Alta dependencia de leads Yango",
+                            en: "High dependency on Yango leads" },
+  leadDepBody:             { es: "{pct}% de los nuevos drivers viene de Yango ({yango} de {total}). El partner depende del lead externo.",
+                            en: "{pct}% of new drivers come from Yango ({yango} of {total}). The partner depends on external leads." },
+  leadDepAction:           { es: "Trabajar con el partner para fortalecer su propio pipeline de captación: referidos, redes sociales, alianzas locales. Reduce el riesgo si Yango baja la asignación de leads.",
+                            en: "Work with the partner to strengthen its own acquisition pipeline: referrals, social media, local partnerships. Reduces risk if Yango lowers lead assignment." }
 };
 
 // Resolver i18n: devuelve string en el lang actual.
@@ -350,9 +406,9 @@ function renderPartnerView() {
       <div class="section" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px">
         ${_pvKpiCard(_t("activeDrivers"), tADsum, pADsum, METRICS.ad.color)}
         ${_pvKpiCard(_t("newReact"),      tNR,    pNR,    METRICS.nr.color)}
-        ${_pvKpiCard(_t("supplyHours"),   tSH,    pSH,    METRICS.sh.color)}
-        ${_pvKpiCard(_t("trips"),         tTr,    null,   "#10b981")}
-        ${_pvKpiCard(_t("commission"),    tCo,    null,   "#06b6d4", true)}
+        ${_pvKpiCard(_t("supplyHours"),   tSH,    pSH,    METRICS.sh.color, { useK: true })}
+        ${_pvKpiCard(_t("trips"),         tTr,    null,   "#10b981",       { useK: true })}
+        ${_pvKpiCard(_t("commission"),    tCo,    null,   "#06b6d4",       { isMoney: true, useK: true })}
       </div>
 
       <!-- Sección por ciudad -->
@@ -496,51 +552,136 @@ function _pvExecutiveSummary(ctx) {
     }
   }
 
-  // ── 5. Cumplimiento de metas ──────────────────────────────────────────────
-  const metasPartner = (STATE.metasData || []).filter(m => m.partner === partner);
-  if (metasPartner.length) {
-    const meta_ad = metasPartner.reduce((s, m) => s + (m.mA  || 0), 0);
-    const meta_nr = metasPartner.reduce((s, m) => s + (m.mNR || 0), 0);
-    const meta_sh = metasPartner.reduce((s, m) => s + (m.mH  || 0), 0);
-    const checkCumpl = (label, actual, meta, lowActionKey, highActionKey) => {
-      if (meta <= 0) return;
-      const pct = (actual / meta) * 100;
-      if (pct < 50) {
+  // ── 5. Tendencia AD largo plazo (avg 3 ultimos vs 3 anteriores) ──────────
+  // Construir serie agregada del partner por fecha (total cross-city, dedup CLID por ciudad/fecha)
+  if (dates.length >= 6) {
+    const adByDate = {};
+    const seen = new Set();
+    partnerRows.forEach(r => {
+      const dk = `${r.clid}|${r.city}|${r.date}`;
+      if (seen.has(dk)) return;
+      seen.add(dk);
+      adByDate[r.date] = (adByDate[r.date] || 0) + (r.activeDrivers || 0);
+    });
+    const serieAD = dates.map(d => adByDate[d] || 0);
+    const last3 = serieAD.slice(-3);
+    const prev3 = serieAD.slice(-6, -3);
+    const sumL = last3.reduce((s, x) => s + x, 0);
+    const sumP = prev3.reduce((s, x) => s + x, 0);
+    if (sumP > 0) {
+      const chg = ((sumL - sumP) / sumP) * 100;
+      const avgL = Math.round(sumL / 3);
+      const avgP = Math.round(sumP / 3);
+      if (chg <= -5) {
         findings.push({
           sev: "red", icon: "🔴",
-          title:  _t("metaLowTitle",  { label, pct: pct.toFixed(0) }),
-          body:   _t("metaLowBody",   { cur: fmt(actual), meta: fmt(meta), gap: fmt(meta - actual) }),
-          action: _t(lowActionKey,    { period })
+          title:  _t("trendDownTitle"),
+          body:   _t("trendDownBody", { periods, pct: Math.abs(chg).toFixed(1), prevAvg: avgP.toLocaleString(), curAvg: avgL.toLocaleString() }),
+          action: _t("trendDownAction")
         });
-      } else if (pct < 80) {
-        findings.push({
-          sev: "yellow", icon: "🟡",
-          title:  _t("metaMidTitle",  { label, pct: pct.toFixed(0) }),
-          body:   _t("metaMidBody",   { cur: fmt(actual), meta: fmt(meta), gap: fmt(meta - actual) }),
-          action: _t("metaMidAction", { periods })
-        });
-      } else if (pct >= 110) {
+      } else if (chg >= 5) {
         findings.push({
           sev: "green", icon: "🟢",
-          title:  _t("metaHighTitle", { label, pct: pct.toFixed(0) }),
-          body:   _t("metaHighBody",  { cur: fmt(actual), meta: fmt(meta), over: fmt(actual - meta) }),
-          action: _t(highActionKey)
+          title:  _t("trendUpTitle"),
+          body:   _t("trendUpBody", { periods, pct: chg.toFixed(1), prevAvg: avgP.toLocaleString(), curAvg: avgL.toLocaleString() }),
+          action: _t("trendUpAction")
         });
       }
-    };
-    checkCumpl(_t("activeDrivers"), tADsum, meta_ad, "metaAdLowAction", "metaAdHighAction");
-    checkCumpl(_t("newReactShort"),  tNR,    meta_nr, "metaNrLowAction", "metaNrHighAction");
-    checkCumpl(_t("supplyHours"),    tSH,    meta_sh, "metaShLowAction", "metaShHighAction");
-  } else if (STATE.metasData && STATE.metasData.length) {
-    findings.push({
-      sev: "info", icon: "💡",
-      title:  _t("noMetasTitle"),
-      body:   _t("noMetasBody"),
-      action: _t("noMetasAction")
-    });
+    }
+
+    // ── 6. Volatilidad: coeficiente de variacion en AD ────────────────────
+    const filtered = serieAD.filter(x => x > 0);
+    if (filtered.length >= 4) {
+      const mean = filtered.reduce((s, x) => s + x, 0) / filtered.length;
+      const variance = filtered.reduce((s, x) => s + Math.pow(x - mean, 2), 0) / filtered.length;
+      const stdev = Math.sqrt(variance);
+      const cv = mean > 0 ? stdev / mean : 0;
+      if (cv >= 0.25) {
+        findings.push({
+          sev: "yellow", icon: "🟡",
+          title:  _t("volatilityTitle"),
+          body:   _t("volatilityBody", { periods }),
+          action: _t("volatilityAction")
+        });
+      }
+    }
+
+    // ── 7. Pico historico vs actual ────────────────────────────────────────
+    const peak = Math.max(...serieAD);
+    if (peak > 0 && tADsum > 0) {
+      const ratio = (tADsum / peak) * 100;
+      if (ratio >= 95) {
+        findings.push({
+          sev: "green", icon: "🟢",
+          title:  _t("peakBestTitle"),
+          body:   _t("peakBestBody", { cur: tADsum.toLocaleString(), pct: ratio.toFixed(0), peak: peak.toLocaleString() }),
+          action: _t("peakBestAction")
+        });
+      } else if (ratio < 60) {
+        findings.push({
+          sev: "yellow", icon: "🟡",
+          title:  _t("peakLowTitle"),
+          body:   _t("peakLowBody",  { cur: tADsum.toLocaleString(), pct: ratio.toFixed(0), peak: peak.toLocaleString() }),
+          action: _t("peakLowAction", { peak: peak.toLocaleString() })
+        });
+      }
+    }
   }
 
-  // ── 6. Brecha entre ciudades (multi-ciudad) ───────────────────────────────
+  // ── 8. Productividad SH/AD ───────────────────────────────────────────────
+  if (tADsum > 0 && tSH > 0) {
+    const ratio = tSH / tADsum;  // horas promedio por conductor en el ultimo periodo
+    if (ratio < 20) {
+      findings.push({
+        sev: "yellow", icon: "🟡",
+        title:  _t("prodLowTitle"),
+        body:   _t("prodLowBody",  { hours: ratio.toFixed(1), period }),
+        action: _t("prodLowAction")
+      });
+    } else if (ratio > 35) {
+      findings.push({
+        sev: "green", icon: "🟢",
+        title:  _t("prodHighTitle"),
+        body:   _t("prodHighBody", { hours: ratio.toFixed(1), period }),
+        action: _t("prodHighAction")
+      });
+    }
+  }
+
+  // ── 9. Comision por viaje (commission/trips) ────────────────────────────
+  const pTr0 = prevRows.reduce((s, r) => s + (r.trips || 0), 0);
+  const pCo0 = prevRows.reduce((s, r) => s + (r.commission || 0), 0);
+  if (pTr0 > 0 && pCo0 > 0 && tTr > 0 && tCo > 0) {
+    const cpPrev = pCo0 / pTr0;
+    const cpCur  = tCo  / tTr;
+    if (cpPrev > 0) {
+      const drop = ((cpPrev - cpCur) / cpPrev) * 100;
+      if (drop >= 10) {
+        findings.push({
+          sev: "yellow", icon: "🟡",
+          title:  _t("commPerTripTitle"),
+          body:   _t("commPerTripBody", { prev: "$" + cpPrev.toFixed(2), cur: "$" + cpCur.toFixed(2), pct: drop.toFixed(1) }),
+          action: _t("commPerTripAction")
+        });
+      }
+    }
+  }
+
+  // ── 10. Dependencia de leads Yango ───────────────────────────────────────
+  if (recibeLeads) {
+    const totalNew = lastRows.reduce((s, r) => s + (r.newPartner || 0) + (r.newService || 0) + (r.reactivated || 0), 0);
+    const yangoNew = lastRows.reduce((s, r) => s + (r.newService || 0), 0);
+    if (totalNew >= 5 && yangoNew / totalNew >= 0.5) {
+      findings.push({
+        sev: "yellow", icon: "🟡",
+        title:  _t("leadDepTitle"),
+        body:   _t("leadDepBody", { pct: ((yangoNew / totalNew) * 100).toFixed(0), yango: yangoNew, total: totalNew }),
+        action: _t("leadDepAction")
+      });
+    }
+  }
+
+  // ── 11. Brecha entre ciudades (multi-ciudad) ─────────────────────────────
   if (citiesOf.length >= 2) {
     const cityPerf = citiesOf.map(c => {
       const last = lastRows.filter(r => r.city === c);
@@ -626,8 +767,14 @@ function _pvExecutiveSummary(ctx) {
     </div>`;
 }
 
-function _pvKpiCard(label, cur, prev, color, isMoney = false) {
-  const value = isMoney ? `$${fmt(cur)}` : fmt(cur);
+function _pvKpiCard(label, cur, prev, color, opts = {}) {
+  // opts: { isMoney, useK }
+  // - isMoney: prefijo $ en el valor
+  // - useK: usar fmtSmart (X.XK / X.XM con 1 decimal) en vez de fmt
+  const isMoney = opts === true || (opts && opts.isMoney);  // compat con llamada legacy
+  const useK    = opts && opts.useK;
+  const formatN = useK ? fmtSmart : fmt;
+  const value = isMoney ? `$${formatN(cur)}` : formatN(cur);
   const bdgHtml = prev !== null ? bdgMode(cur, prev, "mb-badge") : "";
   return `
     <div style="background:#fff;border:1px solid #eee;border-top:3px solid ${color};border-radius:10px;padding:10px 12px">
@@ -660,8 +807,42 @@ function _pvCitySection(partner, city, dates, recibeLeads, seriesCached) {
   }
 
   const id = city.toLowerCase().replace(/[^a-z0-9]/g, "");
-  const breakdownLabel = PARTNER_VIEW_STATE.lang === "en" ? "(breakdown)" : "(desglose)";
-  const tripsCommLabel = PARTNER_VIEW_STATE.lang === "en" ? "Trips & Commission" : "Viajes & Comisión";
+  const isEN = PARTNER_VIEW_STATE.lang === "en";
+  const breakdownLabel = isEN ? "(breakdown)" : "(desglose)";
+  const tripsCommLabel = isEN ? "Trips & Commission" : "Viajes & Comisión";
+  const tblTotalLabel  = isEN ? "Total" : "Total";
+  const tblNewPartner  = isEN ? "New (Partner)" : "Nuevos (Partner)";
+  const tblNewYango    = isEN ? "New (Yango)"   : "Nuevos (Yango)";
+  const tblReact       = isEN ? "Reactivated"   : "Reactivados";
+
+  // Mini-tabla de desglose N+R por fecha. Garantiza que el detalle completo
+  // (incluidos los segmentos chicos que no muestran numero en la barra) este
+  // visible al exportar a PDF.
+  const headerCells = [`<th style="text-align:left;padding:4px 6px;border-bottom:1px solid #eee;background:#f9f9f9">${isEN?"Date":"Fecha"}</th>`]
+    .concat(dates.map(d => `<th style="text-align:right;padding:4px 6px;border-bottom:1px solid #eee;background:#f9f9f9;font-size:.65rem">${d2s(d)}</th>`))
+    .join("");
+  const _row = (label, getter, color) => {
+    const cells = series.map(s => `<td style="text-align:right;padding:3px 6px;border-bottom:1px solid #f5f5f5">${fmt(getter(s))}</td>`).join("");
+    return `<tr>
+      <td style="padding:3px 6px;border-bottom:1px solid #f5f5f5;font-weight:600;color:${color}">
+        <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${color};margin-right:4px"></span>${label}
+      </td>${cells}
+    </tr>`;
+  };
+  const nrTableRows = [
+    _row(tblNewPartner, s => s.npPartner, "#3b82f6"),
+    recibeLeads ? _row(tblNewYango, s => s.npService, "#f59e0b") : "",
+    _row(tblReact, s => s.reactivated, "#10b981"),
+    _row(tblTotalLabel, s => s.nr, "#111")
+  ].filter(Boolean).join("");
+
+  const nrTable = `
+    <div style="margin-top:8px;overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:.68rem;background:#fff;border:1px solid #f0f0f0;border-radius:6px">
+        <thead><tr>${headerCells}</tr></thead>
+        <tbody>${nrTableRows}</tbody>
+      </table>
+    </div>`;
 
   return `
     <div style="border:1px solid #eee;border-top:3px solid ${cityColor};border-radius:10px;padding:14px;margin-bottom:14px">
@@ -675,8 +856,8 @@ function _pvCitySection(partner, city, dates, recibeLeads, seriesCached) {
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px">
         <div class="chart-card"><div class="chart-head"><span class="chart-title">${escapeHTML(_t("activeDrivers"))}</span></div><div id="pv_${id}_ad"></div></div>
         <div class="chart-card"><div class="chart-head"><span class="chart-title">${escapeHTML(_t("supplyHours"))}</span></div><div id="pv_${id}_sh"></div></div>
-        <div class="chart-card"><div class="chart-head"><span class="chart-title">${escapeHTML(_t("newReact"))} ${recibeLeads ? breakdownLabel : ""}</span></div><div id="pv_${id}_nr"></div></div>
-        <div class="chart-card"><div class="chart-head"><span class="chart-title">${escapeHTML(tripsCommLabel)}</span></div><div id="pv_${id}_tc"></div></div>
+        <div class="chart-card" style="grid-column:span 2"><div class="chart-head"><span class="chart-title">${escapeHTML(_t("newReact"))} ${recibeLeads ? breakdownLabel : ""}</span></div><div id="pv_${id}_nr"></div>${nrTable}</div>
+        <div class="chart-card" style="grid-column:span 2"><div class="chart-head"><span class="chart-title">${escapeHTML(tripsCommLabel)}</span></div><div id="pv_${id}_tc"></div></div>
       </div>
     </div>`;
 }
@@ -687,11 +868,11 @@ function _pvBuildCityCharts(partner, city, dates, recibeLeads, seriesCached) {
   const series = seriesCached || _pvSeriesByPartnerCity(partner, city, dates);
   const labels = dates.map(d2s);
 
-  // Chart 1: AD (línea simple)
+  // Chart 1: AD (línea simple) — siempre numero exacto (sin K)
   _pvSimpleLine(`pv_${id}_ad`, labels, [{ name: "AD", data: series.map(s => s.ad) }], [cityColor]);
 
-  // Chart 2: SH (línea simple)
-  _pvSimpleLine(`pv_${id}_sh`, labels, [{ name: "SH", data: series.map(s => s.sh) }], ["#8b5cf6"]);
+  // Chart 2: SH (línea simple) — formato K (1 decimal fijo) para no saturar
+  _pvSimpleLine(`pv_${id}_sh`, labels, [{ name: "SH", data: series.map(s => s.sh) }], ["#8b5cf6"], fmtSmart);
 
   // Chart 3: N+R desglosado o agregado
   const isEN = PARTNER_VIEW_STATE.lang === "en";
@@ -718,12 +899,13 @@ function _pvBuildCityCharts(partner, city, dates, recibeLeads, seriesCached) {
     ["#10b981", "#06b6d4"]);
 }
 
-function _pvSimpleLine(elId, labels, series, colors) {
+function _pvSimpleLine(elId, labels, series, colors, formatter) {
   const el = document.getElementById(elId);
   if (!el || typeof ApexCharts === "undefined") return;
   // Marcar el contenedor con clase para que las reglas CSS de fondo claro
   // (styles.css .pv-chart .apexcharts-datalabel-background) apliquen.
   el.classList.add("pv-chart");
+  const fmtFn = formatter || (v => fmt(v));
   const ch = new ApexCharts(el, {
     series,
     chart: { type: "line", height: 180, toolbar: { show: false }, animations: { enabled: false }, fontFamily: "inherit" },
@@ -735,13 +917,13 @@ function _pvSimpleLine(elId, labels, series, colors) {
     // blanco grueso via CSS (paint-order: stroke) para garantizar legibilidad.
     dataLabels: {
       enabled: true,
-      formatter: v => fmt(v),
+      formatter: v => fmtFn(v),
       style: { fontSize: "10px", colors: ["#111"], fontWeight: 700 },
       background: { enabled: false },
       offsetY: -10
     },
     xaxis: { categories: labels, labels: { style: { fontSize: "9px" }, rotate: -30 }, axisBorder: { show: false }, axisTicks: { show: false } },
-    yaxis: { labels: { formatter: v => fmt(v), style: { fontSize: "10px" } } },
+    yaxis: { labels: { formatter: v => fmtFn(v), style: { fontSize: "10px" } } },
     grid: { borderColor: "#f0f0f0", strokeDashArray: 4 },
     tooltip: { y: { formatter: v => fmt(v) } },
     legend: { show: false }
@@ -756,16 +938,38 @@ function _pvStackedColumn(elId, labels, series, colors) {
   el.classList.add("pv-chart");
   const ch = new ApexCharts(el, {
     series,
-    chart: { type: "bar", height: 180, stacked: true, toolbar: { show: false }, animations: { enabled: false }, fontFamily: "inherit" },
-    plotOptions: { bar: { columnWidth: "60%", dataLabels: { position: "center" } } },
+    chart: { type: "bar", height: 200, stacked: true, toolbar: { show: false }, animations: { enabled: false }, fontFamily: "inherit" },
+    plotOptions: {
+      bar: {
+        columnWidth: "60%",
+        dataLabels: {
+          position: "center",
+          // Mostrar el TOTAL del stack arriba de cada barra (numero principal)
+          total: {
+            enabled: true,
+            offsetY: -4,
+            style: { fontSize: "11px", fontWeight: 800, color: "#111" },
+            formatter: v => fmt(v)
+          }
+        }
+      }
+    },
     colors,
-    // dataLabels chicos para que entren dentro de cada segmento de la barra.
-    // Solo se muestran si el valor es >= 3 (evita ruido en segmentos minusculos).
+    // Etiqueta dentro del segmento: solo si el segmento >= 20% del total de su
+    // barra (evita superposicion). Los segmentos chicos se ven por color pero
+    // sin numero; el detalle queda en el tooltip y en la mini-tabla debajo.
     dataLabels: {
       enabled: true,
-      formatter: v => (v >= 3 ? fmt(v) : ""),
-      style: { fontSize: "8px", colors: ["#fff"], fontWeight: 700 },
-      dropShadow: { enabled: true, top: 1, left: 1, blur: 1, opacity: .35 }
+      formatter: function(val, opts) {
+        if (!val || val <= 0) return "";
+        const series = opts.w.config.series;
+        const total = series.reduce((s, ser) => s + (ser.data[opts.dataPointIndex] || 0), 0);
+        if (total === 0) return "";
+        if (val / total < 0.20) return "";
+        return fmt(val);
+      },
+      style: { fontSize: "9px", colors: ["#fff"], fontWeight: 800 },
+      dropShadow: { enabled: true, top: 1, left: 1, blur: 1, opacity: .45 }
     },
     xaxis: { categories: labels, labels: { style: { fontSize: "9px" }, rotate: -30 } },
     yaxis: { labels: { formatter: v => fmt(v), style: { fontSize: "10px" } } },
@@ -781,6 +985,8 @@ function _pvDualLine(elId, labels, series, colors) {
   const el = document.getElementById(elId);
   if (!el || typeof ApexCharts === "undefined") return;
   el.classList.add("pv-chart");
+  // Ambas series usan fmtSmart (Viajes y Comision suelen ser numeros grandes).
+  // seriesIndex 0 = Viajes (sin $), seriesIndex 1 = Comision (con $).
   const ch = new ApexCharts(el, {
     series,
     chart: { type: "line", height: 180, toolbar: { show: false }, animations: { enabled: false }, fontFamily: "inherit" },
@@ -790,18 +996,20 @@ function _pvDualLine(elId, labels, series, colors) {
     dataLabels: {
       enabled: true,
       enabledOnSeries: [0, 1],
-      formatter: (v, opts) => opts.seriesIndex === 1 ? "$" + fmt(v) : fmt(v),
+      formatter: (v, opts) => opts.seriesIndex === 1 ? "$" + fmtSmart(v) : fmtSmart(v),
       style: { fontSize: "10px", colors: ["#111"], fontWeight: 700 },
       background: { enabled: false },
       offsetY: -10
     },
     xaxis: { categories: labels, labels: { style: { fontSize: "9px" }, rotate: -30 } },
     yaxis: [
-      { seriesName: "Viajes", labels: { formatter: v => fmt(v), style: { fontSize: "10px" } } },
-      { opposite: true, seriesName: "Comisión", labels: { formatter: v => "$" + fmt(v), style: { fontSize: "10px" } } }
+      { seriesName: (series[0] && series[0].name) || "Viajes",
+        labels: { formatter: v => fmtSmart(v), style: { fontSize: "10px" } } },
+      { opposite: true, seriesName: (series[1] && series[1].name) || "Comisión",
+        labels: { formatter: v => "$" + fmtSmart(v), style: { fontSize: "10px" } } }
     ],
     grid: { borderColor: "#f0f0f0", strokeDashArray: 4 },
-    tooltip: { y: { formatter: (v, { seriesIndex }) => seriesIndex === 1 ? "$" + fmt(v) : fmt(v) } },
+    tooltip: { y: { formatter: (v, { seriesIndex }) => seriesIndex === 1 ? "$" + fmtSmart(v) : fmtSmart(v) } },
     legend: { position: "bottom", fontSize: "10px" }
   });
   ch.render();

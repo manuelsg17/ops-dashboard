@@ -123,6 +123,25 @@ function fmtK(n) {
   return "$" + ((n || 0) / 1000).toLocaleString("es-PE",
     { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "K";
 }
+// fmtSmart: compresion automatica K/M con 1 decimal fijo.
+// Usar para metricas grandes (Supply Hours, Trips, Commission) donde el numero
+// completo no entra en charts/KPI cards. Mantiene 1 decimal siempre para no
+// hacer redondeos fuertes (12,500 -> "12.5K" en vez de "13K").
+// Para Conductores Activos NO usar — el numero exacto es sensible.
+function fmtSmart(n) {
+  if (n === null || n === undefined || isNaN(n)) return "0";
+  const neg = n < 0;
+  const abs = Math.abs(n);
+  let out;
+  if (abs >= 1_000_000) {
+    out = (abs / 1_000_000).toLocaleString("es-PE", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "M";
+  } else if (abs >= 1_000) {
+    out = (abs / 1_000).toLocaleString("es-PE", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "K";
+  } else {
+    out = fmt(abs);
+  }
+  return neg ? "-" + out : out;
+}
 function d2s(d) { return d ? d.split("-").reverse().join("/") : "--"; }
 
 // Badge HTML
