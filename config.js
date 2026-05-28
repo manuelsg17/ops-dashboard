@@ -91,10 +91,18 @@ const STATE = {
                             // y aborta si !==STATE._tabRenderId.
   _switchingTab:    false,  // Guard de reentrancia: evita que doble-click rapido
                             // lance dos secuencias destroy+render concurrentes.
-  bannedWords: JSON.parse(
-    localStorage.getItem("yangoBannedWords") ||
-    JSON.stringify(["tuktuk", "tuk tuk", "delivery", "cargo", "mototaxi", "bikes"])
-  )
+  // Defensivo contra localStorage manipulado: solo strings hasta 40 chars,
+  // cap de 100 entradas, fallback al default si el JSON no es array de strings.
+  bannedWords: (function() {
+    const fallback = ["tuktuk", "tuk tuk", "delivery", "cargo", "mototaxi", "bikes"];
+    try {
+      const raw = JSON.parse(localStorage.getItem("yangoBannedWords") || "null");
+      if (!Array.isArray(raw)) return fallback;
+      return raw
+        .filter(w => typeof w === "string" && w.length > 0 && w.length <= 40)
+        .slice(0, 100);
+    } catch { return fallback; }
+  })()
 };
 function rebuildKAMPartners() {
   STATE.KAM_PARTNERS = {};

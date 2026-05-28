@@ -462,7 +462,7 @@ function popKAM() {
   const kams = [...new Set(Object.values(STATE.KAM_MAP))].sort();
   document.getElementById("kamFilter").innerHTML =
     `<option value="all">Todos</option>` +
-    kams.map(k => `<option value="${k}">${k}</option>`).join("");
+    kams.map(k => `<option value="${escapeHTML(k)}">${escapeHTML(k)}</option>`).join("");
 }
 
 // ── SIDEBAR: PARTNERS ────────────────────────────────────────────────────────
@@ -668,8 +668,11 @@ function renderConfig() {
       </div>
     </div>`;
 
-  // ── Sección: Eliminar Datos ─────────────────────────────────────────────────
-  html += `
+  // ── Sección: Eliminar Datos (solo admin) ────────────────────────────────────
+  // El gate definitivo es RLS en Supabase: aunque alguien fuerce el render
+  // desde DevTools, la query DELETE falla con 401/PGRST.
+  if (STATE.isAdmin) {
+    html += `
     <div class="section" style="margin-bottom:16px;border:1px solid #fecaca;background:#fff8f8;border-radius:8px;padding:14px">
       <div style="font-size:.8rem;font-weight:700;color:#991b1b;margin-bottom:6px">🗑️ Eliminar Datos</div>
       <div style="font-size:.72rem;color:#888;margin-bottom:12px">
@@ -697,16 +700,21 @@ function renderConfig() {
         </button>
       </div>
     </div>`;
+  }
 
   // ── Sección: Filtros de Flota (palabras prohibidas) ──────────────────────────
   const excludedCount = STATE.rawDataFull.length - STATE.rawData.length;
-  const bannedBadges  = STATE.bannedWords.map(w =>
-    `<span style="display:inline-flex;align-items:center;gap:4px;background:#fff0f0;border:1px solid #fecaca;border-radius:20px;padding:3px 10px;font-size:.73rem;font-weight:600;color:#991b1b">
-      ${w}
-      <button onclick="removeBannedWord('${w.replace(/'/g, "\\'")}')"
+  // bannedWords viene de localStorage y puede ser manipulado: escapamos siempre,
+  // y pasamos el valor como JSON HTML-encodeado para no romper el atributo onclick.
+  const bannedBadges  = STATE.bannedWords.map(w => {
+    const wText = escapeHTML(w);
+    const wAttr = escapeHTML(JSON.stringify(w));
+    return `<span style="display:inline-flex;align-items:center;gap:4px;background:#fff0f0;border:1px solid #fecaca;border-radius:20px;padding:3px 10px;font-size:.73rem;font-weight:600;color:#991b1b">
+      ${wText}
+      <button onclick="removeBannedWord(${wAttr})"
         style="background:none;border:none;cursor:pointer;color:#FF0000;font-size:.85rem;line-height:1;padding:0 2px;margin-left:2px" title="Eliminar">✕</button>
-    </span>`
-  ).join("");
+    </span>`;
+  }).join("");
 
   // Calcular qué partners fueron excluidos y por qué (qué palabra disparó la exclusion)
   const bannedLower = (STATE.bannedWords || []).map(w => w.toLowerCase());
@@ -1039,6 +1047,12 @@ async function deleteDashboardData() {
   const tableSel = document.getElementById("delTableSel");
   const monthInp = document.getElementById("delMonthInput");
   if (!tableSel || !monthInp) return;
+
+  // Guard defensivo. El enforcement real esta en RLS (is_admin()).
+  if (!STATE.isAdmin) {
+    showBanner(false, "Operacion bloqueada: requiere rol admin.");
+    return;
+  }
 
   const table = tableSel.value;
   const mes   = monthInp.value.trim();

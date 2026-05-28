@@ -384,8 +384,8 @@ function renderTable() {
     const nsCell  = r.ns > 0
       ? `<span class="leads-badge" title="Recibe leads de Yango">★ ${fmt(r.ns)}</span>`
       : `<span style="color:#ccc">${fmt(r.ns)}</span>`;
-    h += `<tr data-partner="${r.partner}"${r.ns > 0 ? ' class="leads-row"' : ""}>
-      <td>${pd}${alertBd}${r.partner}</td><td>${kd}${r.kam}</td>
+    h += `<tr data-partner="${escapeHTML(r.partner)}"${r.ns > 0 ? ' class="leads-row"' : ""}>
+      <td>${pd}${alertBd}${escapeHTML(r.partner)}</td><td>${kd}${escapeHTML(r.kam)}</td>
       <td class="tn">${fmt(r.ad)}</td><td class="tn">${fmt(r.nr)}</td>
       <td class="tn">${fmt(r.sh)}</td><td class="tn">${fmtK(r.co)}</td>
       <td class="tn">${nsCell}</td>
@@ -477,11 +477,11 @@ function buildPartnerCards(apd, lastDate, prevDate, partners, sel) {
     card.innerHTML = `
       <div class="pcard-name">
         <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${col};margin-right:5px"></span>
-        ${partner}
+        ${escapeHTML(partner)}
       </div>
       <div class="pcard-sub">
         <span style="width:7px;height:7px;border-radius:50%;background:${kc};display:inline-block;margin-right:3px"></span>
-        ${last.kam} &nbsp;·&nbsp; ${prevRow ? d2s(prevDate) + " → " : ""}${d2s(lastDate)}
+        ${escapeHTML(last.kam)} &nbsp;·&nbsp; ${prevRow ? d2s(prevDate) + " → " : ""}${d2s(lastDate)}
       </div>
       <div class="pcard-kpis">
         <div class="pk">

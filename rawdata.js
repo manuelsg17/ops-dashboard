@@ -178,10 +178,10 @@ function renderRawData() {
             <td style="color:#888;font-size:.72rem">${d2s(r.date)}</td>
             <td>
               <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${STATE.partnerColors[r.partner] || "#ccc"};margin-right:5px"></span>
-              ${r.partner}
+              ${escapeHTML(r.partner)}
             </td>
-            <td style="font-size:.73rem;color:#555">${r.kam || "–"}</td>
-            <td style="font-size:.73rem;color:#555">${r.city || "–"}</td>
+            <td style="font-size:.73rem;color:#555">${escapeHTML(r.kam) || "–"}</td>
+            <td style="font-size:.73rem;color:#555">${escapeHTML(r.city) || "–"}</td>
             <td class="tn">${fmt(r.activeDrivers)}</td>
             <td class="tn">${fmt(nr)}</td>
             <td class="tn">${fmt(r.supplyHours)}</td>

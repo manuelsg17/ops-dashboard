@@ -328,7 +328,7 @@ function _renderMetasImpl() {
       <div class="city-card" style="border-top-color:${col}">
         <div class="city-name">
           <span style="width:10px;height:10px;border-radius:50%;background:${col};display:inline-block"></span>
-          ${cityLabel(city)}
+          ${escapeHTML(cityLabel(city))}
         </div>
         ${miniBar("Cond. Activos",  crAD, cmA,  cpAD)}
         ${miniBar("Nuevos+React",   crNR, cmNR, cpNR)}
@@ -373,14 +373,14 @@ function _renderMetasImpl() {
           <span style="margin-left:auto;font-size:.6rem;opacity:.7">click para ver</span>
         </summary>
         <div style="font-size:.66rem;background:#fffaf0;border:1px solid #fed7aa;border-top:none;border-radius:0 0 5px 5px;padding:5px 7px;color:#9a3412">
-          ${noGoalPartners.join(", ")}
+          ${noGoalPartners.map(escapeHTML).join(", ")}
         </div>
       </details>` : "";
     html += `
       <div class="city-card" style="border-top-color:${col}">
         <div class="city-name">
           <span style="width:10px;height:10px;border-radius:50%;background:${col};display:inline-block"></span>
-          ${kam}
+          ${escapeHTML(kam)}
           <span style="font-size:.7rem;font-weight:500;color:#aaa">(${totalAccounts} cuentas)</span>
         </div>
         ${alertHtml}
@@ -407,12 +407,12 @@ function _renderMetasImpl() {
         <div class="pcard" style="border-left-color:${col};background:#fafaf9">
           <div class="pcard-name">
             <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${col};margin-right:5px"></span>
-            ${c.partner}
+            ${escapeHTML(c.partner)}
             <span style="font-size:.6rem;font-weight:600;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;padding:1px 5px;border-radius:8px;margin-left:5px">Sin Plan</span>
           </div>
           <div class="pcard-sub">
             <span style="width:7px;height:7px;border-radius:50%;background:${kcolor};display:inline-block;margin-right:3px"></span>
-            ${c.kam} &nbsp;·&nbsp; ${c.city}
+            ${escapeHTML(c.kam)} &nbsp;·&nbsp; ${escapeHTML(c.city)}
           </div>
           <div style="margin:8px 0 4px;font-size:.74rem;color:#555;display:flex;justify-content:space-between">
             <span>Cond. Activos</span><strong>${fmt(c.ad)}</strong>
@@ -432,11 +432,11 @@ function _renderMetasImpl() {
         <div class="pcard" style="border-left-color:${col}">
           <div class="pcard-name">
             <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${col};margin-right:5px"></span>
-            ${c.partner}
+            ${escapeHTML(c.partner)}
           </div>
           <div class="pcard-sub">
             <span style="width:7px;height:7px;border-radius:50%;background:${kcolor};display:inline-block;margin-right:3px"></span>
-            ${c.kam} &nbsp;·&nbsp; ${c.city}
+            ${escapeHTML(c.kam)} &nbsp;·&nbsp; ${escapeHTML(c.city)}
           </div>
           ${miniBarFull("Cond. Activos", c.ad, c.mA,  c.projAD)}
           ${miniBarFull("Nuevos+React",  c.nr, c.mNR, c.projNR)}
