@@ -134,6 +134,21 @@ const PV_I18N = {
                             en: "The average of the last 3 {periods} grew {pct}% vs the previous 3 {periods} ({prevAvg} → {curAvg} AD)." },
   trendUpAction:          { es: "Felicitaciones, es tracción real y no un rebote puntual. Sugerimos validar la capacidad operativa para sostener el ritmo y conversar próximos pasos de expansión.",
                             en: "Congratulations, this is real traction rather than a one-off bounce. We suggest validating operational capacity to sustain the pace and discussing next expansion steps." },
+  // ── Señal mixta AD: corto plazo (MoM) y mediano plazo (3m) en conflicto ──
+  // Evita mostrar "caída fuerte" (rojo) y "crecimiento sostenido" (verde) a la
+  // vez sobre el mismo KPI; se fusionan en un solo hallazgo coherente.
+  adMixDownUpTitle:       { es: "Conductores Activos: bajón reciente, tendencia aún positiva",
+                            en: "Active Drivers: recent dip, trend still positive" },
+  adMixDownUpBody:        { es: "El último {period} cayó {momAbs}% ({prev} → {cur}), pero el promedio de los últimos 3 {periods} sigue +{trendAbs}% sobre el de los 3 {periods} previos ({prevAvg} → {curAvg} AD).",
+                            en: "This {period} fell {momAbs}% ({prev} → {cur}), but the last-3-{periods} average is still +{trendAbs}% above the previous 3 {periods} ({prevAvg} → {curAvg} AD)." },
+  adMixDownUpAction:      { es: "Vigilar el próximo {period}: si se recupera, fue un bajón puntual; si sigue cayendo, conviene activar reactivación y revisar la operativa (uso de la app, comisión, pagos).",
+                            en: "Watch next {period}: if it recovers it was a one-off dip; if it keeps falling, activate re-activation and review operations (app usage, commission, payments)." },
+  adMixUpDownTitle:       { es: "Conductores Activos: rebote reciente, pero tendencia a la baja",
+                            en: "Active Drivers: recent rebound, but downward trend" },
+  adMixUpDownBody:        { es: "El último {period} subió {momAbs}% ({prev} → {cur}), pero el promedio de los últimos 3 {periods} cayó {trendAbs}% vs los 3 {periods} previos ({prevAvg} → {curAvg} AD).",
+                            en: "This {period} rose {momAbs}% ({prev} → {cur}), but the last-3-{periods} average fell {trendAbs}% vs the previous 3 {periods} ({prevAvg} → {curAvg} AD)." },
+  adMixUpDownAction:      { es: "El repunte es buena señal, pero la tendencia de fondo aún baja. Sugerimos confirmar que la mejora se sostenga 1-2 {periods} más antes de darla por consolidada, y revisar qué frenó el trimestre.",
+                            en: "The uptick is encouraging, but the underlying trend is still down. We suggest confirming the improvement holds 1-2 more {periods} before considering it consolidated, and reviewing what slowed the quarter." },
   prodLowTitle:           { es: "Productividad por conductor por debajo del promedio",
                             en: "Below-average productivity per driver" },
   prodLowBody:            { es: "Promedio de {hours}h por conductor en el último {period}. El referente esperado es superior a 20h.",
@@ -526,32 +541,10 @@ function _pvExecutiveSummary(ctx) {
     });
   }
 
-  // ── 2. Variacion fuerte en AD global ──────────────────────────────────────
+  // ── 2. Variacion AD global (MoM) — se CALCULA aquí; se EMITE en el bloque
+  //       unificado de AD (#5b), combinada con la tendencia 3m, para no
+  //       contradecirse (antes salían "Caída fuerte" y "Crecimiento" a la vez).
   const wowAD = pADsum > 0 ? ((tADsum - pADsum) / pADsum) * 100 : null;
-  if (wowAD !== null) {
-    if (wowAD <= -15) {
-      findings.push({
-        sev: "red", icon: "🔴",
-        title:  _t("adDropSharpTitle"),
-        body:   _t("adDropSharpBody",  { prev: pADsum.toLocaleString(), cur: tADsum.toLocaleString(), pct: wowAD.toFixed(1), period }),
-        action: _t("adDropSharpAction")
-      });
-    } else if (wowAD <= -5) {
-      findings.push({
-        sev: "yellow", icon: "🟡",
-        title:  _t("adDropModTitle",  { pct: wowAD.toFixed(1) }),
-        body:   _t("adDropModBody",   { prev: pADsum, cur: tADsum }),
-        action: _t("adDropModAction", { periods })
-      });
-    } else if (wowAD >= 15) {
-      findings.push({
-        sev: "green", icon: "🟢",
-        title:  _t("adGrowTitle",  { pct: wowAD.toFixed(1) }),
-        body:   _t("adGrowBody",   { prev: pADsum.toLocaleString(), cur: tADsum.toLocaleString() }),
-        action: _t("adGrowAction", { period })
-      });
-    }
-  }
 
   // ── 3. N+R: caída a cero ──────────────────────────────────────────────────
   if (tNR === 0 && pNR > 0) {
@@ -583,8 +576,10 @@ function _pvExecutiveSummary(ctx) {
     }
   }
 
-  // ── 5. Tendencia AD largo plazo (avg 3 ultimos vs 3 anteriores) ──────────
-  // Construir serie agregada del partner por fecha (total cross-city, dedup CLID por ciudad/fecha)
+  // ── 5. Tendencia AD mediano plazo (avg 3 ultimos vs 3 anteriores) ────────
+  // Construir serie agregada del partner por fecha (total cross-city, dedup CLID por ciudad/fecha).
+  // NO emite card aquí: alimenta adTrend, que el bloque unificado (#5b) combina con wowAD.
+  let adTrend = null;  // { chg, avgL, avgP } cuando hay >= 6 periodos
   if (dates.length >= 6) {
     const adByDate = {};
     const seen = new Set();
@@ -600,24 +595,7 @@ function _pvExecutiveSummary(ctx) {
     const sumL = last3.reduce((s, x) => s + x, 0);
     const sumP = prev3.reduce((s, x) => s + x, 0);
     if (sumP > 0) {
-      const chg = ((sumL - sumP) / sumP) * 100;
-      const avgL = Math.round(sumL / 3);
-      const avgP = Math.round(sumP / 3);
-      if (chg <= -5) {
-        findings.push({
-          sev: "red", icon: "🔴",
-          title:  _t("trendDownTitle"),
-          body:   _t("trendDownBody", { periods, pct: Math.abs(chg).toFixed(1), prevAvg: avgP.toLocaleString(), curAvg: avgL.toLocaleString() }),
-          action: _t("trendDownAction")
-        });
-      } else if (chg >= 5) {
-        findings.push({
-          sev: "green", icon: "🟢",
-          title:  _t("trendUpTitle"),
-          body:   _t("trendUpBody", { periods, pct: chg.toFixed(1), prevAvg: avgP.toLocaleString(), curAvg: avgL.toLocaleString() }),
-          action: _t("trendUpAction")
-        });
-      }
+      adTrend = { chg: ((sumL - sumP) / sumP) * 100, avgL: Math.round(sumL / 3), avgP: Math.round(sumP / 3) };
     }
 
     // ── 6. Volatilidad: coeficiente de variacion en AD ────────────────────
@@ -656,6 +634,53 @@ function _pvExecutiveSummary(ctx) {
           action: _t("peakLowAction", { peak: peak.toLocaleString() })
         });
       }
+    }
+  }
+
+  // ── 5b. AD UNIFICADO: reconcilia MoM (wowAD) con tendencia 3m (adTrend) ───
+  // Un solo hallazgo de Conductores Activos. Antes #2 y #5 emitían cards por
+  // separado y podían contradecirse ("Caída fuerte" rojo + "Crecimiento
+  // sostenido" verde a la vez). Mismos umbrales de siempre (MoM ±5/±15, 3m ±5).
+  if (wowAD !== null) {
+    const momPct   = (wowAD >= 0 ? "+" : "") + wowAD.toFixed(1);   // p.ej. "-28.3"
+    const momAbs   = Math.abs(wowAD).toFixed(1);
+    const trendAbs = adTrend ? Math.abs(adTrend.chg).toFixed(1) : null;
+    const mom = { prev: pADsum.toLocaleString(), cur: tADsum.toLocaleString(), pct: momPct, period };
+    const tr  = adTrend
+      ? { periods, pct: trendAbs, prevAvg: adTrend.avgP.toLocaleString(), curAvg: adTrend.avgL.toLocaleString() }
+      : null;
+    const mix = { period, periods, momAbs, prev: mom.prev, cur: mom.cur, trendAbs,
+                  prevAvg: tr ? tr.prevAvg : "", curAvg: tr ? tr.curAvg : "" };
+
+    const momDown  = wowAD <= -5;
+    const momSharp = wowAD <= -15;
+    const momUp    = wowAD >= 15;
+    const trUp     = adTrend && adTrend.chg >= 5;
+    const trDown   = adTrend && adTrend.chg <= -5;
+
+    if (momDown && trUp) {
+      // señal mixta: bajón reciente pero la tendencia 3m sigue positiva
+      findings.push({ sev: "yellow", icon: "🟡",
+        title: _t("adMixDownUpTitle"), body: _t("adMixDownUpBody", mix), action: _t("adMixDownUpAction", mix) });
+    } else if (momUp && trDown) {
+      // señal mixta: rebote reciente pero la tendencia 3m viene a la baja
+      findings.push({ sev: "yellow", icon: "🟡",
+        title: _t("adMixUpDownTitle"), body: _t("adMixUpDownBody", mix), action: _t("adMixUpDownAction", mix) });
+    } else if (momSharp) {
+      findings.push({ sev: "red", icon: "🔴",
+        title: _t("adDropSharpTitle"), body: _t("adDropSharpBody", mom), action: _t("adDropSharpAction") });
+    } else if (momDown) {
+      findings.push({ sev: "yellow", icon: "🟡",
+        title: _t("adDropModTitle", { pct: wowAD.toFixed(1) }), body: _t("adDropModBody", { prev: pADsum, cur: tADsum }), action: _t("adDropModAction", { periods }) });
+    } else if (trDown) {
+      findings.push({ sev: "red", icon: "🔴",
+        title: _t("trendDownTitle"), body: _t("trendDownBody", tr), action: _t("trendDownAction") });
+    } else if (momUp) {
+      findings.push({ sev: "green", icon: "🟢",
+        title: _t("adGrowTitle", { pct: wowAD.toFixed(1) }), body: _t("adGrowBody", { prev: pADsum.toLocaleString(), cur: tADsum.toLocaleString() }), action: _t("adGrowAction", { period }) });
+    } else if (trUp) {
+      findings.push({ sev: "green", icon: "🟢",
+        title: _t("trendUpTitle"), body: _t("trendUpBody", tr), action: _t("trendUpAction") });
     }
   }
 
