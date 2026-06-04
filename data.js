@@ -70,12 +70,22 @@ function escapeHTML(s) {
 // Registra en STATE.parseWarnings cuando una celda no es numerica.
 function toN(v, label) {
   if (v === null || v === undefined || v === "") return 0;
+  // Si XLSX entregó un número (raw:true), ESE es el valor exacto y completo.
+  // No aplicar heurísticas de separador/sufijo: romperían decimales reales
+  // (p.ej. 1611576.849 → "1611576.849" → digitsAfter===3 lo trataría como
+  // separador de miles → 1611576849, error ×1000). Devolver tal cual.
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
   let s = String(v).trim();
-  if (s === "0") return 0;
+  if (s === "" || s === "0") return 0;
 
-  // Sufijo K → multiplicar por 1000 (case-insensitive)
-  if (s.toUpperCase().endsWith("K")) {
-    return toN(s.slice(0, -1), label) * 1000;
+  // Sufijo de magnitud (case-insensitive): K=mil, M/MM=millón, B/G=mil millones.
+  // Solo si hay parte numérica antes del sufijo. Convierte "1.8M" → 1800000 y
+  // "51.7K" → 51700. ANTES solo se manejaba "K"; "1.8M" caía en parseFloat=1.8,
+  // perdiendo el 99.9% del valor (raíz del GMV "clavado"/saltos en el dashboard).
+  const sufMatch = s.match(/^([-+]?[\d.,\s]+)(K|MM|M|B|G)$/i);
+  if (sufMatch) {
+    const mult = { K: 1e3, MM: 1e6, M: 1e6, B: 1e9, G: 1e9 }[sufMatch[2].toUpperCase()];
+    return toN(sufMatch[1], label) * mult;
   }
 
   // Eliminar % y espacios (incluido espacio fino)
@@ -266,6 +276,154 @@ function hasConsecutiveDecline(apdByPartner, partner) {
   return true;
 }
 
+// ── REGISTRO DE METRICAS TAXIPARKS ────────────────────────────────────────────
+// Fuente unica de verdad: nombre de metrica del export (normalizado) -> columna
+// snake_case en BD. Las 7 core conservan su nombre historico (los graficos
+// existentes siguen linkeados igual); las ~41 nuevas se agregaron en
+// migrations/2026-06-02_taxiparks_kpis_y_conversion.sql.
+//
+// El match es EXACTO sobre el nombre normalizado (lower + solo [a-z0-9] + espacios)
+// para evitar colisiones por substring (ej. "new drivers from partner" vs
+// "new profiles from partner").
+function _txNorm(s) { return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); }
+function _snakeToCamel(s) { return s.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase()); }
+
+const TX_COL_BY_NORM = {
+  // ── core (nombre historico, NO cambiar) ──
+  "active drivers": "active_drivers",
+  "new drivers from partner": "new_from_partner",
+  "new drivers from service": "new_from_service",
+  "reactivated drivers": "reactivated",
+  "supply hours": "supply_hours",
+  "partner commission": "commission",
+  "trips": "trips",
+  // ── nuevas: conteos / montos ──
+  "gmv": "gmv",
+  "new drivers": "new_drivers",
+  "new drivers from partner with 50 trips": "new_from_partner_50t",
+  "new drivers from service with 50 trips": "new_from_service_50t",
+  "active cars": "active_cars",
+  "branded active cars": "branded_active_cars",
+  "owned fleet active cars": "owned_fleet_active_cars",
+  "owned fleet branded active cars": "owned_fleet_branded_active_cars",
+  "internal fleet sh": "internal_fleet_sh",
+  "external fleet sh": "external_fleet_sh",
+  "new profiles": "new_profiles",
+  "new profiles from partner": "new_profiles_partner",
+  "new profiles from partner with 50 trips": "new_profiles_partner_50t",
+  "new profiles from service": "new_profiles_service",
+  "new profiles from service with 50 trips": "new_profiles_service_50t",
+  // ── nuevas: ratios / shares / promedios ──
+  "new drivers share": "new_drivers_share",
+  "acceptance rate": "acceptance_rate",
+  "completion rate": "completion_rate",
+  "trips per hour": "trips_per_hour",
+  "money per hour": "money_per_hour",
+  "avg driver rating": "avg_driver_rating",
+  "avg fare after surge": "avg_fare_after_surge",
+  "bad rated trips share": "bad_rated_trips_share",
+  "fraud trips share": "fraud_trips_share",
+  "driver subsidies by gmv": "driver_subsidies_by_gmv",
+  "driver support requests share": "driver_support_requests_share",
+  "internal fleet sh share": "internal_fleet_sh_share",
+  "internal fleet sh per active car": "internal_fleet_sh_per_active_car",
+  "sh per active car": "sh_per_active_car",
+  "sh per active driver": "sh_per_active_driver",
+  "supply hours share": "supply_hours_share",
+  "trips share": "trips_share",
+  "partner commission share": "commission_share",
+  "new profiles from partner reg 1 trip": "new_profiles_partner_reg1",
+  "new profiles from partner reg 10 trip": "new_profiles_partner_reg10",
+  "new profiles from partner reg 50 trip": "new_profiles_partner_reg50",
+  "new profiles from partner reg 100 trip": "new_profiles_partner_reg100",
+  "new profiles from service reg 1 trip": "new_profiles_service_reg1",
+  "new profiles from service reg 10 trip": "new_profiles_service_reg10",
+  "new profiles from service reg 50 trip": "new_profiles_service_reg50",
+  "new profiles from service reg 100 trip": "new_profiles_service_reg100"
+};
+
+// Columnas que se SUMAN al consolidar duplicados (clid|city|periodo). El resto
+// (ratios/shares/promedios) se asignan: ultima ocurrencia con valor gana.
+const TX_COUNT_COLS = new Set([
+  "active_drivers", "new_drivers", "new_from_partner", "new_from_service", "reactivated",
+  "supply_hours", "commission", "trips", "gmv", "new_from_partner_50t", "new_from_service_50t",
+  "active_cars", "branded_active_cars", "owned_fleet_active_cars", "owned_fleet_branded_active_cars",
+  "internal_fleet_sh", "external_fleet_sh", "new_profiles", "new_profiles_partner",
+  "new_profiles_partner_50t", "new_profiles_service", "new_profiles_service_50t"
+]);
+
+// Columnas NUEVAS (no-core) que viajan en memoria como camelCase (gmv, acceptanceRate, …).
+const TX_NEW_COLS = [
+  "gmv", "new_drivers", "new_drivers_share", "new_from_partner_50t", "new_from_service_50t",
+  "acceptance_rate", "completion_rate", "trips_per_hour", "money_per_hour", "avg_driver_rating",
+  "avg_fare_after_surge", "bad_rated_trips_share", "fraud_trips_share", "driver_subsidies_by_gmv",
+  "driver_support_requests_share", "active_cars", "branded_active_cars", "owned_fleet_active_cars",
+  "owned_fleet_branded_active_cars", "internal_fleet_sh", "external_fleet_sh", "internal_fleet_sh_share",
+  "internal_fleet_sh_per_active_car", "sh_per_active_car", "sh_per_active_driver", "supply_hours_share",
+  "trips_share", "commission_share", "new_profiles", "new_profiles_partner", "new_profiles_partner_50t",
+  "new_profiles_partner_reg1", "new_profiles_partner_reg10", "new_profiles_partner_reg50", "new_profiles_partner_reg100",
+  "new_profiles_service", "new_profiles_service_50t", "new_profiles_service_reg1", "new_profiles_service_reg10",
+  "new_profiles_service_reg50", "new_profiles_service_reg100"
+];
+
+// Mapea las columnas NUEVAS de una fila BD -> objeto camelCase (null si sin dato).
+function txRowExtra(r) {
+  const out = {};
+  for (const col of TX_NEW_COLS) {
+    const v = r[col];
+    out[_snakeToCamel(col)] = (v === null || v === undefined || v === "") ? null : +v;
+  }
+  return out;
+}
+
+// Extrae todas las metricas reconocidas de una fila para un periodo.
+// mc: { metricLower -> excelColKey }. Devuelve { colSnake: valor }.
+function txExtract(row, mc) {
+  const out = {};
+  // 1) Match EXACTO por nombre normalizado (cubre el export ancho de taxiparks
+  //    sin colisiones, p.ej. "new drivers from partner" vs "new profiles from partner").
+  for (const [metricName, excelCol] of Object.entries(mc)) {
+    const col = TX_COL_BY_NORM[_txNorm(metricName)];
+    if (col && out[col] === undefined) out[col] = toN(row[excelCol], metricName);
+  }
+  // 2) Fallback FUZZY solo para las 7 core (compat con formatos viejos/variantes
+  //    cuyos headers no calzan exacto: "Commission", "Viajes", "Active Driver"...).
+  //    Solo rellena columnas que el match exacto no encontro.
+  const fuzzy = (...needles) => {
+    for (const n of needles)
+      for (const [mk, excelCol] of Object.entries(mc))
+        if (_txNorm(mk).includes(n)) return toN(row[excelCol], mk);
+    return undefined;
+  };
+  const setIf = (col, ...needles) => {
+    if (out[col] !== undefined) return;
+    const v = fuzzy(...needles);
+    if (v !== undefined) out[col] = v;
+  };
+  setIf("active_drivers", "active driver");
+  setIf("new_from_partner", "new drivers from partner", "new profile from partner", "from partner");
+  setIf("new_from_service", "new drivers from service", "new profile from service", "from service");
+  setIf("reactivated", "reactivat");
+  setIf("supply_hours", "supply hour");
+  setIf("commission", "commission", "comisi");
+  setIf("trips", "trip", "viaje");
+  // 3) Compat: si no vinieron las columnas split de "New Drivers" pero si el total,
+  //    mandarlo a new_from_partner para que np+ns+re siga cuadrando.
+  if (out.new_from_partner === undefined && out.new_from_service === undefined && out.new_drivers !== undefined) {
+    out.new_from_partner = out.new_drivers;
+  }
+  return out;
+}
+
+// Consolida `m` dentro de `target` (suma counts, ultima-con-valor gana en ratios).
+function txConsolidate(target, m) {
+  for (const col in m) {
+    const v = m[col];
+    if (TX_COUNT_COLS.has(col)) target[col] = (target[col] || 0) + (v || 0);
+    else if (target[col] === undefined || (v !== null && v !== undefined && v !== 0)) target[col] = v;
+  }
+}
+
 // ── PAGINACIÓN PARALELA ───────────────────────────────────────────────────────
 // Descarga todas las páginas de una tabla en paralelo (sin esperar página a página)
 async function fetchAllPages(table, orderCol) {
@@ -333,7 +491,8 @@ async function loadFromSupabase() {
       reactivated:   +r.reactivated,
       supplyHours:   +r.supply_hours,
       commission:    +r.commission,
-      trips:         +r.trips
+      trips:         +r.trips,
+      ...txRowExtra(r)
     }));
 
     // 3. Rendimiento mensual → carga diferida (ver loadMensualIfNeeded)
@@ -450,7 +609,8 @@ async function loadMensualIfNeeded() {
       reactivated:   +r.reactivated,
       supplyHours:   +r.supply_hours,
       commission:    +r.commission,
-      trips:         +r.trips
+      trips:         +r.trips,
+      ...txRowExtra(r)
     }));
     STATE.rawDataMensualFull = [...STATE.rawDataMensual];
     if (STATE.bannedWords && STATE.bannedWords.length) {
@@ -486,7 +646,8 @@ async function loadDiarioIfNeeded() {
       reactivated:   +r.reactivated    || 0,
       supplyHours:   +r.supply_hours   || 0,
       commission:    +r.commission     || 0,
-      trips:         +r.trips          || 0
+      trips:         +r.trips          || 0,
+      ...txRowExtra(r)
     }));
     STATE.rawDataDiarioFull = [...STATE.rawDataDiario];
     if (STATE.bannedWords && STATE.bannedWords.length) {
@@ -501,6 +662,36 @@ async function loadDiarioIfNeeded() {
     showBanner(false, "Error al cargar diario: " + err.message);
   }
   showLoad(false);
+}
+
+// ── LAZY LOAD CONVERSION (funnel por CLID, nivel pais) ────────────────────────
+async function loadConversionIfNeeded() {
+  if (STATE._conversionLoaded) return;
+  try {
+    const rows = await fetchAllPages("conversion_pais", "mes");
+    STATE.conversionData = (rows || []).map(r => {
+      const clid = (r.clid || "").trim();
+      return {
+        clid,
+        partner:       STATE.CLID_MAP[clid] || r.partner || "",
+        kam:           STATE.KAM_MAP[clid]  || "",
+        mes:           r.mes,
+        activeDrivers: +r.active_drivers || 0,
+        newDrivers:    +r.new_drivers    || 0,
+        firstOrder:    r.first_order  == null ? null : +r.first_order,
+        n5:            r.n5_success   == null ? null : +r.n5_success,
+        n10:           r.n10_success  == null ? null : +r.n10_success,
+        n25:           r.n25_success  == null ? null : +r.n25_success,
+        n50:           r.n50_success  == null ? null : +r.n50_success,
+        n100:          r.n100_success == null ? null : +r.n100_success
+      };
+    });
+    STATE._conversionLoaded = true;
+  } catch (err) {
+    // La tabla puede no existir en entornos viejos — fallo silencioso, no critico.
+    STATE.conversionData = [];
+    STATE._conversionLoaded = true; // no reintentar en cada render
+  }
 }
 
 // ── UPLOAD RENDIMIENTO MENSUAL ────────────────────────────────────────────────
@@ -525,54 +716,22 @@ async function uploadRendimientoMensual(rows) {
     mesColMap[iso][metrica] = k;
   });
 
-  function pick(mc, ...needles) {
-    for (const n of needles)
-      for (const [mk, col] of Object.entries(mc))
-        if (mk.includes(n)) return col;
-    return null;
-  }
-
-  // Agregar por clid+city+mes para evitar duplicados
+  // Agregar por clid+city+mes para evitar duplicados (registro unico TX_COL_BY_NORM)
   const agg = {};
   rows.forEach(row => {
     const clid    = String(row["CLID"] || row["clid"] || "").trim();
-    // IMPORTANTE: guardamos el partner TAL CUAL viene del Excel (no lo pisamos con
-    // CLID_MAP). La resolucion al "nombre configurado" se hace al CARGAR a memoria
-    // desde Supabase, no al escribir. Asi la BD siempre tiene la verdad del Excel
-    // y la vista Flotas puede mostrar "Nombre Excel" vs "Nombre Configurado".
+    // Guardamos el partner TAL CUAL del Excel (no lo pisamos con CLID_MAP); la
+    // resolucion al nombre configurado se hace al CARGAR desde Supabase.
     const partner = String(row["Partner"] || row["partner"] || "").trim() || clid || "Unknown";
     const kam  = STATE.KAM_MAP[clid] || "";
     const city = normCity(row["City"] || row["city"] || row["Ciudad"]);
 
     Object.entries(mesColMap).forEach(([mes, mc]) => {
-      const v  = col => col ? toN(row[col]) : 0;
-      const ad = v(pick(mc, "active driver"));
-      let   np = v(pick(mc, "new profile from partner", "new profiles from partner", "from partner"));
-      let   ns = v(pick(mc, "new profile from service", "new profiles from service", "from service"));
-      // Si no hay np ni ns separados, intentar capturar "new drivers" combinado
-      // (formato comun de region profile de Yango). Lo guardamos en np para que
-      // np + ns + re siga sumando el total correcto sin perder datos.
-      if (np === 0 && ns === 0) {
-        np = v(pick(mc, "new drivers", "nuevos conductores", "new conductor"));
-      }
-      const re = v(pick(mc, "reactivat"));
-      const sh = v(pick(mc, "supply hour"));
-      const co = v(pick(mc, "commission", "comisi"));
-      const tr = v(pick(mc, "trip", "viaje"));
-
-      if (ad || np || ns || re || sh || co || tr) {
-        const k = `${clid}|||${city}|||${mes}`;
-        if (!agg[k]) agg[k] = { clid, partner, kam, city, mes,
-          active_drivers: 0, new_from_partner: 0, new_from_service: 0,
-          reactivated: 0, supply_hours: 0, commission: 0, trips: 0 };
-        agg[k].active_drivers   += ad;
-        agg[k].new_from_partner += np;
-        agg[k].new_from_service += ns;
-        agg[k].reactivated      += re;
-        agg[k].supply_hours     += sh;
-        agg[k].commission       += co;
-        agg[k].trips            += tr;
-      }
+      const m = txExtract(row, mc);
+      if (!Object.values(m).some(v => v)) return;
+      const k = `${clid}|||${city}|||${mes}`;
+      if (!agg[k]) agg[k] = { clid, partner, kam, city, mes };
+      txConsolidate(agg[k], m);
     });
   });
 
@@ -584,6 +743,7 @@ async function uploadRendimientoMensual(rows) {
       .upsert(flat.slice(i, i + 500), { onConflict: "clid,city,mes" });
     if (error) throw error;
   }
+  STATE._mensualLoaded = false; // invalidar cache lazy → forzar recarga del dataset mensual
 }
 
 // ── UPLOAD RENDIMIENTO DIARIO ─────────────────────────────────────────────────
@@ -601,45 +761,28 @@ async function uploadRendimientoDiario(rows) {
     dateColMap[iso][m[4].trim().toLowerCase()] = k;
   });
 
-  function pick(mc, ...needles) {
-    for (const n of needles)
-      for (const [mk, col] of Object.entries(mc))
-        if (mk.includes(n)) return col;
-    return null;
-  }
-
   const agg = {};
   rows.forEach(row => {
     const clid = String(row["CLID"] || row["clid"] || "").trim();
     const city = normCity(row["City"] || row["city"] || row["Ciudad"]);
 
     Object.entries(dateColMap).forEach(([date, mc]) => {
-      const v  = col => col ? toN(row[col]) : 0;
-      const ad = v(pick(mc, "active driver"));
-      const np = v(pick(mc, "new profile from partner", "new profiles from partner", "from partner"));
-      const ns = v(pick(mc, "new profile from service", "new profiles from service", "from service"));
-      const re = v(pick(mc, "reactivat"));
-      const sh = v(pick(mc, "supply hour"));
-      const co = v(pick(mc, "commission", "comisi"));
-      const tr = v(pick(mc, "trip", "viaje"));
-
-      if (ad || np || ns || re || sh || co || tr) {
-        const k = `${clid}|||${city}|||${date}`;
-        if (!agg[k]) agg[k] = { clid, city, date,
-          active_drivers: 0, new_partner: 0, new_service: 0,
-          reactivated: 0, supply_hours: 0, commission: 0, trips: 0 };
-        agg[k].active_drivers += ad;
-        agg[k].new_partner    += np;
-        agg[k].new_service    += ns;
-        agg[k].reactivated    += re;
-        agg[k].supply_hours   += sh;
-        agg[k].commission     += co;
-        agg[k].trips          += tr;
-      }
+      const m = txExtract(row, mc);
+      if (!Object.values(m).some(v => v)) return;
+      const k = `${clid}|||${city}|||${date}`;
+      if (!agg[k]) agg[k] = { clid, city, date };
+      txConsolidate(agg[k], m);
     });
   });
 
-  const flat = Object.values(agg);
+  // El esquema diario usa new_partner/new_service (no new_from_*) y no tiene
+  // columnas partner/kam. Remapear los nombres core antes del upsert.
+  const flat = Object.values(agg).map(o => {
+    const { new_from_partner, new_from_service, partner, kam, ...rest } = o;
+    if (new_from_partner !== undefined) rest.new_partner = new_from_partner;
+    if (new_from_service !== undefined) rest.new_service = new_from_service;
+    return rest;
+  });
   if (!flat.length) throw new Error("No se encontraron datos. Verifica que las columnas tengan formato DD.MM.YYYY - Métrica");
 
   for (let i = 0; i < flat.length; i += 500) {
@@ -648,6 +791,74 @@ async function uploadRendimientoDiario(rows) {
     if (error) throw error;
   }
   STATE._diarioLoaded = false; // forzar recarga al siguiente switchMode("diario")
+}
+
+// ── UPLOAD CONVERSION (funnel por CLID, nivel pais, sin ciudad) ───────────────
+// Excel: CLID | Partner(s) | Active Drivers | New Drivers | 01 first_order |
+//        02 n5_success | 03 n10_success | 04 n25_success | 05 n50_success | 06 n100_success
+// El mes se toma de: (1) prefijo de fecha en algun header, (2) columna MES,
+// (3) fallback al mes mas reciente ya cargado (con aviso).
+async function uploadConversion(rows) {
+  if (!rows.length) throw new Error("Archivo vacío");
+  const keys = Object.keys(rows[0]);
+
+  let globalMes = null;
+  for (const k of keys) {
+    const m2 = k.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+    const m1 = k.match(/\b(\d{2})\.(\d{4})\b/);
+    if (m2) { globalMes = `${m2[3]}-${m2[2]}`; break; }
+    if (m1) { globalMes = `${m1[2]}-${m1[1]}`; break; }
+  }
+  const mesCol = keys.find(k => /^(mes|month)$/i.test(k.trim()));
+  if (!globalMes && !mesCol) {
+    const all = (STATE.allDates || []).concat((STATE.rawDataMensual || []).map(r => r.date));
+    const months = all.map(d => String(d).slice(0, 7)).filter(Boolean).sort();
+    globalMes = months.length ? months[months.length - 1] : null;
+    if (globalMes) showBanner(true, `Conversión: sin columna MES ni fecha en headers → se asumió el mes ${globalMes}.`);
+  }
+
+  // Detecta columna por nombre normalizado (ignora prefijos "01 ", "02 ").
+  const pickKey = (...needles) => keys.find(k => {
+    const n = _txNorm(k);
+    return needles.some(nd => n.includes(nd));
+  });
+  const cAD   = pickKey("active drivers", "active driver");
+  const cND   = pickKey("new drivers", "new driver");
+  const cFO   = pickKey("first order");
+  const cN5   = pickKey("n5 success");
+  const cN10  = pickKey("n10 success");
+  const cN25  = pickKey("n25 success");
+  const cN50  = pickKey("n50 success");
+  const cN100 = pickKey("n100 success");
+
+  const seen = new Map();
+  rows.forEach(row => {
+    const clid    = _clidStr(row["CLID"] || row["clid"] || "");
+    if (!clid) return;
+    const partner = String(row["Partners"] || row["Partner"] || row["partner"] || "").trim();
+    const mes     = mesCol ? String(row[mesCol]).trim() : globalMes;
+    if (!mes) return;
+    seen.set(`${clid}|||${mes}`, {
+      clid, partner, mes,
+      active_drivers: cAD ? toN(row[cAD]) : 0,
+      new_drivers:    cND ? toN(row[cND]) : 0,
+      first_order:    cFO   ? toN(row[cFO])   : null,
+      n5_success:     cN5   ? toN(row[cN5])   : null,
+      n10_success:    cN10  ? toN(row[cN10])  : null,
+      n25_success:    cN25  ? toN(row[cN25])  : null,
+      n50_success:    cN50  ? toN(row[cN50])  : null,
+      n100_success:   cN100 ? toN(row[cN100]) : null
+    });
+  });
+
+  const data = [...seen.values()];
+  if (!data.length) throw new Error("No se encontraron filas válidas (¿hay columna CLID y columnas de funnel?).");
+  for (let i = 0; i < data.length; i += 500) {
+    const { error } = await sb.from("conversion_pais")
+      .upsert(data.slice(i, i + 500), { onConflict: "clid,mes" });
+    if (error) throw error;
+  }
+  STATE._conversionLoaded = false; // forzar recarga
 }
 
 // ── FILE UPLOAD HANDLERS ──────────────────────────────────────────────────────
@@ -664,13 +875,15 @@ function initFileHandlers() {
     .addEventListener("change", e => handleFile(e.target.files[0], "rendimientoDiario"));
   const fF = document.getElementById("fileFlotas");
   if (fF) fF.addEventListener("change", e => handleFile(e.target.files[0], "flotas"));
+  const fC = document.getElementById("fileConversion");
+  if (fC) fC.addEventListener("change", e => handleFile(e.target.files[0], "conversion"));
 }
 
 // Classifies upload errors into user-friendly messages
 function describeUploadError(type, err) {
   const base = err.message || "Error desconocido";
   const typeLabel = { rendimiento: "Rendimiento Semanal", rendimientoMensual: "Rendimiento Mensual",
-                      rendimientoDiario: "Rendimiento Diario",
+                      rendimientoDiario: "Rendimiento Diario", conversion: "Conversión",
                       metas: "Metas", data: "Partners", flotas: "Flotas" }[type] || type;
   if (base.includes("duplicate") || base.includes("unico") || base.includes("unique"))
     return `Ya existen filas con las mismas claves en ${typeLabel}. Los datos existentes fueron actualizados (upsert).`;
@@ -713,11 +926,15 @@ async function handleFile(file, type) {
           ? sheetNames.indexOf("METAS") : 0];
       }
 
-      // raw:true para metas/partners: conserva precision de CLID (12 digitos).
-      // Con raw:false Excel a veces formatea CLIDs largos en notacion cientifica
-      // ("4.00005E+11") perdiendo digitos -> CLID degradado en BD.
-      // Para rendimiento mantenemos raw:false por compatibilidad con formatos de fecha.
-      const useRaw = type === "data" || type === "metas";
+      // raw:true en (casi) todos los uploads: XLSX devuelve el NÚMERO subyacente
+      // con precisión completa en vez del texto formateado de display ("1.6M",
+      // "51.7K", "1,234,567"). Esto da sumas exactas y conserva CLIDs de 12 dígitos
+      // (raw:false los degradaba a notación científica "4.00005E+11").
+      // Seguro para rendimiento: los periodos salen de los HEADERS (regex
+      // MM.YYYY / DD.MM.YYYY - Métrica), NO de celdas-fecha, así que raw:true no
+      // afecta el parseo de fechas. El display sigue redondeando con fmtSmart (K/M).
+      // flotas se queda en raw:false (sin números sensibles; evita tocar lo no probado).
+      const useRaw = type !== "flotas";
       const json = XLSX.utils.sheet_to_json(wb.Sheets[sheetName],
         { raw: useRaw, defval: "" });
 
@@ -726,9 +943,15 @@ async function handleFile(file, type) {
       else if (type === "rendimientoMensual") await uploadRendimientoMensual(json);
       else if (type === "rendimientoDiario") await uploadRendimientoDiario(json);
       else if (type === "flotas")            await uploadFlotas(json);
+      else if (type === "conversion")        await uploadConversion(json);
       else                                   await uploadMetas(json);
 
       await loadFromSupabase();
+      // loadFromSupabase NO recarga los datasets lazy (mensual/diario). Si el modo
+      // activo es uno de esos, recargarlo y refrescar para reflejar lo recien subido.
+      if ((STATE.curMode === "mensual" || STATE.curMode === "diario") && typeof switchMode === "function") {
+        await switchMode(STATE.curMode);
+      }
     } catch (err) {
       showBanner(false, describeUploadError(type, err));
       console.error(err);
@@ -881,47 +1104,22 @@ async function uploadRendimiento(rows) {
     dateColMap[iso][m[4].trim().toLowerCase()] = k;
   });
 
-  function pick(mc, ...needles) {
-    for (const n of needles)
-      for (const [mk, col] of Object.entries(mc))
-        if (mk.includes(n)) return col;
-    return null;
-  }
-
-  // Aggregate by clid+city+fecha to avoid duplicates
+  // Aggregate by clid+city+fecha to avoid duplicates (registro unico TX_COL_BY_NORM)
   const agg = {};
   rows.forEach(row => {
     const clid    = String(row["CLID"] || row["clid"] || "").trim();
-    // IMPORTANTE: guardamos el partner TAL CUAL del Excel. La resolucion al
-    // nombre configurado se hace al cargar desde BD a memoria. Ver comentario
-    // en uploadRendimientoMensual.
+    // Guardamos el partner TAL CUAL del Excel; la resolucion al nombre
+    // configurado se hace al cargar desde BD a memoria.
     const partner = String(row["Partner"] || row["partner"] || "").trim() || clid || "Unknown";
     const kam  = STATE.KAM_MAP[clid] || "";
     const city = normCity(row["City"] || row["city"] || row["Ciudad"]);
 
     Object.entries(dateColMap).forEach(([fecha, mc]) => {
-      const v   = col => col ? toN(row[col]) : 0;
-      const ad  = v(pick(mc, "active driver"));
-      const np  = v(pick(mc, "new profile from partner", "new profiles from partner", "from partner"));
-      const ns  = v(pick(mc, "new profile from service", "new profiles from service", "from service"));
-      const re  = v(pick(mc, "reactivat"));
-      const sh  = v(pick(mc, "supply hour"));
-      const co  = v(pick(mc, "commission", "comisi"));
-      const tr  = v(pick(mc, "trip", "viaje"));
-
-      if (ad || np || ns || re || sh || co || tr) {
-        const k = `${clid}|||${city}|||${fecha}`;
-        if (!agg[k]) agg[k] = { clid, partner, kam, city, fecha,
-          active_drivers: 0, new_from_partner: 0, new_from_service: 0,
-          reactivated: 0, supply_hours: 0, commission: 0, trips: 0 };
-        agg[k].active_drivers   += ad;
-        agg[k].new_from_partner += np;
-        agg[k].new_from_service += ns;
-        agg[k].reactivated      += re;
-        agg[k].supply_hours     += sh;
-        agg[k].commission       += co;
-        agg[k].trips            += tr;
-      }
+      const m = txExtract(row, mc);
+      if (!Object.values(m).some(v => v)) return;
+      const k = `${clid}|||${city}|||${fecha}`;
+      if (!agg[k]) agg[k] = { clid, partner, kam, city, fecha };
+      txConsolidate(agg[k], m);
     });
   });
 

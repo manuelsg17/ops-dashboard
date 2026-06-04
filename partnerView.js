@@ -175,7 +175,37 @@ const PV_I18N = {
   leadDepBody:             { es: "El {pct}% de las nuevas incorporaciones proviene de leads Yango ({yango} de {total}).",
                             en: "{pct}% of new sign-ups come from Yango leads ({yango} of {total})." },
   leadDepAction:           { es: "Sería positivo complementar con un pipeline propio de captación (referidos, redes sociales, alianzas locales) para diversificar fuentes y reducir dependencia. Compartimos buenas prácticas si resulta útil.",
-                            en: "It would be positive to complement this with your own acquisition pipeline (referrals, social media, local partnerships) to diversify sources and reduce dependency. We can share best practices if helpful." }
+                            en: "It would be positive to complement this with your own acquisition pipeline (referrals, social media, local partnerships) to diversify sources and reduce dependency. We can share best practices if helpful." },
+
+  // ── Embudo de conversión (funnel por CLID, solo top-10) ──────────────────
+  convTitle:      { es: "Embudo de Conversión",  en: "Conversion Funnel" },
+  convSub:        { es: "Conversión de nuevos drivers por hitos de viajes",
+                    en: "New-driver conversion by trip milestones" },
+  convRank:       { es: "Ranking nacional por Active Drivers: #{rank} de {total}",
+                    en: "National ranking by Active Drivers: #{rank} of {total}" },
+  convClid:       { es: "CLID",          en: "CLID" },
+  convAD:         { es: "Active Drivers", en: "Active Drivers" },
+  convND:         { es: "New Drivers",    en: "New Drivers" },
+  convFirstOrder: { es: "1er viaje",     en: "First order" },
+  convN5:         { es: "5 viajes",      en: "5 trips" },
+  convN10:        { es: "10 viajes",     en: "10 trips" },
+  convN25:        { es: "25 viajes",     en: "25 trips" },
+  convN50:        { es: "50 viajes",     en: "50 trips" },
+  convN100:       { es: "100 viajes",    en: "100 trips" },
+  convBenchmark:  { es: "Benchmark (percentiles del set filtrado)", en: "Benchmark (filtered-set percentiles)" },
+  convADRange:    { es: "Active Drivers (mín–máx)", en: "Active Drivers (min–max)" },
+  convNDMin:      { es: "New Drivers (mín)",        en: "New Drivers (min)" },
+  convP25:        { es: "P25",             en: "P25" },
+  convP50:        { es: "Mediana (P50)",   en: "Median (P50)" },
+  convP75:        { es: "P75",             en: "P75" },
+
+  // ── Perú (General) + comparación cohortes ────────────────────────────────
+  peruGeneral:    { es: "Perú (General)",  en: "Peru (Overall)" },
+  peruGeneralSub: { es: "El partner combinando sus 3 ciudades · crecimiento/decrecimiento + comparación vs cohortes",
+                    en: "The partner across its cities · growth/decline + comparison vs cohorts" },
+  compareWith:    { es: "Comparar con",    en: "Compare with" },
+  cohortTop5:     { es: "Prom. Top 5",     en: "Avg Top 5" },
+  cohortTop610:   { es: "Prom. Top 6-10",  en: "Avg Top 6-10" }
 };
 
 // Resolver i18n: devuelve string en el lang actual.
@@ -193,6 +223,22 @@ function _t(key, opts) {
 function _pvDestroyCharts() {
   PARTNER_VIEW_STATE.charts.forEach(c => { try { c.destroy(); } catch(e){} });
   PARTNER_VIEW_STATE.charts = [];
+  const sc = PARTNER_VIEW_STATE.scopeCharts || {};
+  Object.keys(sc).forEach(id => { try { sc[id].destroy(); } catch(e){} });
+  PARTNER_VIEW_STATE.scopeCharts = {};
+}
+
+// Monta (o re-monta) un chart keyed por elId. En el toggle de cohortes el div
+// sigue en el DOM: destruimos la instancia previa y creamos una nueva EN EL MISMO
+// div, sin reconstruir todo renderPartnerView (resumen ejecutivo, conversión,
+// KPIs, innerHTML). Los animations:false ya hacen barato el render.
+function _pvMountChart(elId, el, opts) {
+  const reg = PARTNER_VIEW_STATE.scopeCharts || (PARTNER_VIEW_STATE.scopeCharts = {});
+  const prev = reg[elId];
+  if (prev) { try { prev.destroy(); } catch (e) {} }
+  const ch = new ApexCharts(el, opts);
+  ch.render();
+  reg[elId] = ch;
 }
 
 // Cuántos puntos mostrar según escala
@@ -218,8 +264,8 @@ function _pvSeriesByPartnerCity(partner, city, dates) {
     .filter(r => r.city === city && datesSet.has(r.date));
   rows.forEach(r => {
     if (!byDate[r.date]) byDate[r.date] = {
-      date: r.date, ad: 0, nr: 0, sh: 0,
-      trips: 0, commission: 0,
+      date: r.date, _present: true, ad: 0, nr: 0, sh: 0,
+      trips: 0, commission: 0, gmv: 0,
       npPartner: 0, npService: 0, reactivated: 0
     };
     const e = byDate[r.date];
@@ -232,10 +278,11 @@ function _pvSeriesByPartnerCity(partner, city, dates) {
     e.sh += r.supplyHours;
     e.trips      += r.trips || 0;
     e.commission += r.commission || 0;
+    e.gmv        += r.gmv || 0;
   });
   return dates.map(d => byDate[d] || {
-    date: d, ad: 0, nr: 0, sh: 0,
-    trips: 0, commission: 0,
+    date: d, _present: false, ad: 0, nr: 0, sh: 0,
+    trips: 0, commission: 0, gmv: 0,
     npPartner: 0, npService: 0, reactivated: 0
   });
 }
@@ -246,9 +293,14 @@ function renderPartnerView() {
   if (!el) return;
   ensureIndexes();
   _pvDestroyCharts();
+  // Carga diferida del funnel de conversion (re-render cuando llegue).
+  if (!STATE._conversionLoaded) {
+    loadConversionIfNeeded().then(() => { if (STATE.curTab === "partnerview") renderPartnerView(); });
+  }
   // Reset _seriesCache: la siguiente seccion lo repuebla solo para el render
   // actual. Evita acumulacion sin limite si el usuario navega muchos partners.
   PARTNER_VIEW_STATE._seriesCache = {};
+  PARTNER_VIEW_STATE._scopeCache  = {};   // memo de _pvScopeSeries para este render
 
   if (!STATE.rawData.length) {
     el.innerHTML = `<div class="empty"><p>Carga datos de <strong>Rendimiento</strong> para usar Vista Partner.</p></div>`;
@@ -370,29 +422,37 @@ function renderPartnerView() {
         tADsum, pADsum, tNR, pNR, tSH, pSH, tTr, tCo
       })}
 
-      <!-- KPIs globales -->
+      <!-- KPIs globales (partner a nivel Perú = combinado de sus ciudades) -->
       ${_secH("⚡", "#FF0000", _t("kpisTitle"), `${d2s(lastDate)}`)}
-      <div class="section" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px">
+      <div class="section" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px">
         ${_pvKpiCard(_t("activeDrivers"), tADsum, pADsum, METRICS.ad.color)}
         ${_pvKpiCard(_t("newReact"),      tNR,    pNR,    METRICS.nr.color)}
         ${_pvKpiCard(_t("supplyHours"),   tSH,    pSH,    METRICS.sh.color, { useK: true })}
         ${_pvKpiCard(_t("trips"),         tTr,    null,   "#10b981",       { useK: true })}
         ${_pvKpiCard(_t("commission"),    tCo,    null,   "#06b6d4",       { isMoney: true, useK: true })}
+        ${_pvKpiCard("GMV",               lastRows.reduce((s, r) => s + (r.gmv || 0), 0), null, "#f59e0b", { isMoney: true, useK: true })}
       </div>
 
-      <!-- Sección por ciudad -->
-      ${_secH("🏙️", "#06b6d4", _t("cityDetail"), `${citiesOf.length} ${citiesOf.length>1?_t("cityCountPlural"):_t("cityCount")} · ${periodLabel}`)}
-      <div class="section">
-        ${citiesOf.map(city => {
-          // Cachear series por ciudad para no recalcular en buildCharts
-          if (!PARTNER_VIEW_STATE._seriesCache) PARTNER_VIEW_STATE._seriesCache = {};
-          const ck = `${partner}|||${city}|||${dates.join(",")}`;
-          if (!PARTNER_VIEW_STATE._seriesCache[ck]) {
-            PARTNER_VIEW_STATE._seriesCache[ck] = _pvSeriesByPartnerCity(partner, city, dates);
-          }
-          return _pvCitySection(partner, city, dates, recibeLeads, PARTNER_VIEW_STATE._seriesCache[ck]);
-        }).join("")}
+      <!-- Perú (General): el partner combinando sus 3 ciudades -->
+      ${_secH("🇵🇪", "#FF0000", _t("peruGeneral"), _t("peruGeneralSub"))}
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 10px">
+        <span style="font-size:.72rem;color:#666;font-weight:700">${_t("compareWith")}:</span>
+        <span id="pvCohortBar" style="display:flex;gap:8px;flex-wrap:wrap">${PV_COHORT_BANDS.map(b => _pvCohortBtn(b)).join("")}</span>
       </div>
+      <div class="section">${_pvScopeBlock(null, "peru")}</div>
+      ${_pvConversionSection(partner)}
+      ${_pvChannelPlaceholder()}
+
+      <!-- Detalle por provincia (mismos KPIs + misma comparación) -->
+      ${_secH("🏙️", "#06b6d4", _t("cityDetail"), `${citiesOf.length} ${citiesOf.length>1?_t("cityCountPlural"):_t("cityCount")} · ${periodLabel}`)}
+      ${citiesOf.map(city => `
+        <div class="section" style="margin-bottom:14px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+            <span style="width:12px;height:12px;border-radius:50%;background:${CITY_COLORS[city] || "#888"}"></span>
+            <span style="font-size:1rem;font-weight:800;color:#111">${escapeHTML(cityLabel(city))}</span>
+          </div>
+          ${_pvScopeBlock(city, _pvCityId(city))}
+        </div>`).join("")}
     </div>`;
 
   // Marca de render unica para evitar race conditions de setTimeout
@@ -401,13 +461,15 @@ function renderPartnerView() {
 
   // Construir charts despues de innerHTML. Si llega otro render antes,
   // el renderId cambia y el setTimeout previo se ignora.
+  // Closure para reconstruir los charts de todos los scopes (Perú + provincias)
+  // con el estado de cohortes actual. La usa el toggle para no re-renderizar todo.
+  PARTNER_VIEW_STATE._rebuildScopes = () => {
+    _pvBuildScopeCharts(partner, null, "peru", dates, recibeLeads);
+    citiesOf.forEach(city => _pvBuildScopeCharts(partner, city, _pvCityId(city), dates, recibeLeads));
+  };
   setTimeout(() => {
     if (renderId !== PARTNER_VIEW_STATE._renderId) return;
-    citiesOf.forEach(city => {
-      const ck = `${partner}|||${city}|||${dates.join(",")}`;
-      const series = PARTNER_VIEW_STATE._seriesCache?.[ck] || _pvSeriesByPartnerCity(partner, city, dates);
-      _pvBuildCityCharts(partner, city, dates, recibeLeads, series);
-    });
+    PARTNER_VIEW_STATE._rebuildScopes();
   }, 100);
 }
 
@@ -1109,4 +1171,349 @@ async function pvDownloadPDF() {
   } finally {
     showLoad(false);
   }
+}
+
+// ── EMBUDO DE CONVERSIÓN (funnel por CLID, solo top-10 por tamaño) ─────────────
+// Percentil lineal (interpolado) de un array numerico. Ignora null/NaN.
+function _pvPercentile(arr, p) {
+  const s = (arr || []).filter(v => v !== null && v !== undefined && !isNaN(v)).sort((a, b) => a - b);
+  if (!s.length) return null;
+  const idx = (s.length - 1) * p;
+  const lo = Math.floor(idx), hi = Math.ceil(idx);
+  return lo === hi ? s[lo] : s[lo] + (s[hi] - s[lo]) * (idx - lo);
+}
+
+// Heatmap rojo→verde de una celda segun su posicion vs percentiles de la columna.
+function _pvConvColor(v, p25, p50, p75) {
+  if (v === null || v === undefined || p50 === null) return "#fff";
+  if (v >= p75) return "#bbf7d0";
+  if (v >= p50) return "#dcfce7";
+  if (v >= p25) return "#fef9c3";
+  return "#fee2e2";
+}
+
+// Relee los filtros del benchmark y re-renderiza.
+function pvConvFilter() {
+  const adMin = +document.getElementById("pvConvAdMin")?.value;
+  const adMax = +document.getElementById("pvConvAdMax")?.value;
+  const ndMin = +document.getElementById("pvConvNdMin")?.value;
+  PARTNER_VIEW_STATE.convFilter = {
+    adMin: isNaN(adMin) ? 0 : adMin,
+    adMax: isNaN(adMax) ? 999999 : adMax,
+    ndMin: isNaN(ndMin) ? 0 : ndMin
+  };
+  renderPartnerView();
+}
+
+// Benchmark de conversion (top-10 nacional por Active Drivers, mes mas reciente).
+// Se muestra SOLO en la seccion Peru (General). Resalta los CLIDs del partner
+// seleccionado. Una fila por CLID (pivote), mas filas de percentil del set filtrado.
+function _pvConversionSection(selectedPartner) {
+  const data = STATE.conversionData || [];
+  const cols = [
+    { key: "firstOrder", t: "convFirstOrder" },
+    { key: "n5",  t: "convN5" },  { key: "n10", t: "convN10" }, { key: "n25", t: "convN25" },
+    { key: "n50", t: "convN50" }, { key: "n100", t: "convN100" }
+  ];
+  if (!data.length) {
+    const msg = PARTNER_VIEW_STATE.lang === "en"
+      ? "Upload the Conversion (country) Excel to populate this benchmark."
+      : "Sube el Excel de Conversión (país) para poblar este benchmark.";
+    return `${_secH("🎯", "#8b5cf6", _t("convTitle"), _t("convSub"))}
+      <div class="section"><div style="font-size:.8rem;color:#aaa;padding:6px">${msg}</div></div>`;
+  }
+
+  const months = [...new Set(data.map(r => r.mes))].sort();
+  const latest = months[months.length - 1];
+  const cur = data.filter(r => r.mes === latest).slice().sort((a, b) => (b.activeDrivers || 0) - (a.activeDrivers || 0));
+  const top10 = cur.slice(0, 10);
+
+  // Benchmark percentil sobre el set filtrado (defaults como el Excel: AD 0–6000, ND ≥ 50).
+  const F = PARTNER_VIEW_STATE.convFilter || (PARTNER_VIEW_STATE.convFilter = { adMin: 0, adMax: 6000, ndMin: 50 });
+  const pop = cur.filter(r => (r.activeDrivers || 0) >= F.adMin && (r.activeDrivers || 0) <= F.adMax && (r.newDrivers || 0) >= F.ndMin);
+  const pcts = {};
+  cols.forEach(c => { const vals = pop.map(r => r[c.key]); pcts[c.key] = { p25: _pvPercentile(vals, .25), p50: _pvPercentile(vals, .50), p75: _pvPercentile(vals, .75) }; });
+  const fpct = v => (v === null || v === undefined) ? "—" : (+v).toFixed(1) + "%";
+
+  const th = (s, left) => `<th style="text-align:${left ? "left" : "right"};padding:6px 8px;border-bottom:2px solid #eee;font-size:.7rem;background:#fafafa">${escapeHTML(s)}</th>`;
+  const headerRow = `<tr>${th("#", true)}${th(_t("partner"), true)}${th(_t("convClid"), true)}${th(_t("convAD"))}${th(_t("convND"))}${cols.map(c => th(_t(c.t))).join("")}</tr>`;
+
+  const dataRows = top10.map((r, i) => {
+    const sel = r.partner === selectedPartner;
+    const funnel = cols.map(c => {
+      const v = r[c.key], p = pcts[c.key];
+      return `<td style="text-align:right;padding:5px 8px;border-bottom:1px solid #f3f3f3;background:${_pvConvColor(v, p.p25, p.p50, p.p75)};font-weight:700">${fpct(v)}</td>`;
+    }).join("");
+    return `<tr style="${sel ? "background:#faf5ff;box-shadow:inset 3px 0 0 #8b5cf6" : ""}">
+      <td style="padding:5px 8px;border-bottom:1px solid #f3f3f3;color:#aaa;font-size:.72rem">${i + 1}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #f3f3f3;font-weight:${sel ? "800" : "600"};color:${sel ? "#6b21a8" : "#333"}">${escapeHTML(r.partner || "")}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #f3f3f3;font-family:monospace;font-size:.7rem;color:#999">${escapeHTML(r.clid)}</td>
+      <td style="text-align:right;padding:5px 8px;border-bottom:1px solid #f3f3f3">${fmt(r.activeDrivers)}</td>
+      <td style="text-align:right;padding:5px 8px;border-bottom:1px solid #f3f3f3">${fmt(r.newDrivers)}</td>
+      ${funnel}
+    </tr>`;
+  }).join("");
+
+  const benchRow = (label, key) => `<tr style="background:#f9fafb">
+    <td></td><td style="padding:4px 8px;font-size:.72rem;color:#666;font-style:italic">${escapeHTML(label)}</td><td></td><td></td><td></td>
+    ${cols.map(c => `<td style="text-align:right;padding:4px 8px;font-size:.72rem;color:#888;font-style:italic">${fpct(pcts[c.key][key])}</td>`).join("")}
+  </tr>`;
+
+  return `
+    ${_secH("🎯", "#8b5cf6", _t("convTitle"), `${_t("convSub")} · top 10`)}
+    <div class="section">
+      <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:10px">
+        <div><label style="font-size:.66rem;color:#666;font-weight:700;display:block;margin-bottom:3px">${_t("convADRange")}</label>
+          <div style="display:flex;gap:4px">
+            <input id="pvConvAdMin" class="crud-input" type="number" value="${F.adMin}" style="width:80px" onchange="pvConvFilter()"/>
+            <input id="pvConvAdMax" class="crud-input" type="number" value="${F.adMax}" style="width:90px" onchange="pvConvFilter()"/>
+          </div></div>
+        <div><label style="font-size:.66rem;color:#666;font-weight:700;display:block;margin-bottom:3px">${_t("convNDMin")}</label>
+          <input id="pvConvNdMin" class="crud-input" type="number" value="${F.ndMin}" style="width:90px" onchange="pvConvFilter()"/></div>
+        <span style="font-size:.72rem;color:#aaa">${_t("convBenchmark")} · n=${pop.length}</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:.78rem">
+          <thead>${headerRow}</thead>
+          <tbody>${dataRows}${benchRow(_t("convP75"), "p75")}${benchRow(_t("convP50"), "p50")}${benchRow(_t("convP25"), "p25")}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+// ── PERÚ (GENERAL) + COMPARACIÓN POR COHORTES ─────────────────────────────────
+function _pvCityId(city) { return city.toLowerCase().replace(/[^a-z0-9]/g, ""); }
+
+// Bandas de cohorte por ranking de Active Drivers. range = [inicio, fin) sobre `ranked`.
+// Permiten comparar al partner contra tiers específicos (líder, peers cercanos, grupo
+// medio) en vez de un único promedio que se diluye al comparar partners grandes.
+const PV_COHORT_BANDS = [
+  { key: "t1",   range: [0, 1],  color: "#ef4444", es: "Top 1",       en: "Top 1" },
+  { key: "t23",  range: [1, 3],  color: "#f59e0b", es: "Top 2-3",     en: "Top 2-3" },
+  { key: "t45",  range: [3, 5],  color: "#0ea5e9", es: "Top 4-5",     en: "Top 4-5" },
+  { key: "t610", range: [5, 10], color: "#a855f7", es: "Top 6-10",    en: "Top 6-10" },
+  { key: "t5",   range: [0, 5],  color: "#10b981", es: "Prom. Top 5", en: "Avg Top 5" }
+];
+
+// Toggle de comparacion (aplica a Perú-General y a todas las provincias).
+function pvCohortToggle(which) {
+  PARTNER_VIEW_STATE.cohort = PARTNER_VIEW_STATE.cohort || {};
+  PARTNER_VIEW_STATE.cohort[which] = !PARTNER_VIEW_STATE.cohort[which];
+  // Solo actualizar los botones + reconstruir los charts en sitio (los divs siguen
+  // en el DOM). Evita re-render completo de Vista Partner en cada toggle.
+  const bar = document.getElementById("pvCohortBar");
+  if (bar) bar.innerHTML = PV_COHORT_BANDS.map(b => _pvCohortBtn(b)).join("");
+  if (typeof PARTNER_VIEW_STATE._rebuildScopes === "function") PARTNER_VIEW_STATE._rebuildScopes();
+  else renderPartnerView();
+}
+
+function _pvCohortBtn(band) {
+  const on = (PARTNER_VIEW_STATE.cohort || {})[band.key];
+  const label = PARTNER_VIEW_STATE.lang === "en" ? band.en : band.es;
+  return `<button onclick="pvCohortToggle('${band.key}')" class="preset-btn${on ? " active" : ""}" style="${on ? `background:${band.color};color:#fff;border-color:${band.color}` : ""}">+ ${escapeHTML(label)}</button>`;
+}
+
+// Serie del partner para un scope: scopeCity=null => combinado de TODAS sus
+// ciudades (Perú-General); scopeCity="LIMA" => solo esa ciudad.
+function _pvScopeSeries(partner, scopeCity, dates) {
+  // Memo por render (reseteado en renderPartnerView): un cohorte puede pedir la
+  // misma serie de un partner varias veces (varias bandas se solapan).
+  const cache = PARTNER_VIEW_STATE._scopeCache || (PARTNER_VIEW_STATE._scopeCache = {});
+  const ck = `${partner}|||${scopeCity || "_PE_"}`;
+  if (cache[ck]) return cache[ck];
+  let out;
+  if (scopeCity) {
+    out = _pvSeriesByPartnerCity(partner, scopeCity, dates);
+  } else {
+    const rows = (STATE._byPartner && STATE._byPartner.get(partner)) || STATE.rawData.filter(r => r.partner === partner);
+    const cities = [...new Set(rows.map(r => r.city).filter(Boolean))];
+    const per = cities.map(c => _pvSeriesByPartnerCity(partner, c, dates));
+    out = dates.map((d, i) => {
+      const o = { date: d, ad: 0, nr: 0, sh: 0, trips: 0, commission: 0, gmv: 0, npPartner: 0, npService: 0, reactivated: 0 };
+      per.forEach(ser => {
+        const e = ser[i]; if (!e) return;
+        o.ad += e.ad; o.sh += e.sh; o.trips += e.trips; o.commission += e.commission; o.gmv += e.gmv || 0;
+        o.npPartner += e.npPartner; o.npService += e.npService; o.reactivated += e.reactivated;
+      });
+      o.nr = o.npPartner + o.npService + o.reactivated;
+      o._present = per.some(ser => ser[i] && ser[i]._present);
+      return o;
+    });
+  }
+  cache[ck] = out;
+  return out;
+}
+
+// Cohortes top-5 / top-6-10 por Active Drivers del último periodo, dentro del scope.
+function _pvScopeCohorts(scopeCity, dates) {
+  const lastDate = dates[dates.length - 1];
+  const rows = ((STATE._byDate && STATE._byDate.get(lastDate)) || STATE.rawData.filter(r => r.date === lastDate))
+    .filter(r => !scopeCity || r.city === scopeCity);
+  const byPC = {};   // partner|city -> max AD (snapshot)
+  rows.forEach(r => { const k = `${r.partner}|||${r.city}`; if ((r.activeDrivers || 0) > (byPC[k] || 0)) byPC[k] = r.activeDrivers || 0; });
+  const adByPartner = {};
+  Object.entries(byPC).forEach(([k, v]) => { const p = k.split("|||")[0]; adByPartner[p] = (adByPartner[p] || 0) + v; });
+  const ranked = Object.entries(adByPartner).sort((a, b) => b[1] - a[1]).map(e => e[0]);
+  return { ranked, top5: ranked.slice(0, 5), top610: ranked.slice(5, 10) };
+}
+
+// Promedio por fecha de una métrica (getter) sobre un conjunto de partners, en el scope.
+function _pvCohortAvg(cohortPartners, scopeCity, dates, getter) {
+  if (!cohortPartners.length) return dates.map(() => 0);
+  const seriesArr = cohortPartners.map(p => _pvScopeSeries(p, scopeCity, dates));
+  // Promedio solo sobre los miembros del cohorte que TIENEN dato esa fecha
+  // (_present). Evita sesgar a la baja contando como 0 a los ausentes; un miembro
+  // presente con valor 0 SÍ cuenta (no se confunde "sin dato" con "valor 0").
+  return dates.map((d, i) => {
+    let s = 0, count = 0;
+    seriesArr.forEach(ser => {
+      const e = ser[i];
+      if (e && e._present) { s += getter(e) || 0; count++; }
+    });
+    return count > 0 ? s / count : 0;
+  });
+}
+
+// Línea: serie del partner + (opcional) líneas de promedio de cohortes.
+function _pvCmpLine(elId, labels, partnerSeries, cohortLines, color, fmtFn, money) {
+  const el = document.getElementById(elId);
+  if (!el || typeof ApexCharts === "undefined") return;
+  el.classList.add("pv-chart");
+  const fn = fmtFn || (v => fmt(v));
+  const pref = money ? "$" : "";
+  const series = [partnerSeries, ...cohortLines.map(l => ({ name: l.name, data: l.data }))];
+  const colors = [color, ...cohortLines.map(l => l.color)];
+  _pvMountChart(elId, el, {
+    series,
+    chart: { type: "line", height: 180, toolbar: { show: false }, animations: { enabled: false }, fontFamily: "inherit" },
+    stroke: { curve: "smooth", width: [2.5, ...cohortLines.map(() => 2)], dashArray: [0, ...cohortLines.map(() => 5)] },
+    colors, markers: { size: 3 },
+    dataLabels: { enabled: true, enabledOnSeries: [0], formatter: v => pref + fn(v), style: { fontSize: "10px", colors: ["#111"], fontWeight: 700 }, background: { enabled: false }, offsetY: -10 },
+    xaxis: { categories: labels, labels: { style: { fontSize: "9px" }, rotate: -30 }, axisBorder: { show: false }, axisTicks: { show: false } },
+    yaxis: { labels: { formatter: v => pref + fn(v), style: { fontSize: "10px" } } },
+    grid: { borderColor: "#f0f0f0", strokeDashArray: 4 },
+    tooltip: { shared: true, y: { formatter: v => pref + fn(v) } },
+    legend: { show: cohortLines.length > 0, position: "bottom", fontSize: "10px" }
+  });
+}
+
+// N+R: columnas apiladas (partner/yango/react) + (opcional) líneas de total de cohortes.
+function _pvCmpNR(elId, labels, series, recibeLeads, cohortLines) {
+  const el = document.getElementById(elId);
+  if (!el || typeof ApexCharts === "undefined") return;
+  el.classList.add("pv-chart");
+  const isEN = PARTNER_VIEW_STATE.lang === "en";
+  const colSeries = recibeLeads
+    ? [{ name: isEN ? "New (Partner)" : "Nuevos (Partner)", type: "column", data: series.map(s => s.npPartner) },
+       { name: isEN ? "New (Yango)" : "Nuevos (Yango)", type: "column", data: series.map(s => s.npService) },
+       { name: isEN ? "Reactivated" : "Reactivados", type: "column", data: series.map(s => s.reactivated) }]
+    : [{ name: isEN ? "New (Partner)" : "Nuevos (Partner)", type: "column", data: series.map(s => s.npPartner) },
+       { name: isEN ? "Reactivated" : "Reactivados", type: "column", data: series.map(s => s.reactivated) }];
+  const colColors = recibeLeads ? ["#3b82f6", "#f59e0b", "#10b981"] : ["#3b82f6", "#10b981"];
+  const lineSeries = cohortLines.map(l => ({ name: l.name, type: "line", data: l.data }));
+  const lineColors = cohortLines.map(l => l.color);
+  const hasLines = lineSeries.length > 0;
+  _pvMountChart(elId, el, {
+    series: [...colSeries, ...lineSeries],
+    chart: { type: "line", height: 200, stacked: true, toolbar: { show: false }, animations: { enabled: false }, fontFamily: "inherit" },
+    colors: [...colColors, ...lineColors],
+    stroke: { width: [...colSeries.map(() => 0), ...lineSeries.map(() => 2)], dashArray: [...colSeries.map(() => 0), ...lineSeries.map(() => 5)], curve: "smooth" },
+    plotOptions: { bar: { columnWidth: "60%", dataLabels: { total: { enabled: !hasLines, offsetY: -4, style: { fontSize: "11px", fontWeight: 800, color: "#111" }, formatter: v => fmt(v) } } } },
+    dataLabels: {
+      enabled: true,
+      enabledOnSeries: colSeries.map((_, i) => i),
+      formatter: (val, opts) => {
+        if (!val || val <= 0) return "";
+        const all = opts.w.config.series;
+        let tot = 0; for (let i = 0; i < colSeries.length; i++) tot += all[i].data[opts.dataPointIndex] || 0;
+        if (!tot || val / tot < 0.20) return "";
+        return fmt(val);
+      },
+      style: { fontSize: "9px", colors: ["#fff"], fontWeight: 800 },
+      dropShadow: { enabled: true, top: 1, left: 1, blur: 1, opacity: .45 }
+    },
+    xaxis: { categories: labels, labels: { style: { fontSize: "9px" }, rotate: -30 } },
+    yaxis: { labels: { formatter: v => fmt(v), style: { fontSize: "10px" } } },
+    grid: { borderColor: "#f0f0f0", strokeDashArray: 4 },
+    tooltip: { shared: true, y: { formatter: v => fmt(v) } },
+    legend: { position: "bottom", fontSize: "10px", itemMargin: { horizontal: 6 } }
+  });
+}
+
+// Mini-tabla de desglose N+R por fecha (para que el detalle se vea también en PDF).
+function _pvNRTable(series, dates, recibeLeads) {
+  const isEN = PARTNER_VIEW_STATE.lang === "en";
+  const head = [`<th style="text-align:left;padding:4px 6px;border-bottom:1px solid #eee;background:#f9f9f9">${isEN ? "Date" : "Fecha"}</th>`]
+    .concat(dates.map(d => `<th style="text-align:right;padding:4px 6px;border-bottom:1px solid #eee;background:#f9f9f9;font-size:.65rem">${d2s(d)}</th>`)).join("");
+  const row = (label, getter, color) => `<tr>
+    <td style="padding:3px 6px;border-bottom:1px solid #f5f5f5;font-weight:600;color:${color}">
+      <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${color};margin-right:4px"></span>${label}</td>
+    ${series.map(s => `<td style="text-align:right;padding:3px 6px;border-bottom:1px solid #f5f5f5">${fmt(getter(s))}</td>`).join("")}
+  </tr>`;
+  const rows = [
+    row(isEN ? "New (Partner)" : "Nuevos (Partner)", s => s.npPartner, "#3b82f6"),
+    recibeLeads ? row(isEN ? "New (Yango)" : "Nuevos (Yango)", s => s.npService, "#f59e0b") : "",
+    row(isEN ? "Reactivated" : "Reactivados", s => s.reactivated, "#10b981"),
+    row("Total", s => s.nr, "#111")
+  ].filter(Boolean).join("");
+  return `<div style="margin-top:8px;overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:.68rem;background:#fff;border:1px solid #f0f0f0;border-radius:6px">
+      <thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+// Bloque de un scope (Perú-General si scopeCity=null, o una provincia): 6 charts
+// (AD, SH, N+R, Trips, Commission, GMV) con comparación top-5/top-6-10.
+function _pvScopeBlock(scopeCity, idPrefix) {
+  const grid = "display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px";
+  const card = (id, label, span) => `<div class="chart-card" style="${span ? "grid-column:1/-1" : ""}">
+    <div class="chart-head"><span class="chart-title">${escapeHTML(label)}</span></div>
+    <div id="pvs_${idPrefix}_${id}"></div><div id="pvs_${idPrefix}_${id}_tbl"></div></div>`;
+  return `<div style="${grid}">
+    ${card("ad", _t("activeDrivers"))}
+    ${card("sh", _t("supplyHours"))}
+    ${card("nr", _t("newReact"), true)}
+    ${card("trips", _t("trips"))}
+    ${card("commission", _t("commission"))}
+    ${card("gmv", "GMV")}
+  </div>`;
+}
+
+function _pvBuildScopeCharts(partner, scopeCity, idPrefix, dates, recibeLeads) {
+  const series = _pvScopeSeries(partner, scopeCity, dates);
+  const labels = dates.map(d2s);
+  const accent = scopeCity ? (CITY_COLORS[scopeCity] || "#888") : "#FF0000";
+  const tog = PARTNER_VIEW_STATE.cohort || {};
+  const anyOn = PV_COHORT_BANDS.some(b => tog[b.key]);
+  const cohorts = anyOn ? _pvScopeCohorts(scopeCity, dates) : null;
+  const lines = getter => {
+    if (!cohorts) return [];
+    const arr = [];
+    PV_COHORT_BANDS.forEach(b => {
+      if (!tog[b.key]) return;
+      const members = cohorts.ranked.slice(b.range[0], b.range[1]);
+      if (!members.length) return;
+      const label = PARTNER_VIEW_STATE.lang === "en" ? b.en : b.es;
+      arr.push({ name: label, data: _pvCohortAvg(members, scopeCity, dates, getter), color: b.color });
+    });
+    return arr;
+  };
+  _pvCmpLine(`pvs_${idPrefix}_ad`, labels, { name: _t("activeDrivers"), data: series.map(s => s.ad) }, lines(s => s.ad), accent, fmt);
+  _pvCmpLine(`pvs_${idPrefix}_sh`, labels, { name: _t("supplyHours"), data: series.map(s => s.sh) }, lines(s => s.sh), "#8b5cf6", fmtSmart);
+  _pvCmpNR(`pvs_${idPrefix}_nr`, labels, series, recibeLeads, lines(s => s.nr));
+  _pvCmpLine(`pvs_${idPrefix}_trips`, labels, { name: _t("trips"), data: series.map(s => s.trips) }, lines(s => s.trips), "#10b981", fmtSmart);
+  _pvCmpLine(`pvs_${idPrefix}_commission`, labels, { name: _t("commission"), data: series.map(s => s.commission) }, lines(s => s.commission), "#06b6d4", fmtSmart, true);
+  _pvCmpLine(`pvs_${idPrefix}_gmv`, labels, { name: "GMV", data: series.map(s => s.gmv) }, lines(s => s.gmv), "#f59e0b", fmtSmart, true);
+  const tbl = document.getElementById(`pvs_${idPrefix}_nr_tbl`);
+  if (tbl) tbl.innerHTML = _pvNRTable(series, dates, recibeLeads);
+}
+
+// Placeholder de canal de adquisición (formato de datos pendiente).
+function _pvChannelPlaceholder() {
+  const isEN = PARTNER_VIEW_STATE.lang === "en";
+  return `${_secH("🔌", "#64748b", isEN ? "New drivers by acquisition channel" : "Nuevos por canal de adquisición", isEN ? "pending data format" : "pendiente de formato")}
+    <div class="section">
+      <div style="border:1px dashed #d1d5db;border-radius:8px;padding:16px;background:#fafafa;color:#9ca3af;font-size:.8rem;text-align:center">
+        ${isEN ? "Scouts / referrals / organic — waiting for the data format to be defined." : "Scouts / referidos / orgánicos — esperando que definas el formato de datos para implementarlo."}
+      </div>
+    </div>`;
 }

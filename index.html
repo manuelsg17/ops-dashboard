@@ -130,6 +130,10 @@
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="13" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
             Flotas
           </label>
+          <label class="upload-menu-item" for="fileConversion">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+            Conversión (país)
+          </label>
         </div>
       </div>
 
@@ -140,6 +144,7 @@
       <input type="file" id="fileMetas"       accept=".xlsx,.xls"/>
       <input type="file" id="fileData"        accept=".xlsx,.xls"/>
       <input type="file" id="fileFlotas"      accept=".xlsx,.xls"/>
+      <input type="file" id="fileConversion"  accept=".xlsx,.xls"/>
 
       <span id="userBadge" class="user-badge"></span>
       <button class="logout-btn" onclick="handleLogout()">Salir →</button>
@@ -240,7 +245,7 @@
         <div id="insightsContent"></div>
       </div>
 
-      <!-- Vista Partner Individual -->
+      <!-- Vista Partner Individual (incluye Perú-General del partner + provincias) -->
       <div class="tab-panel" id="tab-partnerview">
         <div id="partnerViewContent"></div>
       </div>

@@ -58,7 +58,7 @@ function initApp() {
   });
 
   // Cerrar dropdown al seleccionar un archivo
-  ["fileRend", "fileRendMensual", "fileRendDiario", "fileMetas", "fileData", "fileFlotas"].forEach(id => {
+  ["fileRend", "fileRendMensual", "fileRendDiario", "fileMetas", "fileData", "fileFlotas", "fileConversion"].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     el.addEventListener("change", () => {

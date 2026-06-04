@@ -79,6 +79,8 @@ const STATE = {
   parseWarnings:    new Set(),
   _mensualLoaded:   false,
   _diarioLoaded:    false,
+  conversionData:   [],     // funnel por CLID (tabla conversion_pais)
+  _conversionLoaded: false,
   rawDataDiario:      [],
   rawDataDiarioFull:  [],
   _apdFull:         null,

@@ -1,0 +1,30 @@
+-- ============================================================
+-- 2026-06-03_revert_is_admin_revoke.sql
+-- Revertir A1 (2026-06-02): el REVOKE de is_admin() rompio los upserts admin
+-- ============================================================
+--
+-- QUE PASO:
+--   La migracion 2026-06-02_advisors_a1_a2.sql revoco EXECUTE sobre
+--   public.is_admin() a anon/authenticated/public para cerrar los lints 0028/0029
+--   (funcion SECURITY DEFINER ejecutable via RPC).
+--
+--   PERO is_admin() se usa DENTRO de las RLS policies de las 7 tablas
+--   (WITH CHECK / USING is_admin()). En esta instancia, evaluar esa policy
+--   requiere que el rol que ejecuta la operacion (authenticated) tenga EXECUTE
+--   sobre is_admin(), aunque la funcion sea SECURITY DEFINER. Al revocarlo, todo
+--   INSERT/UPDATE/DELETE de admin fallo con:
+--       ERROR 42501: permission denied for function is_admin
+--   (visible al subir el Excel de Rendimiento Mensual -> 403 Forbidden).
+--
+-- FIX: re-otorgar EXECUTE a authenticated (estado original del Sprint 0).
+--   - anon y public quedan SIN EXECUTE (no disparan is_admin en ninguna policy:
+--     anon no tiene policies de lectura, y SELECT usa `true`, no is_admin()).
+--   - Esto reabre el lint 0029 (authenticated puede ejecutar is_admin via RPC),
+--     pero es un FALSO POSITIVO aqui: la funcion es necesaria para la RLS y solo
+--     devuelve un booleano sobre el propio JWT (no filtra datos).
+--
+-- Como correrla: Supabase Dashboard -> SQL editor -> RUN.
+--                (aplicada via MCP apply_migration el 2026-06-03)
+-- ============================================================
+
+GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated;
