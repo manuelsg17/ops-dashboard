@@ -47,7 +47,8 @@ function _calcAggByPartnerCity(rows, monthsSet) {
     let e = out.get(k);
     if (!e) {
       e = { clid: r.clid || "", partner: r.partner, city: r.city, kam: r.kam,
-            trips: 0, sh: 0, ad: 0, np: 0, ns: 0, re: 0 };
+            trips: 0, sh: 0, ad: 0, np: 0, ns: 0, re: 0,
+            activeCars: 0, shCarW: 0, acceptW: 0 };
       out.set(k, e);
     }
     if (!e.clid && r.clid) e.clid = r.clid;
@@ -57,8 +58,21 @@ function _calcAggByPartnerCity(rows, monthsSet) {
     e.np    += r.newPartner || 0;
     e.ns    += r.newService || 0;
     e.re    += r.reactivated || 0;
+    // Referencias fleet (tasas): sh_per_active_car ponderado por active cars (dato
+    // del export, no recalculado), acceptance (0-1) ponderado por viajes.
+    e.activeCars += r.activeCars || 0;
+    e.shCarW     += (r.shPerActiveCar || 0) * (r.activeCars || 0);
+    e.acceptW    += (r.acceptanceRate || 0) * (r.trips || 0);
   });
   return out;
+}
+
+// Referencia 3m (promedio ponderado) de los KPIs fleet de un partner-ciudad.
+function _calcFleetRef(e) {
+  return {
+    shcar:  e.activeCars > 0 ? e.shCarW / e.activeCars : null,   // horas/auto activo
+    accept: e.trips > 0 ? (e.acceptW / e.trips) * 100 : null     // % (0-100)
+  };
 }
 
 // Fallback: busca el CLID de un partner+city en los datasets si la fila agregada no lo tiene.
@@ -160,6 +174,7 @@ function renderCalculator() {
       ${_calcSec2_promedio3m(aggLast3, last3)}
       ${_calcSec3_pct(aggLast3, totals)}
       ${_calcSec4_distribucion(aggLast3, totals)}
+      ${_calcSec4b_fleet(aggLast3)}
       ${_calcSec5_exportPartner(aggLast3, totals)}
     </div>`;
 }
@@ -401,6 +416,58 @@ function _calcCuadre(sum, target) {
   return `<div style="font-size:.7rem;line-height:1.3">${fmt(target)}<br><span style="color:${c};font-weight:800">${tag}</span></div>`;
 }
 
+// ── SECCION 4b: KPIs Fleet (opcional) ─────────────────────────────────────────
+// Metas manuales por partner-ciudad para partners fleet. NO se distribuyen ni van
+// al CSV (la tabla `metas` no las tiene); si se llenan, aparecen en la tarjeta (sec 5).
+function _calcSec4b_fleet(agg) {
+  const items = [...agg.values()].sort((a, b) =>
+    a.partner.localeCompare(b.partner) || a.city.localeCompare(b.city));
+
+  const _inp = (partner, city, metric, ph) => {
+    const k = `${partner}|||${city}|||${metric}`;
+    const val = CALC_STATE.edits[k] !== undefined ? CALC_STATE.edits[k] : "";
+    return `<input type="number" step="0.1" min="0" class="calc-inp" value="${val}" placeholder="${ph}"
+      data-pk="${escapeHTML(partner)}" data-city="${escapeHTML(city)}" data-metric="${metric}"
+      onchange="calcOnGoalEdit(this)"
+      style="width:84px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;font-size:.74rem;text-align:right"/>`;
+  };
+
+  const rowsHtml = items.map(e => {
+    const ref = _calcFleetRef(e);
+    return `
+      <tr>
+        <td style="font-size:.75rem;font-weight:600">${escapeHTML(e.partner)}</td>
+        <td style="font-size:.72rem;color:#666">${escapeHTML(e.city)}</td>
+        <td class="tn" style="color:#888">${ref.shcar == null ? "—" : ref.shcar.toFixed(1)}</td>
+        <td>${_inp(e.partner, e.city, "shcar", "meta")}</td>
+        <td class="tn" style="color:#888">${ref.accept == null ? "—" : ref.accept.toFixed(1) + "%"}</td>
+        <td>${_inp(e.partner, e.city, "accept", "meta %")}</td>
+        <td>${_inp(e.partner, e.city, "util", "85")}</td>
+      </tr>`;
+  }).join("");
+
+  return `
+    ${_secH("🚗", "#0891b2", "KPIs Fleet (opcional)", "Solo para partners fleet · si llenas una meta se agrega a la tarjeta del partner")}
+    <div class="section">
+      <div class="tbl-wrap" style="max-height:420px;overflow-y:auto">
+        <table class="dtbl">
+          <thead>
+            <tr>
+              <th>Partner</th><th>Ciudad</th>
+              <th class="tn">SH/Auto (3m)</th><th class="tn">Meta SH/Auto</th>
+              <th class="tn">Aceptación (3m)</th><th class="tn">Meta Acept. %</th>
+              <th class="tn">Meta Utiliz. %</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml || `<tr><td colspan="7" style="text-align:center;color:#aaa;padding:20px">Sin datos.</td></tr>`}</tbody>
+        </table>
+      </div>
+      <div style="font-size:.7rem;color:#888;margin-top:6px;font-style:italic">
+        💡 Utilización: la meta suele ser <strong>85%</strong> (active cars / total) — llénala solo en los partners que aplican. Estos 3 KPIs <strong>no van al CSV</strong>; aparecen solo en la tarjeta descargable del partner (sección 5). Presiona <strong>"Aplicar cambios"</strong> (sección 4) para reflejarlos.
+      </div>
+    </div>`;
+}
+
 // ── SECCION 5: Vista compartible / descarga por partner ───────────────────────
 function _calcSec5_exportPartner(agg, totals) {
   const g = CALC_STATE.kamGoals;
@@ -416,17 +483,32 @@ function _calcSec5_exportPartner(agg, totals) {
   CALC_STATE.selPartnerExport = sel;
 
   const partnerItems = [...agg.values()].filter(e => e.partner === sel);
+
+  // KPIs fleet: solo aparecen columnas para los que el partner tenga meta cargada.
+  const FLEET_DEFS = [
+    { k: "shcar",  h: "SH/Auto",     fmt: v => fmt(v) },
+    { k: "accept", h: "Aceptación",  fmt: v => fmt(v) + "%" },
+    { k: "util",   h: "Utilización", fmt: v => fmt(v) + "%" }
+  ];
+  const editVal = (e, k) => CALC_STATE.edits[`${e.partner}|||${e.city}|||${k}`];
+  const activeFleet = FLEET_DEFS.filter(fd => partnerItems.some(e => { const v = editVal(e, fd.k); return v !== undefined && v !== ""; }));
+
   const cityRows = partnerItems.map(e => {
     const nr = e.np + e.ns + e.re;
     const adGoal = _calcGoalFor(e.partner, e.city, "ad", (+g.ad || 0) * _calcShare(e.ad, totals.ad));
     const shGoal = _calcGoalFor(e.partner, e.city, "sh", (+g.sh || 0) * _calcShare(e.sh, totals.sh));
     const nrGoal = _calcGoalFor(e.partner, e.city, "nr", (+g.nr || 0) * _calcShare(nr,  totals.nr));
+    const fleetCells = activeFleet.map(fd => {
+      const v = editVal(e, fd.k);
+      return `<td class="tn">${v === undefined || v === "" ? "—" : fd.fmt(+v)}</td>`;
+    }).join("");
     return `
       <tr>
         <td style="font-weight:600">${escapeHTML(e.city)}</td>
         <td class="tn">${fmt(adGoal)}</td>
         <td class="tn">${fmt(shGoal)}</td>
         <td class="tn">${fmt(nrGoal)}</td>
+        ${fleetCells}
       </tr>`;
   }).join("");
 
@@ -464,6 +546,7 @@ function _calcSec5_exportPartner(agg, totals) {
               <th style="text-align:right;padding:8px 12px;font-size:.74rem">Active Drivers</th>
               <th style="text-align:right;padding:8px 12px;font-size:.74rem">Supply Hours</th>
               <th style="text-align:right;padding:8px 12px;font-size:.74rem">N+R</th>
+              ${activeFleet.map(fd => `<th style="text-align:right;padding:8px 12px;font-size:.74rem">${fd.h}</th>`).join("")}
             </tr>
           </thead>
           <tbody>${cityRows}</tbody>

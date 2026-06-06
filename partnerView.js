@@ -227,6 +227,8 @@ const PV_I18N = {
                     en: "New drivers by channel · you vs group average" },
   chanToggleHint: { es: "Usa el botón Top 5 / Top 10 del Embudo de Conversión (arriba) para cambiar la comparación.",
                     en: "Use the Top 5 / Top 10 button in the Conversion Funnel (above) to switch the comparison." },
+  shPerCar:       { es: "SH por Auto Activo", en: "SH per Active Car" },
+  acceptRate:     { es: "Tasa de Aceptación", en: "Acceptance Rate" },
 
   // ── Perú (General) + comparación cohortes ────────────────────────────────
   peruGeneral:    { es: "Perú (General)",  en: "Peru (Overall)" },
@@ -291,12 +293,14 @@ function _pvSeriesByPartnerCity(partner, city, dates) {
   // Solo rows de este partner y esta ciudad y dentro del rango
   const rows = (STATE._byPartner?.get(partner) || STATE.rawData.filter(r => r.partner === partner))
     .filter(r => r.city === city && datesSet.has(r.date));
+  const _blank = (d, present) => ({
+    date: d, _present: present, ad: 0, nr: 0, sh: 0,
+    trips: 0, commission: 0, gmv: 0,
+    npPartner: 0, npService: 0, reactivated: 0,
+    activeCars: 0, _shCarW: 0, _acceptW: 0, shCar: 0, accept: 0
+  });
   rows.forEach(r => {
-    if (!byDate[r.date]) byDate[r.date] = {
-      date: r.date, _present: true, ad: 0, nr: 0, sh: 0,
-      trips: 0, commission: 0, gmv: 0,
-      npPartner: 0, npService: 0, reactivated: 0
-    };
+    if (!byDate[r.date]) byDate[r.date] = _blank(r.date, true);
     const e = byDate[r.date];
     // AD es snapshot: max entre CLIDs duplicados del mismo partner+ciudad+fecha
     if ((r.activeDrivers || 0) > e.ad) e.ad = r.activeDrivers || 0;
@@ -308,12 +312,18 @@ function _pvSeriesByPartnerCity(partner, city, dates) {
     e.trips      += r.trips || 0;
     e.commission += r.commission || 0;
     e.gmv        += r.gmv || 0;
+    // Tasas (NO se suman): sh_per_active_car es dato del export (no se recalcula
+    // sh/cars: usa otro denominador), se pondera por active cars; acceptance (0-1)
+    // se pondera por viajes. Se derivan abajo a partir de los acumuladores.
+    e.activeCars += r.activeCars || 0;
+    e._shCarW    += (r.shPerActiveCar || 0) * (r.activeCars || 0);
+    e._acceptW   += (r.acceptanceRate || 0) * (r.trips || 0);
   });
-  return dates.map(d => byDate[d] || {
-    date: d, _present: false, ad: 0, nr: 0, sh: 0,
-    trips: 0, commission: 0, gmv: 0,
-    npPartner: 0, npService: 0, reactivated: 0
+  Object.values(byDate).forEach(e => {
+    e.shCar  = e.activeCars > 0 ? e._shCarW / e.activeCars : 0;
+    e.accept = e.trips > 0 ? e._acceptW / e.trips : 0;
   });
+  return dates.map(d => byDate[d] || _blank(d, false));
 }
 
 // ── RENDER PRINCIPAL ──────────────────────────────────────────────────────────
@@ -1450,13 +1460,16 @@ function _pvScopeSeries(partner, scopeCity, dates) {
     const cities = [...new Set(rows.map(r => r.city).filter(Boolean))];
     const per = cities.map(c => _pvSeriesByPartnerCity(partner, c, dates));
     out = dates.map((d, i) => {
-      const o = { date: d, ad: 0, nr: 0, sh: 0, trips: 0, commission: 0, gmv: 0, npPartner: 0, npService: 0, reactivated: 0 };
+      const o = { date: d, ad: 0, nr: 0, sh: 0, trips: 0, commission: 0, gmv: 0, npPartner: 0, npService: 0, reactivated: 0, activeCars: 0, _shCarW: 0, _acceptW: 0, shCar: 0, accept: 0 };
       per.forEach(ser => {
         const e = ser[i]; if (!e) return;
         o.ad += e.ad; o.sh += e.sh; o.trips += e.trips; o.commission += e.commission; o.gmv += e.gmv || 0;
         o.npPartner += e.npPartner; o.npService += e.npService; o.reactivated += e.reactivated;
+        o.activeCars += e.activeCars || 0; o._shCarW += e._shCarW || 0; o._acceptW += e._acceptW || 0;
       });
       o.nr = o.npPartner + o.npService + o.reactivated;
+      o.shCar  = o.activeCars > 0 ? o._shCarW / o.activeCars : 0;
+      o.accept = o.trips > 0 ? o._acceptW / o.trips : 0;
       o._present = per.some(ser => ser[i] && ser[i]._present);
       return o;
     });
@@ -1500,6 +1513,15 @@ function _pvCmpLine(elId, labels, partnerSeries, cohortLines, color, fmtFn, mone
   const el = document.getElementById(elId);
   if (!el || typeof ApexCharts === "undefined") return;
   el.classList.add("pv-chart");
+  // Si ni el partner ni los cohortes tienen dato (p.ej. KPI fleet en un partner
+  // no-fleet), no montar una línea plana en 0: mostrar "Sin datos".
+  const _has = (partnerSeries.data || []).some(v => v) || cohortLines.some(l => (l.data || []).some(v => v));
+  if (!_has) {
+    const reg = PARTNER_VIEW_STATE.scopeCharts;
+    if (reg && reg[elId]) { try { reg[elId].destroy(); } catch (e) {} delete reg[elId]; }
+    el.innerHTML = `<div style="font-size:.75rem;color:#bbb;padding:34px 8px;text-align:center">Sin datos para este KPI</div>`;
+    return;
+  }
   const fn = fmtFn || (v => fmt(v));
   const pref = money ? "$" : "";
   const series = [partnerSeries, ...cohortLines.map(l => ({ name: l.name, data: l.data }))];
@@ -1624,6 +1646,8 @@ function _pvScopeBlock(scopeCity, idPrefix) {
     ${card("trips", _t("trips"))}
     ${card("commission", _t("commission"))}
     ${card("gmv", "GMV", true)}
+    ${card("shcar", _t("shPerCar"))}
+    ${card("accept", _t("acceptRate"))}
   </div>`;
 }
 
@@ -1652,6 +1676,9 @@ function _pvBuildScopeCharts(partner, scopeCity, idPrefix, dates, recibeLeads) {
   _pvCmpLine(`pvs_${idPrefix}_trips`, labels, { name: _t("trips"), data: series.map(s => s.trips) }, lines(s => s.trips), "#10b981", fmtSmart);
   _pvCmpLine(`pvs_${idPrefix}_commission`, labels, { name: _t("commission"), data: series.map(s => s.commission) }, lines(s => s.commission), "#06b6d4", fmtSmart, true);
   _pvCmpLine(`pvs_${idPrefix}_gmv`, labels, { name: "GMV", data: series.map(s => s.gmv) }, lines(s => s.gmv), "#f59e0b", fmtSmart, true);
+  // SH por auto activo (horas, 1 decimal) y Tasa de aceptación (fracción 0-1 → %).
+  _pvCmpLine(`pvs_${idPrefix}_shcar`, labels, { name: _t("shPerCar"), data: series.map(s => s.shCar) }, lines(s => s.shCar), "#0891b2", v => (v || 0).toFixed(1));
+  _pvCmpLine(`pvs_${idPrefix}_accept`, labels, { name: _t("acceptRate"), data: series.map(s => s.accept) }, lines(s => s.accept), "#db2777", v => ((v || 0) * 100).toFixed(1) + "%");
   const tbl = document.getElementById(`pvs_${idPrefix}_nr_tbl`);
   if (tbl) tbl.innerHTML = _pvNRTable(series, dates, recibeLeads);
 }
