@@ -1516,7 +1516,10 @@ function _pvCmpLine(elId, labels, partnerSeries, cohortLines, color, fmtFn, mone
     chart: { type: "line", height: 210, toolbar: { show: false }, animations: { enabled: false }, fontFamily: "inherit" },
     stroke: { curve: "smooth", width: [2.5, ...cohortLines.map(() => 2)], dashArray: [0, ...cohortLines.map(() => 5)] },
     colors, markers: { size: 3 },
-    dataLabels: { enabled: true, enabledOnSeries: [0], formatter: v => pref + fn(v), style: { fontSize: "10px", colors: ["#111"], fontWeight: 700 }, background: { enabled: false }, offsetY: -10 },
+    // Etiquetas en TODAS las series (partner + cohortes) para que los promedios
+    // sean legibles tambien al exportar a PDF. Cada etiqueta del color de su
+    // linea (partner en negro), con halo blanco via CSS .pv-chart.
+    dataLabels: { enabled: true, formatter: v => pref + fn(v), style: { fontSize: "10px", colors: ["#111", ...cohortLines.map(l => l.color)], fontWeight: 700 }, background: { enabled: false }, offsetY: -10 },
     xaxis: { categories: labels, labels: { style: { fontSize: "9px" }, rotate: -30 }, axisBorder: { show: false }, axisTicks: { show: false } },
     yaxis: yAxis,
     // padding.left amplio: separa el primer dataLabel de los números del eje Y;
@@ -1557,16 +1560,21 @@ function _pvCmpNR(elId, labels, series, recibeLeads, cohortLines) {
     stroke: { width: [...colSeries.map(() => 0), ...lineSeries.map(() => 2)], dashArray: [...colSeries.map(() => 0), ...lineSeries.map(() => 5)], curve: "smooth" },
     plotOptions: { bar: { columnWidth: "60%", dataLabels: { total: { enabled: !hasLines, offsetY: -4, style: { fontSize: "11px", fontWeight: 800, color: "#111" }, formatter: v => fmt(v) } } } },
     dataLabels: {
+      // Columnas (segmentos) + lineas de cohorte: el total del promedio tambien
+      // se etiqueta (legible en PDF). Color: segmentos en blanco, lineas en su color.
       enabled: true,
-      enabledOnSeries: colSeries.map((_, i) => i),
+      enabledOnSeries: [...colSeries.map((_, i) => i), ...lineSeries.map((_, i) => colSeries.length + i)],
       formatter: (val, opts) => {
+        // Serie de linea (cohorte): muestra su total con su color.
+        if (opts.seriesIndex >= colSeries.length) return val ? fmt(val) : "";
+        // Segmento de columna: solo si pesa >= 20% del total de su barra.
         if (!val || val <= 0) return "";
         const all = opts.w.config.series;
         let tot = 0; for (let i = 0; i < colSeries.length; i++) tot += all[i].data[opts.dataPointIndex] || 0;
         if (!tot || val / tot < 0.20) return "";
         return fmt(val);
       },
-      style: { fontSize: "9px", colors: ["#fff"], fontWeight: 800 },
+      style: { fontSize: "9px", colors: [...colSeries.map(() => "#fff"), ...lineColors], fontWeight: 800 },
       dropShadow: { enabled: true, top: 1, left: 1, blur: 1, opacity: .45 }
     },
     xaxis: { categories: labels, labels: { style: { fontSize: "9px" }, rotate: -30 } },

@@ -1,15 +1,15 @@
-// calculator.js — Calculadora de Metas
-// Ayuda al KAM a setear metas mensuales por partner+ciudad.
-// 5 secciones:
-//  1) Promedio 3 últimos meses por partner+ciudad
-//  2) % representación vs total de la ciudad (heatmap)
-//  3) Generador de metas (multiplicador editable manualmente)
-//  4) Validación: meta KAM vs suma de metas-partners (con pesos Yango)
-//  5) Vista exportable por partner
+// calculator.js — Calculadora de Metas (flujo TOP-DOWN)
+// El KAM ingresa su meta TOTAL y se reparte (disgrega) a cada partner+ciudad
+// segun su % de representacion en el promedio de los ultimos 3 meses.
+// Secciones (en orden):
+//  1) Ingresa tus metas KAM (totales del jefe, formato Yango con pesos)
+//  2) Promedio ultimos 3 meses por partner+ciudad
+//  3) % Representacion (peso de cada partner+ciudad en el total del KAM)
+//  4) Distribucion de metas (meta KAM x % — editable, valida el cuadre)
+//  5) Descarga / vista compartible por partner
 
 const CALC_STATE = {
   kam:        "all",
-  multiplier: 1.10,
   // Metas editadas manualmente: { "partner|||city|||metric": valor }
   edits:      {},
   // Metas KAM input manual (formato Yango con pesos)
@@ -27,11 +27,7 @@ const KAM_WEIGHTS = {
 
 // ── HELPER: dataset mensual (rendimiento_mensual) ─────────────────────────────
 function _calcGetMensualData() {
-  // Si estamos en otra escala, intentar usar rawDataMensual si esta cargada
-  if (STATE.rawDataMensual && STATE.rawDataMensual.length) {
-    return STATE.rawDataMensual;
-  }
-  // Fallback: usar rawData actual (modo activo)
+  if (STATE.rawDataMensual && STATE.rawDataMensual.length) return STATE.rawDataMensual;
   return STATE.rawData || [];
 }
 
@@ -41,7 +37,7 @@ function _calcLastNMonths(rows, n) {
   return months.slice(-n);
 }
 
-// Agrega por partner+city sobre un set de meses específicos
+// Agrega por partner+city sobre un set de meses específicos.
 // Devuelve Map<"partner|||city", { clid, trips, sh, ad, np, ns, re, partner, city, kam }>
 function _calcAggByPartnerCity(rows, monthsSet) {
   const out = new Map();
@@ -54,12 +50,10 @@ function _calcAggByPartnerCity(rows, monthsSet) {
             trips: 0, sh: 0, ad: 0, np: 0, ns: 0, re: 0 };
       out.set(k, e);
     }
-    // Si el primer row no traia CLID y un row posterior si, capturarlo
     if (!e.clid && r.clid) e.clid = r.clid;
     e.trips += r.trips || 0;
     e.sh    += r.supplyHours || 0;
-    // AD: max across months (snapshot)
-    if ((r.activeDrivers || 0) > e.ad) e.ad = r.activeDrivers || 0;
+    if ((r.activeDrivers || 0) > e.ad) e.ad = r.activeDrivers || 0;  // AD: snapshot (max)
     e.np    += r.newPartner || 0;
     e.ns    += r.newService || 0;
     e.re    += r.reactivated || 0;
@@ -67,8 +61,7 @@ function _calcAggByPartnerCity(rows, monthsSet) {
   return out;
 }
 
-// Fallback: busca el CLID de un partner+city en STATE.rawData si la fila
-// agregada no lo tiene (caso: el row vino de un dataset que no incluye clid).
+// Fallback: busca el CLID de un partner+city en los datasets si la fila agregada no lo tiene.
 function _calcLookupClid(partner, city) {
   const datasets = [STATE.rawDataMensual, STATE.rawData, STATE.rawDataDiario];
   for (const ds of datasets) {
@@ -76,17 +69,46 @@ function _calcLookupClid(partner, city) {
     const row = ds.find(r => r.partner === partner && r.city === city && r.clid);
     if (row) return row.clid;
   }
-  // Ultimo fallback: scan inverso de CLID_MAP por partner (toma el primero)
   for (const [clid, p] of Object.entries(STATE.CLID_MAP || {})) {
     if (p === partner) return clid;
   }
   return "";
 }
 
+// Totales del KAM (base para repartir): suma de los valores 3m de cada partner+ciudad.
+// nr = nuevos partner + nuevos yango + reactivados. (Para el % la /n se cancela.)
+function _calcKamTotals(agg) {
+  let ad = 0, sh = 0, nr = 0;
+  for (const e of agg.values()) { ad += e.ad; sh += e.sh; nr += (e.np + e.ns + e.re); }
+  return { ad, sh, nr };
+}
+function _calcShare(val, tot) { return tot > 0 ? val / tot : 0; }
+
+// Meta distribuida o edit manual para un partner+city+metric.
+function _calcGoalFor(partner, city, metric, base) {
+  const k = `${partner}|||${city}|||${metric}`;
+  if (CALC_STATE.edits[k] !== undefined) return +CALC_STATE.edits[k] || 0;
+  return Math.round(base);
+}
+
+// Heatmap helpers (% de representación)
+function _calcHeatColor(pct) {
+  if (pct >= 20) return "#10b981";
+  if (pct >= 10) return "#22c55e";
+  if (pct >= 5)  return "#f59e0b";
+  if (pct >= 1)  return "#fb923c";
+  return "#FF0000";
+}
+function _calcHeatBg(pct) {
+  if (pct >= 20) return "#bbf7d0";
+  if (pct >= 10) return "#d9f99d";
+  if (pct >= 5)  return "#fef3c7";
+  if (pct >= 1)  return "#fed7aa";
+  return "#fecaca";
+}
+
 // ── RENDER PRINCIPAL ──────────────────────────────────────────────────────────
 function renderCalculator() {
-  // Guard: si por algun motivo (timer reentrante, RAF tardio) se invoca cuando
-  // ya no estamos en Calculadora, abortar. Evita reflow pesado en DOM oculto.
   if (STATE.curTab !== "calculator") return;
   const el = document.getElementById("calculatorContent");
   if (!el) return;
@@ -102,7 +124,6 @@ function renderCalculator() {
     return;
   }
 
-  // Validar formato YYYY-MM en las dates. Si no, no es data mensual valida.
   const hasMonthFormat = rows.some(r => /^\d{4}-\d{2}$/.test(r.date || ""));
   if (!hasMonthFormat) {
     el.innerHTML = `
@@ -116,9 +137,8 @@ function renderCalculator() {
     return;
   }
 
-  const allKAMs = [...new Set(Object.values(STATE.KAM_MAP).map(k => (k||"").trim()).filter(Boolean))].sort();
+  const allKAMs = [...new Set(Object.values(STATE.KAM_MAP).map(k => (k || "").trim()).filter(Boolean))].sort();
 
-  // Filtrar por KAM (si CALC_STATE.kam !== "all")
   const filteredRows = CALC_STATE.kam === "all"
     ? rows
     : rows.filter(r => {
@@ -126,67 +146,82 @@ function renderCalculator() {
         return k === CALC_STATE.kam;
       });
 
-  // Bug #6+7: cachear meses y aggregaciones (1 sola pasada por dataset)
   const allMonths = [...new Set(rows.map(r => r.date))].sort();
   const last3 = allMonths.slice(-3);
-  const last1 = allMonths.slice(-1);
   const last3Set = new Set(last3);
-  const last1Set = new Set(last1);
 
-  // Aggregaciones cacheadas para esta render
+  // Base unica de todo el flujo: agregado 3 meses del KAM seleccionado.
   const aggLast3 = _calcAggByPartnerCity(filteredRows, last3Set);
-  const aggLast1 = _calcAggByPartnerCity(filteredRows, last1Set);
-  const aggAllLast3 = _calcAggByPartnerCity(rows, last3Set);  // sin filtro KAM para totales de ciudad
+  const totals = _calcKamTotals(aggLast3);
 
-  let html = `
+  el.innerHTML = `
     <div style="padding:0 8px 16px">
-      <!-- Controles -->
-      <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin:8px 0 16px">
-        <div>
-          <label style="font-size:.68rem;color:#666;font-weight:700;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px">KAM</label>
-          <select id="calcKamSel" class="sb-sel" style="width:180px" onchange="calcOnKamChange(this.value)">
-            <option value="all" ${CALC_STATE.kam==="all"?"selected":""}>Todos los KAMs</option>
-            ${allKAMs.map(k => `<option value="${escapeHTML(k)}" ${CALC_STATE.kam===k?"selected":""}>${escapeHTML(k)}</option>`).join("")}
-          </select>
-        </div>
-        <div>
-          <label style="font-size:.68rem;color:#666;font-weight:700;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px">Multiplicador global</label>
-          <input id="calcMultiplier" type="number" step="0.05" min="0.5" max="3" value="${CALC_STATE.multiplier}"
-            class="sb-inp" style="width:110px" onchange="calcOnMultiplierChange(this.value)"/>
-        </div>
-        <div style="font-size:.72rem;color:#666;background:#fef3c7;padding:6px 10px;border-radius:6px;border:1px solid #fcd34d">
-          📅 Promedios: ${last3.map(d2s).join(" · ")}
-        </div>
-      </div>
-
-      ${_calcSec1_promedio3m(aggLast3, last3)}
-      ${_calcSec2_pctCiudad(aggAllLast3, last3)}
-      ${_calcSec3_generador(aggLast1, last1)}
-      ${_calcSec4_validacionKAM(aggLast1, last1)}
-      ${_calcSec5_exportPartner(aggLast1, last1)}
+      ${_calcSec1_metas(allKAMs, last3)}
+      ${_calcSec2_promedio3m(aggLast3, last3)}
+      ${_calcSec3_pct(aggLast3, totals)}
+      ${_calcSec4_distribucion(aggLast3, totals)}
+      ${_calcSec5_exportPartner(aggLast3, totals)}
     </div>`;
-
-  el.innerHTML = html;
 }
 
-// ── SECCION 1: Promedio 3 últimos meses ───────────────────────────────────────
-function _calcSec1_promedio3m(agg, months) {
+// ── SECCION 1: Ingresa tus metas KAM ──────────────────────────────────────────
+function _calcSec1_metas(allKAMs, last3) {
+  const g = CALC_STATE.kamGoals;
+  return `
+    ${_secH("🎯", "#FF0000", "1. Ingresa tus metas KAM", "Las que te dio tu jefe (formato Yango con pesos)")}
+    <div class="section">
+      <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:12px">
+        <div>
+          <label style="font-size:.68rem;color:#666;font-weight:700;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px">KAM</label>
+          <select id="calcKamSel" class="sb-sel" style="width:200px" onchange="calcOnKamChange(this.value)">
+            <option value="all" ${CALC_STATE.kam === "all" ? "selected" : ""}>Todos los KAMs</option>
+            ${allKAMs.map(k => `<option value="${escapeHTML(k)}" ${CALC_STATE.kam === k ? "selected" : ""}>${escapeHTML(k)}</option>`).join("")}
+          </select>
+        </div>
+        <div style="font-size:.72rem;color:#666;background:#fef3c7;padding:6px 10px;border-radius:6px;border:1px solid #fcd34d">
+          📅 Distribución según promedio de: ${last3.map(d2s).join(" · ")}
+        </div>
+      </div>
+      <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px">
+        <div style="font-size:.78rem;font-weight:700;color:#92400e;margin-bottom:8px">📥 Metas totales del KAM:</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px">
+          ${_kamGoalInput("ad",        "Active Drivers",       KAM_WEIGHTS.ad,        g.ad)}
+          ${_kamGoalInput("sh",        "Supply Hours",         KAM_WEIGHTS.sh,        g.sh)}
+          ${_kamGoalInput("nr",        "New + Reactivated",    KAM_WEIGHTS.nr,        g.nr)}
+          ${_kamGoalInput("otherProj", "Other Projects (%)",   KAM_WEIGHTS.otherProj, g.otherProj)}
+          ${_kamGoalInput("fleetA2",   "Fleet drivers A2 (%)", KAM_WEIGHTS.fleetA2,   g.fleetA2)}
+        </div>
+        <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center">
+          <button id="calcDistBtn" style="padding:8px 16px;font-size:.8rem;background:#FF0000;color:#fff;border:none;border-radius:8px;font-weight:800;cursor:pointer" onclick="calcApplyChanges()">📊 Distribuir metas</button>
+          <span style="font-size:.7rem;color:#888;font-style:italic;max-width:520px">
+            <strong>AD · SH · N+R</strong> se reparten entre tus partners según su % de los últimos 3 meses.
+            <strong>Other Projects</strong> y <strong>Fleet A2</strong> son metas % a nivel KAM (no se reparten por partner).
+          </span>
+        </div>
+      </div>
+    </div>`;
+}
+
+function _kamGoalInput(metric, label, weight, val) {
+  return `
+    <div>
+      <label style="font-size:.66rem;color:#666;font-weight:700;display:block;margin-bottom:3px">${escapeHTML(label)} <span style="color:#aaa">(${weight}%)</span></label>
+      <input type="number" step="1" min="0" value="${+val || 0}"
+        onchange="calcOnKamGoalChange('${metric}', this.value)"
+        class="sb-inp" style="width:100%;padding:5px 8px;font-size:.78rem"/>
+    </div>`;
+}
+
+// ── SECCION 2: Promedio 3 últimos meses ───────────────────────────────────────
+function _calcSec2_promedio3m(agg, months) {
   const n = months.length || 1;
-
-  // Sort partners by partner+city
   const items = [...agg.values()].sort((a, b) =>
-    a.partner.localeCompare(b.partner) || a.city.localeCompare(b.city)
-  );
+    a.partner.localeCompare(b.partner) || a.city.localeCompare(b.city));
 
-  // Totales del KAM (suma)
   const tot = { trips: 0, sh: 0, ad: 0, np: 0, ns: 0, re: 0 };
   items.forEach(e => {
-    tot.trips += e.trips / n;
-    tot.sh    += e.sh / n;
-    tot.ad    += e.ad;       // AD ya es max, no se promedia
-    tot.np    += e.np / n;
-    tot.ns    += e.ns / n;
-    tot.re    += e.re / n;
+    tot.trips += e.trips / n; tot.sh += e.sh / n; tot.ad += e.ad;
+    tot.np += e.np / n; tot.ns += e.ns / n; tot.re += e.re / n;
   });
 
   const rowsHtml = items.map(e => `
@@ -202,7 +237,7 @@ function _calcSec1_promedio3m(agg, months) {
     </tr>`).join("");
 
   return `
-    ${_secH("📊", "#06b6d4", "1. Promedio 3 últimos meses", `${items.length} partner-ciudad · KAM: ${CALC_STATE.kam === "all" ? "Todos" : CALC_STATE.kam}`)}
+    ${_secH("📊", "#06b6d4", "2. Promedio 3 últimos meses", `${items.length} partner-ciudad · KAM: ${CALC_STATE.kam === "all" ? "Todos" : CALC_STATE.kam}`)}
     <div class="section">
       <div class="tbl-wrap" style="max-height:400px;overflow-y:auto">
         <table class="dtbl">
@@ -231,102 +266,16 @@ function _calcSec1_promedio3m(agg, months) {
     </div>`;
 }
 
-// ── SECCION 2: % Representación vs Ciudad (heatmap) ───────────────────────────
-function _calcSec2_pctCiudad(aggAll, months) {
-
-  // Total por ciudad por métrica
-  const cityTotals = {};
-  for (const e of aggAll.values()) {
-    if (!cityTotals[e.city]) cityTotals[e.city] = { trips: 0, sh: 0, ad: 0, np: 0, ns: 0, re: 0 };
-    const t = cityTotals[e.city];
-    t.trips += e.trips; t.sh += e.sh; t.ad += e.ad;
-    t.np += e.np; t.ns += e.ns; t.re += e.re;
-  }
-
-  // Filtrar items por KAM (solo para mostrar la fila del KAM seleccionado)
-  const items = [...aggAll.values()].filter(e => {
-    if (CALC_STATE.kam === "all") return true;
-    const k = e.kam || getKAMForPartner(e.partner);
-    return k === CALC_STATE.kam;
-  }).sort((a, b) => a.partner.localeCompare(b.partner) || a.city.localeCompare(b.city));
-
-  // Color heatmap: 0% rojo → 20% naranja → 50% verde fuerte
-  function _heatColor(pct) {
-    if (pct >= 20) return "#10b981";
-    if (pct >= 10) return "#22c55e";
-    if (pct >= 5)  return "#f59e0b";
-    if (pct >= 1)  return "#fb923c";
-    return "#FF0000";
-  }
-  function _heatBg(pct) {
-    if (pct >= 20) return "#bbf7d0";
-    if (pct >= 10) return "#d9f99d";
-    if (pct >= 5)  return "#fef3c7";
-    if (pct >= 1)  return "#fed7aa";
-    return "#fecaca";
-  }
-  function _cell(val, total) {
-    if (!total) return `<td class="tn" style="color:#ccc">—</td>`;
-    const pct = (val / total) * 100;
-    return `<td class="tn" style="background:${_heatBg(pct)};color:${_heatColor(pct)};font-weight:700">${pct.toFixed(2)}%</td>`;
-  }
-
-  const rowsHtml = items.map(e => {
-    const ct = cityTotals[e.city] || {};
-    return `
-      <tr>
-        <td style="font-size:.75rem;font-weight:600">${escapeHTML(e.partner)}</td>
-        <td style="font-size:.72rem;color:#666">${escapeHTML(e.city)}</td>
-        ${_cell(e.trips, ct.trips)}
-        ${_cell(e.sh,    ct.sh)}
-        ${_cell(e.ad,    ct.ad)}
-        ${_cell(e.np,    ct.np)}
-        ${_cell(e.ns,    ct.ns)}
-        ${_cell(e.re,    ct.re)}
-      </tr>`;
-  }).join("");
-
-  return `
-    ${_secH("🔥", "#f59e0b", "2. % Representación vs Ciudad", "Tu peso en cada ciudad (heatmap rojo→verde)")}
-    <div class="section">
-      <div class="tbl-wrap" style="max-height:400px;overflow-y:auto">
-        <table class="dtbl">
-          <thead>
-            <tr>
-              <th>Partner</th><th>Ciudad</th>
-              <th class="tn">Trips</th><th class="tn">SH</th>
-              <th class="tn">AD</th><th class="tn">New Partner</th>
-              <th class="tn">New Yango</th><th class="tn">Reactivados</th>
-            </tr>
-          </thead>
-          <tbody>${rowsHtml || `<tr><td colspan="8" style="text-align:center;color:#aaa;padding:20px">Sin datos.</td></tr>`}</tbody>
-        </table>
-      </div>
-    </div>`;
-}
-
-// ── SECCION 3: Generador de Metas ─────────────────────────────────────────────
-function _calcSec3_generador(agg, months) {
-  const m = CALC_STATE.multiplier || 1.1;
-
+// ── SECCION 3: % Representación (base de la distribución) ──────────────────────
+function _calcSec3_pct(agg, totals) {
   const items = [...agg.values()].sort((a, b) =>
-    a.partner.localeCompare(b.partner) || a.city.localeCompare(b.city)
-  );
+    a.partner.localeCompare(b.partner) || a.city.localeCompare(b.city));
 
-  // Helper: obtener valor editado o calcular default (base * multiplicador)
-  function _calcGoal(partner, city, metric, base) {
-    const k = `${partner}|||${city}|||${metric}`;
-    if (CALC_STATE.edits[k] !== undefined) return CALC_STATE.edits[k];
-    return Math.round(base * m);
-  }
-  function _input(partner, city, metric, base) {
-    const k = `${partner}|||${city}|||${metric}`;
-    const val = _calcGoal(partner, city, metric, base);
-    return `<input type="number" step="1" min="0" class="calc-inp" value="${val}"
-      data-pk="${escapeHTML(partner)}" data-city="${escapeHTML(city)}" data-metric="${metric}"
-      onchange="calcOnGoalEdit(this)"
-      style="width:90px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;font-size:.74rem;text-align:right"/>`;
-  }
+  const _cell = (val, tot) => {
+    if (!tot) return `<td class="tn" style="color:#ccc">—</td>`;
+    const pct = (val / tot) * 100;
+    return `<td class="tn" style="background:${_calcHeatBg(pct)};color:${_calcHeatColor(pct)};font-weight:700">${pct.toFixed(1)}%</td>`;
+  };
 
   const rowsHtml = items.map(e => {
     const nr = e.np + e.ns + e.re;
@@ -334,161 +283,144 @@ function _calcSec3_generador(agg, months) {
       <tr>
         <td style="font-size:.75rem;font-weight:600">${escapeHTML(e.partner)}</td>
         <td style="font-size:.72rem;color:#666">${escapeHTML(e.city)}</td>
-        <td class="tn" style="color:#888">${fmt(e.ad)}</td>
-        <td>${_input(e.partner, e.city, "ad", e.ad)}</td>
-        <td class="tn" style="color:#888">${fmt(e.sh)}</td>
-        <td>${_input(e.partner, e.city, "sh", e.sh)}</td>
-        <td class="tn" style="color:#888">${fmt(nr)}</td>
-        <td>${_input(e.partner, e.city, "nr", nr)}</td>
+        ${_cell(e.ad, totals.ad)}
+        ${_cell(e.sh, totals.sh)}
+        ${_cell(nr,  totals.nr)}
       </tr>`;
   }).join("");
 
   return `
-    ${_secH("⚙️", "#8b5cf6", "3. Generador de Metas", `Base: último mes · Multiplicador: ${m}× (+${((m-1)*100).toFixed(0)}%). Cada celda es editable.`)}
+    ${_secH("🔥", "#f59e0b", "3. % Representación (base de la distribución)", "Peso de cada partner-ciudad en el total del KAM · suma 100% por métrica")}
     <div class="section">
+      <div class="tbl-wrap" style="max-height:400px;overflow-y:auto">
+        <table class="dtbl">
+          <thead>
+            <tr><th>Partner</th><th>Ciudad</th><th class="tn">% AD</th><th class="tn">% SH</th><th class="tn">% N+R</th></tr>
+          </thead>
+          <tbody>${rowsHtml || `<tr><td colspan="5" style="text-align:center;color:#aaa;padding:20px">Sin datos.</td></tr>`}</tbody>
+          <tfoot style="font-weight:700;background:#f9f9f9">
+            <tr><td colspan="2">Total KAM</td><td class="tn">100%</td><td class="tn">100%</td><td class="tn">100%</td></tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>`;
+}
+
+// ── SECCION 4: Distribución de metas (editable) ───────────────────────────────
+function _calcSec4_distribucion(agg, totals) {
+  const g = CALC_STATE.kamGoals;
+  const items = [...agg.values()].sort((a, b) =>
+    a.partner.localeCompare(b.partner) || a.city.localeCompare(b.city));
+
+  const _input = (partner, city, metric, base) => {
+    const k = `${partner}|||${city}|||${metric}`;
+    const val = CALC_STATE.edits[k] !== undefined ? +CALC_STATE.edits[k] : Math.round(base);
+    return `<input type="number" step="1" min="0" class="calc-inp" value="${val}"
+      data-pk="${escapeHTML(partner)}" data-city="${escapeHTML(city)}" data-metric="${metric}"
+      onchange="calcOnGoalEdit(this)"
+      style="width:90px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;font-size:.74rem;text-align:right"/>`;
+  };
+  const _pct = (val, tot) => tot > 0 ? ((val / tot) * 100).toFixed(1) + "%" : "—";
+
+  let sumAD = 0, sumSH = 0, sumNR = 0;
+  const rowsHtml = items.map(e => {
+    const nr = e.np + e.ns + e.re;
+    const adBase = (+g.ad || 0) * _calcShare(e.ad, totals.ad);
+    const shBase = (+g.sh || 0) * _calcShare(e.sh, totals.sh);
+    const nrBase = (+g.nr || 0) * _calcShare(nr,  totals.nr);
+    sumAD += _calcGoalFor(e.partner, e.city, "ad", adBase);
+    sumSH += _calcGoalFor(e.partner, e.city, "sh", shBase);
+    sumNR += _calcGoalFor(e.partner, e.city, "nr", nrBase);
+    return `
+      <tr>
+        <td style="font-size:.75rem;font-weight:600">${escapeHTML(e.partner)}</td>
+        <td style="font-size:.72rem;color:#666">${escapeHTML(e.city)}</td>
+        <td class="tn" style="color:#888">${_pct(e.ad, totals.ad)}</td>
+        <td>${_input(e.partner, e.city, "ad", adBase)}</td>
+        <td class="tn" style="color:#888">${_pct(e.sh, totals.sh)}</td>
+        <td>${_input(e.partner, e.city, "sh", shBase)}</td>
+        <td class="tn" style="color:#888">${_pct(nr, totals.nr)}</td>
+        <td>${_input(e.partner, e.city, "nr", nrBase)}</td>
+      </tr>`;
+  }).join("");
+
+  const noGoals = !(+g.ad || +g.sh || +g.nr);
+  const hint = noGoals
+    ? `<div style="font-size:.78rem;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:8px 10px;margin-bottom:8px">⚠️ Ingresa tus metas KAM en la sección 1 y presiona <strong>"Distribuir metas"</strong> para repartirlas aquí.</div>`
+    : "";
+
+  return `
+    ${_secH("⚙️", "#8b5cf6", "4. Distribución de metas (editable)", "Meta KAM × % de representación · cada celda es editable")}
+    <div class="section">
+      ${hint}
       <div class="tbl-wrap" style="max-height:500px;overflow-y:auto">
         <table class="dtbl">
           <thead>
             <tr>
               <th>Partner</th><th>Ciudad</th>
-              <th class="tn">AD base</th><th class="tn">AD meta</th>
-              <th class="tn">SH base</th><th class="tn">SH meta</th>
-              <th class="tn">N+R base</th><th class="tn">N+R meta</th>
+              <th class="tn">% AD</th><th class="tn">AD meta</th>
+              <th class="tn">% SH</th><th class="tn">SH meta</th>
+              <th class="tn">% N+R</th><th class="tn">N+R meta</th>
             </tr>
           </thead>
           <tbody>${rowsHtml || `<tr><td colspan="8" style="text-align:center;color:#aaa;padding:20px">Sin datos.</td></tr>`}</tbody>
+          <tfoot style="font-weight:700;background:#f9f9f9">
+            <tr>
+              <td colspan="2">Suma distribuida</td>
+              <td></td><td class="tn">${fmt(sumAD)}</td>
+              <td></td><td class="tn">${fmt(sumSH)}</td>
+              <td></td><td class="tn">${fmt(sumNR)}</td>
+            </tr>
+            <tr>
+              <td colspan="2" style="color:#666;font-weight:600">Meta KAM · cuadre</td>
+              <td></td><td class="tn">${_calcCuadre(sumAD, +g.ad || 0)}</td>
+              <td></td><td class="tn">${_calcCuadre(sumSH, +g.sh || 0)}</td>
+              <td></td><td class="tn">${_calcCuadre(sumNR, +g.nr || 0)}</td>
+            </tr>
+          </tfoot>
         </table>
       </div>
       <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
         <button id="calcApplyBtn" style="padding:7px 14px;font-size:.78rem;background:#10b981;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer" onclick="calcApplyChanges()">✓ Aplicar cambios</button>
         <button style="padding:7px 14px;font-size:.78rem;background:#666;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer" onclick="calcResetEdits()">↺ Reset ediciones</button>
-        <button style="padding:7px 14px;font-size:.78rem;background:#FF0000;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer" onclick="calcExportExcel()">📥 Exportar Excel para subir</button>
+        <button style="padding:7px 14px;font-size:.78rem;background:#FF0000;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer" onclick="calcExportExcel()">📥 Descargar metas (CSV)</button>
       </div>
       <div style="font-size:.7rem;color:#888;margin-top:6px;font-style:italic">
-        💡 Editá los valores libremente — los cambios se guardan al salir de cada celda. Presioná <strong>"Aplicar cambios"</strong> para refrescar la sección de validación KAM y la vista exportable.
+        💡 Edita los valores libremente; al salir de cada celda se guardan. Presiona <strong>"Aplicar cambios"</strong> para refrescar el cuadre y la vista compartible.
       </div>
     </div>`;
 }
 
-// ── SECCION 4: Validación contra meta KAM ─────────────────────────────────────
-function _calcSec4_validacionKAM(agg, months) {
-  if (CALC_STATE.kam === "all") {
-    return `
-      ${_secH("🎯", "#FF0000", "4. Validación contra meta KAM", "Selecciona un KAM arriba para validar contra sus metas")}
-      <div class="section"><div style="font-size:.78rem;color:#aaa;padding:8px 0">⚠️ Filtra por un KAM específico arriba para usar esta sección.</div></div>`;
-  }
-  const m = CALC_STATE.multiplier || 1.1;
+// Compara la suma distribuida vs la meta KAM y devuelve el cuadre coloreado.
+function _calcCuadre(sum, target) {
+  if (!target) return `<span style="color:#aaa">sin meta</span>`;
+  const gap = sum - target;
+  const ok = Math.abs(gap) <= Math.max(1, target * 0.005);
+  const c = ok ? "#10b981" : (gap > 0 ? "#f59e0b" : "#FF0000");
+  const tag = ok ? "✓ cuadra" : (gap > 0 ? `+${fmt(gap)}` : `${fmt(gap)}`);
+  return `<div style="font-size:.7rem;line-height:1.3">${fmt(target)}<br><span style="color:${c};font-weight:800">${tag}</span></div>`;
+}
 
-  // Suma de las metas propuestas (usa edits o base * m)
-  let sumAD = 0, sumSH = 0, sumNR = 0;
-  for (const e of agg.values()) {
-    const nrBase = e.np + e.ns + e.re;
-    const adGoal = CALC_STATE.edits[`${e.partner}|||${e.city}|||ad`] ?? Math.round(e.ad * m);
-    const shGoal = CALC_STATE.edits[`${e.partner}|||${e.city}|||sh`] ?? Math.round(e.sh * m);
-    const nrGoal = CALC_STATE.edits[`${e.partner}|||${e.city}|||nr`] ?? Math.round(nrBase * m);
-    sumAD += (+adGoal || 0);
-    sumSH += (+shGoal || 0);
-    sumNR += (+nrGoal || 0);
-  }
-
+// ── SECCION 5: Vista compartible / descarga por partner ───────────────────────
+function _calcSec5_exportPartner(agg, totals) {
   const g = CALC_STATE.kamGoals;
-  function _row(label, weight, sumPartners, target) {
-    const cubre = target > 0 ? (sumPartners / target) * 100 : 0;
-    const status = target === 0 ? { c: "#aaa", e: "—", t: "Sin meta" }
-                 : cubre >= 100  ? { c: "#10b981", e: "✅", t: "Cubre" }
-                 : cubre >= 95   ? { c: "#f59e0b", e: "⚠️", t: "Ajustado" }
-                 : { c: "#FF0000", e: "🔴", t: "Insuficiente" };
-    const gap = target - sumPartners;
-    return `
-      <tr>
-        <td style="font-weight:600">${escapeHTML(label)}</td>
-        <td class="tn">${weight}%</td>
-        <td class="tn">${fmt(target)}</td>
-        <td class="tn">${fmt(sumPartners)}</td>
-        <td class="tn"><strong style="color:${status.c}">${cubre.toFixed(1)}%</strong></td>
-        <td class="tn" style="color:${status.c};font-weight:700">${gap >= 0 ? "+" : ""}${fmt(gap)}</td>
-        <td><span style="color:${status.c};font-weight:700">${status.e} ${status.t}</span></td>
-      </tr>`;
-  }
-
-  return `
-    ${_secH("🎯", "#FF0000", "4. Validación contra meta KAM", `KAM: ${escapeHTML(CALC_STATE.kam)} · pesos formato Yango`)}
-    <div class="section">
-      <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px;margin-bottom:12px">
-        <div style="font-size:.78rem;font-weight:700;color:#92400e;margin-bottom:8px">📥 Ingresa tus metas KAM (las que te dio tu jefe):</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px">
-          ${_kamGoalInput("ad",        "Active Drivers",     KAM_WEIGHTS.ad,        g.ad)}
-          ${_kamGoalInput("sh",        "Supply Hours",       KAM_WEIGHTS.sh,        g.sh)}
-          ${_kamGoalInput("nr",        "New + Reactivated",  KAM_WEIGHTS.nr,        g.nr)}
-          ${_kamGoalInput("otherProj", "Other Projects (%)", KAM_WEIGHTS.otherProj, g.otherProj)}
-          ${_kamGoalInput("fleetA2",   "Fleet drivers A2 (%)", KAM_WEIGHTS.fleetA2, g.fleetA2)}
-        </div>
-      </div>
-
-      <div class="tbl-wrap">
-        <table class="dtbl">
-          <thead>
-            <tr>
-              <th>KPI</th><th class="tn">Peso</th><th class="tn">Meta KAM</th>
-              <th class="tn">Suma partners</th><th class="tn">% cubierto</th>
-              <th class="tn">Gap</th><th>Estado</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${_row("Active Drivers",    KAM_WEIGHTS.ad, sumAD, +g.ad || 0)}
-            ${_row("Supply Hours",      KAM_WEIGHTS.sh, sumSH, +g.sh || 0)}
-            ${_row("New + Reactivated", KAM_WEIGHTS.nr, sumNR, +g.nr || 0)}
-            <tr style="color:#aaa">
-              <td>Other Projects</td><td class="tn">${KAM_WEIGHTS.otherProj}%</td>
-              <td class="tn">${g.otherProj}%</td>
-              <td colspan="3" style="text-align:center;font-style:italic">No se calcula automáticamente</td>
-              <td>—</td>
-            </tr>
-            <tr style="color:#aaa">
-              <td>Fleet drivers A2</td><td class="tn">${KAM_WEIGHTS.fleetA2}%</td>
-              <td class="tn">${g.fleetA2}%</td>
-              <td colspan="3" style="text-align:center;font-style:italic">No se calcula automáticamente</td>
-              <td>—</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>`;
-}
-
-function _kamGoalInput(metric, label, weight, val) {
-  return `
-    <div>
-      <label style="font-size:.66rem;color:#666;font-weight:700;display:block;margin-bottom:3px">${escapeHTML(label)} <span style="color:#aaa">(${weight}%)</span></label>
-      <input type="number" step="1" min="0" value="${+val || 0}"
-        onchange="calcOnKamGoalChange('${metric}', this.value)"
-        class="sb-inp" style="width:100%;padding:5px 8px;font-size:.78rem"/>
-    </div>`;
-}
-
-// ── SECCION 5: Vista exportable por partner ──────────────────────────────────
-function _calcSec5_exportPartner(agg, months) {
   const partners = [...new Set([...agg.values()].map(e => e.partner))].sort();
   if (!partners.length) {
     return `
-      ${_secH("📤", "#10b981", "5. Vista exportable por partner", "Sin partners en este filtro")}
-      <div class="section"><div style="font-size:.78rem;color:#aaa;padding:8px 0">No hay partners en el KAM seleccionado con datos en el último mes.</div></div>`;
+      ${_secH("📤", "#10b981", "5. Vista compartible por partner", "Sin partners en este filtro")}
+      <div class="section"><div style="font-size:.78rem;color:#aaa;padding:8px 0">No hay partners en el KAM seleccionado con datos en los últimos 3 meses.</div></div>`;
   }
-  // Bug #5: validar que selPartnerExport esté en partners filtrados.
-  // Si el partner antiguo no existe en el nuevo KAM, fallback al primero.
   const sel = (CALC_STATE.selPartnerExport && partners.includes(CALC_STATE.selPartnerExport))
     ? CALC_STATE.selPartnerExport
     : partners[0];
   CALC_STATE.selPartnerExport = sel;
 
   const partnerItems = [...agg.values()].filter(e => e.partner === sel);
-  const m = CALC_STATE.multiplier || 1.1;
-
   const cityRows = partnerItems.map(e => {
-    const nrBase = e.np + e.ns + e.re;
-    const adGoal = CALC_STATE.edits[`${e.partner}|||${e.city}|||ad`] ?? Math.round(e.ad * m);
-    const shGoal = CALC_STATE.edits[`${e.partner}|||${e.city}|||sh`] ?? Math.round(e.sh * m);
-    const nrGoal = CALC_STATE.edits[`${e.partner}|||${e.city}|||nr`] ?? Math.round(nrBase * m);
+    const nr = e.np + e.ns + e.re;
+    const adGoal = _calcGoalFor(e.partner, e.city, "ad", (+g.ad || 0) * _calcShare(e.ad, totals.ad));
+    const shGoal = _calcGoalFor(e.partner, e.city, "sh", (+g.sh || 0) * _calcShare(e.sh, totals.sh));
+    const nrGoal = _calcGoalFor(e.partner, e.city, "nr", (+g.nr || 0) * _calcShare(nr,  totals.nr));
     return `
       <tr>
         <td style="font-weight:600">${escapeHTML(e.city)}</td>
@@ -499,7 +431,7 @@ function _calcSec5_exportPartner(agg, months) {
   }).join("");
 
   return `
-    ${_secH("📤", "#10b981", "5. Vista exportable por partner", "Tarjeta compartible (sin mezclar otros partners)")}
+    ${_secH("📤", "#10b981", "5. Vista compartible por partner", "Tarjeta compartible (sin mezclar otros partners)")}
     <div class="section">
       <div style="display:flex;gap:10px;align-items:end;margin-bottom:10px;flex-wrap:wrap">
         <div style="position:relative">
@@ -512,7 +444,7 @@ function _calcSec5_exportPartner(agg, months) {
             onkeydown="calcExportKeydown(event)"/>
           <div id="calcExportList" style="display:none;position:absolute;top:100%;left:0;width:240px;max-height:280px;overflow-y:auto;background:#fff;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:100;margin-top:2px"></div>
         </div>
-        <button style="padding:7px 14px;font-size:.78rem;background:#10b981;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer" onclick="calcDownloadPartnerImage()">📥 Descargar Imagen/PDF</button>
+        <button style="padding:7px 14px;font-size:.78rem;background:#10b981;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer" onclick="calcDownloadPartnerImage()">📥 Descargar Imagen</button>
       </div>
 
       <div id="calcExportCard" style="background:linear-gradient(135deg,#fff 0%,#fff8f8 100%);border:2px solid #FF0000;border-radius:12px;padding:20px;max-width:560px">
@@ -546,23 +478,13 @@ function _calcSec5_exportPartner(agg, months) {
 // ── INTERACCIONES ─────────────────────────────────────────────────────────────
 function calcOnKamChange(v) {
   CALC_STATE.kam = v;
-  // Reset selected partner for export
   CALC_STATE.selPartnerExport = null;
   renderCalculator();
 }
 
-function calcOnMultiplierChange(v) {
-  const n = parseFloat(v);
-  if (!isNaN(n) && n > 0) CALC_STATE.multiplier = n;
-  renderCalculator();
-}
-
 function _calcScheduleRerender() {
-  // Guard temprano: si ya no estamos en Calculadora, no encolar.
   if (STATE.curTab !== "calculator") return;
   clearTimeout(CALC_STATE._editDeb);
-  // Capturamos el token global. Si el usuario cambia de tab antes del disparo,
-  // el token cambiara y el render se aborta.
   const tokenAtSchedule = STATE._tabRenderId;
   CALC_STATE._editDeb = setTimeout(() => {
     CALC_STATE._editDeb = null;
@@ -587,29 +509,25 @@ function calcOnGoalEdit(input) {
   const k = `${partner}|||${city}|||${metric}`;
   if (isNaN(val)) delete CALC_STATE.edits[k];
   else CALC_STATE.edits[k] = val;
-  // NO re-renderizar aqui: causaba que el input perdiera focus al editar.
-  // El usuario hace todos los cambios libremente y luego presiona "Aplicar cambios"
-  // (boton en seccion 3 que llama calcApplyChanges()).
+  // No re-render aqui (perderia el focus). El usuario edita libre y luego "Aplicar".
   _calcMarkDirty();
 }
 
 function calcOnKamGoalChange(metric, val) {
   CALC_STATE.kamGoals[metric] = parseFloat(val) || 0;
-  // Idem: re-render solo bajo demanda con "Aplicar cambios".
+  // No re-render por keystroke: se aplica con "Distribuir metas" / "Aplicar cambios".
   _calcMarkDirty();
 }
 
 // Marca visualmente que hay cambios sin aplicar, sin re-renderizar.
 function _calcMarkDirty() {
-  const btn = document.getElementById("calcApplyBtn");
-  if (btn) {
-    btn.style.background = "#FF0000";
-    btn.textContent = "✓ Aplicar cambios (pendiente)";
-  }
+  const a = document.getElementById("calcApplyBtn");
+  if (a) { a.style.background = "#FF0000"; a.textContent = "✓ Aplicar cambios (pendiente)"; }
+  const d = document.getElementById("calcDistBtn");
+  if (d) d.textContent = "📊 Distribuir metas (pendiente)";
 }
 
-// Re-renderiza Calculadora con los edits acumulados. Llamado por el boton
-// "Aplicar cambios" en la seccion 3.
+// Re-renderiza con metas + edits aplicados. Lo llaman "Distribuir metas" y "Aplicar cambios".
 function calcApplyChanges() {
   renderCalculator();
 }
@@ -621,33 +539,31 @@ function calcOnExportPartnerChange(v) {
 
 function calcResetEdits() {
   if (!Object.keys(CALC_STATE.edits).length) return;
-  if (!confirm("¿Borrar todas las ediciones manuales y volver al multiplicador global?")) return;
+  if (!confirm("¿Borrar todas las ediciones manuales y volver a la distribución automática?")) return;
   CALC_STATE.edits = {};
   renderCalculator();
 }
 
 // ── EXPORTS ───────────────────────────────────────────────────────────────────
 function calcExportExcel() {
-  // Genera CSV con formato listo para subir como rendimiento_mensual (placeholder)
-  // o como metas. Por ahora exporta como CSV de metas en formato simple.
   const rows = _calcGetMensualData();
-  const last1 = _calcLastNMonths(rows, 1);
-  const monthsSet = new Set(last1);
-  const agg = _calcAggByPartnerCity(rows, monthsSet);
-  const m = CALC_STATE.multiplier || 1.1;
+  const last3 = _calcLastNMonths(rows, 3);
+  const last3Set = new Set(last3);
+  const filteredRows = CALC_STATE.kam === "all"
+    ? rows
+    : rows.filter(r => (r.kam || getKAMForPartner(r.partner)) === CALC_STATE.kam);
+  const agg = _calcAggByPartnerCity(filteredRows, last3Set);
+  const totals = _calcKamTotals(agg);
+  const g = CALC_STATE.kamGoals;
 
   const lines = ["CLID,PARTNER,CIUDAD,MES,ACTIVE_DRIVERS,SUPPLY_HOURS,N+R"];
-  const nextMonth = _calcNextMonth(last1[0]);
+  const nextMonth = _calcNextMonth(last3[last3.length - 1]);
 
   [...agg.values()].forEach(e => {
-    if (CALC_STATE.kam !== "all") {
-      const k = e.kam || getKAMForPartner(e.partner);
-      if (k !== CALC_STATE.kam) return;
-    }
-    const nrBase = e.np + e.ns + e.re;
-    const adGoal = CALC_STATE.edits[`${e.partner}|||${e.city}|||ad`] ?? Math.round(e.ad * m);
-    const shGoal = CALC_STATE.edits[`${e.partner}|||${e.city}|||sh`] ?? Math.round(e.sh * m);
-    const nrGoal = CALC_STATE.edits[`${e.partner}|||${e.city}|||nr`] ?? Math.round(nrBase * m);
+    const nr = e.np + e.ns + e.re;
+    const adGoal = _calcGoalFor(e.partner, e.city, "ad", (+g.ad || 0) * _calcShare(e.ad, totals.ad));
+    const shGoal = _calcGoalFor(e.partner, e.city, "sh", (+g.sh || 0) * _calcShare(e.sh, totals.sh));
+    const nrGoal = _calcGoalFor(e.partner, e.city, "nr", (+g.nr || 0) * _calcShare(nr,  totals.nr));
     const clid = e.clid || _calcLookupClid(e.partner, e.city);
     lines.push(`"${clid}","${e.partner}","${e.city}","${nextMonth}",${adGoal},${shGoal},${nrGoal}`);
   });
@@ -662,11 +578,10 @@ function calcExportExcel() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  showBanner(true, "Excel exportado · súbelo en Configuración → Metas");
+  showBanner(true, "Metas exportadas · súbelas en Configuración → Metas");
 }
 
 function _calcNextMonth(monthStr) {
-  // monthStr formato YYYY-MM. Retorna el mes siguiente.
   if (!monthStr || !/^\d{4}-\d{2}$/.test(monthStr)) return "2026-01";
   const [y, m] = monthStr.split("-").map(Number);
   const d = new Date(y, m, 1); // m sin -1 = mes siguiente
@@ -695,8 +610,7 @@ async function calcDownloadPartnerImage() {
   }
 }
 
-// ── COMBOBOX FLOTANTE PARA VISTA EXPORTABLE (Sec 5) ───────────────────────────
-// Mismo patron que pvFilterPartners: lista flotante para evitar perder focus.
+// ── COMBOBOX FLOTANTE PARA VISTA COMPARTIBLE (Sec 5) ──────────────────────────
 function calcFilterExportPartners(q) {
   calcShowExportList();
   _calcPaintExportList(q);
@@ -720,7 +634,6 @@ function calcHideExportList() {
 function _calcPaintExportList(q) {
   const list = document.getElementById("calcExportList");
   if (!list) return;
-  // Universo: partners disponibles en el filtro actual (mismo set que el render genera)
   const all = [...new Set([...(_calcCurrentAgg() || []).values()].map(e => e.partner))].sort();
   const lower = (q || "").toLowerCase().trim();
   const filtered = lower ? all.filter(p => p.toLowerCase().includes(lower)) : all;
@@ -731,8 +644,8 @@ function _calcPaintExportList(q) {
   list.innerHTML = filtered.slice(0, 100).map(p => {
     const c = STATE.partnerColors[p] || "#888";
     const sel = p === CALC_STATE.selPartnerExport;
-    return `<div class="pv-opt" onmousedown="calcSelectExportPartner('${p.replace(/'/g,"\\'")}')"
-      style="padding:7px 12px;font-size:.78rem;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid #f3f3f3;${sel?'background:#fff0f0;font-weight:700':''}">
+    return `<div class="pv-opt" onmousedown="calcSelectExportPartner('${p.replace(/'/g, "\\'")}')"
+      style="padding:7px 12px;font-size:.78rem;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid #f3f3f3;${sel ? 'background:#fff0f0;font-weight:700' : ''}">
       <span style="width:7px;height:7px;border-radius:50%;background:${c};flex-shrink:0"></span>
       <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(p)}</span>
     </div>`;
@@ -757,23 +670,14 @@ function calcExportKeydown(e) {
   }
 }
 
-// Helper para acceder al agregado actual (recomputa con los mismos filtros que el render).
-// renderCalculator() construye `agg` y lo pasa a las secciones; aqui replicamos esa logica.
+// Universo de partners para el combobox: agregado de los últimos 3 meses con el filtro KAM actual.
 function _calcCurrentAgg() {
-  if (!STATE.rawData || !STATE.rawData.length) return new Map();
-  // Reusa la logica de agrupacion sin re-renderizar
-  const months = STATE.allDates.slice(-1);
-  const lastDate = months[months.length - 1];
-  if (!lastDate) return new Map();
-  const monthRows = STATE._byDate?.get(lastDate) || STATE.rawData.filter(r => r.date === lastDate);
-  const agg = new Map();
-  monthRows.forEach(r => {
-    if (CALC_STATE.kam !== "all" && getKAMForPartner(r.partner) !== CALC_STATE.kam) return;
-    const k = `${r.partner}|||${r.city}`;
-    if (!agg.has(k)) agg.set(k, { partner:r.partner, city:r.city, ad:0, np:0, ns:0, re:0, sh:0 });
-    const e = agg.get(k);
-    e.ad += r.activeDrivers; e.np += r.newPartner; e.ns += r.newService;
-    e.re += r.reactivated;   e.sh += r.supplyHours;
-  });
-  return agg;
+  const rows = _calcGetMensualData();
+  if (!rows.length) return new Map();
+  const last3 = _calcLastNMonths(rows, 3);
+  const last3Set = new Set(last3);
+  const filteredRows = CALC_STATE.kam === "all"
+    ? rows
+    : rows.filter(r => (r.kam || getKAMForPartner(r.partner)) === CALC_STATE.kam);
+  return _calcAggByPartnerCity(filteredRows, last3Set);
 }
