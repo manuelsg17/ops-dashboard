@@ -683,7 +683,16 @@ async function loadConversionIfNeeded() {
         n10:           r.n10_success  == null ? null : +r.n10_success,
         n25:           r.n25_success  == null ? null : +r.n25_success,
         n50:           r.n50_success  == null ? null : +r.n50_success,
-        n100:          r.n100_success == null ? null : +r.n100_success
+        n100:          r.n100_success == null ? null : +r.n100_success,
+        // Adquisición por canal (conteos de nuevos drivers; 2da pestaña del Excel)
+        agencyScouts:    +r.agency_scouts    || 0,
+        organicPartner:  +r.organic_partner  || 0,
+        organicScouts:   +r.organic_scouts   || 0,
+        organicYango:    +r.organic_yango    || 0,
+        paidYango:       +r.paid_yango       || 0,
+        partnerScouts:   +r.partner_scouts   || 0,
+        referralPartner: +r.referral_partner || 0,
+        referralYango:   +r.referral_yango   || 0
       };
     });
     STATE._conversionLoaded = true;
@@ -830,29 +839,97 @@ async function uploadConversion(rows) {
   const cN25  = pickKey("n25 success");
   const cN50  = pickKey("n50 success");
   const cN100 = pickKey("n100 success");
+  // CLID/Partner por nombre normalizado: acepta "Clid", "CLID", "clid",
+  // "Partners", etc. (antes se exigia "CLID"/"clid" exacto y "Clid" no calzaba
+  // -> todas las filas se descartaban -> "no hay filas validas").
+  const cClid    = pickKey("clid");
+  const cPartner = pickKey("partners", "partner");
 
   const seen = new Map();
   rows.forEach(row => {
-    const clid    = _clidStr(row["CLID"] || row["clid"] || "");
+    const clid    = _clidStr((cClid ? row[cClid] : (row["CLID"] || row["clid"])) || "");
     if (!clid) return;
-    const partner = String(row["Partners"] || row["Partner"] || row["partner"] || "").trim();
+    const partner = String((cPartner ? row[cPartner] : (row["Partners"] || row["Partner"] || row["partner"])) || "").trim();
     const mes     = mesCol ? String(row[mesCol]).trim() : globalMes;
     if (!mes) return;
+    // Funnel a escala 0-100: si XLSX entrego la celda con formato % (fraccion,
+    // p.ej. 0.69), la lleva a 69; si ya viene 0-100 la deja. El display agrega "%".
+    const pctOf = col => { if (!col) return null; const v = toN(row[col]); return v <= 1.5 ? v * 100 : v; };
     seen.set(`${clid}|||${mes}`, {
       clid, partner, mes,
       active_drivers: cAD ? toN(row[cAD]) : 0,
       new_drivers:    cND ? toN(row[cND]) : 0,
-      first_order:    cFO   ? toN(row[cFO])   : null,
-      n5_success:     cN5   ? toN(row[cN5])   : null,
-      n10_success:    cN10  ? toN(row[cN10])  : null,
-      n25_success:    cN25  ? toN(row[cN25])  : null,
-      n50_success:    cN50  ? toN(row[cN50])  : null,
-      n100_success:   cN100 ? toN(row[cN100]) : null
+      first_order:    pctOf(cFO),
+      n5_success:     pctOf(cN5),
+      n10_success:    pctOf(cN10),
+      n25_success:    pctOf(cN25),
+      n50_success:    pctOf(cN50),
+      n100_success:   pctOf(cN100)
     });
   });
 
   const data = [...seen.values()];
-  if (!data.length) throw new Error("No se encontraron filas válidas (¿hay columna CLID y columnas de funnel?).");
+  if (!data.length) throw new Error(
+    `No se encontraron filas válidas. CLID detectado: ${cClid || "ninguno"}; ` +
+    `funnel first_order: ${cFO || "ninguno"}. Revisa que el Excel tenga una columna CLID ` +
+    `y las columnas del funnel (01 first_order, 02 n5_success, …).`);
+  for (let i = 0; i < data.length; i += 500) {
+    const { error } = await sb.from("conversion_pais")
+      .upsert(data.slice(i, i + 500), { onConflict: "clid,mes" });
+    if (error) throw error;
+  }
+  STATE._conversionLoaded = false; // forzar recarga
+}
+
+// ── UPLOAD ADQUISICION POR CANAL (2da pestaña del Excel de Conversion) ────────
+// Excel: CLID | MAIN PARTNER | Agency Scouts | Organic Partner | Organic Scouts |
+//        Organic Yango | Paid Yango | Partner Scouts | Referral Partner |
+//        Referral Yango | Suma total
+// Mismo grano que conversion_pais (clid, mes). Upsert por (clid, mes) actualizando
+// SOLO las columnas de canal (deja intactas las del funnel y viceversa).
+async function uploadChannels(rows) {
+  if (!rows || !rows.length) return;
+  const keys = Object.keys(rows[0]);
+  // mes: de header con fecha, columna MES, o el ultimo mes ya cargado (como conversion).
+  let globalMes = null;
+  for (const k of keys) {
+    const m2 = k.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+    const m1 = k.match(/\b(\d{2})\.(\d{4})\b/);
+    if (m2) { globalMes = `${m2[3]}-${m2[2]}`; break; }
+    if (m1) { globalMes = `${m1[2]}-${m1[1]}`; break; }
+  }
+  const mesCol = keys.find(k => /^(mes|month)$/i.test(k.trim()));
+  if (!globalMes && !mesCol) {
+    const all = (STATE.allDates || []).concat((STATE.rawDataMensual || []).map(r => r.date));
+    const months = all.map(d => String(d).slice(0, 7)).filter(Boolean).sort();
+    globalMes = months.length ? months[months.length - 1] : null;
+  }
+  const pickKey = (...needles) => keys.find(k => { const n = _txNorm(k); return needles.some(nd => n.includes(nd)); });
+  const cClid    = pickKey("clid");
+  const cPartner = pickKey("main partner", "partner");
+  const CH = {
+    agency_scouts:    pickKey("agency scouts"),
+    organic_partner:  pickKey("organic partner"),
+    organic_scouts:   pickKey("organic scouts"),
+    organic_yango:    pickKey("organic yango", "organic yang"),
+    paid_yango:       pickKey("paid yango", "paid yang"),
+    partner_scouts:   pickKey("partner scouts"),
+    referral_partner: pickKey("referral partner"),
+    referral_yango:   pickKey("referral yango", "referral yang")
+  };
+  const seen = new Map();
+  rows.forEach(row => {
+    const clid = _clidStr((cClid ? row[cClid] : (row["CLID"] || row["clid"])) || "");
+    if (!clid) return;
+    const partner = String((cPartner ? row[cPartner] : (row["MAIN PARTNER"] || row["Partner"] || "")) || "").trim();
+    const mes = mesCol ? String(row[mesCol]).trim() : globalMes;
+    if (!mes) return;
+    const rec = { clid, partner, mes };
+    for (const [col, key] of Object.entries(CH)) rec[col] = key ? toN(row[key]) : 0;
+    seen.set(`${clid}|||${mes}`, rec);
+  });
+  const data = [...seen.values()];
+  if (!data.length) return; // sin filas validas: no critico (la conversion ya cargo)
   for (let i = 0; i < data.length; i += 500) {
     const { error } = await sb.from("conversion_pais")
       .upsert(data.slice(i, i + 500), { onConflict: "clid,mes" });
@@ -921,6 +998,10 @@ async function handleFile(file, type) {
       } else if (type === "rendimiento" || type === "rendimientoDiario") {
         sheetName = wb.SheetNames[sheetNames.indexOf("RENDIMIENTO") >= 0
           ? sheetNames.indexOf("RENDIMIENTO") : 0];
+      } else if (type === "conversion") {
+        // La pestaña principal es la de Conversión (funnel); la de canal se lee aparte.
+        const ci = sheetNames.findIndex(s => /CONVERSI/.test(s));
+        sheetName = wb.SheetNames[ci >= 0 ? ci : 0];
       } else {
         sheetName = wb.SheetNames[sheetNames.indexOf("METAS") >= 0
           ? sheetNames.indexOf("METAS") : 0];
@@ -943,7 +1024,13 @@ async function handleFile(file, type) {
       else if (type === "rendimientoMensual") await uploadRendimientoMensual(json);
       else if (type === "rendimientoDiario") await uploadRendimientoDiario(json);
       else if (type === "flotas")            await uploadFlotas(json);
-      else if (type === "conversion")        await uploadConversion(json);
+      else if (type === "conversion") {
+        await uploadConversion(json);
+        // 2da pestaña opcional del mismo Excel: adquisición por canal.
+        const chIdx = sheetNames.findIndex(s => /ADQUIS|CHANNEL|CANAL/.test(s));
+        if (chIdx >= 0) await uploadChannels(
+          XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[chIdx]], { raw: useRaw, defval: "" }));
+      }
       else                                   await uploadMetas(json);
 
       await loadFromSupabase();

@@ -213,6 +213,20 @@ const PV_I18N = {
   convP25:        { es: "P25",             en: "P25" },
   convP50:        { es: "Mediana (P50)",   en: "Median (P50)" },
   convP75:        { es: "P75",             en: "P75" },
+  convCmpTitle:   { es: "Comparar contra", en: "Compare against" },
+  convTop5Btn:    { es: "Top 5",  en: "Top 5" },
+  convTop10Btn:   { es: "Top 10", en: "Top 10" },
+  convAvgTop:     { es: "Promedio Top {n}", en: "Top {n} average" },
+  convPeers:      { es: "Pares elegibles", en: "Eligible peers" },
+  convNoPartner:  { es: "Este partner no tiene datos de conversión en el período.",
+                    en: "This partner has no conversion data for the period." },
+  convPrivacyNote:{ es: "Solo se muestra tu desempeño frente al promedio del grupo; no se exponen datos de partners individuales.",
+                    en: "Only your performance vs the group average is shown; individual partners' data is not exposed." },
+  chanTitle:      { es: "Adquisición por canal", en: "Acquisition by channel" },
+  chanSub:        { es: "Nuevos drivers por canal · tú vs promedio del grupo",
+                    en: "New drivers by channel · you vs group average" },
+  chanToggleHint: { es: "Usa el botón Top 5 / Top 10 del Embudo de Conversión (arriba) para cambiar la comparación.",
+                    en: "Use the Top 5 / Top 10 button in the Conversion Funnel (above) to switch the comparison." },
 
   // ── Perú (General) + comparación cohortes ────────────────────────────────
   peruGeneral:    { es: "Perú (General)",  en: "Peru (Overall)" },
@@ -456,7 +470,7 @@ function renderPartnerView() {
       </div>
       <div class="section">${_pvScopeBlock(null, "peru")}</div>
       ${_pvConversionSection(partner)}
-      ${_pvChannelPlaceholder()}
+      ${_pvChannelSection(partner)}
 
       <!-- Detalle por provincia (mismos KPIs + misma comparación) -->
       ${_secH("🏙️", "#06b6d4", _t("cityDetail"), `${citiesOf.length} ${citiesOf.length>1?_t("cityCountPlural"):_t("cityCount")} · ${periodLabel}`)}
@@ -485,6 +499,8 @@ function renderPartnerView() {
   setTimeout(() => {
     if (renderId !== PARTNER_VIEW_STATE._renderId) return;
     PARTNER_VIEW_STATE._rebuildScopes();
+    _pvConvMountChart(partner);
+    _pvChannelMountChart(partner);
   }, 100);
 }
 
@@ -962,6 +978,12 @@ function _pvSimpleLine(elId, labels, series, colors, formatter) {
   // (styles.css .pv-chart .apexcharts-datalabel-background) apliquen.
   el.classList.add("pv-chart");
   const fmtFn = formatter || (v => fmt(v));
+  // Headroom + padding para que los dataLabels (pico y extremos) no se corten.
+  const _vals = series.flatMap(s => (s.data || []).filter(v => v != null && !isNaN(v)));
+  const _mx = _vals.length ? Math.max(..._vals) : 0;
+  const _mn = _vals.length ? Math.min(..._vals) : 0;
+  const yAxis = { labels: { formatter: v => fmtFn(v), style: { fontSize: "10px" } } };
+  if (_mx > 0) { yAxis.max = _mx * 1.15; yAxis.min = Math.max(0, _mn * 0.94); yAxis.forceNiceScale = true; }
   const ch = new ApexCharts(el, {
     series,
     chart: { type: "line", height: 180, toolbar: { show: false }, animations: { enabled: false }, fontFamily: "inherit" },
@@ -979,8 +1001,8 @@ function _pvSimpleLine(elId, labels, series, colors, formatter) {
       offsetY: -10
     },
     xaxis: { categories: labels, labels: { style: { fontSize: "9px" }, rotate: -30 }, axisBorder: { show: false }, axisTicks: { show: false } },
-    yaxis: { labels: { formatter: v => fmtFn(v), style: { fontSize: "10px" } } },
-    grid: { borderColor: "#f0f0f0", strokeDashArray: 4 },
+    yaxis: yAxis,
+    grid: { borderColor: "#f0f0f0", strokeDashArray: 4, padding: { top: 16, right: 22, left: 12, bottom: 0 } },
     tooltip: { y: { formatter: v => fmt(v) } },
     legend: { show: false }
   });
@@ -992,6 +1014,11 @@ function _pvStackedColumn(elId, labels, series, colors) {
   const el = document.getElementById(elId);
   if (!el || typeof ApexCharts === "undefined") return;
   el.classList.add("pv-chart");
+  // Headroom sobre el total de la barra mas alta para que su etiqueta no se corte.
+  const _totals = labels.map((_, i) => series.reduce((s, ser) => s + (ser.data[i] || 0), 0));
+  const _bmax = Math.max(0, ..._totals);
+  const yAxis = { labels: { formatter: v => fmt(v), style: { fontSize: "10px" } } };
+  if (_bmax > 0) { yAxis.max = _bmax * 1.18; yAxis.forceNiceScale = true; }
   const ch = new ApexCharts(el, {
     series,
     chart: { type: "bar", height: 200, stacked: true, toolbar: { show: false }, animations: { enabled: false }, fontFamily: "inherit" },
@@ -1028,8 +1055,8 @@ function _pvStackedColumn(elId, labels, series, colors) {
       dropShadow: { enabled: true, top: 1, left: 1, blur: 1, opacity: .45 }
     },
     xaxis: { categories: labels, labels: { style: { fontSize: "9px" }, rotate: -30 } },
-    yaxis: { labels: { formatter: v => fmt(v), style: { fontSize: "10px" } } },
-    grid: { borderColor: "#f0f0f0", strokeDashArray: 4 },
+    yaxis: yAxis,
+    grid: { borderColor: "#f0f0f0", strokeDashArray: 4, padding: { top: 16, right: 14, left: 12, bottom: 0 } },
     tooltip: { y: { formatter: v => fmt(v) } },
     legend: { position: "bottom", fontSize: "10px", itemMargin: { horizontal: 6 } }
   });
@@ -1043,6 +1070,8 @@ function _pvDualLine(elId, labels, series, colors) {
   el.classList.add("pv-chart");
   // Ambas series usan fmtSmart (Viajes y Comision suelen ser numeros grandes).
   // seriesIndex 0 = Viajes (sin $), seriesIndex 1 = Comision (con $).
+  const _dl = arr => { const v = (arr || []).filter(x => x != null && !isNaN(x)); return { mx: v.length ? Math.max(...v) : 0, mn: v.length ? Math.min(...v) : 0 }; };
+  const _a0 = _dl(series[0] && series[0].data), _a1 = _dl(series[1] && series[1].data);
   const ch = new ApexCharts(el, {
     series,
     chart: { type: "line", height: 180, toolbar: { show: false }, animations: { enabled: false }, fontFamily: "inherit" },
@@ -1060,11 +1089,13 @@ function _pvDualLine(elId, labels, series, colors) {
     xaxis: { categories: labels, labels: { style: { fontSize: "9px" }, rotate: -30 } },
     yaxis: [
       { seriesName: (series[0] && series[0].name) || "Viajes",
+        ...(_a0.mx > 0 ? { max: _a0.mx * 1.15, min: Math.max(0, _a0.mn * 0.9), forceNiceScale: true } : {}),
         labels: { formatter: v => fmtSmart(v), style: { fontSize: "10px" } } },
       { opposite: true, seriesName: (series[1] && series[1].name) || "Comisión",
+        ...(_a1.mx > 0 ? { max: _a1.mx * 1.15, min: Math.max(0, _a1.mn * 0.9), forceNiceScale: true } : {}),
         labels: { formatter: v => "$" + fmtSmart(v), style: { fontSize: "10px" } } }
     ],
-    grid: { borderColor: "#f0f0f0", strokeDashArray: 4 },
+    grid: { borderColor: "#f0f0f0", strokeDashArray: 4, padding: { top: 16, right: 18, left: 12, bottom: 0 } },
     tooltip: { y: { formatter: (v, { seriesIndex }) => seriesIndex === 1 ? "$" + fmtSmart(v) : fmtSmart(v) } },
     legend: { position: "bottom", fontSize: "10px" }
   });
@@ -1217,7 +1248,7 @@ function _pvConvColor(v, p25, p50, p75) {
   return "#fee2e2";
 }
 
-// Relee los filtros del benchmark y re-renderiza.
+// Relee los filtros de pares elegibles y re-renderiza SOLO la sección de conversión.
 function pvConvFilter() {
   const adMin = +document.getElementById("pvConvAdMin")?.value;
   const adMax = +document.getElementById("pvConvAdMax")?.value;
@@ -1227,83 +1258,148 @@ function pvConvFilter() {
     adMax: isNaN(adMax) ? 999999 : adMax,
     ndMin: isNaN(ndMin) ? 0 : ndMin
   };
-  renderPartnerView();
+  _pvConvRefresh();
 }
 
-// Benchmark de conversion (top-10 nacional por Active Drivers, mes mas reciente).
-// Se muestra SOLO en la seccion Peru (General). Resalta los CLIDs del partner
-// seleccionado. Una fila por CLID (pivote), mas filas de percentil del set filtrado.
-function _pvConversionSection(selectedPartner) {
+// Alterna el cohorte de comparación (Top 5 / Top 10) sin re-render completo.
+function pvConvCohort(which) {
+  PARTNER_VIEW_STATE.convCohort = which === "top5" ? "top5" : "top10";
+  _pvConvRefresh();
+}
+
+// Reconstruye conversión Y adquisición por canal (comparten el toggle Top5/Top10
+// y los filtros) + re-monta ambos gráficos. Mantiene los dos charts en sincronía.
+function _pvConvRefresh() {
+  const p = PARTNER_VIEW_STATE.partner;
+  const box = document.getElementById("pvConvBox");
+  const chBox = document.getElementById("pvChannelBox");
+  if (box) { box.innerHTML = _pvConvInner(p); _pvConvMountChart(p); }
+  if (chBox) { chBox.innerHTML = _pvChannelInner(p); _pvChannelMountChart(p); }
+  if (!box && !chBox) renderPartnerView();
+}
+
+// Embudo de conversión: SOLO el partner seleccionado vs el PROMEDIO del cohorte
+// (Top 5 / Top 10 por Active Drivers). NO expone la conversión de partners
+// individuales — pensado para presentárselo al propio partner.
+function _pvConvData(selectedPartner) {
   const data = STATE.conversionData || [];
-  const cols = [
-    { key: "firstOrder", t: "convFirstOrder" },
-    { key: "n5",  t: "convN5" },  { key: "n10", t: "convN10" }, { key: "n25", t: "convN25" },
-    { key: "n50", t: "convN50" }, { key: "n100", t: "convN100" }
-  ];
-  if (!data.length) {
+  const months = [...new Set(data.map(r => r.mes))].sort();
+  const latest = months[months.length - 1];
+  // Default amplio: el cohorte = verdaderos Top 5/10 por Active Drivers (sin
+  // recortar a los mas grandes). El usuario puede angostar el rango si quiere
+  // comparar contra pares de tamaño similar. ndMin filtra ruido de flotas chicas.
+  const F = PARTNER_VIEW_STATE.convFilter || (PARTNER_VIEW_STATE.convFilter = { adMin: 0, adMax: 999999, ndMin: 50 });
+  const cur = data.filter(r => r.mes === latest);
+  // Pares elegibles para el ranking (filtros AD/ND), ordenados por Active Drivers.
+  const pop = cur
+    .filter(r => (r.activeDrivers || 0) >= F.adMin && (r.activeDrivers || 0) <= F.adMax && (r.newDrivers || 0) >= F.ndMin)
+    .slice().sort((a, b) => (b.activeDrivers || 0) - (a.activeDrivers || 0));
+  const cols = ["firstOrder", "n5", "n10", "n25", "n50", "n100"];
+  const avgOf = (rows, k) => { const v = rows.map(r => r[k]).filter(x => x != null && !isNaN(x)); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
+  const cohortAvg = rows => { const o = {}; cols.forEach(k => o[k] = avgOf(rows, k)); return o; };
+  const top5  = cohortAvg(pop.slice(0, 5));
+  const top10 = cohortAvg(pop.slice(0, 10));
+  // Partner: promedio ponderado por New Drivers entre sus CLIDs (mes actual).
+  const pRows = cur.filter(r => r.partner === selectedPartner);
+  const partnerVals = {};
+  cols.forEach(k => {
+    let num = 0, den = 0, ss = 0, sn = 0;
+    pRows.forEach(r => { const v = r[k]; if (v != null && !isNaN(v)) { const w = r.newDrivers || 0; num += v * w; den += w; ss += v; sn++; } });
+    partnerVals[k] = den > 0 ? num / den : (sn > 0 ? ss / sn : null);
+  });
+  return { latest, F, cols, top5, top10, partnerVals, hasPartner: pRows.length > 0, nPop: pop.length };
+}
+
+function _pvConversionSection(selectedPartner) {
+  if (!(STATE.conversionData || []).length) {
     const msg = PARTNER_VIEW_STATE.lang === "en"
       ? "Upload the Conversion (country) Excel to populate this benchmark."
       : "Sube el Excel de Conversión (país) para poblar este benchmark.";
     return `${_secH("🎯", "#8b5cf6", _t("convTitle"), _t("convSub"))}
       <div class="section"><div style="font-size:.8rem;color:#aaa;padding:6px">${msg}</div></div>`;
   }
+  return `${_secH("🎯", "#8b5cf6", _t("convTitle"), _t("convSub"))}
+    <div class="section"><div id="pvConvBox">${_pvConvInner(selectedPartner)}</div></div>`;
+}
 
-  const months = [...new Set(data.map(r => r.mes))].sort();
-  const latest = months[months.length - 1];
-  const cur = data.filter(r => r.mes === latest).slice().sort((a, b) => (b.activeDrivers || 0) - (a.activeDrivers || 0));
-  const top10 = cur.slice(0, 10);
-
-  // Benchmark percentil sobre el set filtrado (defaults como el Excel: AD 0–6000, ND ≥ 50).
-  const F = PARTNER_VIEW_STATE.convFilter || (PARTNER_VIEW_STATE.convFilter = { adMin: 0, adMax: 6000, ndMin: 50 });
-  const pop = cur.filter(r => (r.activeDrivers || 0) >= F.adMin && (r.activeDrivers || 0) <= F.adMax && (r.newDrivers || 0) >= F.ndMin);
-  const pcts = {};
-  cols.forEach(c => { const vals = pop.map(r => r[c.key]); pcts[c.key] = { p25: _pvPercentile(vals, .25), p50: _pvPercentile(vals, .50), p75: _pvPercentile(vals, .75) }; });
-  const fpct = v => (v === null || v === undefined) ? "—" : (+v).toFixed(1) + "%";
-
-  const th = (s, left) => `<th style="text-align:${left ? "left" : "right"};padding:6px 8px;border-bottom:2px solid #eee;font-size:.7rem;background:#fafafa">${escapeHTML(s)}</th>`;
-  const headerRow = `<tr>${th("#", true)}${th(_t("partner"), true)}${th(_t("convClid"), true)}${th(_t("convAD"))}${th(_t("convND"))}${cols.map(c => th(_t(c.t))).join("")}</tr>`;
-
-  const dataRows = top10.map((r, i) => {
-    const sel = r.partner === selectedPartner;
-    const funnel = cols.map(c => {
-      const v = r[c.key], p = pcts[c.key];
-      return `<td style="text-align:right;padding:5px 8px;border-bottom:1px solid #f3f3f3;background:${_pvConvColor(v, p.p25, p.p50, p.p75)};font-weight:700">${fpct(v)}</td>`;
-    }).join("");
-    return `<tr style="${sel ? "background:#faf5ff;box-shadow:inset 3px 0 0 #8b5cf6" : ""}">
-      <td style="padding:5px 8px;border-bottom:1px solid #f3f3f3;color:#aaa;font-size:.72rem">${i + 1}</td>
-      <td style="padding:5px 8px;border-bottom:1px solid #f3f3f3;font-weight:${sel ? "800" : "600"};color:${sel ? "#6b21a8" : "#333"}">${escapeHTML(r.partner || "")}</td>
-      <td style="padding:5px 8px;border-bottom:1px solid #f3f3f3;font-family:monospace;font-size:.7rem;color:#999">${escapeHTML(r.clid)}</td>
-      <td style="text-align:right;padding:5px 8px;border-bottom:1px solid #f3f3f3">${fmt(r.activeDrivers)}</td>
-      <td style="text-align:right;padding:5px 8px;border-bottom:1px solid #f3f3f3">${fmt(r.newDrivers)}</td>
-      ${funnel}
-    </tr>`;
-  }).join("");
-
-  const benchRow = (label, key) => `<tr style="background:#f9fafb">
-    <td></td><td style="padding:4px 8px;font-size:.72rem;color:#666;font-style:italic">${escapeHTML(label)}</td><td></td><td></td><td></td>
-    ${cols.map(c => `<td style="text-align:right;padding:4px 8px;font-size:.72rem;color:#888;font-style:italic">${fpct(pcts[c.key][key])}</td>`).join("")}
-  </tr>`;
+// Cuerpo de la sección: filtros + toggle Top5/Top10 + gráfico de barras + tabla
+// (solo partner y promedios de cohorte). Re-render aislado vía _pvConvRefresh.
+function _pvConvInner(selectedPartner) {
+  const d = _pvConvData(selectedPartner);
+  const which = PARTNER_VIEW_STATE.convCohort === "top5" ? "top5" : "top10";
+  const F = d.F;
+  const fpct = v => (v == null || isNaN(v)) ? "—" : (+v).toFixed(1) + "%";
+  const tkey = { firstOrder: "convFirstOrder", n5: "convN5", n10: "convN10", n25: "convN25", n50: "convN50", n100: "convN100" };
+  const th = (s, left) => `<th style="text-align:${left ? "left" : "right"};padding:6px 8px;border-bottom:2px solid #eee;font-size:.7rem;background:#fafafa;white-space:nowrap">${escapeHTML(s)}</th>`;
+  const rowHtml = (label, vals, color, hl) => `<tr style="${hl ? "background:#fff5f5" : ""}">
+      <td style="padding:6px 8px;border-bottom:1px solid #f3f3f3;font-weight:${hl ? 800 : 600};color:${color};white-space:nowrap">
+        <span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${color};margin-right:6px"></span>${escapeHTML(label)}</td>
+      ${d.cols.map(c => `<td style="text-align:right;padding:6px 8px;border-bottom:1px solid #f3f3f3;font-weight:${hl ? 800 : 600}">${fpct(vals[c])}</td>`).join("")}</tr>`;
+  const toggleBtn = (key, label) => `<button onclick="pvConvCohort('${key}')" class="preset-btn${which === key ? " active" : ""}" style="${which === key ? "background:#3b82f6;color:#fff;border-color:#3b82f6" : ""}">${escapeHTML(label)}</button>`;
 
   return `
-    ${_secH("🎯", "#8b5cf6", _t("convTitle"), `${_t("convSub")} · top 10`)}
-    <div class="section">
-      <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:10px">
-        <div><label style="font-size:.66rem;color:#666;font-weight:700;display:block;margin-bottom:3px">${_t("convADRange")}</label>
-          <div style="display:flex;gap:4px">
-            <input id="pvConvAdMin" class="crud-input" type="number" value="${F.adMin}" style="width:80px" onchange="pvConvFilter()"/>
-            <input id="pvConvAdMax" class="crud-input" type="number" value="${F.adMax}" style="width:90px" onchange="pvConvFilter()"/>
-          </div></div>
-        <div><label style="font-size:.66rem;color:#666;font-weight:700;display:block;margin-bottom:3px">${_t("convNDMin")}</label>
-          <input id="pvConvNdMin" class="crud-input" type="number" value="${F.ndMin}" style="width:90px" onchange="pvConvFilter()"/></div>
-        <span style="font-size:.72rem;color:#aaa">${_t("convBenchmark")} · n=${pop.length}</span>
-      </div>
-      <div style="overflow-x:auto">
-        <table style="width:100%;border-collapse:collapse;font-size:.78rem">
-          <thead>${headerRow}</thead>
-          <tbody>${dataRows}${benchRow(_t("convP75"), "p75")}${benchRow(_t("convP50"), "p50")}${benchRow(_t("convP25"), "p25")}</tbody>
-        </table>
-      </div>
-    </div>`;
+    <div style="display:flex;gap:14px;align-items:end;flex-wrap:wrap;margin-bottom:10px">
+      <div><label style="font-size:.66rem;color:#666;font-weight:700;display:block;margin-bottom:3px">${_t("convADRange")}</label>
+        <div style="display:flex;gap:4px">
+          <input id="pvConvAdMin" class="crud-input" type="number" value="${F.adMin}" style="width:80px" onchange="pvConvFilter()"/>
+          <input id="pvConvAdMax" class="crud-input" type="number" value="${F.adMax}" style="width:90px" onchange="pvConvFilter()"/>
+        </div></div>
+      <div><label style="font-size:.66rem;color:#666;font-weight:700;display:block;margin-bottom:3px">${_t("convNDMin")}</label>
+        <input id="pvConvNdMin" class="crud-input" type="number" value="${F.ndMin}" style="width:90px" onchange="pvConvFilter()"/></div>
+      <div><label style="font-size:.66rem;color:#666;font-weight:700;display:block;margin-bottom:3px">${_t("convCmpTitle")}</label>
+        <div style="display:flex;gap:6px">${toggleBtn("top5", _t("convTop5Btn"))}${toggleBtn("top10", _t("convTop10Btn"))}</div></div>
+      <span style="font-size:.72rem;color:#aaa">${_t("convPeers")}: n=${d.nPop}</span>
+    </div>
+    ${d.hasPartner ? "" : `<div style="font-size:.76rem;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:6px 10px;margin-bottom:8px">${_t("convNoPartner")}</div>`}
+    <div id="pvConvChart" style="min-height:280px"></div>
+    <div style="overflow-x:auto;margin-top:6px">
+      <table style="width:100%;border-collapse:collapse;font-size:.78rem">
+        <thead><tr>${th("", true)}${d.cols.map(c => th(_t(tkey[c]))).join("")}</tr></thead>
+        <tbody>
+          ${rowHtml(selectedPartner, d.partnerVals, "#ef4444", true)}
+          ${rowHtml(_t("convAvgTop", { n: 5 }),  d.top5,  "#3b82f6", false)}
+          ${rowHtml(_t("convAvgTop", { n: 10 }), d.top10, "#1e40af", false)}
+        </tbody>
+      </table>
+    </div>
+    <div style="font-size:.7rem;color:#999;font-style:italic;margin-top:8px">${_t("convPrivacyNote")}</div>`;
+}
+
+// Gráfico de barras agrupadas: partner vs promedio del cohorte seleccionado.
+// Omite "1er viaje" (≈100% para todos). Misma técnica de headroom + padding.
+function _pvConvMountChart(selectedPartner) {
+  const el = document.getElementById("pvConvChart");
+  if (!el || typeof ApexCharts === "undefined") return;
+  el.classList.add("pv-chart");
+  const d = _pvConvData(selectedPartner);
+  const which = PARTNER_VIEW_STATE.convCohort === "top5" ? "top5" : "top10";
+  const cohort = which === "top5" ? d.top5 : d.top10;
+  const chartCols = ["n5", "n10", "n25", "n50", "n100"];
+  const tkey = { n5: "convN5", n10: "convN10", n25: "convN25", n50: "convN50", n100: "convN100" };
+  const r1 = v => (v == null || isNaN(v)) ? null : +(+v).toFixed(1);
+  const partnerData = chartCols.map(k => r1(d.partnerVals[k]));
+  const cohortData  = chartCols.map(k => r1(cohort[k]));
+  const cohortLabel = _t("convAvgTop", { n: which === "top5" ? 5 : 10 });
+  const allv = [...partnerData, ...cohortData].filter(v => v != null);
+  const ymax = allv.length ? Math.min(100, Math.ceil(Math.max(...allv) * 1.2)) : 100;
+  _pvMountChart("pvConvChart", el, {
+    series: [{ name: cohortLabel, data: cohortData }, { name: selectedPartner, data: partnerData }],
+    chart: { type: "bar", height: 280, toolbar: { show: false }, animations: { enabled: false }, fontFamily: "inherit" },
+    colors: ["#3b82f6", "#ef4444"],
+    plotOptions: { bar: { columnWidth: "62%", borderRadius: 3, dataLabels: { position: "top" } } },
+    dataLabels: {
+      enabled: true,
+      formatter: v => (v == null) ? "" : (+v).toFixed(1) + "%",
+      offsetY: -16,
+      style: { fontSize: "10px", colors: ["#1d4ed8", "#b91c1c"], fontWeight: 800 },
+      background: { enabled: false }
+    },
+    xaxis: { categories: chartCols.map(k => _t(tkey[k])), labels: { style: { fontSize: "10px" } }, axisBorder: { show: false }, axisTicks: { show: false } },
+    yaxis: { min: 0, max: ymax, forceNiceScale: true, labels: { formatter: v => (+v).toFixed(0) + "%", style: { fontSize: "10px" } } },
+    grid: { borderColor: "#f0f0f0", strokeDashArray: 4, padding: { top: 22, right: 16, left: 8, bottom: 0 } },
+    legend: { position: "top", fontSize: "11px", fontWeight: 700, markers: { radius: 3 } },
+    tooltip: { shared: true, intersect: false, y: { formatter: v => (v == null) ? "—" : (+v).toFixed(1) + "%" } }
+  });
 }
 
 // ── PERÚ (GENERAL) + COMPARACIÓN POR COHORTES ─────────────────────────────────
@@ -1408,15 +1504,24 @@ function _pvCmpLine(elId, labels, partnerSeries, cohortLines, color, fmtFn, mone
   const pref = money ? "$" : "";
   const series = [partnerSeries, ...cohortLines.map(l => ({ name: l.name, data: l.data }))];
   const colors = [color, ...cohortLines.map(l => l.color)];
+  // Headroom vertical: deja espacio sobre el pico para que su dataLabel no se
+  // corte contra el borde superior. Piso un poco bajo el minimo (sin aplanar).
+  const allVals = series.flatMap(s => (s.data || []).filter(v => v != null && !isNaN(v)));
+  const dMax = allVals.length ? Math.max(...allVals) : 0;
+  const dMin = allVals.length ? Math.min(...allVals) : 0;
+  const yAxis = { labels: { formatter: v => pref + fn(v), style: { fontSize: "10px" } } };
+  if (dMax > 0) { yAxis.max = dMax * 1.15; yAxis.min = Math.max(0, dMin * 0.94); yAxis.forceNiceScale = true; }
   _pvMountChart(elId, el, {
     series,
-    chart: { type: "line", height: 180, toolbar: { show: false }, animations: { enabled: false }, fontFamily: "inherit" },
+    chart: { type: "line", height: 210, toolbar: { show: false }, animations: { enabled: false }, fontFamily: "inherit" },
     stroke: { curve: "smooth", width: [2.5, ...cohortLines.map(() => 2)], dashArray: [0, ...cohortLines.map(() => 5)] },
     colors, markers: { size: 3 },
     dataLabels: { enabled: true, enabledOnSeries: [0], formatter: v => pref + fn(v), style: { fontSize: "10px", colors: ["#111"], fontWeight: 700 }, background: { enabled: false }, offsetY: -10 },
     xaxis: { categories: labels, labels: { style: { fontSize: "9px" }, rotate: -30 }, axisBorder: { show: false }, axisTicks: { show: false } },
-    yaxis: { labels: { formatter: v => pref + fn(v), style: { fontSize: "10px" } } },
-    grid: { borderColor: "#f0f0f0", strokeDashArray: 4 },
+    yaxis: yAxis,
+    // padding.left amplio: separa el primer dataLabel de los números del eje Y;
+    // padding.right: deja respirar el último punto. top: espacio para el pico.
+    grid: { borderColor: "#f0f0f0", strokeDashArray: 4, padding: { top: 18, right: 30, left: 26, bottom: 0 } },
     tooltip: { shared: true, y: { formatter: v => pref + fn(v) } },
     legend: { show: cohortLines.length > 0, position: "bottom", fontSize: "10px" }
   });
@@ -1438,6 +1543,13 @@ function _pvCmpNR(elId, labels, series, recibeLeads, cohortLines) {
   const lineSeries = cohortLines.map(l => ({ name: l.name, type: "line", data: l.data }));
   const lineColors = cohortLines.map(l => l.color);
   const hasLines = lineSeries.length > 0;
+  // Headroom: por encima de la barra apilada mas alta (o de la linea de cohorte
+  // mas alta) para que la etiqueta del total no se corte arriba.
+  const totals = labels.map((_, i) => colSeries.reduce((s, cs) => s + (cs.data[i] || 0), 0));
+  const lineVals = lineSeries.flatMap(l => (l.data || []).filter(v => v != null && !isNaN(v)));
+  const barMax = Math.max(0, ...totals, ...lineVals);
+  const yAxis = { labels: { formatter: v => fmt(v), style: { fontSize: "10px" } } };
+  if (barMax > 0) { yAxis.max = barMax * 1.18; yAxis.forceNiceScale = true; }
   _pvMountChart(elId, el, {
     series: [...colSeries, ...lineSeries],
     chart: { type: "line", height: 200, stacked: true, toolbar: { show: false }, animations: { enabled: false }, fontFamily: "inherit" },
@@ -1458,8 +1570,8 @@ function _pvCmpNR(elId, labels, series, recibeLeads, cohortLines) {
       dropShadow: { enabled: true, top: 1, left: 1, blur: 1, opacity: .45 }
     },
     xaxis: { categories: labels, labels: { style: { fontSize: "9px" }, rotate: -30 } },
-    yaxis: { labels: { formatter: v => fmt(v), style: { fontSize: "10px" } } },
-    grid: { borderColor: "#f0f0f0", strokeDashArray: 4 },
+    yaxis: yAxis,
+    grid: { borderColor: "#f0f0f0", strokeDashArray: 4, padding: { top: 16, right: 14, left: 12, bottom: 0 } },
     tooltip: { shared: true, y: { formatter: v => fmt(v) } },
     legend: { position: "bottom", fontSize: "10px", itemMargin: { horizontal: 6 } }
   });
@@ -1489,7 +1601,11 @@ function _pvNRTable(series, dates, recibeLeads) {
 // Bloque de un scope (Perú-General si scopeCity=null, o una provincia): 6 charts
 // (AD, SH, N+R, Trips, Commission, GMV) con comparación top-5/top-6-10.
 function _pvScopeBlock(scopeCity, idPrefix) {
-  const grid = "display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px";
+  // 2 columnas fijas: cada línea ocupa media fila (≈ el doble de ancho que con el
+  // auto-fit anterior, que dejaba 1-2 celdas vacías a la derecha). N+R y GMV a
+  // ancho completo → sin celdas vacías y con espacio para que las etiquetas no
+  // se enciman ni se corten contra el borde.
+  const grid = "display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px";
   const card = (id, label, span) => `<div class="chart-card" style="${span ? "grid-column:1/-1" : ""}">
     <div class="chart-head"><span class="chart-title">${escapeHTML(label)}</span></div>
     <div id="pvs_${idPrefix}_${id}"></div><div id="pvs_${idPrefix}_${id}_tbl"></div></div>`;
@@ -1499,7 +1615,7 @@ function _pvScopeBlock(scopeCity, idPrefix) {
     ${card("nr", _t("newReact"), true)}
     ${card("trips", _t("trips"))}
     ${card("commission", _t("commission"))}
-    ${card("gmv", "GMV")}
+    ${card("gmv", "GMV", true)}
   </div>`;
 }
 
@@ -1533,12 +1649,111 @@ function _pvBuildScopeCharts(partner, scopeCity, idPrefix, dates, recibeLeads) {
 }
 
 // Placeholder de canal de adquisición (formato de datos pendiente).
-function _pvChannelPlaceholder() {
-  const isEN = PARTNER_VIEW_STATE.lang === "en";
-  return `${_secH("🔌", "#64748b", isEN ? "New drivers by acquisition channel" : "Nuevos por canal de adquisición", isEN ? "pending data format" : "pendiente de formato")}
-    <div class="section">
-      <div style="border:1px dashed #d1d5db;border-radius:8px;padding:16px;background:#fafafa;color:#9ca3af;font-size:.8rem;text-align:center">
-        ${isEN ? "Scouts / referrals / organic — waiting for the data format to be defined." : "Scouts / referidos / orgánicos — esperando que definas el formato de datos para implementarlo."}
-      </div>
-    </div>`;
+// Canales de adquisición (orden de la pestaña del Excel). key = campo camelCase
+// en STATE.conversionData; label = nombre mostrado (igual ES/EN, son internos).
+const PV_CHANNELS = [
+  { key: "agencyScouts",    label: "Agency Scouts" },
+  { key: "organicPartner",  label: "Organic Partner" },
+  { key: "organicScouts",   label: "Organic Scouts" },
+  { key: "organicYango",    label: "Organic Yango" },
+  { key: "paidYango",       label: "Paid Yango" },
+  { key: "partnerScouts",   label: "Partner Scouts" },
+  { key: "referralPartner", label: "Referral Partner" },
+  { key: "referralYango",   label: "Referral Yango" }
+];
+
+// Conteos por canal: partner (suma de sus CLIDs) + promedio del cohorte Top 5/10
+// por Active Drivers. Mismos filtros y mes que la conversión.
+function _pvChannelData(selectedPartner) {
+  const data = STATE.conversionData || [];
+  const months = [...new Set(data.map(r => r.mes))].sort();
+  const latest = months[months.length - 1];
+  const F = PARTNER_VIEW_STATE.convFilter || { adMin: 0, adMax: 999999, ndMin: 50 };
+  const cur = data.filter(r => r.mes === latest);
+  const pop = cur
+    .filter(r => (r.activeDrivers || 0) >= F.adMin && (r.activeDrivers || 0) <= F.adMax && (r.newDrivers || 0) >= F.ndMin)
+    .slice().sort((a, b) => (b.activeDrivers || 0) - (a.activeDrivers || 0));
+  const chans = PV_CHANNELS.map(c => c.key);
+  const avgOf = (rows, k) => rows.length ? rows.reduce((s, r) => s + (r[k] || 0), 0) / rows.length : 0;
+  const cohortAvg = rows => { const o = {}; chans.forEach(k => o[k] = avgOf(rows, k)); return o; };
+  const top5  = cohortAvg(pop.slice(0, 5));
+  const top10 = cohortAvg(pop.slice(0, 10));
+  const pRows = cur.filter(r => r.partner === selectedPartner);
+  const partnerVals = {};
+  chans.forEach(k => partnerVals[k] = pRows.reduce((s, r) => s + (r[k] || 0), 0));
+  const anyData = cur.some(r => chans.some(k => (r[k] || 0) > 0));
+  const hasPartner = pRows.length > 0 && chans.some(k => partnerVals[k] > 0);
+  return { top5, top10, partnerVals, anyData, hasPartner, nPop: pop.length };
+}
+
+function _pvChannelSection(selectedPartner) {
+  const d = _pvChannelData(selectedPartner);
+  if (!(STATE.conversionData || []).length || !d.anyData) {
+    const msg = PARTNER_VIEW_STATE.lang === "en"
+      ? "Upload the 'Adquisition by channel' tab in the Conversion Excel to populate this."
+      : "Sube la pestaña 'Adquisition by channel' del Excel de Conversión para poblar esto.";
+    return `${_secH("🔌", "#64748b", _t("chanTitle"), _t("chanSub"))}
+      <div class="section"><div style="font-size:.8rem;color:#aaa;padding:6px">${msg}</div></div>`;
+  }
+  return `${_secH("🔌", "#64748b", _t("chanTitle"), _t("chanSub"))}
+    <div class="section"><div id="pvChannelBox">${_pvChannelInner(selectedPartner)}</div></div>`;
+}
+
+function _pvChannelInner(selectedPartner) {
+  const d = _pvChannelData(selectedPartner);
+  const fmtN = v => fmt(Math.round(v || 0));
+  const th = (s, left) => `<th style="text-align:${left ? "left" : "right"};padding:6px 8px;border-bottom:2px solid #eee;font-size:.66rem;background:#fafafa;white-space:nowrap">${escapeHTML(s)}</th>`;
+  const rowHtml = (label, vals, color, hl) => `<tr style="${hl ? "background:#fff5f5" : ""}">
+      <td style="padding:6px 8px;border-bottom:1px solid #f3f3f3;font-weight:${hl ? 800 : 600};color:${color};white-space:nowrap">
+        <span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${color};margin-right:6px"></span>${escapeHTML(label)}</td>
+      ${PV_CHANNELS.map(c => `<td style="text-align:right;padding:6px 8px;border-bottom:1px solid #f3f3f3;font-weight:${hl ? 800 : 600}">${fmtN(vals[c.key])}</td>`).join("")}</tr>`;
+  return `
+    <div style="font-size:.72rem;color:#888;margin-bottom:8px">${_t("chanToggleHint")}</div>
+    ${d.hasPartner ? "" : `<div style="font-size:.76rem;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:6px 10px;margin-bottom:8px">${_t("convNoPartner")}</div>`}
+    <div id="pvChannelChart" style="min-height:300px"></div>
+    <div style="overflow-x:auto;margin-top:6px">
+      <table style="width:100%;border-collapse:collapse;font-size:.74rem">
+        <thead><tr>${th("", true)}${PV_CHANNELS.map(c => th(c.label)).join("")}</tr></thead>
+        <tbody>
+          ${rowHtml(selectedPartner, d.partnerVals, "#ef4444", true)}
+          ${rowHtml(_t("convAvgTop", { n: 5 }),  d.top5,  "#3b82f6", false)}
+          ${rowHtml(_t("convAvgTop", { n: 10 }), d.top10, "#1e40af", false)}
+        </tbody>
+      </table>
+    </div>
+    <div style="font-size:.7rem;color:#999;font-style:italic;margin-top:8px">${_t("convPrivacyNote")}</div>`;
+}
+
+// Barras agrupadas por canal: partner vs promedio del cohorte (Top 5/10 según el
+// toggle compartido con la conversión). Conteos (no %). Headroom + padding.
+function _pvChannelMountChart(selectedPartner) {
+  const el = document.getElementById("pvChannelChart");
+  if (!el || typeof ApexCharts === "undefined") return;
+  el.classList.add("pv-chart");
+  const d = _pvChannelData(selectedPartner);
+  const which = PARTNER_VIEW_STATE.convCohort === "top5" ? "top5" : "top10";
+  const cohort = which === "top5" ? d.top5 : d.top10;
+  const r1 = v => +(+(v || 0)).toFixed(1);
+  const partnerData = PV_CHANNELS.map(c => r1(d.partnerVals[c.key]));
+  const cohortData  = PV_CHANNELS.map(c => r1(cohort[c.key]));
+  const cohortLabel = _t("convAvgTop", { n: which === "top5" ? 5 : 10 });
+  const ymax = Math.max(1, Math.ceil(Math.max(...partnerData, ...cohortData) * 1.18));
+  _pvMountChart("pvChannelChart", el, {
+    series: [{ name: cohortLabel, data: cohortData }, { name: selectedPartner, data: partnerData }],
+    chart: { type: "bar", height: 320, toolbar: { show: false }, animations: { enabled: false }, fontFamily: "inherit" },
+    colors: ["#3b82f6", "#ef4444"],
+    plotOptions: { bar: { columnWidth: "68%", borderRadius: 3, dataLabels: { position: "top" } } },
+    dataLabels: {
+      enabled: true,
+      formatter: v => (v == null) ? "" : fmt(Math.round(v)),
+      offsetY: -14,
+      style: { fontSize: "9px", colors: ["#1d4ed8", "#b91c1c"], fontWeight: 800 },
+      background: { enabled: false }
+    },
+    xaxis: { categories: PV_CHANNELS.map(c => c.label), labels: { style: { fontSize: "9px" }, rotate: -30, trim: false }, axisBorder: { show: false }, axisTicks: { show: false } },
+    yaxis: { min: 0, max: ymax, forceNiceScale: true, labels: { formatter: v => fmt(Math.round(v)), style: { fontSize: "10px" } } },
+    grid: { borderColor: "#f0f0f0", strokeDashArray: 4, padding: { top: 22, right: 14, left: 8, bottom: 0 } },
+    legend: { position: "top", fontSize: "11px", fontWeight: 700, markers: { radius: 3 } },
+    tooltip: { shared: true, intersect: false, y: { formatter: v => fmt(Math.round(v || 0)) } }
+  });
 }
