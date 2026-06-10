@@ -251,9 +251,24 @@ function _renderMetasImpl() {
          </select>
        </div>`
     : "";
+  // Botón de borrado (solo admin): elimina TODAS las metas del mes mostrado para
+  // poder re-subir el Excel. El enforcement real es RLS (is_admin()); este gate
+  // solo oculta el botón. data-html2canvas-ignore lo excluye del PDF descargable
+  // (el partner no debe verlo). mesAttr va JSON-encodeado por si el mes trae comillas.
+  const mesAttr    = escapeHTML(JSON.stringify(mesName));
+  const delBtnHTML = STATE.isAdmin
+    ? `<button class="apply-btn" data-html2canvas-ignore="true" onclick="deleteMetasMes(${mesAttr})"
+         title="Borra todas las metas de ${escapeHTML(mesName)} para re-subir el Excel"
+         style="width:auto;padding:7px 14px;font-size:.8rem;background:#FF0000;color:#fff;font-weight:700">
+         🗑️ Eliminar metas de ${escapeHTML(mesName)}
+       </button>`
+    : "";
   html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:12px;flex-wrap:wrap">
     ${mesSelectorHTML}
-    <button class="apply-btn" onclick="downloadMetasPDF()" style="width:auto;padding:7px 16px;font-size:.8rem;margin-left:auto">⬇ Descargar PDF</button>
+    <div style="display:flex;gap:8px;align-items:center;margin-left:auto">
+      ${delBtnHTML}
+      <button class="apply-btn" id="metasPdfBtn" onclick="downloadMetasPDF()" style="width:auto;padding:7px 16px;font-size:.8rem">⬇ Descargar PDF</button>
+    </div>
   </div>`;
 
   // ── 1. Peru Summary ───────────────────────────────────────────────────────
@@ -549,7 +564,7 @@ async function downloadMetasPDF() {
     alert("Librerías PDF no disponibles. Recarga la página.");
     return;
   }
-  const btn = document.querySelector("#metasContent .apply-btn");
+  const btn = document.getElementById("metasPdfBtn");
   if (btn) { btn.textContent = "⏳ Generando..."; btn.disabled = true; }
 
   try {
@@ -595,5 +610,54 @@ async function downloadMetasPDF() {
     alert("Error al generar PDF: " + err.message);
   } finally {
     if (btn) { btn.textContent = "⬇ Descargar PDF"; btn.disabled = false; }
+  }
+}
+
+// ── ELIMINAR METAS DEL MES MOSTRADO ───────────────────────────────────────────
+// Borra TODAS las metas del mes que se está viendo (para re-subir el Excel).
+// Usa `ilike` sin comodines = igualdad case-insensitive, así cubre el casing
+// mixto de uploads viejos ("JUNIO"/"Junio"/"junio") que el loader normaliza a
+// UPPERCASE en cliente. Guard de admin defensivo; el enforcement real es RLS.
+async function deleteMetasMes(mes) {
+  if (!STATE.isAdmin) {
+    showBanner(false, "Operación bloqueada: requiere rol admin.");
+    return;
+  }
+  const mesU = (mes || "").trim();
+  if (!mesU) return;
+
+  const n = STATE.metasData.filter(m => m.mes === mesU.toUpperCase()).length;
+  if (!confirm(
+    `¿Confirmas borrar las metas de ${mesU} (${n} registro${n === 1 ? "" : "s"})?\n\n` +
+    `Útil para re-subir el Excel corregido. Esta acción NO se puede deshacer.`
+  )) return;
+
+  showLoad(true, `Eliminando metas de ${mesU}...`);
+  try {
+    const { error } = await sb.from("metas").delete().ilike("mes", mesU);
+    if (error) throw error;
+
+    // Si el mes borrado era la selección manual del selector, limpiarla para que
+    // renderMetas (vía loadFromSupabase) caiga al mes más reciente que quede.
+    if (STATE.metasMesSel && STATE.metasMesSel.toUpperCase() === mesU.toUpperCase()) {
+      STATE.metasMesSel = null;
+    }
+
+    showBanner(true, `Metas de ${mesU} eliminadas. Vuelve a subir el Excel para recargarlas.`);
+    await loadFromSupabase();   // refresca STATE.metasData + re-renderiza el tab activo
+
+    // loadFromSupabase solo re-renderiza Metas si quedan filas; si ya no quedan,
+    // mostramos el estado vacío explícitamente (si no, queda contenido stale).
+    if (STATE.curTab === "metas" && !STATE.metasData.length) {
+      const empty = document.getElementById("metasEmpty");
+      const cont  = document.getElementById("metasContent");
+      if (empty) empty.style.display = "";
+      if (cont)  cont.style.display  = "none";
+    }
+  } catch (err) {
+    showBanner(false, `Error al eliminar metas: ${err.message}`);
+    console.error("deleteMetasMes:", err.message);
+  } finally {
+    showLoad(false);
   }
 }
