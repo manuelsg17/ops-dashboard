@@ -198,14 +198,15 @@ function trendI(vals) {
   return { i: "→", c: "color:#888" };
 }
 
-// Parsea "YYYY-MM-DD" como fecha LOCAL (medianoche local), no UTC.
+// Parsea "YYYY-MM-DD" o "YYYY-MM" como fecha LOCAL (medianoche local), no UTC.
 // `new Date("2026-06-01")` se interpreta como UTC y en zonas con offset negativo
 // (Perú UTC-5) cae el día anterior (2026-05-31), corriendo mes/día. Eso rompía la
 // proyección: la semana del 1 de junio parecía "cruzar al mes siguiente" y forzaba
 // daysRemaining=0 (Proy = Fact). Construir desde las partes evita el corrimiento.
+// Acepta "YYYY-MM" (modo mensual usa date=mes sin día) defaulteando al día 1.
 function parseLocalDate(s) {
-  const m = String(s).match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  return m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(s);
+  const m = String(s).match(/^(\d{4})-(\d{1,2})(?:-(\d{1,2}))?/);
+  return m ? new Date(+m[1], +m[2] - 1, +(m[3] || 1)) : new Date(s);
 }
 
 // Calcula días transcurridos y restantes del mes según el modo:
@@ -214,33 +215,33 @@ function parseLocalDate(s) {
 // - diario:  lastDate = el día exacto, no se suma nada
 function calcProjectionDays(lastDate) {
   if (!lastDate) return { daysElapsed: 28, daysRemaining: 0, daysInMonth: 30 };
+  const start  = parseLocalDate(lastDate);   // inicio del periodo = mes de referencia
   const refEnd = parseLocalDate(lastDate);
   if (STATE.curMode === "semanal") {
     // Fin de la semana = inicio + 6 días
     refEnd.setDate(refEnd.getDate() + 6);
   }
-  // En diario y mensual, refEnd ya es el último día relevante
-  const daysInMonth = new Date(refEnd.getFullYear(), refEnd.getMonth() + 1, 0).getDate();
-  // Si refEnd cayó fuera del mes (semana cruza al mes siguiente), tope al final del mes
+  // daysInMonth SIEMPRE del mes del periodo (start), nunca de refEnd: en semanal la
+  // semana puede cruzar al mes siguiente y refEnd caería en otro mes → daría los días
+  // del mes equivocado e inflaba la proyección de la última semana (p.ej. la última
+  // semana de feb cruza a marzo y proyectaba ×31/28 ≈ +10%).
+  const daysInMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
   let daysElapsed;
   if (STATE.curMode === "diario") {
     daysElapsed = refEnd.getDate();
   } else if (STATE.curMode === "mensual") {
-    daysElapsed = daysInMonth;  // mes completo
+    daysElapsed = daysInMonth;  // mes completo (mes cerrado)
   } else {
-    // semanal: si la semana se pasa al mes siguiente, considerar el mes completo
-    const lastDateObj = parseLocalDate(lastDate);
-    if (refEnd.getMonth() !== lastDateObj.getMonth()) {
-      daysElapsed = new Date(lastDateObj.getFullYear(), lastDateObj.getMonth() + 1, 0).getDate();
-    } else {
-      daysElapsed = refEnd.getDate();
-    }
+    // semanal: si la semana se pasa al mes siguiente, el mes ya está completo
+    daysElapsed = (refEnd.getMonth() !== start.getMonth()) ? daysInMonth : refEnd.getDate();
   }
   const daysRemaining = Math.max(daysInMonth - daysElapsed, 0);
   return { daysElapsed, daysRemaining, daysInMonth };
 }
 
-// Day-rate projection: total so far + (avg weekly rate / 7) * remaining days
+// Proyeccion lineal por avance del mes: total acumulado escalado al mes completo
+// (total * daysInMonth / daysElapsed). Devuelve `total` tal cual en mensual o si ya
+// no quedan dias. Ver detalle en el cuerpo.
 function projA(vals, daysElapsed, daysRemaining) {
   const v = vals.filter(x => x > 0);
   if (!v.length) return 0;
