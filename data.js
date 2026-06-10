@@ -198,13 +198,23 @@ function trendI(vals) {
   return { i: "→", c: "color:#888" };
 }
 
+// Parsea "YYYY-MM-DD" como fecha LOCAL (medianoche local), no UTC.
+// `new Date("2026-06-01")` se interpreta como UTC y en zonas con offset negativo
+// (Perú UTC-5) cae el día anterior (2026-05-31), corriendo mes/día. Eso rompía la
+// proyección: la semana del 1 de junio parecía "cruzar al mes siguiente" y forzaba
+// daysRemaining=0 (Proy = Fact). Construir desde las partes evita el corrimiento.
+function parseLocalDate(s) {
+  const m = String(s).match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  return m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(s);
+}
+
 // Calcula días transcurridos y restantes del mes según el modo:
 // - mensual: daysRemaining = 0 (mes ya cerrado)
 // - semanal: lastDate = inicio de semana, fin = lastDate + 6 días
 // - diario:  lastDate = el día exacto, no se suma nada
 function calcProjectionDays(lastDate) {
   if (!lastDate) return { daysElapsed: 28, daysRemaining: 0, daysInMonth: 30 };
-  const refEnd = new Date(lastDate);
+  const refEnd = parseLocalDate(lastDate);
   if (STATE.curMode === "semanal") {
     // Fin de la semana = inicio + 6 días
     refEnd.setDate(refEnd.getDate() + 6);
@@ -219,7 +229,7 @@ function calcProjectionDays(lastDate) {
     daysElapsed = daysInMonth;  // mes completo
   } else {
     // semanal: si la semana se pasa al mes siguiente, considerar el mes completo
-    const lastDateObj = new Date(lastDate);
+    const lastDateObj = parseLocalDate(lastDate);
     if (refEnd.getMonth() !== lastDateObj.getMonth()) {
       daysElapsed = new Date(lastDateObj.getFullYear(), lastDateObj.getMonth() + 1, 0).getDate();
     } else {
