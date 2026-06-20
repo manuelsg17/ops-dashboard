@@ -6,6 +6,7 @@ const PARTNER_VIEW_STATE = {
   partner: null,
   period:  "auto",   // auto | 3m | 6m | 12m | custom
   lang:    "es",     // "es" | "en"  — afecta panel ejecutivo, headers y PDF
+  shareMode: false,  // "Solo tendencias": oculta valores en los charts de comparación (para compartir)
   charts:  []        // ApexCharts instances
 };
 
@@ -236,7 +237,10 @@ const PV_I18N = {
                     en: "The partner across its cities · growth/decline + comparison vs cohorts" },
   compareWith:    { es: "Comparar con",    en: "Compare with" },
   cohortTop5:     { es: "Prom. Top 5",     en: "Avg Top 5" },
-  cohortTop610:   { es: "Prom. Top 6-10",  en: "Avg Top 6-10" }
+  cohortTop610:   { es: "Prom. Top 6-10",  en: "Avg Top 6-10" },
+  shareBtn:       { es: "Solo tendencias", en: "Trends only" },
+  shareHint:      { es: "Oculta solo los valores de las líneas de promedio (Top 5 / Top 6-10); tus datos siguen visibles. Para compartir sin exponer las cifras del cohorte.",
+                    en: "Hides only the average lines' values (Top 5 / Top 6-10); your own data stays visible. To share without exposing cohort figures." }
 };
 
 // Resolver i18n: devuelve string en el lang actual.
@@ -463,20 +467,14 @@ function renderPartnerView() {
 
       <!-- KPIs globales (partner a nivel Perú = combinado de sus ciudades) -->
       ${_secH("⚡", "#FF0000", _t("kpisTitle"), `${d2s(lastDate)}`)}
-      <div class="section" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px">
-        ${_pvKpiCard(_t("activeDrivers"), tADsum, pADsum, METRICS.ad.color)}
-        ${_pvKpiCard(_t("newReact"),      tNR,    pNR,    METRICS.nr.color)}
-        ${_pvKpiCard(_t("supplyHours"),   tSH,    pSH,    METRICS.sh.color, { useK: true })}
-        ${_pvKpiCard(_t("trips"),         tTr,    null,   "#10b981",       { useK: true })}
-        ${_pvKpiCard(_t("commission"),    tCo,    null,   "#06b6d4",       { isMoney: true, useK: true })}
-        ${_pvKpiCard("GMV",               lastRows.reduce((s, r) => s + (r.gmv || 0), 0), null, "#f59e0b", { isMoney: true, useK: true })}
-      </div>
+      ${_pvScopeKpiRow(partner, null, dates)}
 
       <!-- Perú (General): el partner combinando sus 3 ciudades -->
       ${_secH("🇵🇪", "#FF0000", _t("peruGeneral"), _t("peruGeneralSub"))}
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 10px">
         <span style="font-size:.72rem;color:#666;font-weight:700">${_t("compareWith")}:</span>
         <span id="pvCohortBar" style="display:flex;gap:8px;flex-wrap:wrap">${PV_COHORT_BANDS.map(b => _pvCohortBtn(b)).join("")}</span>
+        ${_pvShareBtnHtml()}
       </div>
       <div class="section">${_pvScopeBlock(null, "peru")}</div>
       ${_pvConversionSection(partner)}
@@ -490,6 +488,7 @@ function renderPartnerView() {
             <span style="width:12px;height:12px;border-radius:50%;background:${CITY_COLORS[city] || "#888"}"></span>
             <span style="font-size:1rem;font-weight:800;color:#111">${escapeHTML(cityLabel(city))}</span>
           </div>
+          ${_pvScopeKpiRow(partner, city, dates)}
           ${_pvScopeBlock(city, _pvCityId(city))}
         </div>`).join("")}
     </div>`;
@@ -868,6 +867,29 @@ function _pvKpiCard(label, cur, prev, color, opts = {}) {
     </div>`;
 }
 
+// Fila de 6 tarjetas KPI de un scope (Perú-General si scopeCity=null, o una
+// ciudad) con badge WoW/MoM. El badge lo resuelve bdgMode(), que respeta el
+// filtro de escala (STATE.curMode): semanal→WoW, mensual→MoM, diario→sin badge.
+// Usa _pvScopeSeries — la MISMA serie que alimenta los charts de abajo — para que
+// cada tarjeta coincida con el último punto de su gráfico. El período previo solo
+// genera badge si está presente (si no, sin comparación, no "NEW" engañoso).
+function _pvScopeKpiRow(partner, scopeCity, dates) {
+  const series = _pvScopeSeries(partner, scopeCity, dates);
+  if (!series.length) return "";
+  const last  = series[series.length - 1];
+  const prevE = series.length > 1 ? series[series.length - 2] : null;
+  const prev  = (prevE && prevE._present) ? prevE : null;
+  const pv = k => prev ? (prev[k] || 0) : null;
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px">
+    ${_pvKpiCard(_t("activeDrivers"), last.ad,         pv("ad"),         METRICS.ad.color)}
+    ${_pvKpiCard(_t("newReact"),      last.nr,         pv("nr"),         METRICS.nr.color)}
+    ${_pvKpiCard(_t("supplyHours"),   last.sh,         pv("sh"),         METRICS.sh.color, { useK: true })}
+    ${_pvKpiCard(_t("trips"),         last.trips,      pv("trips"),      "#10b981",        { useK: true })}
+    ${_pvKpiCard(_t("commission"),    last.commission, pv("commission"), "#06b6d4",        { isMoney: true, useK: true })}
+    ${_pvKpiCard("GMV",               last.gmv,        pv("gmv"),        "#f59e0b",        { isMoney: true, useK: true })}
+  </div>`;
+}
+
 function _pvCitySection(partner, city, dates, recibeLeads, seriesCached) {
   const cityColor = CITY_COLORS[city] || "#888";
   const series = seriesCached || _pvSeriesByPartnerCity(partner, city, dates);
@@ -1223,7 +1245,12 @@ async function pvDownloadPDF() {
   await new Promise(r => setTimeout(r, 200));
   try {
     const content = document.getElementById("partnerViewContent");
-    const canvas = await html2canvas(content, { scale: 2, useCORS: true, logging: false, backgroundColor: "#fff" });
+    // Fondo del PDF = fondo del dashboard (no blanco), para que las tarjetas y
+    // gráficas blancas contrasten igual que en pantalla. Se lee del body en vivo
+    // (cae a #F2F2F2 si está transparente).
+    let pageBg = getComputedStyle(document.body).backgroundColor;
+    if (!pageBg || pageBg === "transparent" || pageBg === "rgba(0, 0, 0, 0)") pageBg = "#F2F2F2";
+    const canvas = await html2canvas(content, { scale: 2, useCORS: true, logging: false, backgroundColor: pageBg });
     const imgData = canvas.toDataURL("image/jpeg", 0.92);
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ orientation: "portrait", unit: "px", format: [canvas.width, canvas.height] });
@@ -1444,6 +1471,38 @@ function _pvCohortBtn(band) {
   return `<button onclick="pvCohortToggle('${band.key}')" class="preset-btn${on ? " active" : ""}" style="${on ? `background:${band.color};color:#fff;border-color:${band.color}` : ""}">+ ${escapeHTML(label)}</button>`;
 }
 
+// Botón "Solo tendencias" (modo compartir): oculta los valores en los charts de
+// comparación (etiquetas, eje Y y tabla N+R) y fuerza mostrar Top 5 y Top 6-10,
+// para compartir la forma de la tendencia sin exponer cifras. margin-left:auto lo
+// empuja al extremo derecho de la barra de cohortes.
+function _pvShareBtnHtml() {
+  const on = !!PARTNER_VIEW_STATE.shareMode;
+  // flex:0 0 auto — .preset-btn trae flex:1 y, como hijo directo de la barra,
+  // estiraba a todo el ancho. Lo dejamos compacto y alineado a la derecha.
+  return `<button id="pvShareBtn" onclick="pvShareToggle()" class="preset-btn${on ? " active" : ""}" title="${escapeHTML(_t("shareHint"))}" style="flex:0 0 auto;margin-left:auto;white-space:nowrap;padding:4px 10px;${on ? "background:#111;color:#fff;border-color:#111" : ""}">${on ? "🔒" : "🔓"} ${escapeHTML(_t("shareBtn"))}</button>`;
+}
+
+// Alterna el modo compartir. Al activarlo guarda la selección de cohorte actual y
+// fuerza Top 5 + Top 6-10; al desactivarlo la restaura. Reconstruye los charts en
+// sitio (sin re-render completo) para aplicar/quitar el ocultado de valores.
+function pvShareToggle() {
+  const S = PARTNER_VIEW_STATE;
+  S.shareMode = !S.shareMode;
+  if (S.shareMode) {
+    S._cohortBeforeShare = Object.assign({}, S.cohort || {});
+    S.cohort = { t5: true, t610: true };
+  } else {
+    S.cohort = S._cohortBeforeShare || {};
+    S._cohortBeforeShare = null;
+  }
+  const bar = document.getElementById("pvCohortBar");
+  if (bar) bar.innerHTML = PV_COHORT_BANDS.map(b => _pvCohortBtn(b)).join("");
+  const btn = document.getElementById("pvShareBtn");
+  if (btn) btn.outerHTML = _pvShareBtnHtml();
+  if (typeof S._rebuildScopes === "function") S._rebuildScopes();
+  else renderPartnerView();
+}
+
 // Serie del partner para un scope: scopeCity=null => combinado de TODAS sus
 // ciudades (Perú-General); scopeCity="LIMA" => solo esa ciudad.
 function _pvScopeSeries(partner, scopeCity, dates) {
@@ -1513,6 +1572,7 @@ function _pvCmpLine(elId, labels, partnerSeries, cohortLines, color, fmtFn, mone
   const el = document.getElementById(elId);
   if (!el || typeof ApexCharts === "undefined") return;
   el.classList.add("pv-chart");
+  const share = !!PARTNER_VIEW_STATE.shareMode;   // modo compartir: sin valores
   // Si ni el partner ni los cohortes tienen dato (p.ej. KPI fleet en un partner
   // no-fleet), no montar una línea plana en 0: mostrar "Sin datos".
   const _has = (partnerSeries.data || []).some(v => v) || cohortLines.some(l => (l.data || []).some(v => v));
@@ -1541,7 +1601,9 @@ function _pvCmpLine(elId, labels, partnerSeries, cohortLines, color, fmtFn, mone
     // Etiquetas en TODAS las series (partner + cohortes) para que los promedios
     // sean legibles tambien al exportar a PDF. Cada etiqueta del color de su
     // linea (partner en negro), con halo blanco via CSS .pv-chart.
-    dataLabels: { enabled: true, formatter: v => pref + fn(v), style: { fontSize: "10px", colors: ["#111", ...cohortLines.map(l => l.color)], fontWeight: 700 }, background: { enabled: false }, offsetY: -10 },
+    // En modo compartir se ocultan SOLO las de las líneas de cohorte (seriesIndex
+    // > 0); la del partner (índice 0 = su propia serie) sigue visible.
+    dataLabels: { enabled: true, formatter: (v, opts) => (share && opts && opts.seriesIndex > 0) ? "" : pref + fn(v), style: { fontSize: "10px", colors: ["#111", ...cohortLines.map(l => l.color)], fontWeight: 700 }, background: { enabled: false }, offsetY: -10 },
     xaxis: { categories: labels, labels: { style: { fontSize: "9px" }, rotate: -30 }, axisBorder: { show: false }, axisTicks: { show: false } },
     yaxis: yAxis,
     // padding.left amplio: separa el primer dataLabel de los números del eje Y;
@@ -1557,6 +1619,7 @@ function _pvCmpNR(elId, labels, series, recibeLeads, cohortLines) {
   const el = document.getElementById(elId);
   if (!el || typeof ApexCharts === "undefined") return;
   el.classList.add("pv-chart");
+  const share = !!PARTNER_VIEW_STATE.shareMode;   // modo compartir: sin valores
   const isEN = PARTNER_VIEW_STATE.lang === "en";
   const colSeries = recibeLeads
     ? [{ name: isEN ? "New (Partner)" : "Nuevos (Partner)", type: "column", data: series.map(s => s.npPartner) },
@@ -1584,11 +1647,13 @@ function _pvCmpNR(elId, labels, series, recibeLeads, cohortLines) {
     dataLabels: {
       // Columnas (segmentos) + lineas de cohorte: el total del promedio tambien
       // se etiqueta (legible en PDF). Color: segmentos en blanco, lineas en su color.
+      // En modo compartir se ocultan SOLO las etiquetas de las líneas de cohorte;
+      // las columnas del partner (su propia data) siguen visibles.
       enabled: true,
       enabledOnSeries: [...colSeries.map((_, i) => i), ...lineSeries.map((_, i) => colSeries.length + i)],
       formatter: (val, opts) => {
-        // Serie de linea (cohorte): muestra su total con su color.
-        if (opts.seriesIndex >= colSeries.length) return val ? fmt(val) : "";
+        // Serie de linea (cohorte): muestra su total con su color (oculto en compartir).
+        if (opts.seriesIndex >= colSeries.length) return share ? "" : (val ? fmt(val) : "");
         // Segmento de columna: solo si pesa >= 20% del total de su barra.
         if (!val || val <= 0) return "";
         const all = opts.w.config.series;

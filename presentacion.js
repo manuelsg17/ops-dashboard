@@ -15,6 +15,20 @@ let PRESENT_STATE = {
 const SLIDE_NAMES_ES = ["Carátula", "KPIs", "vs Ciudad", "Ranking"];
 const SLIDE_NAMES_EN = ["Cover",    "KPIs", "vs City",   "Ranking"];
 
+// Orden canónico de ciudades para TODA la Presentación: izquierda→derecha
+// Lima, Arequipa, Trujillo (de mayor a menor operación), para leer los KPIs de
+// izquierda a derecha y de arriba hacia abajo. Cualquier otra ciudad va después,
+// alfabética. Centraliza el orden en un solo lugar (antes cada slide lo dejaba al
+// orden natural del Set → salía alfabético).
+const PRES_CITY_ORDER = ["LIMA", "AREQUIPA", "TRUJILLO"];
+function _presOrderCities(cities) {
+  const rank = c => {
+    const i = PRES_CITY_ORDER.indexOf(String(c).toUpperCase());
+    return i === -1 ? PRES_CITY_ORDER.length : i;
+  };
+  return [...cities].sort((a, b) => rank(a) - rank(b) || String(a).localeCompare(String(b)));
+}
+
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 function destroyPresentCharts() {
   PRESENT_STATE.charts.forEach(c => { try { c.destroy(); } catch(e){} });
@@ -70,8 +84,11 @@ function getCityVals(city, dates, metricFn) {
   });
 }
 
-function buildMiniChart(canvasId, dates, partnerVals, cityVals, color) {
-  const canvas = document.getElementById(canvasId);
+function buildMiniChart(canvasId, dates, partnerVals, cityVals, color, root) {
+  // Acotar al `root` (div temporal del PDF) cuando se provee; si no, document.
+  // Evita que getElementById global devuelva el canvas duplicado de la vista en
+  // vivo cuando se exporta estando en el slide de KPIs.
+  const canvas = root ? root.querySelector(`#${canvasId}`) : document.getElementById(canvasId);
   if (!canvas) return;
   const pMax   = Math.max(...partnerVals, 1);
   const cMax   = Math.max(...cityVals, 1);
@@ -331,7 +348,7 @@ function renderSlide(partner, from, to, mode) {
 function buildSlide0(partner, from, to, mode) {
   const col       = STATE.partnerColors[partner] || "#FF0000";
   const kam       = Object.entries(STATE.KAM_MAP).find(([c]) => STATE.CLID_MAP[c] === partner)?.[1] || "";
-  const cities    = [...new Set((STATE._byPartner?.get(partner) || []).map(r => r.city))].join(" · ");
+  const cities    = _presOrderCities([...new Set((STATE._byPartner?.get(partner) || []).map(r => r.city))]).join(" · ");
   const es        = PRESENT_STATE.lang === "es";
   const modeLabel = mode === "mensual"
     ? (es ? "Avance Mensual" : "Monthly Update")
@@ -365,7 +382,7 @@ function buildSlide0(partner, from, to, mode) {
 // ── SLIDE 1: KPIs POR CIUDAD ──────────────────────────────────────────────────
 function buildSlide1(partner, from, to, mode) {
   const es       = PRESENT_STATE.lang === "es";
-  const cities   = [...new Set((STATE._byPartner?.get(partner) || []).map(r => r.city))];
+  const cities   = _presOrderCities([...new Set((STATE._byPartner?.get(partner) || []).map(r => r.city))]);
   const allDates = STATE.allDates;
   const lastDate = allDates.filter(d => d <= to).slice(-1)[0] || to;
   const lastIdx  = allDates.indexOf(lastDate);
@@ -399,7 +416,7 @@ function buildSlide1(partner, from, to, mode) {
           <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#FF0000;margin-left:4px"></span>${es?"negativo":"negative"}
         </span>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(${cities.length},1fr);gap:10px;flex:1;min-height:0">
+      <div style="display:flex;flex-direction:column;gap:8px;flex:1;min-height:0">
         ${cities.map(city => {
           const col = CITY_COLORS[city] || "#888";
           const cdLast = STATE._byCityDate?.get(`${city}|||${lastDate}`) || [];
@@ -408,47 +425,56 @@ function buildSlide1(partner, from, to, mode) {
           const pPrev  = cdPrev.filter(r => r.partner === partner);
           const cLast  = cdLast;
           const cPrev  = cdPrev;
+          // Cada ciudad es una FILA (Lima, Arequipa, Trujillo de arriba a abajo);
+          // dentro, sus 3 KPIs en horizontal (AD → N+R → SH, de izq. a der.).
           return `
-            <div style="border-top:3px solid ${col};padding-top:6px;display:flex;flex-direction:column;gap:5px;min-height:0">
-              <div style="font-weight:800;font-size:.82rem;color:${col}">${cityLabel(city)}</div>
-              ${metrics.map(m => {
-                const pValL = pLast.reduce((s,r)=>s+m.fn(r),0);
-                const pValP = pPrev.reduce((s,r)=>s+m.fn(r),0);
-                const cValL = cLast.reduce((s,r)=>s+m.fn(r),0);
-                const cValP = cPrev.reduce((s,r)=>s+m.fn(r),0);
-                // Full precision en variables; redondeo solo en el template HTML
-                const pWoW  = pValP>0 ? ((pValL-pValP)/pValP*100) : null;
-                const cWoW  = cValP>0 ? ((cValL-cValP)/cValP*100) : null;
-                const pColor = pWoW===null?"#aaa":pWoW>=0?"#10b981":"#FF0000";
-                const cColor = cWoW===null?"#aaa":cWoW>=0?"#10b981":"#FF0000";
-                const pSign  = pWoW!==null && pWoW>=0?"+":"";
-                const cSign  = cWoW!==null && cWoW>=0?"+":"";
-                return `
-                  <div style="flex:1;min-height:0;background:#fafafa;border-radius:6px;padding:5px 7px;display:flex;flex-direction:column">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
-                      <span style="font-size:.6rem;color:#aaa;font-weight:700;text-transform:uppercase;letter-spacing:.3px">${m.label}</span>
-                      <span style="font-size:.66rem;font-weight:700;color:${pColor};background:${pColor}18;padding:1px 5px;border-radius:6px">
-                        ${pWoW!==null?pSign+pWoW.toFixed(1)+"%":"NEW"}
-                      </span>
-                    </div>
-                    <div style="font-weight:900;font-size:.88rem;color:#111;margin-bottom:3px">${fmt(pValL)}</div>
-                    <div style="flex:1;min-height:120px;position:relative;width:100%">
-                      <canvas id="mc_${city}_${m.key}" style="width:100%;height:100%"></canvas>
-                    </div>
-                    <div style="font-size:.58rem;color:#aaa;margin-top:2px;display:flex;justify-content:space-between">
-                      <span>${wowLabel} ${es?"ciudad":"city"}:</span>
-                      <span style="color:${cColor};font-weight:700">${cWoW!==null?cSign+cWoW.toFixed(1)+"%":"N/A"}</span>
-                    </div>
-                  </div>`;
-              }).join("")}
+            <div style="display:flex;gap:8px;flex:1;min-height:0;border-left:3px solid ${col};padding-left:8px">
+              <div style="flex:0 0 84px;display:flex;align-items:center">
+                <span style="font-weight:800;font-size:.84rem;color:${col};line-height:1.15">${cityLabel(city)}</span>
+              </div>
+              <div style="flex:1;min-width:0;display:flex;gap:8px;min-height:0">
+                ${metrics.map(m => {
+                  const pValL = pLast.reduce((s,r)=>s+m.fn(r),0);
+                  const pValP = pPrev.reduce((s,r)=>s+m.fn(r),0);
+                  const cValL = cLast.reduce((s,r)=>s+m.fn(r),0);
+                  const cValP = cPrev.reduce((s,r)=>s+m.fn(r),0);
+                  // Full precision en variables; redondeo solo en el template HTML
+                  const pWoW  = pValP>0 ? ((pValL-pValP)/pValP*100) : null;
+                  const cWoW  = cValP>0 ? ((cValL-cValP)/cValP*100) : null;
+                  const pColor = pWoW===null?"#aaa":pWoW>=0?"#10b981":"#FF0000";
+                  const cColor = cWoW===null?"#aaa":cWoW>=0?"#10b981":"#FF0000";
+                  const pSign  = pWoW!==null && pWoW>=0?"+":"";
+                  const cSign  = cWoW!==null && cWoW>=0?"+":"";
+                  return `
+                    <div style="flex:1;min-width:0;min-height:0;background:#fafafa;border-radius:6px;padding:5px 7px;display:flex;flex-direction:column">
+                      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
+                        <span style="font-size:.6rem;color:#aaa;font-weight:700;text-transform:uppercase;letter-spacing:.3px">${m.label}</span>
+                        <span style="font-size:.66rem;font-weight:700;color:${pColor};background:${pColor}18;padding:1px 5px;border-radius:6px">
+                          ${pWoW!==null?pSign+pWoW.toFixed(1)+"%":"NEW"}
+                        </span>
+                      </div>
+                      <div style="font-weight:900;font-size:.88rem;color:#111;margin-bottom:3px">${fmt(pValL)}</div>
+                      <div style="flex:1;min-height:70px;position:relative;width:100%">
+                        <canvas id="mc_${city}_${m.key}" style="width:100%;height:100%"></canvas>
+                      </div>
+                      <div style="font-size:.58rem;color:#aaa;margin-top:2px;display:flex;justify-content:space-between">
+                        <span>${wowLabel} ${es?"ciudad":"city"}:</span>
+                        <span style="color:${cColor};font-weight:700">${cWoW!==null?cSign+cWoW.toFixed(1)+"%":"N/A"}</span>
+                      </div>
+                    </div>`;
+                }).join("")}
+              </div>
             </div>`;
         }).join("")}
       </div>
     </div>`;
 }
 
-function buildSlide1Charts(partner, from, to, mode) {
-  const cities  = [...new Set((STATE._byPartner?.get(partner) || []).map(r => r.city))];
+// root (opcional): contenedor donde buscar los canvas. En vivo = document; en el
+// export = el div temporal del PDF, para no chocar con los ids duplicados de la
+// vista en vivo (ver downloadPresentPDF).
+function buildSlide1Charts(partner, from, to, mode, root) {
+  const cities  = _presOrderCities([...new Set((STATE._byPartner?.get(partner) || []).map(r => r.city))]);
   const dates   = getSelectedDates(from, to, mode);
   const metrics = [
     { key:"ad", color:"#FF0000", fn: r=>r.activeDrivers },
@@ -459,7 +485,7 @@ function buildSlide1Charts(partner, from, to, mode) {
     metrics.forEach(m => {
       const pVals = getPartnerVals(partner, city, dates, m.fn);
       const cVals = getCityVals(city, dates, m.fn);
-      buildMiniChart(`mc_${city}_${m.key}`, dates, pVals, cVals, m.color);
+      buildMiniChart(`mc_${city}_${m.key}`, dates, pVals, cVals, m.color, root);
     });
   });
 }
@@ -470,7 +496,7 @@ function buildSlide3(partner, from, to, mode) {
   const es       = PRESENT_STATE.lang === "es";
   const allDates = STATE.allDates;
   const lastDate = allDates.filter(d => d <= to).slice(-1)[0] || to;
-  const cities   = [...new Set((STATE._byPartner?.get(partner) || []).map(r => r.city))];
+  const cities   = _presOrderCities([...new Set((STATE._byPartner?.get(partner) || []).map(r => r.city))]);
 
   function getRanking(city, metricFn) {
     const pm = {};
@@ -542,9 +568,7 @@ function buildSlide5(partner, from, to, mode) {
   const es      = PRESENT_STATE.lang === "es";
   const col     = STATE.partnerColors[partner] || "#FF0000";
   const dates   = getSelectedDates(from, to, mode);
-  const availableCities = new Set((STATE._byPartner?.get(partner) || []).map(r => r.city));
-  const order = ["LIMA", "TRUJILLO", "AREQUIPA"];
-  const cities = order.filter(c => availableCities.has(c));
+  const cities = _presOrderCities([...new Set((STATE._byPartner?.get(partner) || []).map(r => r.city))]);
 
   const metrics = [
     { key: "ad", label: es ? "Conductores Activos" : "Active Drivers",    fn: r => r.activeDrivers },
@@ -652,7 +676,7 @@ async function downloadPresentPDF() {
 
     const allSlides = [
       { html: buildSlide0(partner,from,to,mode), hasCharts:false, chartFn:null, name:slideNames[0] },
-      { html: buildSlide1(partner,from,to,mode), hasCharts:true,  chartFn:()=>buildSlide1Charts(partner,from,to,mode), name:slideNames[1] },
+      { html: buildSlide1(partner,from,to,mode), hasCharts:true,  chartFn:(root)=>buildSlide1Charts(partner,from,to,mode,root), name:slideNames[1] },
       { html: buildSlide5(partner,from,to,mode), hasCharts:false, chartFn:null, name:slideNames[2] },
       { html: buildSlide3(partner,from,to,mode), hasCharts:false, chartFn:null, name:slideNames[3] }
     ];
@@ -677,7 +701,12 @@ const div = document.createElement("div");
       await new Promise(r => setTimeout(r, 300));
 
      if (s.hasCharts && s.chartFn) {
-        s.chartFn();
+        // CLAVE: pasamos `div` como raíz. buildSlide1Charts busca los canvas DENTRO
+        // del div temporal (no con getElementById global). Si el usuario descarga
+        // estando en el slide de KPIs, los canvas de la vista en vivo tienen los
+        // MISMOS ids y getElementById devolvía el canvas en vivo → el del PDF
+        // quedaba en blanco. Acotando al div, cada chart se dibuja en su canvas.
+        s.chartFn(div);
         // Con animation:false los charts pintan inmediato, pero igual esperamos
         // 2 RAFs + un timeout corto para garantizar layout + paint en el browser.
         await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
@@ -692,8 +721,7 @@ const div = document.createElement("div");
       if (s.hasCharts) {
         div.querySelectorAll("canvas").forEach(c => { const ch = Chart.getChart(c); if(ch) ch.destroy(); });
         // Limpiar el registry de PRESENT_STATE para evitar referencias muertas
-        // que destroyPresentCharts() intente destruir despues (no falla, pero
-        // ensucia el array y crece sin limite cross-renders).
+        // que destroyPresentCharts() intente destruir despues.
         PRESENT_STATE.charts = [];
       }
       // Garantizar que el div temporal se remueva incluso si algo falla
@@ -719,4 +747,8 @@ const div = document.createElement("div");
   }
 
   document.body.removeChild(prog);
+  // Restaurar la vista en vivo: destroyPresentCharts() (al inicio) destruyó los
+  // charts del slide visible y el export ya no los reconstruye sobre los canvas
+  // en vivo (ahora dibuja dentro del div temporal). Re-render del slide actual.
+  try { if (partner && from && to) renderSlide(partner, from, to, mode); } catch (e) {}
 }
