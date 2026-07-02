@@ -340,6 +340,16 @@ function _renderFlotasView() {
     }
   });
 
+  // Fleetrooms por CLID (sub-flotas con db_id real). Fuente: rawDataFull ya trae
+  // db_id + fleetroom por fila. clid → Map(db_id → nombre). Solo db_id != ''.
+  const fleetroomsByClid = new Map();
+  STATE.rawDataFull.forEach(r => {
+    if (!r.clid || !r.db_id) return;
+    let m = fleetroomsByClid.get(r.clid);
+    if (!m) { m = new Map(); fleetroomsByClid.set(r.clid, m); }
+    if (!m.has(r.db_id)) m.set(r.db_id, r.fleetroom || "");
+  });
+
   const allCLIDs = new Set([...clids, ...fromRawAll.keys()]);
 
   const q = (RAW_STATE.search || "").toLowerCase().trim();
@@ -404,6 +414,7 @@ function _renderFlotasView() {
         <strong>Fuente de verdad:</strong> Configuraci\u00F3n (tabla <code>partners</code>). El nombre y KAM que ves en el dashboard vienen de all\u00ED.
         Esta vista permite <strong>marcar CLIDs como inactivos</strong> (para excluir flotas de otras unidades de negocio) y anotar la ciudad.
         El "Nombre Excel" es informativo: sirve para detectar tuktuk/cargo/delivery/flotas antiguas. Si necesit\u00E1s cambiar nombre o KAM, hacelo en <strong>Configuraci\u00F3n</strong>.
+        <div style="margin-top:6px">\uD83D\uDEFA Si un CLID trae <strong>fleetrooms</strong> (sub-flotas con <code>db_id</code>), se listan debajo y se marcan <strong>por fleetroom</strong>: <strong>Fleet</strong>, <strong>TukTuk</strong> o <strong>Excluir de Taxi</strong> (ej. delivery). As\u00ED solo esa sub-flota entra a TukTuk / sale de Taxi, sin afectar a las dem\u00E1s del mismo CLID.</div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
         <input class="crud-input" placeholder="Buscar CLID, partner, KAM, ciudad..."
@@ -417,6 +428,16 @@ function _renderFlotasView() {
         <button class="crud-btn" onclick="exportFlotasCSV()"
           style="margin-left:auto;background:#f0fdf4;border-color:#86efac;color:#166534">\u2B07 Exportar CSV</button>
       </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:8px 10px">
+        <span style="font-size:.72rem;font-weight:700;color:#92400e;white-space:nowrap">\uD83D\uDEFA Patrones TukTuk (sugerencia):</span>
+        ${(STATE.tuktukPatterns || []).map(w => `
+          <span style="display:inline-flex;align-items:center;gap:4px;background:#fff;border:1px solid #fde68a;border-radius:12px;padding:2px 4px 2px 9px;font-size:.7rem;color:#92400e">
+            ${escapeHTML(w)}
+            <button onclick="removeTuktukPattern('${w.replace(/'/g, "\\'")}')" title="Quitar" style="border:none;background:none;color:#b45309;cursor:pointer;font-weight:700;padding:0 4px">\u00D7</button>
+          </span>`).join("")}
+        <input id="newTuktukPattern" class="crud-input" placeholder="ej. mototaxi" style="width:130px;font-size:.72rem" onkeydown="if(event.key==='Enter')addTuktukPattern()"/>
+        <button class="crud-btn" onclick="addTuktukPattern()" style="font-size:.7rem">+ Agregar</button>
+      </div>
     </div>
     <div class="tbl-wrap">
       <table class="dtbl">
@@ -427,6 +448,9 @@ function _renderFlotasView() {
             <th>Nombre Excel</th>
             <th>Nombre <span style="color:#0ea5e9;font-weight:700">EFECTIVO</span></th>
             <th>KAM <span style="color:#0ea5e9;font-weight:700">EFECTIVO</span></th>
+            <th style="text-align:center;width:55px">Fleet</th>
+            <th style="text-align:center;width:65px">TukTuk</th>
+            <th style="text-align:center;width:75px">Excluir<br>Taxi</th>
             <th style="text-align:center">Estado</th>
             <th style="text-align:center;width:90px">Acci\u00F3n</th>
           </tr>
@@ -440,10 +464,75 @@ function _renderFlotasView() {
     ...Object.values(STATE.flotasMap || {}).map(f => f.kam)
   ].filter(Boolean))].sort();
 
+  // Celdas Fleet/TukTuk/Excluir-Taxi (3 <td>). Para CLIDs SIN fleetrooms (data
+  // legacy sin db_id): checkboxes por CLID → `partners` via flotaSetFlag (Fleet
+  // y TukTuk; Excluir no aplica a nivel CLID). Para CLIDs CON fleetrooms: el
+  // tagging es por sub-flota (sub-filas debajo) → aquí solo una nota "↓ por
+  // fleetroom", sin checkbox por CLID (evita ambigüedad). La sugerencia TukTuk
+  // (badge + resalte) nunca auto-marca ni auto-guarda.
+  function _flotaFlagCells(r, clidJS, hasFleetrooms) {
+    if (hasFleetrooms) {
+      const note = `<span style="font-size:.6rem;color:#0284c7;font-style:italic">↓ fleetroom</span>`;
+      return `
+          <td style="text-align:center">${note}</td>
+          <td style="text-align:center">${note}</td>
+          <td style="text-align:center">${note}</td>`;
+    }
+    const isFleet   = !!(STATE.CLID_IS_FLEET  || {})[r.clid];
+    const isTuktuk  = !!(STATE.CLID_IS_TUKTUK || {})[r.clid];
+    const suggested = !isTuktuk && _tuktukSuggested(r.nombre_excel);
+    const pFall = escapeHTML(r.nombre_efectivo === "—" ? "" : r.nombre_efectivo).replace(/'/g, "\\'");
+    const kFall = escapeHTML(r.kam_efectivo === "—" ? "" : r.kam_efectivo).replace(/'/g, "\\'");
+    return `
+          <td style="text-align:center">
+            <input type="checkbox" title="Fleet" onchange="flotaSetFlag('${clidJS}','is_fleet',this.checked,'${pFall}','${kFall}')" ${isFleet ? "checked" : ""}/>
+          </td>
+          <td style="text-align:center">
+            ${suggested ? `<div title="El Nombre Excel sugiere TukTuk" style="font-size:.62rem;color:#b45309;font-weight:700;margin-bottom:2px">\u{1F6FA}?</div>` : ""}
+            <input type="checkbox" title="TukTuk" onchange="flotaSetFlag('${clidJS}','is_tuktuk',this.checked,'${pFall}','${kFall}')" ${isTuktuk ? "checked" : ""} style="${suggested ? "outline:2px solid #f59e0b" : ""}"/>
+          </td>
+          <td style="text-align:center"><span style="color:#ccc" title="Excluir de Taxi solo aplica por fleetroom">—</span></td>`;
+  }
+
+  // Sub-filas por fleetroom (una por db_id) debajo de la fila del CLID. Cada una
+  // con 3 checkboxes (Fleet/TukTuk/Excluir Taxi) → fleetroomSetFlag(db_id,...).
+  // La sugerencia TukTuk se evalúa sobre el NOMBRE del fleetroom.
+  function _fleetroomSubRows(r, clidJS, froomMap) {
+    const kamCtx  = escapeHTML(r.kam_efectivo === "—" ? "" : r.kam_efectivo).replace(/'/g, "\\'");
+    const cityCtx = escapeHTML(r.ciudad || "").replace(/'/g, "\\'");
+    return [...froomMap.entries()].sort((a, b) => (a[1] || a[0]).localeCompare(b[1] || b[0]))
+      .map(([dbId, name]) => {
+        const dbIdJS   = String(dbId).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+        const nameJS   = escapeHTML(name || "").replace(/'/g, "\\'");
+        const isFleet  = !!(STATE.FLEETROOM_IS_FLEET     || {})[dbId];
+        const isTuktuk = !!(STATE.FLEETROOM_IS_TUKTUK    || {})[dbId];
+        const isExcl   = !!(STATE.FLEETROOM_EXCLUDE_TAXI || {})[dbId];
+        const sugg     = !isTuktuk && _tuktukSuggested(name);
+        const cb = (key, checked, extraStyle = "") =>
+          `<input type="checkbox" onchange="fleetroomSetFlag('${dbIdJS}','${key}',this.checked,'${nameJS}','${clidJS}','${kamCtx}','${cityCtx}')" ${checked ? "checked" : ""} style="${extraStyle}"/>`;
+        const dbShort = escapeHTML(String(dbId).slice(0, 10));
+        return `
+        <tr style="background:#f8fbff">
+          <td style="text-align:right;color:#cbd5e1;font-size:.7rem;padding-right:6px">↳</td>
+          <td colspan="4" style="padding-left:14px">
+            <span style="font-weight:600;color:#0f172a">${escapeHTML(name || "(sin nombre)")}</span>
+            ${sugg ? `<span title="El nombre sugiere TukTuk" style="margin-left:6px;font-size:.6rem;color:#b45309;font-weight:700">🛺?</span>` : ""}
+            <span style="margin-left:6px;font-family:monospace;font-size:.62rem;color:#94a3b8" title="${escapeHTML(String(dbId))}">${dbShort}…</span>
+          </td>
+          <td style="text-align:center" title="Fleet">${cb("is_fleet", isFleet)}</td>
+          <td style="text-align:center" title="TukTuk">${cb("is_tuktuk", isTuktuk, sugg ? "outline:2px solid #f59e0b" : "")}</td>
+          <td style="text-align:center" title="Excluir de Taxi">${cb("exclude_from_taxi", isExcl)}</td>
+          <td colspan="2"></td>
+        </tr>`;
+      }).join("");
+  }
+
   rows.slice(0, 500).forEach(r => {
     const clidJS = r.clid.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
     const clidH  = escapeHTML(r.clid);
     const isEditing = RAW_STATE.editingClid === r.clid;
+    const froomMap = fleetroomsByClid.get(r.clid);
+    const hasFleetrooms = !!(froomMap && froomMap.size);
 
     if (isEditing) {
       // \u2500\u2500\u2500 FILA EN MODO EDICION \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
@@ -473,6 +562,7 @@ function _renderFlotasView() {
             <select id="flEdKam_${clidH}" class="crud-input" style="min-width:110px">${kamOpts}</select>
             ${kamWarning}
           </td>
+          ${_flotaFlagCells(r, clidJS, hasFleetrooms)}
           <td style="text-align:center;vertical-align:top">
             <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:.72rem">
               <input id="flEdActivo_${clidH}" type="checkbox"${r.activo?" checked":""}/>
@@ -518,6 +608,7 @@ function _renderFlotasView() {
           <td style="color:#666;font-size:.78rem">${escapeHTML(r.nombre_excel || "\u2014")}</td>
           <td>${nombreCell}</td>
           <td>${kamCell}</td>
+          ${_flotaFlagCells(r, clidJS, hasFleetrooms)}
           <td style="text-align:center">${badge}</td>
           <td style="text-align:center;white-space:nowrap">
             <button onclick="flotaStartEdit('${clidJS}')" title="Editar ciudad/activo/fallback" style="padding:3px 8px;font-size:.7rem;background:#fff;border:1px solid #ddd;border-radius:5px;cursor:pointer;margin-right:3px">\u270F\uFE0F</button>
@@ -526,11 +617,13 @@ function _renderFlotasView() {
               : `<button onclick="flotaToggleActivo('${clidJS}', false)" title="Marcar inactiva (crear flota)" style="padding:3px 8px;font-size:.7rem;background:#fff5f5;border:1px solid #fecaca;color:#991b1b;border-radius:5px;cursor:pointer">\uD83D\uDEAB</button>`}
           </td>
         </tr>`;
+      // Sub-filas por fleetroom (solo lectura; el tagging es por db_id).
+      if (hasFleetrooms) html += _fleetroomSubRows(r, clidJS, froomMap);
     }
   });
 
   if (rows.length > 500) {
-    html += `<tr><td colspan="7" style="text-align:center;color:#aaa;padding:10px;font-size:.75rem;font-style:italic">Mostrando primeros 500 de ${fmt(rows.length)}. Us\u00E1 el buscador para filtrar.</td></tr>`;
+    html += `<tr><td colspan="10" style="text-align:center;color:#aaa;padding:10px;font-size:.75rem;font-style:italic">Mostrando primeros 500 de ${fmt(rows.length)}. Us\u00E1 el buscador para filtrar.</td></tr>`;
   }
 
   html += `</tbody></table></div>`;
@@ -616,6 +709,71 @@ async function flotaToggleActivo(clid, nuevoEstado) {
   } finally {
     showLoad(false);
   }
+}
+
+// Toggle rapido de is_fleet/is_tuktuk (escribe a `partners`, no a `flotas`).
+// Sin modo edicion — se guarda al instante al tildar/destildar. partnerFallback/
+// kamFallback = nombre/KAM EFECTIVOS ya resueltos para esta fila (si el CLID aun
+// no esta en `partners`, evita perder el nombre en el primer upsert).
+async function flotaSetFlag(clid, key, checked, partnerFallback, kamFallback) {
+  showLoad(true, "Guardando...");
+  try {
+    await setPartnerFlag(clid, key, checked, partnerFallback, kamFallback);
+    showBanner(true, "Actualizado ✓");
+    await loadFromSupabase();
+    renderRawData();
+  } catch (err) {
+    showBanner(false, "Error: " + err.message);
+    console.error(err);
+  } finally {
+    showLoad(false);
+  }
+}
+
+// Toggle de is_fleet/is_tuktuk/exclude_from_taxi POR FLEETROOM (db_id) — escribe
+// a `fleetrooms`. Guarda al instante. name/kam/city = contexto de la sub-flota
+// (para el primer upsert si el fleetroom aun no tiene fila). Preserva los otros
+// dos flags dentro de setFleetroomFlag.
+async function fleetroomSetFlag(dbId, key, checked, name, clid, kam, city) {
+  showLoad(true, "Guardando...");
+  try {
+    await setFleetroomFlag(dbId, key, checked, { clid, name, kam, city });
+    showBanner(true, "Actualizado ✓");
+    await loadFromSupabase();
+    renderRawData();
+  } catch (err) {
+    showBanner(false, "Error: " + err.message);
+    console.error(err);
+  } finally {
+    showLoad(false);
+  }
+}
+
+// Sugerencia (NO filtro): true si el Nombre Excel de un CLID matchea algún
+// patrón TukTuk. Solo se usa para resaltar visualmente en Vista Flotas — nunca
+// para excluir datos ni auto-marcar is_tuktuk.
+function _tuktukSuggested(nombreExcel) {
+  const patterns = (STATE.tuktukPatterns || []).map(w => w.toLowerCase());
+  const name = (nombreExcel || "").toLowerCase();
+  return patterns.some(w => name.includes(w));
+}
+// Gestión de la lista de patrones (cliente, sin round-trip a Supabase — es
+// pura sugerencia visual, no afecta ningún dato ya cargado).
+function addTuktukPattern() {
+  const input = document.getElementById("newTuktukPattern");
+  const word  = (input?.value || "").trim().toLowerCase();
+  if (!word) return;
+  if (STATE.tuktukPatterns.includes(word)) { showBanner(false, `"${word}" ya está en la lista.`); return; }
+  STATE.tuktukPatterns.push(word);
+  lsSet("yangoTuktukPatterns", JSON.stringify(STATE.tuktukPatterns));
+  renderRawData();
+  showBanner(true, `"${word}" agregado a patrones TukTuk ✓`);
+}
+function removeTuktukPattern(word) {
+  STATE.tuktukPatterns = STATE.tuktukPatterns.filter(w => w !== word);
+  lsSet("yangoTuktukPatterns", JSON.stringify(STATE.tuktukPatterns));
+  renderRawData();
+  showBanner(true, `"${word}" eliminado de patrones TukTuk ✓`);
 }
 
 function exportFlotasCSV() {

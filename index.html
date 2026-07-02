@@ -87,8 +87,9 @@
       <button class="nav-dd-item"        data-tab="rawdata"     onclick="switchTabFromMenu('rawdata')">Data Raw</button>
     </div>
   </div>
-  <button class="nav-tab" data-tab="present" onclick="switchTab('present')">Presentación</button>
-  <button class="nav-tab" data-tab="config"  onclick="switchTab('config')">Configuración</button>
+  <button class="nav-tab" data-tab="present"  onclick="switchTab('present')">Presentación</button>
+  <button class="nav-tab" data-tab="present2" onclick="switchTab('present2')">Presentación 2.0</button>
+  <button class="nav-tab" data-tab="config"   onclick="switchTab('config')">Configuración</button>
 </nav>
     </div>
     <div class="topbar-right">
@@ -288,6 +289,10 @@
     <div class="tab-panel" id="tab-present">
       <div id="presentContent"></div>
     </div>
+<!-- Presentación 2.0 -->
+    <div class="tab-panel" id="tab-present2">
+      <div id="present2Content"></div>
+    </div>
   </div><!-- end .layout -->
 </div><!-- end #appContainer -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"
@@ -313,5 +318,6 @@
 <script src="insights.js"></script>
 <script src="partnerView.js"></script>
 <script src="calculator.js"></script>
+<script src="presentacion2.js"></script>
 </body>
 </html>

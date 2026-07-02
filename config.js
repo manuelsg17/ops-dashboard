@@ -104,6 +104,18 @@ const STATE = {
         .filter(w => typeof w === "string" && w.length > 0 && w.length <= 40)
         .slice(0, 100);
     } catch { return fallback; }
+  })(),
+  // Lista SEPARADA de bannedWords: no oculta filas, solo SUGIERE (Vista Flotas)
+  // marcar is_tuktuk cuando el Nombre Excel de un CLID matchea. Nunca auto-guarda.
+  tuktukPatterns: (function() {
+    const fallback = ["tuktuk", "tuk tuk", "tuk-tuk", "mototaxi"];
+    try {
+      const raw = JSON.parse(localStorage.getItem("yangoTuktukPatterns") || "null");
+      if (!Array.isArray(raw)) return fallback;
+      return raw
+        .filter(w => typeof w === "string" && w.length > 0 && w.length <= 40)
+        .slice(0, 100);
+    } catch { return fallback; }
   })()
 };
 function rebuildKAMPartners() {

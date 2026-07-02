@@ -279,6 +279,7 @@ function switchTab(tab) {
       if (prevTab === "calculator"  && typeof calcCancelPendingRender === "function") calcCancelPendingRender();
       if (prevTab === "partnerview" && typeof _pvDestroyCharts === "function")        _pvDestroyCharts();
       if (prevTab === "present"     && typeof destroyPresentCharts === "function")    destroyPresentCharts();
+      if (prevTab === "present2"    && typeof destroyPresent2Charts === "function")   destroyPresent2Charts();
       const apexConsumers = new Set(["rend","metas","ops","insights","unifview"]);
       if (apexConsumers.has(prevTab) && !apexConsumers.has(tab) && typeof destroyAllCharts === "function") {
         destroyAllCharts();
@@ -289,7 +290,7 @@ function switchTab(tab) {
     }
 
     // Pantalla completa en presentación
-    document.body.classList.toggle("present-mode", tab === "present");
+    document.body.classList.toggle("present-mode", tab === "present" || tab === "present2");
     // Guardar filtros actuales antes de cambiar
     STATE.savedFilters = {
       dateFrom:      document.getElementById("dateFrom")?.value,
@@ -350,6 +351,7 @@ function switchTab(tab) {
       if (tab === "rawdata")                                                        renderRawData();
       if (tab === "config")                                                         renderConfig();
       if (tab === "present")                                                        renderPresent();
+      if (tab === "present2"    && STATE.rawData.length)                            renderPresent2();
       if (tab === "insights"    && STATE.rawData.length)                            renderInsights();
       if (tab === "partnerview" && STATE.rawData.length)                            renderPartnerView();
       if (tab === "calculator"  && STATE.rawData.length)                            renderCalculator();
@@ -824,6 +826,8 @@ function renderConfig() {
         <thead>
           <tr>
             <th>CLID</th><th>Partner</th><th>KAM</th>
+            <th style="text-align:center;width:60px">Fleet</th>
+            <th style="text-align:center;width:70px">TukTuk</th>
             <th style="text-align:center;width:130px">Acciones</th>
           </tr>
         </thead>
@@ -839,6 +843,8 @@ function renderConfig() {
       const kamH     = escapeHTML(kam);
       // Para uso dentro de comillas simples de onclick, escapar apostrofes
       const clidJS   = clid.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+      const isFleet  = !!(STATE.CLID_IS_FLEET  || {})[clid];
+      const isTuktuk = !!(STATE.CLID_IS_TUKTUK || {})[clid];
       html += `
         <tr data-clid="${clidH}">
           <td style="font-size:.75rem;color:#aaa;font-family:monospace">${clidH}</td>
@@ -850,6 +856,8 @@ function renderConfig() {
             <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${color};margin-right:4px"></span>
             ${kamH}
           </td>
+          <td style="text-align:center">${isFleet ? `<span style="font-size:.68rem;background:#ecfdf5;color:#059669;padding:2px 7px;border-radius:10px;font-weight:700">🚗 Fleet</span>` : `<span style="color:#ddd">—</span>`}</td>
+          <td style="text-align:center">${isTuktuk ? `<span style="font-size:.68rem;background:#fff7ed;color:#c2410c;padding:2px 7px;border-radius:10px;font-weight:700">🛺 TukTuk</span>` : `<span style="color:#ddd">—</span>`}</td>
           <td style="text-align:center">
             <button class="crud-btn crud-btn-edit" onclick="kamMakeEditable('${clidJS}')">Editar</button>
             <button class="crud-btn crud-btn-del"  onclick="kamCrudDelete('${clidJS}')">Eliminar</button>
@@ -870,6 +878,8 @@ function renderConfig() {
             </select>
             <input class="crud-input" id="newKamCustom" placeholder="Nuevo nombre de KAM" style="display:none;margin-top:4px"/>
           </td>
+          <td style="text-align:center"><input type="checkbox" id="newFleet" title="Fleet"/></td>
+          <td style="text-align:center"><input type="checkbox" id="newTuktuk" title="TukTuk"/></td>
           <td style="text-align:center">
             <button class="crud-btn crud-btn-add" onclick="kamCrudAdd()">+ Agregar</button>
           </td>
@@ -901,6 +911,8 @@ function kamMakeEditable(clid) {
   const clidH    = escapeHTML(clid);
   const partnerH = escapeHTML(partner);
   const clidJS   = clid.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  const isFleet  = !!(STATE.CLID_IS_FLEET  || {})[clid];
+  const isTuktuk = !!(STATE.CLID_IS_TUKTUK || {})[clid];
   row.innerHTML = `
     <td style="font-size:.75rem;color:#aaa;font-family:monospace">${clidH}</td>
     <td><input class="crud-input" id="edit_partner_${clidH}" value="${partnerH}"/></td>
@@ -911,6 +923,8 @@ function kamMakeEditable(clid) {
       </select>
       <input class="crud-input" id="edit_kam_custom_${clidH}" placeholder="Nuevo nombre de KAM" style="display:none;margin-top:4px"/>
     </td>
+    <td style="text-align:center"><input type="checkbox" id="edit_fleet_${clidH}" ${isFleet ? "checked" : ""} title="Fleet"/></td>
+    <td style="text-align:center"><input type="checkbox" id="edit_tuktuk_${clidH}" ${isTuktuk ? "checked" : ""} title="TukTuk"/></td>
     <td style="text-align:center">
       <button class="crud-btn crud-btn-save"   onclick="kamCrudEdit('${clidJS}')">Guardar</button>
       <button class="crud-btn crud-btn-cancel" onclick="renderConfig()">Cancelar</button>
@@ -937,9 +951,11 @@ async function kamCrudEdit(clid) {
     ? (document.getElementById(`edit_kam_custom_${clid}`)?.value.trim() || "")
     : (kamRaw || "").trim();
   if (!partner || !kam) { showBanner(false, "Completa nombre y KAM antes de guardar."); return; }
+  const isFleet  = document.getElementById(`edit_fleet_${clid}`)?.checked || false;
+  const isTuktuk = document.getElementById(`edit_tuktuk_${clid}`)?.checked || false;
   showLoad(true, "Guardando...");
   const { error } = await sb.from("partners")
-    .upsert([{ clid, partner, kam, activo: true }], { onConflict: "clid" });
+    .upsert([{ clid, partner, kam, activo: true, is_fleet: isFleet, is_tuktuk: isTuktuk }], { onConflict: "clid" });
   showLoad(false);
   if (error) { showBanner(false, "Error al guardar: " + error.message); return; }
   await loadFromSupabase();
@@ -960,9 +976,11 @@ async function kamCrudAdd() {
     const existing = `${STATE.CLID_MAP[clid]} (KAM: ${STATE.KAM_MAP[clid]})`;
     if (!confirm(`El CLID "${clid}" ya existe: ${existing}.\n¿Deseas actualizarlo con los nuevos datos?`)) return;
   }
+  const isFleet  = document.getElementById("newFleet")?.checked || false;
+  const isTuktuk = document.getElementById("newTuktuk")?.checked || false;
   showLoad(true, "Guardando...");
   const { error } = await sb.from("partners")
-    .upsert([{ clid, partner, kam, activo: true }], { onConflict: "clid" });
+    .upsert([{ clid, partner, kam, activo: true, is_fleet: isFleet, is_tuktuk: isTuktuk }], { onConflict: "clid" });
   showLoad(false);
   if (error) { showBanner(false, "Error al agregar: " + error.message); return; }
   await loadFromSupabase();

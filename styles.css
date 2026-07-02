@@ -531,9 +531,12 @@ body.present-mode .layout { min-height: 100vh; }
 body.present-mode .main    { padding: 0; }
 body.present-mode #tab-present { height: 100vh; overflow-y: auto; }
 body.present-mode #presentContent { min-height: 100vh; }
-body.present-mode #slideContainer { 
-  width: calc(100vw - 40px) !important; 
+body.present-mode #slideContainer {
+  width: calc(100vw - 40px) !important;
 }
+body.present-mode #tab-present2   { height: 100vh; overflow-y: auto; }
+body.present-mode #present2Content { min-height: 100vh; }
+body.present-mode #slide2Container { width: calc(100vw - 40px) !important; }
 
 /* ── UPLOAD DROPDOWN ─────────────────────────────────────────────────────── */
 .upload-dropdown { position: relative; }

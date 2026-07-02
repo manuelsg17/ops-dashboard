@@ -459,6 +459,54 @@ async function fetchAllPages(table, orderCol) {
   return rows;
 }
 
+// ── FLEETROOM-AWARE PREDICATES (slicing por sub-flota) ────────────────────────
+// Fuente de verdad por fila:
+//   - Si la fila tiene db_id real (!=''), manda el tagging del fleetroom
+//     (tabla fleetrooms → STATE.FLEETROOM_*).
+//   - Si es legacy (db_id=''), cae al flag por CLID (partners.is_tuktuk →
+//     CLID_IS_TUKTUK). Asi la data historica sigue funcionando sin db_id.
+
+// TRUE si la fila pertenece a una operacion TukTuk.
+function rowIsTuktuk(r) {
+  const id = r.db_id;
+  if (id) return !!(STATE.FLEETROOM_IS_TUKTUK || {})[id];
+  return !!(STATE.CLID_IS_TUKTUK || {})[r.clid];        // fallback legacy
+}
+
+// TRUE si la fila debe EXCLUIRSE del calculo Taxi.
+// = es tuktuk  O  el fleetroom esta marcado exclude_from_taxi (ej. delivery).
+// Para legacy (db_id=''), solo aplica CLID_IS_TUKTUK (no hay exclude por CLID).
+function rowExcludedFromTaxi(r) {
+  const id = r.db_id;
+  if (id) {
+    return !!(STATE.FLEETROOM_IS_TUKTUK || {})[id]
+        || !!(STATE.FLEETROOM_EXCLUDE_TAXI || {})[id];
+  }
+  return !!(STATE.CLID_IS_TUKTUK || {})[r.clid];        // fallback legacy
+}
+
+// TRUE si la fila pertenece a una sub-flota Fleet (para KPIs Fleet en present2).
+function rowIsFleet(r) {
+  const id = r.db_id;
+  if (id) return !!(STATE.FLEETROOM_IS_FLEET || {})[id];
+  return !!(STATE.CLID_IS_FLEET || {})[r.clid];         // fallback legacy
+}
+
+// Anti-doble-conteo (no destructivo, load-time): si para una (clid,city,date)
+// existe >=1 fila con db_id real, descarta la fila legacy agregada (db_id='')
+// de esa misma clave. Evita sumar dos veces cuando un periodo se resubio con
+// detalle por fleetroom sin borrar el agregado viejo. La fila legacy sigue en BD.
+function dropLegacyAggregateRows(rows) {
+  const hasReal = new Set();
+  for (const r of rows) {
+    if (r.db_id) hasReal.add(`${r.clid}|||${r.city}|||${r.date}`);
+  }
+  if (!hasReal.size) return rows;                        // nada con detalle: no-op
+  return rows.filter(r =>
+    r.db_id || !hasReal.has(`${r.clid}|||${r.city}|||${r.date}`)
+  );
+}
+
 // ── LOAD FROM SUPABASE ────────────────────────────────────────────────────────
 async function loadFromSupabase() {
   showLoad(true, "Cargando datos desde Supabase...");
@@ -472,6 +520,8 @@ async function loadFromSupabase() {
     if (partners && partners.length) {
       STATE.CLID_MAP = {};
       STATE.KAM_MAP  = {};
+      STATE.CLID_IS_FLEET  = {};
+      STATE.CLID_IS_TUKTUK = {};
       partners.forEach(r => {
         // Trim defensivo: si la BD tiene "Manuel " con espacio, se normaliza al cargar
         // (evita KAMs duplicados visualmente identicos pero distintos por whitespace)
@@ -480,12 +530,34 @@ async function loadFromSupabase() {
         const kamT     = (r.kam     || "").trim();
         STATE.CLID_MAP[clidT] = partnerT;
         STATE.KAM_MAP[clidT]  = kamT;
+        STATE.CLID_IS_FLEET[clidT]  = r.is_fleet === true;
+        STATE.CLID_IS_TUKTUK[clidT] = r.is_tuktuk === true;
         if (kamT && !KAM_COLORS[kamT]) KAM_COLORS[kamT] = hashColor(kamT);
       });
       rebuildKAMPartners();
     }
     // Invalidar caches que dependen de KAM_MAP/CLID_MAP tras un CRUD
     STATE._partnerKAM = null;
+
+    // Fleetrooms: tagging por sub-flota (keyed by db_id). La tabla puede no
+    // existir aun / estar vacia (data legacy sin db_id) → try/catch silencioso.
+    // Debe cargarse ANTES de construir rawData (usa FLEETROOM_NAME) y antes de
+    // los filtros de slicing (rowIsTuktuk/rowExcludedFromTaxi).
+    STATE.FLEETROOM_IS_TUKTUK    = {};
+    STATE.FLEETROOM_IS_FLEET     = {};
+    STATE.FLEETROOM_EXCLUDE_TAXI = {};
+    STATE.FLEETROOM_NAME         = {};
+    try {
+      const { data: frooms } = await sb.from("fleetrooms").select("*");
+      (frooms || []).forEach(f => {
+        const id = (f.db_id || "").trim();
+        if (!id) return;
+        STATE.FLEETROOM_IS_TUKTUK[id]    = f.is_tuktuk === true;
+        STATE.FLEETROOM_IS_FLEET[id]     = f.is_fleet === true;
+        STATE.FLEETROOM_EXCLUDE_TAXI[id] = f.exclude_from_taxi === true;
+        STATE.FLEETROOM_NAME[id]         = (f.name || "").trim();
+      });
+    } catch (_) { /* tabla fleetrooms no existe aun */ }
 
     STATE.rawData = (rend || []).map(r => ({
       clid:          (r.clid || "").trim(),
@@ -496,6 +568,10 @@ async function loadFromSupabase() {
       kam:           STATE.KAM_MAP[r.clid] || r.kam || "",
       city:          normCity(r.city),
       date:          r.fecha,
+      // Fleetroom (sub-flota): db_id estable + nombre (tagging table gana sobre
+      // el crudo del Excel). '' en filas legacy sin desglose.
+      db_id:         (r.db_id || "").trim(),
+      fleetroom:     STATE.FLEETROOM_NAME[(r.db_id || "").trim()] || r.fleetroom || "",
       activeDrivers: +r.active_drivers,
       newPartner:    +r.new_from_partner,
       newService:    +r.new_from_service,
@@ -558,13 +634,36 @@ async function loadFromSupabase() {
     // flotasMap todavia).
     rebuildKAMPartners();
 
+    // Anti-doble-conteo: descartar la fila legacy agregada (db_id='') de una
+    // (clid,city,date) si ya existe detalle por fleetroom. Antes de rawDataFull.
+    STATE.rawData = dropLegacyAggregateRows(STATE.rawData);
+
     // 6. Guardar copia completa y aplicar filtro de palabras prohibidas
     STATE.rawDataFull = [...STATE.rawData];
+
+    // Slice TukTuk: se separa de rawDataFull ANTES del filtro de bannedWords,
+    // para no depender de esas palabras. Incluye fleetrooms marcados is_tuktuk
+    // (por db_id) o, para filas legacy sin db_id, CLIDs is_tuktuk. Estos se
+    // EXCLUYEN del resto del dashboard (solo se ven en Presentación 2.0, TukTuk).
+    STATE.rawDataTuktuk = STATE.rawDataFull.filter(r => rowIsTuktuk(r));
+    STATE._tuktukByCityDate = new Map();
+    STATE.rawDataTuktuk.forEach(r => {
+      const k = `${r.city}|||${r.date}`;
+      let a = STATE._tuktukByCityDate.get(k);
+      if (!a) { a = []; STATE._tuktukByCityDate.set(k, a); }
+      a.push(r);
+    });
+    STATE._tuktukPartners = [...new Set(STATE.rawDataTuktuk.map(r => r.partner))].sort();
+    STATE._tuktukDates    = [...new Set(STATE.rawDataTuktuk.map(r => r.date))].sort();
+
     if (STATE.bannedWords && STATE.bannedWords.length) {
       const banned   = STATE.bannedWords.map(w => w.toLowerCase());
       const isBanned = name => banned.some(w => (name || "").toLowerCase().includes(w));
       STATE.rawData  = STATE.rawData.filter(r => !isBanned(r.partner));
     }
+    // Excluir del dataset Taxi los fleetrooms tuktuk o exclude_from_taxi (o,
+    // legacy, CLIDs is_tuktuk). No contaminan otras pestañas.
+    STATE.rawData = STATE.rawData.filter(r => !rowExcludedFromTaxi(r));
     // Referencia fija al dataset semanal filtrado (C6: elimina backup lazy _rawDataSemanal)
     STATE._semanalData = STATE.rawData;
 
@@ -614,6 +713,8 @@ async function loadMensualIfNeeded() {
       kam:           STATE.KAM_MAP[r.clid]  || r.kam || "",
       city:          normCity(r.city),
       date:          r.mes,
+      db_id:         (r.db_id || "").trim(),
+      fleetroom:     STATE.FLEETROOM_NAME?.[(r.db_id || "").trim()] || r.fleetroom || "",
       activeDrivers: +r.active_drivers,
       newPartner:    +r.new_from_partner,
       newService:    +r.new_from_service,
@@ -623,12 +724,15 @@ async function loadMensualIfNeeded() {
       trips:         +r.trips,
       ...txRowExtra(r)
     }));
+    STATE.rawDataMensual = dropLegacyAggregateRows(STATE.rawDataMensual);
     STATE.rawDataMensualFull = [...STATE.rawDataMensual];
     if (STATE.bannedWords && STATE.bannedWords.length) {
       const banned   = STATE.bannedWords.map(w => w.toLowerCase());
       const isBanned = name => banned.some(w => (name || "").toLowerCase().includes(w));
       STATE.rawDataMensual = STATE.rawDataMensual.filter(r => !isBanned(r.partner));
     }
+    // Excluir tuktuk/exclude_from_taxi por fleetroom (o CLID legacy).
+    STATE.rawDataMensual = STATE.rawDataMensual.filter(r => !rowExcludedFromTaxi(r));
     // Aplicar mapeo de flotas tambien al dataset mensual
     STATE.rawDataMensual = applyFlotasOverride(STATE.rawDataMensual);
     STATE._mensualLoaded = true;
@@ -651,6 +755,8 @@ async function loadDiarioIfNeeded() {
       kam:           STATE.KAM_MAP[r.clid]  || r.kam || "",
       city:          normCity(r.city),
       date:          r.date,
+      db_id:         (r.db_id || "").trim(),
+      fleetroom:     STATE.FLEETROOM_NAME?.[(r.db_id || "").trim()] || r.fleetroom || "",
       activeDrivers: +r.active_drivers || 0,
       newPartner:    +r.new_partner    || 0,
       newService:    +r.new_service    || 0,
@@ -660,12 +766,15 @@ async function loadDiarioIfNeeded() {
       trips:         +r.trips          || 0,
       ...txRowExtra(r)
     }));
+    STATE.rawDataDiario = dropLegacyAggregateRows(STATE.rawDataDiario);
     STATE.rawDataDiarioFull = [...STATE.rawDataDiario];
     if (STATE.bannedWords && STATE.bannedWords.length) {
       const banned   = STATE.bannedWords.map(w => w.toLowerCase());
       const isBanned = name => banned.some(w => (name || "").toLowerCase().includes(w));
       STATE.rawDataDiario = STATE.rawDataDiario.filter(r => !isBanned(r.partner));
     }
+    // Excluir tuktuk/exclude_from_taxi por fleetroom (o CLID legacy).
+    STATE.rawDataDiario = STATE.rawDataDiario.filter(r => !rowExcludedFromTaxi(r));
     // Aplicar mapeo de flotas tambien al dataset diario
     STATE.rawDataDiario = applyFlotasOverride(STATE.rawDataDiario);
     STATE._diarioLoaded = true;
@@ -720,6 +829,7 @@ async function uploadRendimientoMensual(rows) {
 
   const keys = Object.keys(rows[0]);
   const mesColMap = {};
+  const { cDbId, cName } = _fleetroomCols(keys);
 
   // Detectar columnas con formato MM.YYYY o DD.MM.YYYY - Métrica
   keys.forEach(k => {
@@ -745,12 +855,14 @@ async function uploadRendimientoMensual(rows) {
     const partner = String(row["Partner"] || row["partner"] || "").trim() || clid || "Unknown";
     const kam  = STATE.KAM_MAP[clid] || "";
     const city = normCity(row["City"] || row["city"] || row["Ciudad"]);
+    const db_id     = cDbId ? String(row[cDbId] || "").trim() : "";
+    const fleetroom = cName ? String(row[cName] || "").trim() : (db_id ? partner : "");
 
     Object.entries(mesColMap).forEach(([mes, mc]) => {
       const m = txExtract(row, mc);
       if (!Object.values(m).some(v => v)) return;
-      const k = `${clid}|||${city}|||${mes}`;
-      if (!agg[k]) agg[k] = { clid, partner, kam, city, mes };
+      const k = `${clid}|||${city}|||${mes}|||${db_id}`;
+      if (!agg[k]) agg[k] = { clid, partner, kam, city, mes, db_id, fleetroom };
       txConsolidate(agg[k], m);
     });
   });
@@ -760,7 +872,7 @@ async function uploadRendimientoMensual(rows) {
 
   for (let i = 0; i < flat.length; i += 500) {
     const { error } = await sb.from("rendimiento_mensual")
-      .upsert(flat.slice(i, i + 500), { onConflict: "clid,city,mes" });
+      .upsert(flat.slice(i, i + 500), { onConflict: "clid,city,mes,db_id" });
     if (error) throw error;
   }
   STATE._mensualLoaded = false; // invalidar cache lazy → forzar recarga del dataset mensual
@@ -772,6 +884,7 @@ async function uploadRendimientoDiario(rows) {
 
   const keys = Object.keys(rows[0]);
   const dateColMap = {};
+  const { cDbId, cName } = _fleetroomCols(keys);
 
   keys.forEach(k => {
     const m = k.match(/^(\d{2})\.(\d{2})\.(\d{4})\s*-\s*(.+)$/);
@@ -785,18 +898,22 @@ async function uploadRendimientoDiario(rows) {
   rows.forEach(row => {
     const clid = String(row["CLID"] || row["clid"] || "").trim();
     const city = normCity(row["City"] || row["city"] || row["Ciudad"]);
+    const db_id     = cDbId ? String(row[cDbId] || "").trim() : "";
+    const partner   = String(row["Partner"] || row["partner"] || "").trim();
+    const fleetroom = cName ? String(row[cName] || "").trim() : (db_id ? partner : "");
 
     Object.entries(dateColMap).forEach(([date, mc]) => {
       const m = txExtract(row, mc);
       if (!Object.values(m).some(v => v)) return;
-      const k = `${clid}|||${city}|||${date}`;
-      if (!agg[k]) agg[k] = { clid, city, date };
+      const k = `${clid}|||${city}|||${date}|||${db_id}`;
+      if (!agg[k]) agg[k] = { clid, city, date, db_id, fleetroom };
       txConsolidate(agg[k], m);
     });
   });
 
   // El esquema diario usa new_partner/new_service (no new_from_*) y no tiene
   // columnas partner/kam. Remapear los nombres core antes del upsert.
+  // db_id/fleetroom sobreviven en ...rest (no se desestructuran).
   const flat = Object.values(agg).map(o => {
     const { new_from_partner, new_from_service, partner, kam, ...rest } = o;
     if (new_from_partner !== undefined) rest.new_partner = new_from_partner;
@@ -807,7 +924,7 @@ async function uploadRendimientoDiario(rows) {
 
   for (let i = 0; i < flat.length; i += 500) {
     const { error } = await sb.from("rendimiento_diario")
-      .upsert(flat.slice(i, i + 500), { onConflict: "clid,city,date" });
+      .upsert(flat.slice(i, i + 500), { onConflict: "clid,city,date,db_id" });
     if (error) throw error;
   }
   STATE._diarioLoaded = false; // forzar recarga al siguiente switchMode("diario")
@@ -1187,12 +1304,52 @@ async function createFlota(clid, partial) {
   if (error) throw error;
 }
 
+// ── MARCAR is_fleet / is_tuktuk POR CLID (desde Vista Flotas) ─────────────────
+// Escribe a `partners` (NO a `flotas`) — es un flag independiente del
+// edit-mode de flotas. Preserva partner/kam efectivos (fallback si el CLID aun
+// no existe en `partners`) y el OTRO flag (para no resetearlo a false).
+async function setPartnerFlag(clid, key, value, partnerFallback, kamFallback) {
+  if (!clid) throw new Error("Falta CLID");
+  const partner  = STATE.CLID_MAP[clid] || partnerFallback || "";
+  const kam      = STATE.KAM_MAP[clid]  || kamFallback || "";
+  const isFleet  = key === "is_fleet"  ? value : !!(STATE.CLID_IS_FLEET  || {})[clid];
+  const isTuktuk = key === "is_tuktuk" ? value : !!(STATE.CLID_IS_TUKTUK || {})[clid];
+  const { error } = await sb.from("partners")
+    .upsert([{ clid, partner, kam, activo: true, is_fleet: isFleet, is_tuktuk: isTuktuk }], { onConflict: "clid" });
+  if (error) throw error;
+}
+
+// ── MARCAR is_fleet / is_tuktuk / exclude_from_taxi POR FLEETROOM (db_id) ──────
+// Granularidad por sub-flota: escribe a `fleetrooms` (PK db_id). Preserva los
+// OTROS dos flags (leidos de STATE.FLEETROOM_*) para no resetearlos a false, y
+// el clid/name/kam/city de contexto (para un CLID/fleetroom aun sin fila).
+async function setFleetroomFlag(dbId, key, value, ctx = {}) {
+  if (!dbId) throw new Error("Falta db_id");
+  const isFleet   = key === "is_fleet"          ? value : !!(STATE.FLEETROOM_IS_FLEET     || {})[dbId];
+  const isTuktuk  = key === "is_tuktuk"         ? value : !!(STATE.FLEETROOM_IS_TUKTUK    || {})[dbId];
+  const excludeTx = key === "exclude_from_taxi" ? value : !!(STATE.FLEETROOM_EXCLUDE_TAXI || {})[dbId];
+  const row = {
+    db_id: dbId,
+    clid:  ctx.clid || null,
+    name:  ctx.name || (STATE.FLEETROOM_NAME || {})[dbId] || "",
+    kam:   ctx.kam  || null,
+    city:  ctx.city ? normCity(ctx.city) : null,
+    is_fleet:          isFleet,
+    is_tuktuk:         isTuktuk,
+    exclude_from_taxi: excludeTx,
+    activo:            true
+  };
+  const { error } = await sb.from("fleetrooms").upsert([row], { onConflict: "db_id" });
+  if (error) throw error;
+}
+
 // ── UPLOAD RENDIMIENTO (pivot → flat rows) ────────────────────────────────────
 async function uploadRendimiento(rows) {
   if (!rows.length) throw new Error("Archivo vacío");
 
   const keys = Object.keys(rows[0]);
   const dateColMap = {};
+  const { cDbId, cName } = _fleetroomCols(keys);
 
   keys.forEach(k => {
     const m = k.match(/^(\d{2})\.(\d{2})\.(\d{4})\s*-\s*(.+)$/);
@@ -1202,7 +1359,8 @@ async function uploadRendimiento(rows) {
     dateColMap[iso][m[4].trim().toLowerCase()] = k;
   });
 
-  // Aggregate by clid+city+fecha to avoid duplicates (registro unico TX_COL_BY_NORM)
+  // Aggregate by clid+city+fecha+db_id to avoid duplicates (registro unico).
+  // db_id separa fleetrooms del MISMO clid (antes se colapsaban en 1 fila).
   const agg = {};
   rows.forEach(row => {
     const clid    = String(row["CLID"] || row["clid"] || "").trim();
@@ -1211,12 +1369,16 @@ async function uploadRendimiento(rows) {
     const partner = String(row["Partner"] || row["partner"] || "").trim() || clid || "Unknown";
     const kam  = STATE.KAM_MAP[clid] || "";
     const city = normCity(row["City"] || row["city"] || row["Ciudad"]);
+    // db_id: id estable de fleetroom (vacio en Excels legacy sin la columna).
+    // fleetroom: nombre; columna explicita si existe, sino el Partner del Excel.
+    const db_id     = cDbId ? String(row[cDbId] || "").trim() : "";
+    const fleetroom = cName ? String(row[cName] || "").trim() : (db_id ? partner : "");
 
     Object.entries(dateColMap).forEach(([fecha, mc]) => {
       const m = txExtract(row, mc);
       if (!Object.values(m).some(v => v)) return;
-      const k = `${clid}|||${city}|||${fecha}`;
-      if (!agg[k]) agg[k] = { clid, partner, kam, city, fecha };
+      const k = `${clid}|||${city}|||${fecha}|||${db_id}`;
+      if (!agg[k]) agg[k] = { clid, partner, kam, city, fecha, db_id, fleetroom };
       txConsolidate(agg[k], m);
     });
   });
@@ -1227,10 +1389,31 @@ async function uploadRendimiento(rows) {
   // Batch upsert 500 rows at a time
   for (let i = 0; i < flat.length; i += 500) {
     const { error } = await sb.from("rendimiento")
-      .upsert(flat.slice(i, i + 500), { onConflict: "clid,city,fecha" });
+      .upsert(flat.slice(i, i + 500), { onConflict: "clid,city,fecha,db_id" });
     if (error) throw error;
   }
 }
+// Detecta las columnas db_id (id estable de fleetroom) y nombre de fleetroom
+// por header normalizado. Tolerante a casing/espacios ("DB ID", "db_id",
+// "Fleetroom", "Sala", "Sub Flota"). Devuelve { cDbId, cName } (claves de
+// columna del Excel o undefined). Mismo patron que pickKey de uploadConversion.
+function _fleetroomCols(keys) {
+  const pick = (except, ...needles) => keys.find(k => {
+    if (k === except) return false;
+    const n = _txNorm(k);
+    return needles.some(nd => n === nd || n.includes(nd));
+  });
+  const cDbId = pick(null, "db id", "dbid", "fleetroom id", "sala id", "park id", "parkid");
+  return {
+    cDbId,
+    // El nombre del fleetroom suele venir en la columna "Partner" del export de
+    // DataLens (City|CLID|db_id|Partner|...); ahi lo toma el uploader como
+    // fallback. Solo si el Excel trae una columna EXPLICITA de nombre la usamos.
+    // Se excluye la columna db_id para que "fleetroom id" no calce como nombre.
+    cName: pick(cDbId, "fleetroom name", "sala", "sub flota", "subflota")
+  };
+}
+
 // Normaliza un valor de CLID a string entero. Maneja: number (raw),
 // string entero, string con decimal trailing, string en notacion cientifica.
 // Si detecta cientifica devuelve null (CLID degradado, no usable).
@@ -1354,6 +1537,7 @@ function updateIndexes() {
   STATE._byCity     = new Map();
   STATE._byCityDate = new Map();
   STATE._partnerKAM = new Map();
+  STATE._partnerIsFleet = new Map();
   STATE.rawData.forEach(r => {
     // _byDate
     let a = STATE._byDate.get(r.date);
@@ -1375,6 +1559,10 @@ function updateIndexes() {
     // _partnerKAM (primer kam no vacío gana)
     if (r.kam && !STATE._partnerKAM.has(r.partner)) {
       STATE._partnerKAM.set(r.partner, r.kam);
+    }
+    // _partnerIsFleet: true si ALGÚN CLID del partner tiene is_fleet=true
+    if ((STATE.CLID_IS_FLEET || {})[r.clid] && !STATE._partnerIsFleet.get(r.partner)) {
+      STATE._partnerIsFleet.set(r.partner, true);
     }
   });
   STATE._apdFull = null;   // dataset cambió → invalidar agregado completo
@@ -1404,6 +1592,18 @@ function getKAMForPartner(partner) {
     });
   }
   return STATE._partnerKAM.get(partner) || "";
+}
+
+// Partner es Fleet si ALGÚN CLID suyo tiene is_fleet=true (flag manual en Config).
+// Memoizado en updateIndexes (_partnerIsFleet); lazy-build si aún no existe.
+function isFleetPartner(partner) {
+  if (STATE._partnerIsFleet?.has(partner)) return STATE._partnerIsFleet.get(partner);
+  if (!STATE._partnerIsFleet) STATE._partnerIsFleet = new Map();
+  const map = STATE.CLID_IS_FLEET || {};
+  Object.entries(STATE.CLID_MAP || {}).forEach(([clid, p]) => {
+    if (p && map[clid] && !STATE._partnerIsFleet.has(p)) STATE._partnerIsFleet.set(p, true);
+  });
+  return STATE._partnerIsFleet.get(partner) || false;
 }
 
 function getFilteredByDateRange(from, to) {
