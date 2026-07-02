@@ -538,6 +538,11 @@ body.present-mode #tab-present2   { height: 100vh; overflow-y: auto; }
 body.present-mode #present2Content { min-height: 100vh; }
 body.present-mode #slide2Container { width: calc(100vw - 40px) !important; }
 
+/* ── SIN SIDEBAR (Fase 7: Configuración / Calculadora / Data Raw) ─────────── */
+/* Esos tabs no dependen de los filtros del sidebar → se oculta y el main ocupa
+   todo el ancho (declutter). El sidebar-toggle vive dentro de .sidebar-wrap. */
+body.no-sidebar .sidebar-wrap { display: none !important; }
+
 /* ── UPLOAD DROPDOWN ─────────────────────────────────────────────────────── */
 .upload-dropdown { position: relative; }
 .upload-main-btn {

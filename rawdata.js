@@ -120,9 +120,9 @@ function renderRawData() {
   html += `
     <div class="section" style="margin-bottom:16px">
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <input class="crud-input" placeholder="Buscar partner o KAM..."
+        <input class="crud-input" id="rawSearchReg" placeholder="Buscar partner o KAM..."
           value="${RAW_STATE.search.replace(/"/g, "&quot;")}"
-          oninput="RAW_STATE.search=this.value;RAW_STATE.page=0;renderRawData()"
+          oninput="rawSearchInput(this,true)"
           style="flex:1;min-width:160px;max-width:260px"/>
         <select class="sb-sel" onchange="RAW_STATE.city=this.value;RAW_STATE.page=0;renderRawData()">
           <option value="all"${RAW_STATE.city === "all" ? " selected" : ""}>Todas las ciudades</option>
@@ -304,6 +304,18 @@ function rawSwitchView(v) {
   renderRawData();
 }
 
+// Buscador sin perder foco: renderRawData reconstruye todo el panel (destruye el
+// input al re-render). Guardamos el caret y re-enfocamos el mismo id tras el
+// re-render → se puede escribir corrido (fix Fase 7). Espejo del arreglo de Config.
+function rawSearchInput(inp, resetPage) {
+  RAW_STATE.search = inp.value;
+  if (resetPage) RAW_STATE.page = 0;
+  const id = inp.id, pos = inp.selectionStart;
+  renderRawData();
+  const el = id && document.getElementById(id);
+  if (el) { el.focus(); try { el.setSelectionRange(pos, pos); } catch (e) {} }
+}
+
 // \u2500\u2500 VISTA FLOTAS \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 // Vista de auditoria del mapeo CLID \u2192 flota. La FUENTE DE VERDAD es la tabla
 // `partners` (Configuracion). La tabla `flotas` solo:
@@ -417,9 +429,9 @@ function _renderFlotasView() {
         <div style="margin-top:6px">\uD83D\uDEFA Si un CLID trae <strong>fleetrooms</strong> (sub-flotas con <code>db_id</code>), se listan debajo y se marcan <strong>por fleetroom</strong>: <strong>Fleet</strong>, <strong>TukTuk</strong> o <strong>Excluir de Taxi</strong> (ej. delivery). As\u00ED solo esa sub-flota entra a TukTuk / sale de Taxi, sin afectar a las dem\u00E1s del mismo CLID.</div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
-        <input class="crud-input" placeholder="Buscar CLID, partner, KAM, ciudad..."
+        <input class="crud-input" id="rawSearchFlotas" placeholder="Buscar CLID, partner, KAM, ciudad..."
           value="${(RAW_STATE.search || "").replace(/"/g, "&quot;")}"
-          oninput="RAW_STATE.search=this.value;renderRawData()"
+          oninput="rawSearchInput(this,false)"
           style="flex:1;min-width:200px;max-width:340px"/>
         <select class="sb-sel" onchange="RAW_STATE.city=this.value;renderRawData()">
           <option value="all"${RAW_STATE.city==="all"?" selected":""}>Todas las ciudades</option>

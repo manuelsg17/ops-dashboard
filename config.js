@@ -59,6 +59,7 @@ const METRICS = {
 const STATE = {
   rawData:             [],
   rawDataMensual:      [],
+  rawDataMensualTuktuk:[],   // Slice mensual TukTuk (Fase 7, para metas TukTuk)
   rawDataFull:         [],   // Copia sin filtrar (incluye flotas excluidas)
   rawDataMensualFull:  [],   // Idem para mensual
   metasData:           [],

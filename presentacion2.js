@@ -252,7 +252,7 @@ const P2_GET = {
   comm:  r => r.commission || 0
 };
 
-// Todas las métricas (base + derivadas: N+R, Retención, VxH, VxC, HxC) por nivel.
+// Todas las métricas (base + derivadas: N+R, Retención, Trips/SH, Trips/AD, SH/AD) por nivel.
 // Retención[i] = (AD[i] − Nuevos[i] − Reactivados[i]) / AD[i−1]  (null si i=0 o AD prev=0).
 function p2Metrics(partner, scope, dates) {
   const ad    = p2Vals(partner, scope, dates, P2_GET.ad);
@@ -263,10 +263,10 @@ function p2Metrics(partner, scope, dates) {
   const comm  = p2Vals(partner, scope, dates, P2_GET.comm);
   const nr    = dates.map((_, i) => (newd[i] || 0) + (react[i] || 0));
   const ret   = dates.map((_, i) => (i === 0 || !ad[i - 1]) ? null : (ad[i] - newd[i] - react[i]) / ad[i - 1]);
-  const vxh   = dates.map((_, i) => sh[i] ? trips[i] / sh[i] : null);
-  const vxc   = dates.map((_, i) => ad[i] ? trips[i] / ad[i] : null);
-  const hxc   = dates.map((_, i) => ad[i] ? sh[i] / ad[i] : null);
-  return { ad, newd, react, sh, trips, comm, nr, ret, vxh, vxc, hxc };
+  const tripsPerSh = dates.map((_, i) => sh[i] ? trips[i] / sh[i] : null);   // Trips/SH
+  const tripsPerAd = dates.map((_, i) => ad[i] ? trips[i] / ad[i] : null);   // Trips/AD
+  const shPerAd    = dates.map((_, i) => ad[i] ? sh[i] / ad[i] : null);      // SH/AD
+  return { ad, newd, react, sh, trips, comm, nr, ret, tripsPerSh, tripsPerAd, shPerAd };
 }
 
 // Retención a nivel ciudad (todos los partners) para la tendencia de comparación.
@@ -567,7 +567,7 @@ function buildSlide2MatrixCharts(partner, dates, root) {
 
 // ── SLIDES 1 y 2: DATA RAW numérico / porcentual ──────────────────────────────
 // Columnas (formato de referencia): Trips · Supply Hours · Active Drivers ·
-// New Drivers · Reactivated · Partner Commission · N+R · Retención · VxH · VxC · HxC.
+// New Drivers · Reactivated · Partner Commission · N+R · Retención · Trips/SH · Trips/AD · SH/AD.
 function p2RawCols(es) {
   return [
     { key: "trips", label: "Trips",           kind: "num" },
@@ -578,13 +578,13 @@ function p2RawCols(es) {
     { key: "comm",  label: "Partner Commission", kind: "money" },
     { key: "nr",    label: "N+R",              kind: "num" },
     { key: "ret",   label: es ? "Retención" : "Retention", kind: "pct" },
-    { key: "vxh",   label: "VxH",              kind: "ratio" },
-    { key: "vxc",   label: "VxC",              kind: "ratio" },
-    { key: "hxc",   label: "HxC",              kind: "ratio" }
+    { key: "tripsPerSh", label: "Trips/SH",    kind: "ratio" },
+    { key: "tripsPerAd", label: "Trips/AD",    kind: "ratio" },
+    { key: "shPerAd",    label: "SH/AD",       kind: "ratio" }
   ];
 }
 // Fleet: TODAS las columnas de agregador (p2RawCols, sin quitar nada — incluye
-// VxH/VxC/HxC) + 3 fleet-específicas al final (aditivo, no reemplaza; el
+// Trips/SH, Trips/AD, SH/AD) + 3 fleet-específicas al final (aditivo, no reemplaza; el
 // partner Fleet quiere ver info de agregador Y de fleet juntas).
 function p2RawColsFleet(es) {
   return [
@@ -671,7 +671,13 @@ function p2MonthDates(mesName) {
     out = allDates.filter(d => d.startsWith(ym));
   } else if (ord > 2000 && ord < 3000) {
     const mn = ord - 2000;
-    out = allDates.filter(d => parseInt(d.slice(5, 7), 10) === mn);
+    // metas.mes es un NOMBRE sin año ("JUNIO"); el dataset puede tener ese mes en
+    // varios años (p.ej. 2025-06 Y 2026-06). Tomar SOLO el año más reciente: sin
+    // esto Avance sumaba meses de años distintos → N+R/SH ~duplicados y AD corrupto.
+    const matches = allDates.filter(d => parseInt(d.slice(5, 7), 10) === mn);
+    const years = [...new Set(matches.map(d => d.slice(0, 4)))].sort();
+    const lastYear = years[years.length - 1];
+    out = lastYear ? matches.filter(d => d.slice(0, 4) === lastYear) : [];
   }
   if (!out.length) {   // fallback: último mes presente en el dataset activo
     const last = allDates.slice(-1)[0];
@@ -687,25 +693,25 @@ function p2MetaFor(partner, scopeCity, mes) {
     return o;
   }, { mA: 0, mNR: 0, mH: 0 });
 }
-// Actuals: AD = Σciudades(max en el mes); N+R y SH = suma. (espejo de getRPC/metas.js)
+// Actuals: AD = máx sobre fechas de (Σciudades) — MISMO criterio que getRPC/metas.js:
+// suma las ciudades POR FECHA y LUEGO toma el máximo. NO Σciudades(máx del mes), que
+// sobre-cuenta a los partners multi-ciudad (suma el pico de cada ciudad aunque ocurran
+// en semanas distintas). N+R y SH = suma (invariantes al orden). p2GetPartnerVals es
+// dataset-scoped (taxi usa STATE._byCityDate; tuktuk STATE._tuktukByCityDate).
 function p2ActualsMTD(partner, scopeCity, monthDates) {
   const cities = scopeCity ? [scopeCity] : p2PartnerCities(partner);
-  let ad = 0, nr = 0, sh = 0, lastAD = 0;
-  const nrV = monthDates.map(() => 0), shV = monthDates.map(() => 0);
-  cities.forEach(c => {
-    // p2GetPartnerVals (no getPartnerVals global): dataset-scoped. Para taxi es el
-    // MISMO índice (STATE._byCityDate); para tuktuk lee STATE._tuktukByCityDate.
-    const adA = p2GetPartnerVals(partner, c, monthDates, P2_GET.ad);
-    const ndA = p2GetPartnerVals(partner, c, monthDates, P2_GET.newd);
-    const rcA = p2GetPartnerVals(partner, c, monthDates, P2_GET.react);
-    const shA = p2GetPartnerVals(partner, c, monthDates, P2_GET.sh);
-    ad     += adA.length ? Math.max(...adA) : 0;
-    lastAD += adA.length ? adA[adA.length - 1] : 0;
-    monthDates.forEach((_, i) => {
-      nr += (ndA[i] || 0) + (rcA[i] || 0); sh += shA[i] || 0;
-      nrV[i] += (ndA[i] || 0) + (rcA[i] || 0); shV[i] += shA[i] || 0;
-    });
-  });
+  const adPer = cities.map(c => p2GetPartnerVals(partner, c, monthDates, P2_GET.ad));
+  const ndPer = cities.map(c => p2GetPartnerVals(partner, c, monthDates, P2_GET.newd));
+  const rcPer = cities.map(c => p2GetPartnerVals(partner, c, monthDates, P2_GET.react));
+  const shPer = cities.map(c => p2GetPartnerVals(partner, c, monthDates, P2_GET.sh));
+  // Serie por fecha sumando ciudades (Σciudades por fecha).
+  const adTot = monthDates.map((_, i) => cities.reduce((s, _c, ci) => s + (adPer[ci][i] || 0), 0));
+  const nrV   = monthDates.map((_, i) => cities.reduce((s, _c, ci) => s + (ndPer[ci][i] || 0) + (rcPer[ci][i] || 0), 0));
+  const shV   = monthDates.map((_, i) => cities.reduce((s, _c, ci) => s + (shPer[ci][i] || 0), 0));
+  const ad     = adTot.length ? Math.max(...adTot) : 0;        // máx de (Σciudades por fecha)
+  const nr     = nrV.reduce((s, v) => s + v, 0);
+  const sh     = shV.reduce((s, v) => s + v, 0);
+  const lastAD = adTot.length ? adTot[adTot.length - 1] : 0;   // Σciudades en la última fecha (base de proyección)
   return { ad, nr, sh, nrV, shV, lastAD };
 }
 function p2ProjMTD(act, lastDate) {
@@ -828,8 +834,8 @@ const P2_ALERT_THRESHOLDS = {
   retMin: 0.95,         // retención mínima
   retLargeMin: 0.93,    // retención mínima parks grandes
   smallParkAD: 20, midParkAD: 100,
-  smallHxCMin: 15,      // HxC (horas/conductor) mínimo park chico
-  midVxCMin: 20         // VxC (viajes/conductor) mínimo park medio
+  smallShPerAdMin: 15,     // SH/AD (horas/conductor) mínimo park chico
+  midTripsPerAdMin: 20     // Trips/AD (viajes/conductor) mínimo park medio
 };
 function p2ComputeAlerts(partner, dates) {
   const es = PRESENT2_STATE.lang === "es";
@@ -841,7 +847,7 @@ function p2ComputeAlerts(partner, dates) {
     const lastAD = ad[ad.length - 1] || 0;
     const lastRet = ret[ret.length - 1];
     const wow = getWoW(ad); const lw = wow[wow.length - 1];
-    const hxc = m.hxc[m.hxc.length - 1], vxc = m.vxc[m.vxc.length - 1];
+    const shPerAd = m.shPerAd[m.shPerAd.length - 1], tripsPerAd = m.tripsPerAd[m.tripsPerAd.length - 1];
     // (a) AD cae 3 semanas seguidas
     if (ad.length >= 3) {
       const a = ad.slice(-3);
@@ -853,9 +859,9 @@ function p2ComputeAlerts(partner, dates) {
     if (lastRet != null && lastRet < T.retMin) out.push({ sev: "mid", level: lv.label, msg: es ? `Retención ${(lastRet * 100).toFixed(1)}% (bajo 95%)` : `Retention ${(lastRet * 100).toFixed(1)}% (below 95%)` });
     // (d) mínimos por tamaño de park
     if (lastAD > 0 && lastAD < T.smallParkAD) {
-      if (hxc != null && hxc < T.smallHxCMin) out.push({ sev: "mid", level: lv.label, msg: es ? `Park chico con HxC bajo (${hxc.toFixed(1)} h/cond)` : `Small park, low HxC (${hxc.toFixed(1)} h/driver)` });
+      if (shPerAd != null && shPerAd < T.smallShPerAdMin) out.push({ sev: "mid", level: lv.label, msg: es ? `Park chico con SH/AD bajo (${shPerAd.toFixed(1)} h/cond)` : `Small park, low SH/AD (${shPerAd.toFixed(1)} h/driver)` });
     } else if (lastAD < T.midParkAD) {
-      if ((vxc != null && vxc < T.midVxCMin)) out.push({ sev: "mid", level: lv.label, msg: es ? `Park medio con VxC bajo (${vxc.toFixed(1)} viajes/cond)` : `Mid park, low VxC (${vxc.toFixed(1)})` });
+      if ((tripsPerAd != null && tripsPerAd < T.midTripsPerAdMin)) out.push({ sev: "mid", level: lv.label, msg: es ? `Park medio con Trips/AD bajo (${tripsPerAd.toFixed(1)} viajes/cond)` : `Mid park, low Trips/AD (${tripsPerAd.toFixed(1)})` });
     } else if (lastAD > 0) {
       if ((lw != null && lw < 0) || (lastRet != null && lastRet < T.retLargeMin)) out.push({ sev: "mid", level: lv.label, msg: es ? `Park grande con señal de caída (revisar estabilidad)` : `Large park showing decline` });
     }

@@ -726,6 +726,22 @@ async function loadMensualIfNeeded() {
     }));
     STATE.rawDataMensual = dropLegacyAggregateRows(STATE.rawDataMensual);
     STATE.rawDataMensualFull = [...STATE.rawDataMensual];
+
+    // Slice TukTuk MENSUAL: separar ANTES del filtro exclude_from_taxi, desde el
+    // Full (aún incluye tuktuk). Espejo del semanal (loadFromSupabase ~648-657).
+    // Lo usa la Calculadora para armar metas TukTuk (Fase 7). applyFlotasOverride
+    // para paridad de nombres con el resto del mensual.
+    STATE.rawDataMensualTuktuk = applyFlotasOverride(STATE.rawDataMensualFull.filter(r => rowIsTuktuk(r)));
+    STATE._tuktukMensualByCityDate = new Map();
+    STATE.rawDataMensualTuktuk.forEach(r => {
+      const k = `${r.city}|||${r.date}`;
+      let a = STATE._tuktukMensualByCityDate.get(k);
+      if (!a) { a = []; STATE._tuktukMensualByCityDate.set(k, a); }
+      a.push(r);
+    });
+    STATE._tuktukMensualPartners = [...new Set(STATE.rawDataMensualTuktuk.map(r => r.partner))].sort();
+    STATE._tuktukMensualDates    = [...new Set(STATE.rawDataMensualTuktuk.map(r => r.date))].sort();
+
     if (STATE.bannedWords && STATE.bannedWords.length) {
       const banned   = STATE.bannedWords.map(w => w.toLowerCase());
       const isBanned = name => banned.some(w => (name || "").toLowerCase().includes(w));

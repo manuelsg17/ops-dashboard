@@ -291,6 +291,10 @@ function switchTab(tab) {
 
     // Pantalla completa en presentación
     document.body.classList.toggle("present-mode", tab === "present" || tab === "present2");
+    // Ocultar el sidebar de filtros en tabs donde no aplica (Fase 7): la data de
+    // Configuración/Calculadora/Data Raw no depende de Escala/Fechas/Ciudad/KAM.
+    const NO_SIDEBAR_TABS = new Set(["config", "calculator", "rawdata"]);
+    document.body.classList.toggle("no-sidebar", NO_SIDEBAR_TABS.has(tab));
     // Guardar filtros actuales antes de cambiar
     STATE.savedFilters = {
       dateFrom:      document.getElementById("dateFrom")?.value,
@@ -301,7 +305,9 @@ function switchTab(tab) {
       selected:      getSel()
     };
 
-    const ANALISIS_TABS = ["rend", "metas", "ops", "proyectos", "unifview", "rawdata"];
+    // Tabs bajo el dropdown "Análisis" (Fase 7: sincronizado con el nav visible —
+    // incluye partnerview/calculator, excluye ops/proyectos ocultos).
+    const ANALISIS_TABS = ["rend", "partnerview", "calculator", "metas", "unifview", "rawdata"];
     const navAnalisis = document.getElementById("navAnalisis");
     if (navAnalisis) navAnalisis.classList.toggle("active", ANALISIS_TABS.includes(tab));
     document.querySelectorAll(".nav-tab[data-tab]").forEach(btn => {
@@ -794,10 +800,36 @@ function renderConfig() {
   });
   html += `</div>`;
 
-  // CRUD table with filter + pagination
+  // CRUD table: toolbar ESTÁTICO (search + KAM filter) + contenedor de resultados
+  // que se repinta solo (renderConfigResults) → el input no se re-crea y conserva
+  // el foco al escribir (fix Fase 7).
+  const cfgKamF   = CONFIG_STATE.kamFilter;
+  const kamFilterOpts = kams.map(k => `<option value="${escapeHTML(k)}"${cfgKamF===k?" selected":""}>${escapeHTML(k)}</option>`).join("");
+  html += `
+    <div style="margin-bottom:10px;font-size:.8rem;font-weight:700;color:#555">👥 Partners &amp; CLIDs</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+      <input class="crud-input" id="configSearch" placeholder="Buscar CLID, partner o KAM..." value="${CONFIG_STATE.search.replace(/"/g,'&quot;')}"
+        oninput="CONFIG_STATE.search=this.value;CONFIG_STATE.page=0;renderConfigResults()" style="flex:1;min-width:160px;max-width:300px"/>
+      <select class="crud-input" id="configKamFilter" onchange="CONFIG_STATE.kamFilter=this.value;CONFIG_STATE.page=0;renderConfigResults()" style="width:auto">
+        <option value="all"${cfgKamF==="all"?" selected":""}>Todos los KAMs</option>
+        ${kamFilterOpts}
+      </select>
+      <span id="configCount" style="font-size:.75rem;color:#aaa"></span>
+    </div>
+    <div id="configResults"></div>
+    </div>`;   // cierra la .section abierta arriba (stats KAM + Partners & CLIDs)
+  content.innerHTML = html;
+  renderConfigResults();
+}
+
+// Repinta SOLO contador + tabla + paginación (sin re-crear el input de búsqueda).
+function renderConfigResults() {
+  const box = document.getElementById("configResults");
+  if (!box) return;
+  const kams = [...new Set(Object.values(STATE.KAM_MAP))].sort();
   const cfgSearch = CONFIG_STATE.search.toLowerCase();
   const cfgKamF   = CONFIG_STATE.kamFilter;
-  let allRows = Object.entries(STATE.CLID_MAP)
+  const allRows = Object.entries(STATE.CLID_MAP)
     .sort((a, b) => a[1].localeCompare(b[1]))
     .filter(([clid, partner]) => {
       const kam = STATE.KAM_MAP[clid] || "";
@@ -808,19 +840,10 @@ function renderConfig() {
   const totalPages = Math.max(1, Math.ceil(allRows.length / CONFIG_STATE.PAGE_SIZE));
   if (CONFIG_STATE.page >= totalPages) CONFIG_STATE.page = 0;
   const pageRows  = allRows.slice(CONFIG_STATE.page * CONFIG_STATE.PAGE_SIZE, (CONFIG_STATE.page + 1) * CONFIG_STATE.PAGE_SIZE);
-  const kamFilterOpts = kams.map(k => `<option value="${k}"${cfgKamF===k?" selected":""}>${k}</option>`).join("");
+  const cnt = document.getElementById("configCount");
+  if (cnt) cnt.textContent = `${allRows.length} resultado${allRows.length!==1?"s":""}`;
 
-  html += `
-    <div style="margin-bottom:10px;font-size:.8rem;font-weight:700;color:#555">👥 Partners &amp; CLIDs</div>
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
-      <input class="crud-input" id="configSearch" placeholder="Buscar CLID, partner o KAM..." value="${CONFIG_STATE.search.replace(/"/g,'&quot;')}"
-        oninput="CONFIG_STATE.search=this.value;CONFIG_STATE.page=0;renderConfig()" style="flex:1;min-width:160px;max-width:300px"/>
-      <select class="crud-input" id="configKamFilter" onchange="CONFIG_STATE.kamFilter=this.value;CONFIG_STATE.page=0;renderConfig()" style="width:auto">
-        <option value="all"${cfgKamF==="all"?" selected":""}>Todos los KAMs</option>
-        ${kamFilterOpts}
-      </select>
-      <span style="font-size:.75rem;color:#aaa">${allRows.length} resultado${allRows.length!==1?"s":""}</span>
-    </div>
+  let html = `
     <div class="tbl-wrap">
       <table class="dtbl" id="crudTable">
         <thead>
@@ -888,14 +911,13 @@ function renderConfig() {
     </div>
     ${totalPages > 1 ? `
     <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.78rem;color:#555">
-      <button class="crud-btn" onclick="CONFIG_STATE.page=Math.max(0,CONFIG_STATE.page-1);renderConfig()"
+      <button class="crud-btn" onclick="CONFIG_STATE.page=Math.max(0,CONFIG_STATE.page-1);renderConfigResults()"
         ${CONFIG_STATE.page===0?"disabled":""} style="padding:4px 10px">← Anterior</button>
       <span>Página <strong>${CONFIG_STATE.page+1}</strong> de <strong>${totalPages}</strong></span>
-      <button class="crud-btn" onclick="CONFIG_STATE.page=Math.min(${totalPages-1},CONFIG_STATE.page+1);renderConfig()"
+      <button class="crud-btn" onclick="CONFIG_STATE.page=Math.min(${totalPages-1},CONFIG_STATE.page+1);renderConfigResults()"
         ${CONFIG_STATE.page===totalPages-1?"disabled":""} style="padding:4px 10px">Siguiente →</button>
-    </div>` : ""}
-    </div>`;
-  content.innerHTML = html;
+    </div>` : ""}`;
+  box.innerHTML = html;
 }
 
 // ── KAM CRUD FUNCTIONS ────────────────────────────────────────────────────────

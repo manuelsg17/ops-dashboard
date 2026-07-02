@@ -66,10 +66,13 @@ async function handleLogout() {
 
 function _clearStateAndLocalStorage() {
   // Drop de datos del dataset en memoria.
-  ["rawData","rawDataMensual","rawDataFull","rawDataMensualFull",
-   "rawDataDiario","rawDataDiarioFull","metasData","proyectosData",
+  ["rawData","rawDataMensual","rawDataMensualTuktuk","rawDataFull","rawDataMensualFull",
+   "rawDataDiario","rawDataDiarioFull","rawDataTuktuk","metasData","proyectosData",
    "allDates","allPartners","curSummaries"
   ].forEach(k => { if (Array.isArray(STATE[k])) STATE[k].length = 0; });
+  STATE._tuktukMensualByCityDate = null;
+  STATE._tuktukMensualPartners   = null;
+  STATE._tuktukMensualDates      = null;
   STATE.CLID_MAP        = {};
   STATE.KAM_MAP         = {};
   STATE.KAM_PARTNERS    = {};

@@ -12,8 +12,8 @@ const CALC_STATE = {
   kam:        "all",
   // Metas editadas manualmente: { "partner|||city|||metric": valor }
   edits:      {},
-  // Metas KAM input manual (formato Yango con pesos)
-  kamGoals:   { ad: 0, sh: 0, nr: 0, otherProj: 0, fleetA2: 0 }
+  // Metas KAM input manual (formato Yango con pesos) + metas TukTuk (Fase 7)
+  kamGoals:   { ad: 0, sh: 0, nr: 0, otherProj: 0, fleetA2: 0, tkAd: 0, tkNr: 0, tkCars: 0 }
 };
 
 // Pesos Yango (formato KAM-level)
@@ -47,7 +47,7 @@ function _calcAggByPartnerCity(rows, monthsSet) {
     let e = out.get(k);
     if (!e) {
       e = { clid: r.clid || "", partner: r.partner, city: r.city, kam: r.kam,
-            trips: 0, sh: 0, ad: 0, np: 0, ns: 0, re: 0,
+            trips: 0, sh: 0, ad: 0, np: 0, ns: 0, re: 0, bcars: 0,
             activeCars: 0, shCarW: 0, acceptW: 0 };
       out.set(k, e);
     }
@@ -55,6 +55,7 @@ function _calcAggByPartnerCity(rows, monthsSet) {
     e.trips += r.trips || 0;
     e.sh    += r.supplyHours || 0;
     if ((r.activeDrivers || 0) > e.ad) e.ad = r.activeDrivers || 0;  // AD: snapshot (max)
+    if ((r.brandedActiveCars || 0) > e.bcars) e.bcars = r.brandedActiveCars || 0;  // cars TukTuk: snapshot (max)
     e.np    += r.newPartner || 0;
     e.ns    += r.newService || 0;
     e.re    += r.reactivated || 0;
@@ -89,14 +90,58 @@ function _calcLookupClid(partner, city) {
   return "";
 }
 
-// Totales del KAM (base para repartir): suma de los valores 3m de cada partner+ciudad.
-// nr = nuevos partner + nuevos yango + reactivados. (Para el % la /n se cancela.)
-function _calcKamTotals(agg) {
-  let ad = 0, sh = 0, nr = 0;
-  for (const e of agg.values()) { ad += e.ad; sh += e.sh; nr += (e.np + e.ns + e.re); }
-  return { ad, sh, nr };
+// Totales del KAM (base para repartir): suma de los valores de cada partner+ciudad.
+// opts.excludeFleet salta partners fleet (isFleetPartner) → los NO-fleet suman 100%
+// (el reparto de agregador no depende de partners fleet). Incluye cars (TukTuk).
+function _calcKamTotals(agg, opts) {
+  const skipFleet = opts && opts.excludeFleet;
+  let ad = 0, sh = 0, nr = 0, cars = 0;
+  for (const e of agg.values()) {
+    if (skipFleet && _calcIsFleet(e.partner)) continue;
+    ad += e.ad; sh += e.sh; nr += (e.np + e.ns + e.re); cars += e.bcars || 0;
+  }
+  return { ad, sh, nr, cars };
+}
+// Totales TukTuk (AD/N+R/cars) — alias semántico sobre _calcKamTotals.
+function _calcTkTotals(agg, opts) { const t = _calcKamTotals(agg, opts); return { ad: t.ad, nr: t.nr, cars: t.cars }; }
+
+// Totales por CIUDAD para UN mes, sobre TODOS los partners (NO filtrado por KAM):
+// es el denominador exacto del "peso de Yego en Lima". Reusa _calcAggByPartnerCity
+// (mismo criterio de agregación: AD/cars = max, resto suma) y colapsa por ciudad.
+function _calcCityTotals(month, rows) {
+  const aggFull = _calcAggByPartnerCity(rows || [], new Set([month]));
+  const byCity = new Map();
+  for (const e of aggFull.values()) {
+    let c = byCity.get(e.city);
+    if (!c) { c = { ad: 0, sh: 0, nr: 0, cars: 0 }; byCity.set(e.city, c); }
+    c.ad += e.ad; c.sh += e.sh; c.nr += (e.np + e.ns + e.re); c.cars += e.bcars || 0;
+  }
+  return byCity;
 }
 function _calcShare(val, tot) { return tot > 0 ? val / tot : 0; }
+function _calcIsFleet(partner) { return typeof isFleetPartner === "function" && isFleetPartner(partner); }
+
+// Bases distribuidas de AGREGADOR (AD/SH/N+R) para un partner-ciudad. Fleet → 0
+// (incremento mínimo, editable) y marcado. distTotals = _calcKamTotals(...,{excludeFleet:true}).
+function _calcAggMetaBases(e, g, distTotals) {
+  if (_calcIsFleet(e.partner)) return { ad: 0, sh: 0, nr: 0, fleet: true };
+  const nr = e.np + e.ns + e.re;
+  return {
+    ad: (+g.ad || 0) * _calcShare(e.ad, distTotals.ad),
+    sh: (+g.sh || 0) * _calcShare(e.sh, distTotals.sh),
+    nr: (+g.nr || 0) * _calcShare(nr,  distTotals.nr),
+    fleet: false
+  };
+}
+// Bases distribuidas TukTuk (AD/N+R/cars).
+function _calcTkBases(e, g, distTotals) {
+  const nr = e.np + e.ns + e.re;
+  return {
+    ad:   (+g.tkAd   || 0) * _calcShare(e.ad,    distTotals.ad),
+    nr:   (+g.tkNr   || 0) * _calcShare(nr,      distTotals.nr),
+    cars: (+g.tkCars || 0) * _calcShare(e.bcars, distTotals.cars)
+  };
+}
 
 // Meta distribuida o edit manual para un partner+city+metric.
 function _calcGoalFor(partner, city, metric, base) {
@@ -163,25 +208,65 @@ function renderCalculator() {
   const allMonths = [...new Set(rows.map(r => r.date))].sort();
   const last3 = allMonths.slice(-3);
   const last3Set = new Set(last3);
+  const lastMonth = allMonths[allMonths.length - 1];
 
-  // Base unica de todo el flujo: agregado 3 meses del KAM seleccionado.
+  // Agregados TAXI: 3M para el promedio (sec 2); ÚLTIMO MES para representación y
+  // reparto (así el % que se ve = el que reparte). distTot1 excluye fleet → cuadra 100%.
   const aggLast3 = _calcAggByPartnerCity(filteredRows, last3Set);
-  const totals = _calcKamTotals(aggLast3);
+  const aggLast1 = _calcAggByPartnerCity(filteredRows, new Set([lastMonth]));
+  const cartTot1 = _calcKamTotals(aggLast1);
+  const distTot1 = _calcKamTotals(aggLast1, { excludeFleet: true });
+  const cityTot1 = _calcCityTotals(lastMonth, STATE.rawDataMensual || []);
+
+  // Agregados TUKTUK (eje de meses propio; puede diferir del taxi).
+  const tkRows  = STATE.rawDataMensualTuktuk || [];
+  const tkFilt  = CALC_STATE.kam === "all" ? tkRows
+                : tkRows.filter(r => (r.kam || getKAMForPartner(r.partner)) === CALC_STATE.kam);
+  const tkMonths = [...new Set(tkRows.map(r => r.date))].sort();
+  const tkLast1  = tkMonths.length ? tkMonths[tkMonths.length - 1] : null;
+  const aggTk1   = tkLast1 ? _calcAggByPartnerCity(tkFilt, new Set([tkLast1])) : new Map();
+  const tkCartT1 = _calcTkTotals(aggTk1);
+  const tkCityT1 = tkLast1 ? _calcCityTotals(tkLast1, tkRows) : new Map();
+  const hasTk    = tkRows.length > 0;
+
+  const TAXI_METRICS = [
+    { key: "ad", label: "AD",  get: e => e.ad },
+    { key: "sh", label: "SH",  get: e => e.sh },
+    { key: "nr", label: "N+R", get: e => e.np + e.ns + e.re }
+  ];
+  const TK_METRICS = [
+    { key: "ad",   label: "AD",   get: e => e.ad },
+    { key: "nr",   label: "N+R",  get: e => e.np + e.ns + e.re },
+    { key: "cars", label: "Cars", get: e => e.bcars }
+  ];
+  const cardNo = hasTk ? 8 : 6;
 
   el.innerHTML = `
     <div style="padding:0 8px 16px">
-      ${_calcSec1_metas(allKAMs, last3)}
+      ${_calcSec1_metas(allKAMs, last3, hasTk)}
       ${_calcSec2_promedio3m(aggLast3, last3)}
-      ${_calcSec3_pct(aggLast3, totals)}
-      ${_calcSec4_distribucion(aggLast3, totals)}
+      ${_calcSec3_pct(aggLast1, cartTot1, cityTot1, lastMonth, { n: 3, icon: "🔥", color: "#f59e0b", title: "% Representación · Ciudad + Cartera", metrics: TAXI_METRICS })}
+      ${_calcSec4_distribucion(aggLast1, distTot1, lastMonth)}
       ${_calcSec4b_fleet(aggLast3)}
-      ${_calcSec5_exportPartner(aggLast3, totals)}
+      ${hasTk ? _calcSec3_pct(aggTk1, tkCartT1, tkCityT1, tkLast1, { n: 6, icon: "🛺", color: "#a855f7", title: "% Representación TukTuk · Ciudad + Cartera", metrics: TK_METRICS }) : ""}
+      ${hasTk ? _calcSecTk_distribucion(aggTk1, tkCartT1, tkLast1) : ""}
+      ${_calcSec5_exportPartner(aggLast1, distTot1, aggTk1, tkCartT1, cardNo)}
     </div>`;
 }
 
 // ── SECCION 1: Ingresa tus metas KAM ──────────────────────────────────────────
-function _calcSec1_metas(allKAMs, last3) {
+function _calcSec1_metas(allKAMs, last3, hasTk) {
   const g = CALC_STATE.kamGoals;
+  const tkBox = hasTk ? `
+      <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:12px;margin-top:10px">
+        <div style="font-size:.78rem;font-weight:700;color:#7e22ce;margin-bottom:8px">🛺 Metas totales TukTuk (branding cars):</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px">
+          ${_kamGoalInput("tkAd",   "AD (TukTuk)",   null, g.tkAd)}
+          ${_kamGoalInput("tkNr",   "N+R (TukTuk)",  null, g.tkNr)}
+          ${_kamGoalInput("tkCars", "Cars (branded)",null, g.tkCars)}
+        </div>
+        <div style="font-size:.7rem;color:#7e22ce;margin-top:8px;font-style:italic">Se reparten entre tus partners con flota TukTuk según su peso. Metas TukTuk viven en la tarjeta del partner (no en el CSV de agregador).</div>
+      </div>` : "";
   return `
     ${_secH("🎯", "#FF0000", "1. Ingresa tus metas KAM", "Las que te dio tu jefe (formato Yango con pesos)")}
     <div class="section">
@@ -214,13 +299,15 @@ function _calcSec1_metas(allKAMs, last3) {
           </span>
         </div>
       </div>
+      ${tkBox}
     </div>`;
 }
 
 function _kamGoalInput(metric, label, weight, val) {
+  const wtag = (weight === null || weight === undefined) ? "" : ` <span style="color:#aaa">(${weight}%)</span>`;
   return `
     <div>
-      <label style="font-size:.66rem;color:#666;font-weight:700;display:block;margin-bottom:3px">${escapeHTML(label)} <span style="color:#aaa">(${weight}%)</span></label>
+      <label style="font-size:.66rem;color:#666;font-weight:700;display:block;margin-bottom:3px">${escapeHTML(label)}${wtag}</label>
       <input type="number" step="1" min="0" value="${+val || 0}"
         onchange="calcOnKamGoalChange('${metric}', this.value)"
         class="sb-inp" style="width:100%;padding:5px 8px;font-size:.78rem"/>
@@ -281,48 +368,65 @@ function _calcSec2_promedio3m(agg, months) {
     </div>`;
 }
 
-// ── SECCION 3: % Representación (base de la distribución) ──────────────────────
-function _calcSec3_pct(agg, totals) {
+// ── SECCION 3 / 6: % Representación (Ciudad + Cartera) — parametrizable ─────────
+// Por cada métrica muestra DOS columnas: % Ciudad (val ÷ total de la ciudad, TODOS
+// los partners → "peso de Yego en Lima", exacto) y % Cartera (val ÷ total del KAM
+// = base del reparto, suma 100%). Ventana: último mes. opts.metrics = [{key,label,get}],
+// cartTotals[key], cityTotals=Map<city,{key:val}>. Reusa _calcHeatBg/_calcHeatColor.
+function _calcSec3_pct(agg, cartTotals, cityTotals, monthLabel, opts) {
+  const M = opts.metrics;
   const items = [...agg.values()].sort((a, b) =>
     a.partner.localeCompare(b.partner) || a.city.localeCompare(b.city));
 
-  const _cell = (val, tot) => {
+  const _pctCell = (val, tot) => {
     if (!tot) return `<td class="tn" style="color:#ccc">—</td>`;
     const pct = (val / tot) * 100;
     return `<td class="tn" style="background:${_calcHeatBg(pct)};color:${_calcHeatColor(pct)};font-weight:700">${pct.toFixed(1)}%</td>`;
   };
 
   const rowsHtml = items.map(e => {
-    const nr = e.np + e.ns + e.re;
+    const ct = cityTotals.get(e.city) || {};
+    const cells = M.map(m => {
+      const v = m.get(e);
+      return _pctCell(v, ct[m.key]) + _pctCell(v, cartTotals[m.key]);   // Ciudad, Cartera
+    }).join("");
     return `
       <tr>
         <td style="font-size:.75rem;font-weight:600">${escapeHTML(e.partner)}</td>
         <td style="font-size:.72rem;color:#666">${escapeHTML(e.city)}</td>
-        ${_cell(e.ad, totals.ad)}
-        ${_cell(e.sh, totals.sh)}
-        ${_cell(nr,  totals.nr)}
+        ${cells}
       </tr>`;
   }).join("");
 
+  const topHead = M.map(m => `<th class="tn" colspan="2">${escapeHTML(m.label)}</th>`).join("");
+  const subHead = M.map(() => `<th class="tn" title="Peso en la ciudad (todos los KAMs)">% Ciudad</th><th class="tn" title="Peso en tu cartera KAM">% Cartera</th>`).join("");
+  const footCells = M.map(() => `<td class="tn" style="color:#aaa">—</td><td class="tn">100%</td>`).join("");
+  const nCols = 2 + M.length * 2;
+
   return `
-    ${_secH("🔥", "#f59e0b", "3. % Representación (base de la distribución)", "Peso de cada partner-ciudad en el total del KAM · suma 100% por métrica")}
+    ${_secH(opts.icon, opts.color, `${opts.n}. ${opts.title} · ${d2s(monthLabel || "")}`,
+            "% Ciudad = peso real de tu partner en la ciudad (todos los partners Yango) · % Cartera = peso en tu KAM (base del reparto) · ventana: último mes")}
     <div class="section">
       <div class="tbl-wrap" style="max-height:400px;overflow-y:auto">
         <table class="dtbl">
           <thead>
-            <tr><th>Partner</th><th>Ciudad</th><th class="tn">% AD</th><th class="tn">% SH</th><th class="tn">% N+R</th></tr>
+            <tr><th rowspan="2">Partner</th><th rowspan="2">Ciudad</th>${topHead}</tr>
+            <tr>${subHead}</tr>
           </thead>
-          <tbody>${rowsHtml || `<tr><td colspan="5" style="text-align:center;color:#aaa;padding:20px">Sin datos.</td></tr>`}</tbody>
+          <tbody>${rowsHtml || `<tr><td colspan="${nCols}" style="text-align:center;color:#aaa;padding:20px">Sin datos.</td></tr>`}</tbody>
           <tfoot style="font-weight:700;background:#f9f9f9">
-            <tr><td colspan="2">Total KAM</td><td class="tn">100%</td><td class="tn">100%</td><td class="tn">100%</td></tr>
+            <tr><td colspan="2">Total cartera</td>${footCells}</tr>
           </tfoot>
         </table>
       </div>
     </div>`;
 }
 
-// ── SECCION 4: Distribución de metas (editable) ───────────────────────────────
-function _calcSec4_distribucion(agg, totals) {
+// ── SECCION 4: Distribución de metas AGREGADOR (editable) ──────────────────────
+// Ventana: último mes (misma que la representación → el % que ves reparte).
+// Fleet: base 0 (incremento mínimo, editable) + badge; el cuadre solo cuenta a los
+// agregadores no-fleet (distTotals ya los excluyó) → suma 100% de la meta KAM.
+function _calcSec4_distribucion(agg, distTotals, monthLabel) {
   const g = CALC_STATE.kamGoals;
   const items = [...agg.values()].sort((a, b) =>
     a.partner.localeCompare(b.partner) || a.city.localeCompare(b.city));
@@ -335,27 +439,29 @@ function _calcSec4_distribucion(agg, totals) {
       onchange="calcOnGoalEdit(this)"
       style="width:90px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;font-size:.74rem;text-align:right"/>`;
   };
-  const _pct = (val, tot) => tot > 0 ? ((val / tot) * 100).toFixed(1) + "%" : "—";
+  const _pct = (val, tot, fleet) => fleet ? "—" : (tot > 0 ? ((val / tot) * 100).toFixed(1) + "%" : "—");
 
-  let sumAD = 0, sumSH = 0, sumNR = 0;
+  let sumAD = 0, sumSH = 0, sumNR = 0;      // agregadores (cuadre)
+  let fAD = 0, fSH = 0, fNR = 0;            // fleet (manual, informativo)
   const rowsHtml = items.map(e => {
     const nr = e.np + e.ns + e.re;
-    const adBase = (+g.ad || 0) * _calcShare(e.ad, totals.ad);
-    const shBase = (+g.sh || 0) * _calcShare(e.sh, totals.sh);
-    const nrBase = (+g.nr || 0) * _calcShare(nr,  totals.nr);
-    sumAD += _calcGoalFor(e.partner, e.city, "ad", adBase);
-    sumSH += _calcGoalFor(e.partner, e.city, "sh", shBase);
-    sumNR += _calcGoalFor(e.partner, e.city, "nr", nrBase);
+    const b = _calcAggMetaBases(e, g, distTotals);
+    const ad = _calcGoalFor(e.partner, e.city, "ad", b.ad);
+    const sh = _calcGoalFor(e.partner, e.city, "sh", b.sh);
+    const nrg = _calcGoalFor(e.partner, e.city, "nr", b.nr);
+    if (b.fleet) { fAD += ad; fSH += sh; fNR += nrg; }
+    else         { sumAD += ad; sumSH += sh; sumNR += nrg; }
+    const badge = b.fleet ? ` <span style="font-size:.58rem;background:#0891b2;color:#fff;padding:1px 5px;border-radius:6px;vertical-align:middle">FLEET</span>` : "";
     return `
-      <tr>
-        <td style="font-size:.75rem;font-weight:600">${escapeHTML(e.partner)}</td>
+      <tr${b.fleet ? ' style="background:#f1f5f9"' : ''}>
+        <td style="font-size:.75rem;font-weight:600">${escapeHTML(e.partner)}${badge}</td>
         <td style="font-size:.72rem;color:#666">${escapeHTML(e.city)}</td>
-        <td class="tn" style="color:#888">${_pct(e.ad, totals.ad)}</td>
-        <td>${_input(e.partner, e.city, "ad", adBase)}</td>
-        <td class="tn" style="color:#888">${_pct(e.sh, totals.sh)}</td>
-        <td>${_input(e.partner, e.city, "sh", shBase)}</td>
-        <td class="tn" style="color:#888">${_pct(nr, totals.nr)}</td>
-        <td>${_input(e.partner, e.city, "nr", nrBase)}</td>
+        <td class="tn" style="color:#888">${_pct(e.ad, distTotals.ad, b.fleet)}</td>
+        <td>${_input(e.partner, e.city, "ad", b.ad)}</td>
+        <td class="tn" style="color:#888">${_pct(e.sh, distTotals.sh, b.fleet)}</td>
+        <td>${_input(e.partner, e.city, "sh", b.sh)}</td>
+        <td class="tn" style="color:#888">${_pct(nr, distTotals.nr, b.fleet)}</td>
+        <td>${_input(e.partner, e.city, "nr", b.nr)}</td>
       </tr>`;
   }).join("");
 
@@ -363,9 +469,16 @@ function _calcSec4_distribucion(agg, totals) {
   const hint = noGoals
     ? `<div style="font-size:.78rem;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:8px 10px;margin-bottom:8px">⚠️ Ingresa tus metas KAM en la sección 1 y presiona <strong>"Distribuir metas"</strong> para repartirlas aquí.</div>`
     : "";
+  const fleetRow = (fAD || fSH || fNR) ? `
+            <tr>
+              <td colspan="2" style="color:#0891b2;font-weight:600">Fleet (manual · no cuadra)</td>
+              <td></td><td class="tn">${fmt(fAD)}</td>
+              <td></td><td class="tn">${fmt(fSH)}</td>
+              <td></td><td class="tn">${fmt(fNR)}</td>
+            </tr>` : "";
 
   return `
-    ${_secH("⚙️", "#8b5cf6", "4. Distribución de metas (editable)", "Meta KAM × % de representación · cada celda es editable")}
+    ${_secH("⚙️", "#8b5cf6", "4. Distribución de metas · Agregador · " + d2s(monthLabel || ""), "Meta KAM × % Cartera (último mes) · editable · los Fleet arrancan en 0 (mínimo)")}
     <div class="section">
       ${hint}
       <div class="tbl-wrap" style="max-height:500px;overflow-y:auto">
@@ -381,11 +494,11 @@ function _calcSec4_distribucion(agg, totals) {
           <tbody>${rowsHtml || `<tr><td colspan="8" style="text-align:center;color:#aaa;padding:20px">Sin datos.</td></tr>`}</tbody>
           <tfoot style="font-weight:700;background:#f9f9f9">
             <tr>
-              <td colspan="2">Suma distribuida</td>
+              <td colspan="2">Suma agregadores</td>
               <td></td><td class="tn">${fmt(sumAD)}</td>
               <td></td><td class="tn">${fmt(sumSH)}</td>
               <td></td><td class="tn">${fmt(sumNR)}</td>
-            </tr>
+            </tr>${fleetRow}
             <tr>
               <td colspan="2" style="color:#666;font-weight:600">Meta KAM · cuadre</td>
               <td></td><td class="tn">${_calcCuadre(sumAD, +g.ad || 0)}</td>
@@ -420,8 +533,9 @@ function _calcCuadre(sum, target) {
 // Metas manuales por partner-ciudad para partners fleet. NO se distribuyen ni van
 // al CSV (la tabla `metas` no las tiene); si se llenan, aparecen en la tarjeta (sec 5).
 function _calcSec4b_fleet(agg) {
-  const items = [...agg.values()].sort((a, b) =>
-    a.partner.localeCompare(b.partner) || a.city.localeCompare(b.city));
+  const items = [...agg.values()]
+    .filter(e => _calcIsFleet(e.partner))       // Fase 7: solo partners fleet
+    .sort((a, b) => a.partner.localeCompare(b.partner) || a.city.localeCompare(b.city));
 
   const _inp = (partner, city, metric, ph) => {
     const k = `${partner}|||${city}|||${metric}`;
@@ -447,7 +561,7 @@ function _calcSec4b_fleet(agg) {
   }).join("");
 
   return `
-    ${_secH("🚗", "#0891b2", "KPIs Fleet (opcional)", "Solo para partners fleet · si llenas una meta se agrega a la tarjeta del partner")}
+    ${_secH("🚗", "#0891b2", "5. Metas Fleet (KPIs propios)", "Solo partners marcados Fleet · SH/Auto, Aceptación, Utilización · van a la tarjeta del partner")}
     <div class="section">
       <div class="tbl-wrap" style="max-height:420px;overflow-y:auto">
         <table class="dtbl">
@@ -459,7 +573,7 @@ function _calcSec4b_fleet(agg) {
               <th class="tn">Meta Utiliz. %</th>
             </tr>
           </thead>
-          <tbody>${rowsHtml || `<tr><td colspan="7" style="text-align:center;color:#aaa;padding:20px">Sin datos.</td></tr>`}</tbody>
+          <tbody>${rowsHtml || `<tr><td colspan="7" style="text-align:center;color:#aaa;padding:20px">No hay partners marcados como Fleet en este KAM.</td></tr>`}</tbody>
         </table>
       </div>
       <div style="font-size:.7rem;color:#888;margin-top:6px;font-style:italic">
@@ -468,52 +582,133 @@ function _calcSec4b_fleet(agg) {
     </div>`;
 }
 
-// ── SECCION 5: Vista compartible / descarga por partner ───────────────────────
-function _calcSec5_exportPartner(agg, totals) {
+// ── SECCION 7: Distribución de metas TukTuk (editable) ────────────────────────
+// KPIs AD / N+R / Cars (branded_active_cars). Reparte g.tkAd/tkNr/tkCars por peso
+// dentro de la cartera TukTuk. edit-keys tk_* (disjuntas de taxi). Solo card, no CSV.
+function _calcSecTk_distribucion(agg, distTotals, monthLabel) {
   const g = CALC_STATE.kamGoals;
-  const partners = [...new Set([...agg.values()].map(e => e.partner))].sort();
+  const items = [...agg.values()].sort((a, b) =>
+    a.partner.localeCompare(b.partner) || a.city.localeCompare(b.city));
+
+  const _input = (partner, city, metric, base) => {
+    const k = `${partner}|||${city}|||${metric}`;
+    const val = CALC_STATE.edits[k] !== undefined ? +CALC_STATE.edits[k] : Math.round(base);
+    return `<input type="number" step="1" min="0" class="calc-inp" value="${val}"
+      data-pk="${escapeHTML(partner)}" data-city="${escapeHTML(city)}" data-metric="${metric}"
+      onchange="calcOnGoalEdit(this)"
+      style="width:90px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;font-size:.74rem;text-align:right"/>`;
+  };
+
+  let sAD = 0, sNR = 0, sCars = 0;
+  const rowsHtml = items.map(e => {
+    const b = _calcTkBases(e, g, distTotals);
+    const ad   = _calcGoalFor(e.partner, e.city, "tk_ad",   b.ad);
+    const nrg  = _calcGoalFor(e.partner, e.city, "tk_nr",   b.nr);
+    const cars = _calcGoalFor(e.partner, e.city, "tk_cars", b.cars);
+    sAD += ad; sNR += nrg; sCars += cars;
+    return `
+      <tr>
+        <td style="font-size:.75rem;font-weight:600">${escapeHTML(e.partner)}</td>
+        <td style="font-size:.72rem;color:#666">${escapeHTML(e.city)}</td>
+        <td>${_input(e.partner, e.city, "tk_ad",   b.ad)}</td>
+        <td>${_input(e.partner, e.city, "tk_nr",   b.nr)}</td>
+        <td>${_input(e.partner, e.city, "tk_cars", b.cars)}</td>
+      </tr>`;
+  }).join("");
+
+  return `
+    ${_secH("🛺", "#a855f7", "7. Distribución de metas · TukTuk · " + d2s(monthLabel || ""), "Meta TukTuk × % Cartera · AD · N+R · Cars (branded) · editable")}
+    <div class="section">
+      <div class="tbl-wrap" style="max-height:460px;overflow-y:auto">
+        <table class="dtbl">
+          <thead>
+            <tr><th>Partner</th><th>Ciudad</th><th class="tn">AD meta</th><th class="tn">N+R meta</th><th class="tn">Cars meta</th></tr>
+          </thead>
+          <tbody>${rowsHtml || `<tr><td colspan="5" style="text-align:center;color:#aaa;padding:20px">Sin partners TukTuk en este KAM.</td></tr>`}</tbody>
+          <tfoot style="font-weight:700;background:#f9f9f9">
+            <tr><td colspan="2">Suma distribuida</td><td class="tn">${fmt(sAD)}</td><td class="tn">${fmt(sNR)}</td><td class="tn">${fmt(sCars)}</td></tr>
+            <tr><td colspan="2" style="color:#666;font-weight:600">Meta TukTuk · cuadre</td>
+              <td class="tn">${_calcCuadre(sAD, +g.tkAd || 0)}</td>
+              <td class="tn">${_calcCuadre(sNR, +g.tkNr || 0)}</td>
+              <td class="tn">${_calcCuadre(sCars, +g.tkCars || 0)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div style="font-size:.7rem;color:#888;margin-top:6px;font-style:italic">💡 Las metas TukTuk viven en la tarjeta del partner (sección 8), no en el CSV de agregador.</div>
+    </div>`;
+}
+
+// ── SECCION 8: Vista compartible / descarga por partner (Taxi + TukTuk) ────────
+function _calcSec5_exportPartner(agg, totals, aggTk, tkTotals, secNo) {
+  const g = CALC_STATE.kamGoals;
+  const partners = [...new Set([
+    ...[...agg.values()].map(e => e.partner),
+    ...[...(aggTk ? aggTk.values() : [])].map(e => e.partner)
+  ])].sort();
   if (!partners.length) {
     return `
-      ${_secH("📤", "#10b981", "5. Vista compartible por partner", "Sin partners en este filtro")}
-      <div class="section"><div style="font-size:.78rem;color:#aaa;padding:8px 0">No hay partners en el KAM seleccionado con datos en los últimos 3 meses.</div></div>`;
+      ${_secH("📤", "#10b981", `${secNo}. Vista compartible por partner`, "Sin partners en este filtro")}
+      <div class="section"><div style="font-size:.78rem;color:#aaa;padding:8px 0">No hay partners en el KAM seleccionado con datos.</div></div>`;
   }
   const sel = (CALC_STATE.selPartnerExport && partners.includes(CALC_STATE.selPartnerExport))
     ? CALC_STATE.selPartnerExport
     : partners[0];
   CALC_STATE.selPartnerExport = sel;
 
-  const partnerItems = [...agg.values()].filter(e => e.partner === sel);
+  const taxiItems = [...agg.values()].filter(e => e.partner === sel);
+  const tkItems   = [...(aggTk ? aggTk.values() : [])].filter(e => e.partner === sel);
 
-  // KPIs fleet: solo aparecen columnas para los que el partner tenga meta cargada.
+  // KPIs fleet: columnas solo si el partner tiene meta cargada.
   const FLEET_DEFS = [
     { k: "shcar",  h: "SH/Auto",     fmt: v => fmt(v) },
     { k: "accept", h: "Aceptación",  fmt: v => fmt(v) + "%" },
     { k: "util",   h: "Utilización", fmt: v => fmt(v) + "%" }
   ];
   const editVal = (e, k) => CALC_STATE.edits[`${e.partner}|||${e.city}|||${k}`];
-  const activeFleet = FLEET_DEFS.filter(fd => partnerItems.some(e => { const v = editVal(e, fd.k); return v !== undefined && v !== ""; }));
+  const activeFleet = FLEET_DEFS.filter(fd => taxiItems.some(e => { const v = editVal(e, fd.k); return v !== undefined && v !== ""; }));
 
-  const cityRows = partnerItems.map(e => {
-    const nr = e.np + e.ns + e.re;
-    const adGoal = _calcGoalFor(e.partner, e.city, "ad", (+g.ad || 0) * _calcShare(e.ad, totals.ad));
-    const shGoal = _calcGoalFor(e.partner, e.city, "sh", (+g.sh || 0) * _calcShare(e.sh, totals.sh));
-    const nrGoal = _calcGoalFor(e.partner, e.city, "nr", (+g.nr || 0) * _calcShare(nr,  totals.nr));
-    const fleetCells = activeFleet.map(fd => {
-      const v = editVal(e, fd.k);
-      return `<td class="tn">${v === undefined || v === "" ? "—" : fd.fmt(+v)}</td>`;
+  const _th = t => `<th style="text-align:${t.a || "right"};padding:8px 12px;font-size:.74rem">${t.h}</th>`;
+
+  // Bloque Taxi (AD/SH/N+R + fleet activas)
+  const taxiBlock = taxiItems.length ? (() => {
+    const rows = taxiItems.map(e => {
+      const b = _calcAggMetaBases(e, g, totals);
+      const adGoal = _calcGoalFor(e.partner, e.city, "ad", b.ad);
+      const shGoal = _calcGoalFor(e.partner, e.city, "sh", b.sh);
+      const nrGoal = _calcGoalFor(e.partner, e.city, "nr", b.nr);
+      const fleetCells = activeFleet.map(fd => { const v = editVal(e, fd.k); return `<td class="tn">${v===undefined||v===""?"—":fd.fmt(+v)}</td>`; }).join("");
+      return `<tr><td style="font-weight:600">${escapeHTML(e.city)}</td><td class="tn">${fmt(adGoal)}</td><td class="tn">${fmt(shGoal)}</td><td class="tn">${fmt(nrGoal)}</td>${fleetCells}</tr>`;
     }).join("");
+    const heads = [{h:"Ciudad",a:"left"},{h:"Active Drivers"},{h:"Supply Hours"},{h:"N+R"}].concat(activeFleet.map(fd=>({h:fd.h}))).map(_th).join("");
     return `
-      <tr>
-        <td style="font-weight:600">${escapeHTML(e.city)}</td>
-        <td class="tn">${fmt(adGoal)}</td>
-        <td class="tn">${fmt(shGoal)}</td>
-        <td class="tn">${fmt(nrGoal)}</td>
-        ${fleetCells}
-      </tr>`;
-  }).join("");
+      <div style="font-size:.72rem;font-weight:800;color:#b91c1c;margin:4px 0 6px">🚕 Taxi</div>
+      <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;margin-bottom:12px">
+        <thead><tr style="background:#f9f9f9">${heads}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  })() : "";
+
+  // Bloque TukTuk (AD/N+R/Cars)
+  const tkBlock = tkItems.length ? (() => {
+    const rows = tkItems.map(e => {
+      const b = _calcTkBases(e, g, tkTotals || { ad:0, nr:0, cars:0 });
+      const adGoal   = _calcGoalFor(e.partner, e.city, "tk_ad",   b.ad);
+      const nrGoal   = _calcGoalFor(e.partner, e.city, "tk_nr",   b.nr);
+      const carsGoal = _calcGoalFor(e.partner, e.city, "tk_cars", b.cars);
+      return `<tr><td style="font-weight:600">${escapeHTML(e.city)}</td><td class="tn">${fmt(adGoal)}</td><td class="tn">${fmt(nrGoal)}</td><td class="tn">${fmt(carsGoal)}</td></tr>`;
+    }).join("");
+    const heads = [{h:"Ciudad",a:"left"},{h:"Active Drivers"},{h:"N+R"},{h:"Cars"}].map(_th).join("");
+    return `
+      <div style="font-size:.72rem;font-weight:800;color:#7e22ce;margin:4px 0 6px">🛺 TukTuk</div>
+      <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden">
+        <thead><tr style="background:#faf5ff">${heads}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  })() : "";
 
   return `
-    ${_secH("📤", "#10b981", "5. Vista compartible por partner", "Tarjeta compartible (sin mezclar otros partners)")}
+    ${_secH("📤", "#10b981", `${secNo}. Vista compartible por partner`, "Tarjeta compartible · Taxi + TukTuk (sin mezclar otros partners)")}
     <div class="section">
       <div style="display:flex;gap:10px;align-items:end;margin-bottom:10px;flex-wrap:wrap">
         <div style="position:relative">
@@ -539,18 +734,8 @@ function _calcSec5_exportPartner(agg, totals) {
             <div style="font-size:1.1rem;font-weight:900;color:#111">${escapeHTML(sel)}</div>
           </div>
         </div>
-        <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden">
-          <thead>
-            <tr style="background:#f9f9f9">
-              <th style="text-align:left;padding:8px 12px;font-size:.74rem">Ciudad</th>
-              <th style="text-align:right;padding:8px 12px;font-size:.74rem">Active Drivers</th>
-              <th style="text-align:right;padding:8px 12px;font-size:.74rem">Supply Hours</th>
-              <th style="text-align:right;padding:8px 12px;font-size:.74rem">N+R</th>
-              ${activeFleet.map(fd => `<th style="text-align:right;padding:8px 12px;font-size:.74rem">${fd.h}</th>`).join("")}
-            </tr>
-          </thead>
-          <tbody>${cityRows}</tbody>
-        </table>
+        ${taxiBlock}${tkBlock}
+        ${(!taxiBlock && !tkBlock) ? `<div style="font-size:.78rem;color:#aaa;padding:8px 0">Sin datos para este partner.</div>` : ""}
         <div style="margin-top:10px;font-size:.65rem;color:#aaa;font-style:italic">
           Propuesta generada el ${new Date().toLocaleDateString("es-PE")}
         </div>
@@ -630,23 +815,24 @@ function calcResetEdits() {
 // ── EXPORTS ───────────────────────────────────────────────────────────────────
 function calcExportExcel() {
   const rows = _calcGetMensualData();
-  const last3 = _calcLastNMonths(rows, 3);
-  const last3Set = new Set(last3);
+  const allMonths = [...new Set(rows.map(r => r.date))].sort();
+  const lastMonth = allMonths[allMonths.length - 1];
   const filteredRows = CALC_STATE.kam === "all"
     ? rows
     : rows.filter(r => (r.kam || getKAMForPartner(r.partner)) === CALC_STATE.kam);
-  const agg = _calcAggByPartnerCity(filteredRows, last3Set);
-  const totals = _calcKamTotals(agg);
+  // Mismo criterio que la UI (Sección 4): último mes + denominador non-fleet.
+  const agg = _calcAggByPartnerCity(filteredRows, new Set([lastMonth]));
+  const distTotals = _calcKamTotals(agg, { excludeFleet: true });
   const g = CALC_STATE.kamGoals;
 
   const lines = ["CLID,PARTNER,CIUDAD,MES,ACTIVE_DRIVERS,SUPPLY_HOURS,N+R"];
-  const nextMonth = _calcNextMonth(last3[last3.length - 1]);
+  const nextMonth = _calcNextMonth(lastMonth);
 
   [...agg.values()].forEach(e => {
-    const nr = e.np + e.ns + e.re;
-    const adGoal = _calcGoalFor(e.partner, e.city, "ad", (+g.ad || 0) * _calcShare(e.ad, totals.ad));
-    const shGoal = _calcGoalFor(e.partner, e.city, "sh", (+g.sh || 0) * _calcShare(e.sh, totals.sh));
-    const nrGoal = _calcGoalFor(e.partner, e.city, "nr", (+g.nr || 0) * _calcShare(nr,  totals.nr));
+    const b = _calcAggMetaBases(e, g, distTotals);   // fleet → 0 (o su edit manual)
+    const adGoal = _calcGoalFor(e.partner, e.city, "ad", b.ad);
+    const shGoal = _calcGoalFor(e.partner, e.city, "sh", b.sh);
+    const nrGoal = _calcGoalFor(e.partner, e.city, "nr", b.nr);
     const clid = e.clid || _calcLookupClid(e.partner, e.city);
     lines.push(`"${clid}","${e.partner}","${e.city}","${nextMonth}",${adGoal},${shGoal},${nrGoal}`);
   });
@@ -717,7 +903,13 @@ function calcHideExportList() {
 function _calcPaintExportList(q) {
   const list = document.getElementById("calcExportList");
   if (!list) return;
-  const all = [...new Set([...(_calcCurrentAgg() || []).values()].map(e => e.partner))].sort();
+  // Universo = partners con taxi (agg 3M) ∪ partners con TukTuk (filtrados por KAM).
+  const tkPartners = (STATE._tuktukMensualPartners || []).filter(p =>
+    CALC_STATE.kam === "all" || getKAMForPartner(p) === CALC_STATE.kam);
+  const all = [...new Set([
+    ...[...(_calcCurrentAgg() || []).values()].map(e => e.partner),
+    ...tkPartners
+  ])].sort();
   const lower = (q || "").toLowerCase().trim();
   const filtered = lower ? all.filter(p => p.toLowerCase().includes(lower)) : all;
   if (!filtered.length) {
