@@ -1,17 +1,14 @@
-// calculator.js — Calculadora de Metas (flujo TOP-DOWN)
-// El KAM ingresa su meta TOTAL y se reparte (disgrega) a cada partner+ciudad
-// segun su % de representacion en el ULTIMO MES.
-// Secciones (en orden):
-//  1) Ingresa tus metas KAM (agregador + TukTuk, formato Yango con pesos) → Distribuir
-//  2) % Representacion Ciudad + Cartera (peso del partner en la ciudad y en tu KAM)
-//  3) Distribucion de metas agregador (meta KAM x % — editable, valida el cuadre)
-//  4) Metas Fleet (KPIs propios)
-//  5-6) Representacion + Distribucion TukTuk (si hay flota TukTuk)
-//  Bloque de acciones (Aplicar / Reset / Descargar CSV) + tarjeta compartible
-//  Al final, colapsable: Promedio 3 meses (referencia, no reparte)
+// calculator.js — Calculadora de Metas (flujo por PESTAÑAS de línea de negocio)
+// El KAM ingresa su meta TOTAL por línea y se reparte (disgrega) a cada partner+ciudad
+// segun su % de representacion en el ULTIMO MES. En vez de un scroll con 6+ tablas,
+// se navega por pestañas: Agregador / Fleet / TukTuk / Revisar y compartir.
+// Solo se muestra la pestaña activa (primera pantalla corta); la cabecera persistente
+// lleva el selector de KAM + una barra de estado con el cuadre EN VIVO de cada línea.
+// Las pestañas Fleet/TukTuk solo aparecen si el KAM tiene esos partners.
 
 const CALC_STATE = {
   kam:        "all",
+  tab:        "agg",   // pestaña activa: "agg" | "fleet" | "tk" | "review"
   // Metas editadas manualmente: { "partner|||city|||metric": valor }
   edits:      {},
   // Metas KAM input manual (formato Yango con pesos) + metas TukTuk (Fase 7)
@@ -26,6 +23,18 @@ const KAM_WEIGHTS = {
   otherProj: 35,
   fleetA2:    7.5
 };
+
+// Métricas por línea (estáticas). get(e) sobre una fila agregada partner-ciudad.
+const CALC_TAXI_METRICS = [
+  { key: "ad", label: "AD",  get: e => e.ad },
+  { key: "sh", label: "SH",  get: e => e.sh },
+  { key: "nr", label: "N+R", get: e => e.np + e.ns + e.re }
+];
+const CALC_TK_METRICS = [
+  { key: "ad",   label: "AD",   get: e => e.ad },
+  { key: "nr",   label: "N+R",  get: e => e.np + e.ns + e.re },
+  { key: "cars", label: "Cars", get: e => e.bcars }
+];
 
 // ── HELPER: dataset mensual (rendimiento_mensual) ─────────────────────────────
 function _calcGetMensualData() {
@@ -168,6 +177,230 @@ function _calcHeatBg(pct) {
   return "#fecaca";
 }
 
+// ── MODELO EN MEMORIA ─────────────────────────────────────────────────────────
+// Deriva todos los agregados que necesita la pestaña activa + la barra de estado.
+// Barato (todo en memoria); lo llaman renderCalculator Y _calcRefreshStatus.
+function _calcComputeModel() {
+  const rows = _calcGetMensualData();
+  const allMonths = [...new Set(rows.map(r => r.date))].sort();
+  const last3 = allMonths.slice(-3);
+  const last3Set = new Set(last3);
+  const lastMonth = allMonths[allMonths.length - 1];
+
+  const filteredRows = CALC_STATE.kam === "all"
+    ? rows
+    : rows.filter(r => (r.kam || getKAMForPartner(r.partner)) === CALC_STATE.kam);
+
+  // Agregados TAXI: 3M para el promedio y las refs fleet; ÚLTIMO MES para
+  // representación y reparto (así el % que se ve = el que reparte). distTot1 excluye fleet.
+  const aggLast3 = _calcAggByPartnerCity(filteredRows, last3Set);
+  const aggLast1 = _calcAggByPartnerCity(filteredRows, new Set([lastMonth]));
+  const cartTot1 = _calcKamTotals(aggLast1);
+  const distTot1 = _calcKamTotals(aggLast1, { excludeFleet: true });
+  const cityTot1 = _calcCityTotals(lastMonth, STATE.rawDataMensual || []);
+
+  // Agregados TUKTUK (eje de meses propio; puede diferir del taxi).
+  const tkRows  = STATE.rawDataMensualTuktuk || [];
+  const tkFilt  = CALC_STATE.kam === "all" ? tkRows
+                : tkRows.filter(r => (r.kam || getKAMForPartner(r.partner)) === CALC_STATE.kam);
+  const tkMonths = [...new Set(tkRows.map(r => r.date))].sort();
+  const tkLast1  = tkMonths.length ? tkMonths[tkMonths.length - 1] : null;
+  const aggTk1   = tkLast1 ? _calcAggByPartnerCity(tkFilt, new Set([tkLast1])) : new Map();
+  const tkCartT1 = _calcTkTotals(aggTk1);
+  const tkCityT1 = tkLast1 ? _calcCityTotals(tkLast1, tkRows) : new Map();
+
+  const hasTk    = tkFilt.length > 0;   // adaptativo por KAM (no solo "existe data tuktuk")
+  const hasFleet = [...aggLast3.values()].some(e => _calcIsFleet(e.partner));
+
+  return { rows, last3, lastMonth, aggLast3, aggLast1, cartTot1, distTot1, cityTot1,
+           aggTk1, tkCartT1, tkCityT1, tkLast1, hasTk, hasFleet };
+}
+
+// Array de pestañas visibles (adaptativo). Agregador y Revisar siempre; Fleet/TukTuk
+// solo si el KAM los tiene.
+function _calcBuildTabs(m) {
+  const tabs = [{ key: "agg", label: "Agregador" }];
+  if (m.hasFleet) tabs.push({ key: "fleet", label: "Fleet" });
+  if (m.hasTk)    tabs.push({ key: "tk", label: "TukTuk" });
+  tabs.push({ key: "review", label: "Revisar y compartir" });
+  return tabs;
+}
+
+// ── ESTADO / CUADRE ───────────────────────────────────────────────────────────
+// Cuadre de una métrica: sum distribuida vs meta KAM (misma tolerancia que _calcCuadre).
+function _calcMetricCuadre(sum, target) {
+  const hasGoal = target > 0;
+  const gap = sum - target;
+  const ok = hasGoal && Math.abs(gap) <= Math.max(1, target * 0.005);
+  return { sum, target, gap, ok, hasGoal };
+}
+
+// Sumas distribuidas de agregador (respeta edits) — no-fleet cuadran vs meta.
+function _calcAggDistSums(agg, distTotals, g) {
+  let sumAD = 0, sumSH = 0, sumNR = 0;
+  for (const e of agg.values()) {
+    const b = _calcAggMetaBases(e, g, distTotals);
+    if (b.fleet) continue;
+    sumAD += _calcGoalFor(e.partner, e.city, "ad", b.ad);
+    sumSH += _calcGoalFor(e.partner, e.city, "sh", b.sh);
+    sumNR += _calcGoalFor(e.partner, e.city, "nr", b.nr);
+  }
+  return { sumAD, sumSH, sumNR };
+}
+
+// Sumas distribuidas TukTuk (respeta edits).
+function _calcTkDistSums(agg, tkTotals, g) {
+  let sAD = 0, sNR = 0, sCars = 0;
+  for (const e of agg.values()) {
+    const b = _calcTkBases(e, g, tkTotals);
+    sAD   += _calcGoalFor(e.partner, e.city, "tk_ad",   b.ad);
+    sNR   += _calcGoalFor(e.partner, e.city, "tk_nr",   b.nr);
+    sCars += _calcGoalFor(e.partner, e.city, "tk_cars", b.cars);
+  }
+  return { sAD, sNR, sCars };
+}
+
+// Conteo fleet: partner-ciudades con al menos un KPI fleet cargado (edit real).
+function _calcFleetMetaCount(agg) {
+  const fleet = [...agg.values()].filter(e => _calcIsFleet(e.partner));
+  let filled = 0;
+  for (const e of fleet) {
+    const has = ["shcar", "accept", "util"].some(mtr => {
+      const v = CALC_STATE.edits[`${e.partner}|||${e.city}|||${mtr}`];
+      return v !== undefined && v !== "";
+    });
+    if (has) filled++;
+  }
+  return { filled, total: fleet.length };
+}
+
+// Estado completo de las 3 líneas (para píldoras + puntos de pestaña).
+function _calcComputeStatus(m) {
+  const g = CALC_STATE.kamGoals;
+  const a = _calcAggDistSums(m.aggLast1, m.distTot1, g);
+  const agg = {
+    ad: _calcMetricCuadre(a.sumAD, +g.ad || 0),
+    sh: _calcMetricCuadre(a.sumSH, +g.sh || 0),
+    nr: _calcMetricCuadre(a.sumNR, +g.nr || 0)
+  };
+  let fleet = null;
+  if (m.hasFleet) fleet = _calcFleetMetaCount(m.aggLast3);
+  let tk = null;
+  if (m.hasTk) {
+    const t = _calcTkDistSums(m.aggTk1, m.tkCartT1, g);
+    tk = {
+      ad:   _calcMetricCuadre(t.sAD, +g.tkAd || 0),
+      nr:   _calcMetricCuadre(t.sNR, +g.tkNr || 0),
+      cars: _calcMetricCuadre(t.sCars, +g.tkCars || 0)
+    };
+  }
+  return { agg, fleet, tk, hasFleet: m.hasFleet, hasTk: m.hasTk };
+}
+
+// Rollup de una línea agregador/tuktuk a un glifo/color (para el punto de pestaña).
+function _calcLineRollup(line) {
+  const parts = Object.values(line).filter(p => p && p.hasGoal);
+  if (!parts.length) return { glyph: "○", color: "#aaa" };
+  return parts.every(p => p.ok)
+    ? { glyph: "✓", color: "#10b981" }
+    : { glyph: "⚠", color: "#f59e0b" };
+}
+
+// ── CABECERA + BARRA DE ESTADO + BARRA DE PESTAÑAS ────────────────────────────
+function _calcPill(label, body) {
+  return `<span style="display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid #eee;border-radius:20px;padding:4px 11px;font-size:.7rem;margin:2px 6px 2px 0">
+    <b style="color:#555">${escapeHTML(label)}</b> ${body}</span>`;
+}
+// Cuerpo de píldora por línea agregador/tuktuk: por métrica ✓ o el gap coloreado.
+function _calcLinePillBody(line, defs) {
+  const anyGoal = defs.some(([, k]) => line[k] && line[k].hasGoal);
+  if (!anyGoal) return `<span style="color:#aaa">sin metas</span>`;
+  return defs.map(([lbl, k]) => {
+    const p = line[k];
+    if (!p || !p.hasGoal) return `<span style="color:#ccc">${lbl} —</span>`;
+    if (p.ok) return `<span style="color:#10b981;font-weight:700">${lbl} ✓</span>`;
+    const sign = p.gap > 0 ? "+" : "";
+    const col  = p.gap > 0 ? "#f59e0b" : "#FF0000";
+    return `<span style="color:${col};font-weight:700">${lbl} ${sign}${fmt(p.gap)}</span>`;
+  }).join(` <span style="color:#ddd">·</span> `);
+}
+function _calcStatusPills(status) {
+  const pills = [];
+  pills.push(_calcPill("Agregador", _calcLinePillBody(status.agg, [["AD", "ad"], ["SH", "sh"], ["N+R", "nr"]])));
+  if (status.hasFleet && status.fleet) {
+    const f = status.fleet;
+    const c = f.total === 0 ? "#aaa" : (f.filled >= f.total ? "#10b981" : "#f59e0b");
+    pills.push(_calcPill("Fleet", `<span style="color:${c};font-weight:700">${f.filled}/${f.total} con meta</span>`));
+  }
+  if (status.hasTk && status.tk) {
+    pills.push(_calcPill("TukTuk", _calcLinePillBody(status.tk, [["AD", "ad"], ["N+R", "nr"], ["Cars", "cars"]])));
+  }
+  return pills.join("");
+}
+
+// Punto de estado de una pestaña (espejo de la píldora).
+function _calcTabDot(key, status) {
+  let r = null;
+  if (key === "agg") r = _calcLineRollup(status.agg);
+  else if (key === "tk" && status.tk) r = _calcLineRollup(status.tk);
+  else if (key === "fleet" && status.fleet) {
+    if (status.fleet.total === 0) return "";
+    const done = status.fleet.filled >= status.fleet.total;
+    r = done ? { glyph: "✓", color: "#10b981" } : { glyph: "⚠", color: "#f59e0b" };
+  }
+  if (!r) return "";
+  return `<span style="color:${r.color};margin-right:5px;font-weight:900">${r.glyph}</span>`;
+}
+function _calcTabBtns(tabs, active, status) {
+  return tabs.map(t =>
+    `<button class="mode-btn${t.key === active ? " active" : ""}" style="flex:0 0 auto" onclick="calcSetTab('${t.key}')">${_calcTabDot(t.key, status)}${escapeHTML(t.label)}</button>`
+  ).join("");
+}
+function _calcTabBar(tabs, active, status) {
+  return `<div class="mode-toggle-row" id="calcTabBar" style="flex-wrap:wrap;margin:0 4px 12px">${_calcTabBtns(tabs, active, status)}</div>`;
+}
+
+function _calcHeader(m, allKAMs, status) {
+  const nextM = _calcNextMonth(m.lastMonth || "");
+  return `
+    ${_secH("🎯", "#FF0000", "Calculadora de metas", "Define las metas del próximo mes por línea de negocio · navega por pestañas")}
+    <div class="section">
+      <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:10px">
+        <div>
+          <label style="font-size:.68rem;color:#666;font-weight:700;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px">KAM</label>
+          <select id="calcKamSel" class="sb-sel" style="width:200px" onchange="calcOnKamChange(this.value)">
+            <option value="all" ${CALC_STATE.kam === "all" ? "selected" : ""}>Todos los KAMs</option>
+            ${allKAMs.map(k => `<option value="${escapeHTML(k)}" ${CALC_STATE.kam === k ? "selected" : ""}>${escapeHTML(k)}</option>`).join("")}
+          </select>
+        </div>
+        <div style="font-size:.72rem;color:#666;background:#fef3c7;padding:6px 10px;border-radius:6px;border:1px solid #fcd34d">
+          📅 Metas para <strong>${d2s(nextM)}</strong> · reparto según ${d2s(m.lastMonth || "")}
+        </div>
+      </div>
+      <div style="font-size:.66rem;color:#999;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Estado (cuadre en vivo)</div>
+      <div id="calcStatusBar" style="display:flex;flex-wrap:wrap;align-items:center">${_calcStatusPills(status)}</div>
+    </div>`;
+}
+
+// Refresca SOLO las píldoras de estado + los puntos de pestaña sin re-render total
+// (patrón in-place → no roba foco). Marca el botón Recalcular como "pendiente".
+function _calcRefreshStatus() {
+  const sb = document.getElementById("calcStatusBar");
+  if (!sb) return; // no estamos en la Calculadora
+  const m = _calcComputeModel();
+  const status = _calcComputeStatus(m);
+  sb.innerHTML = _calcStatusPills(status);
+  const tb = document.getElementById("calcTabBar");
+  if (tb) tb.innerHTML = _calcTabBtns(_calcBuildTabs(m), CALC_STATE.tab, status);
+  const rb = document.getElementById("calcRecalcBtn");
+  if (rb && !/pendiente/.test(rb.textContent)) rb.textContent = "↻ Recalcular distribución (pendiente)";
+}
+
+// Botón de recálculo (pestañas con metas → tabla): re-render de la pestaña.
+function _calcRecalcBtn() {
+  return `<button id="calcRecalcBtn" style="width:100%;margin:14px 0 4px;padding:11px;font-size:.86rem;background:#FF0000;color:#fff;border:none;border-radius:8px;font-weight:800;cursor:pointer" onclick="calcApplyChanges()">↻ Recalcular distribución</button>`;
+}
+
 // ── RENDER PRINCIPAL ──────────────────────────────────────────────────────────
 function renderCalculator() {
   if (STATE.curTab !== "calculator") return;
@@ -199,109 +432,97 @@ function renderCalculator() {
   }
 
   const allKAMs = [...new Set(Object.values(STATE.KAM_MAP).map(k => (k || "").trim()).filter(Boolean))].sort();
+  const m = _calcComputeModel();
 
-  const filteredRows = CALC_STATE.kam === "all"
-    ? rows
-    : rows.filter(r => {
-        const k = r.kam || getKAMForPartner(r.partner);
-        return k === CALC_STATE.kam;
-      });
+  // Pestañas adaptativas + clamp (protege un cambio de KAM que quita Fleet/TukTuk).
+  const tabs = _calcBuildTabs(m);
+  if (!tabs.some(t => t.key === CALC_STATE.tab)) CALC_STATE.tab = "agg";
+  const status = _calcComputeStatus(m);
 
-  const allMonths = [...new Set(rows.map(r => r.date))].sort();
-  const last3 = allMonths.slice(-3);
-  const last3Set = new Set(last3);
-  const lastMonth = allMonths[allMonths.length - 1];
-
-  // Agregados TAXI: 3M para el promedio (sec 2); ÚLTIMO MES para representación y
-  // reparto (así el % que se ve = el que reparte). distTot1 excluye fleet → cuadra 100%.
-  const aggLast3 = _calcAggByPartnerCity(filteredRows, last3Set);
-  const aggLast1 = _calcAggByPartnerCity(filteredRows, new Set([lastMonth]));
-  const cartTot1 = _calcKamTotals(aggLast1);
-  const distTot1 = _calcKamTotals(aggLast1, { excludeFleet: true });
-  const cityTot1 = _calcCityTotals(lastMonth, STATE.rawDataMensual || []);
-
-  // Agregados TUKTUK (eje de meses propio; puede diferir del taxi).
-  const tkRows  = STATE.rawDataMensualTuktuk || [];
-  const tkFilt  = CALC_STATE.kam === "all" ? tkRows
-                : tkRows.filter(r => (r.kam || getKAMForPartner(r.partner)) === CALC_STATE.kam);
-  const tkMonths = [...new Set(tkRows.map(r => r.date))].sort();
-  const tkLast1  = tkMonths.length ? tkMonths[tkMonths.length - 1] : null;
-  const aggTk1   = tkLast1 ? _calcAggByPartnerCity(tkFilt, new Set([tkLast1])) : new Map();
-  const tkCartT1 = _calcTkTotals(aggTk1);
-  const tkCityT1 = tkLast1 ? _calcCityTotals(tkLast1, tkRows) : new Map();
-  const hasTk    = tkRows.length > 0;
-
-  const TAXI_METRICS = [
-    { key: "ad", label: "AD",  get: e => e.ad },
-    { key: "sh", label: "SH",  get: e => e.sh },
-    { key: "nr", label: "N+R", get: e => e.np + e.ns + e.re }
-  ];
-  const TK_METRICS = [
-    { key: "ad",   label: "AD",   get: e => e.ad },
-    { key: "nr",   label: "N+R",  get: e => e.np + e.ns + e.re },
-    { key: "cars", label: "Cars", get: e => e.bcars }
-  ];
-  const cardNo = hasTk ? 7 : 5;
+  let body;
+  switch (CALC_STATE.tab) {
+    case "fleet":  body = _calcTabFleet(m);  break;
+    case "tk":     body = _calcTabTk(m);     break;
+    case "review": body = _calcTabReview(m); break;
+    default:       body = _calcTabAgg(m);
+  }
 
   el.innerHTML = `
     <div style="padding:0 8px 16px">
-      ${_calcSec1_metas(allKAMs, lastMonth, hasTk)}
-      ${_calcSec3_pct(aggLast1, cartTot1, cityTot1, lastMonth, { n: 2, icon: "🔥", color: "#f59e0b", title: "% Representación · Ciudad + Cartera", metrics: TAXI_METRICS })}
-      ${_calcSec4_distribucion(aggLast1, distTot1, lastMonth, 3)}
-      ${_calcSec4b_fleet(aggLast3, 4)}
-      ${hasTk ? _calcSec3_pct(aggTk1, tkCartT1, tkCityT1, tkLast1, { n: 5, icon: "🛺", color: "#a855f7", title: "% Representación TukTuk · Ciudad + Cartera", metrics: TK_METRICS }) : ""}
-      ${hasTk ? _calcSecTk_distribucion(aggTk1, tkCartT1, tkLast1, 6) : ""}
-      ${_calcSecActions()}
-      ${_calcSec5_exportPartner(aggLast1, distTot1, aggTk1, tkCartT1, cardNo)}
-      ${_calcSec2_promedio3m(aggLast3, last3)}
+      ${_calcHeader(m, allKAMs, status)}
+      ${_calcTabBar(tabs, CALC_STATE.tab, status)}
+      ${body}
     </div>`;
 }
 
-// ── SECCION 1: Ingresa tus metas KAM ──────────────────────────────────────────
-function _calcSec1_metas(allKAMs, lastMonth, hasTk) {
-  const g = CALC_STATE.kamGoals;
-  const tkBox = hasTk ? `
-      <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:12px;margin-top:10px">
-        <div style="font-size:.78rem;font-weight:700;color:#7e22ce;margin-bottom:8px">🛺 Metas totales TukTuk (branding cars):</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px">
-          ${_kamGoalInput("tkAd",   "AD (TukTuk)",   null, g.tkAd)}
-          ${_kamGoalInput("tkNr",   "N+R (TukTuk)",  null, g.tkNr)}
-          ${_kamGoalInput("tkCars", "Cars (branded)",null, g.tkCars)}
-        </div>
-        <div style="font-size:.7rem;color:#7e22ce;margin-top:8px;font-style:italic">Se reparten entre tus partners con flota TukTuk según su peso. Metas TukTuk viven en la tarjeta del partner (no en el CSV de agregador).</div>
-      </div>` : "";
+// ── PESTAÑA: AGREGADOR ────────────────────────────────────────────────────────
+function _calcTabAgg(m) {
   return `
-    ${_secH("🎯", "#FF0000", "1. Ingresa tus metas KAM", "Paso 1 · completa TODAS tus metas (agregador + TukTuk) y presiona Distribuir")}
-    <div class="section">
-      <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:12px">
-        <div>
-          <label style="font-size:.68rem;color:#666;font-weight:700;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px">KAM</label>
-          <select id="calcKamSel" class="sb-sel" style="width:200px" onchange="calcOnKamChange(this.value)">
-            <option value="all" ${CALC_STATE.kam === "all" ? "selected" : ""}>Todos los KAMs</option>
-            ${allKAMs.map(k => `<option value="${escapeHTML(k)}" ${CALC_STATE.kam === k ? "selected" : ""}>${escapeHTML(k)}</option>`).join("")}
-          </select>
-        </div>
-        <div style="font-size:.72rem;color:#666;background:#fef3c7;padding:6px 10px;border-radius:6px;border:1px solid #fcd34d">
-          📅 Distribución según último mes: ${d2s(lastMonth || "")}
-        </div>
+    <div class="section">${_calcAggGoalsBlock()}</div>
+    ${_calcPctDetails(m.aggLast1, m.cartTot1, m.cityTot1, CALC_TAXI_METRICS, m.lastMonth)}
+    ${_calcRecalcBtn()}
+    ${_calcSec4_distribucion(m.aggLast1, m.distTot1, m.lastMonth)}`;
+}
+
+// Bloque de metas totales del agregador (Taxi) — lo único que va al CSV.
+function _calcAggGoalsBlock() {
+  const g = CALC_STATE.kamGoals;
+  return `
+    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <div style="font-size:.82rem;font-weight:800;color:#92400e">📥 Metas totales · Agregador (Taxi)</div>
+        <span title="Solo estas metas (AD/SH/N+R) se exportan al CSV de metas" style="font-size:.58rem;background:#FF0000;color:#fff;padding:2px 7px;border-radius:6px;font-weight:800;letter-spacing:.5px">VA AL CSV</span>
       </div>
-      <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px">
-        <div style="font-size:.78rem;font-weight:700;color:#92400e;margin-bottom:8px">📥 Metas totales · Agregador (Taxi):</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px">
-          ${_kamGoalInput("ad",        "Active Drivers",       KAM_WEIGHTS.ad,        g.ad)}
-          ${_kamGoalInput("sh",        "Supply Hours",         KAM_WEIGHTS.sh,        g.sh)}
-          ${_kamGoalInput("nr",        "New + Reactivated",    KAM_WEIGHTS.nr,        g.nr)}
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px">
+        ${_kamGoalInput("ad", "Active Drivers",    KAM_WEIGHTS.ad, g.ad)}
+        ${_kamGoalInput("sh", "Supply Hours",      KAM_WEIGHTS.sh, g.sh)}
+        ${_kamGoalInput("nr", "New + Reactivated", KAM_WEIGHTS.nr, g.nr)}
+      </div>
+      <details style="margin-top:12px">
+        <summary style="cursor:pointer;font-size:.72rem;font-weight:700;color:#92400e">Metas % KAM (no se reparten por partner)</summary>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-top:8px">
           ${_kamGoalInput("otherProj", "Other Projects (%)",   KAM_WEIGHTS.otherProj, g.otherProj)}
           ${_kamGoalInput("fleetA2",   "Fleet drivers A2 (%)", KAM_WEIGHTS.fleetA2,   g.fleetA2)}
         </div>
-        <div style="font-size:.7rem;color:#92400e;margin-top:10px;font-style:italic">
-          <strong>AD · SH · N+R</strong> se reparten entre tus partners según su % del último mes.
-          <strong>Other Projects</strong> y <strong>Fleet A2</strong> son metas % a nivel KAM (no se reparten por partner).
-        </div>
-      </div>
-      ${tkBox}
-      <button id="calcDistBtn" style="width:100%;margin-top:14px;padding:12px;font-size:.9rem;background:#FF0000;color:#fff;border:none;border-radius:8px;font-weight:800;cursor:pointer" onclick="calcApplyChanges()">📊 Distribuir metas</button>
+        <div style="font-size:.68rem;color:#92400e;margin-top:6px;font-style:italic">Metas % a nivel KAM (referencia); no se distribuyen por partner ni van al CSV.</div>
+      </details>
     </div>`;
+}
+
+// ── PESTAÑA: FLEET ────────────────────────────────────────────────────────────
+function _calcTabFleet(m) {
+  return _calcSec4b_fleet(m.aggLast3);
+}
+
+// ── PESTAÑA: TUKTUK ───────────────────────────────────────────────────────────
+function _calcTabTk(m) {
+  return `
+    <div class="section">${_calcTkGoalsBlock()}</div>
+    ${_calcPctDetails(m.aggTk1, m.tkCartT1, m.tkCityT1, CALC_TK_METRICS, m.tkLast1)}
+    ${_calcRecalcBtn()}
+    ${_calcSecTk_distribucion(m.aggTk1, m.tkCartT1, m.tkLast1)}`;
+}
+
+// Bloque de metas totales TukTuk (viven en la tarjeta, no en el CSV).
+function _calcTkGoalsBlock() {
+  const g = CALC_STATE.kamGoals;
+  return `
+    <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:12px">
+      <div style="font-size:.82rem;font-weight:800;color:#7e22ce;margin-bottom:8px">🛺 Metas totales · TukTuk (branding cars)</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px">
+        ${_kamGoalInput("tkAd",   "AD (TukTuk)",    null, g.tkAd)}
+        ${_kamGoalInput("tkNr",   "N+R (TukTuk)",   null, g.tkNr)}
+        ${_kamGoalInput("tkCars", "Cars (branded)", null, g.tkCars)}
+      </div>
+    </div>`;
+}
+
+// ── PESTAÑA: REVISAR Y COMPARTIR ──────────────────────────────────────────────
+function _calcTabReview(m) {
+  return `
+    ${_calcSecActions()}
+    ${_calcSec5_exportPartner(m.aggLast1, m.distTot1, m.aggTk1, m.tkCartT1)}
+    ${_calcSec2_promedio3m(m.aggLast3, m.last3)}`;
 }
 
 function _kamGoalInput(metric, label, weight, val) {
@@ -315,7 +536,7 @@ function _kamGoalInput(metric, label, weight, val) {
     </div>`;
 }
 
-// ── SECCION 2: Promedio 3 últimos meses ───────────────────────────────────────
+// ── Promedio 3 últimos meses (referencia colapsable, pestaña Revisar) ─────────
 function _calcSec2_promedio3m(agg, months) {
   const n = months.length || 1;
   const items = [...agg.values()].sort((a, b) =>
@@ -369,13 +590,19 @@ function _calcSec2_promedio3m(agg, months) {
     </details>`;
 }
 
-// ── SECCION 3 / 6: % Representación (Ciudad + Cartera) — parametrizable ─────────
+// ── % Representación (Ciudad + Cartera) — colapsable dentro de su pestaña ──────
 // Por cada métrica muestra DOS columnas: % Ciudad (val ÷ total de la ciudad, TODOS
 // los partners → "peso de Yego en Lima", exacto) y % Cartera (val ÷ total del KAM
-// = base del reparto, suma 100%). Ventana: último mes. opts.metrics = [{key,label,get}],
-// cartTotals[key], cityTotals=Map<city,{key:val}>. Reusa _calcHeatBg/_calcHeatColor.
-function _calcSec3_pct(agg, cartTotals, cityTotals, monthLabel, opts) {
-  const M = opts.metrics;
+// = base del reparto, suma 100%). Ventana: último mes.
+function _calcPctDetails(agg, cartTotals, cityTotals, metrics, monthLabel) {
+  return `
+    <details class="section" style="margin-bottom:8px">
+      <summary style="cursor:pointer;font-size:.8rem;font-weight:700;color:#666;padding:6px 4px">📊 Ver % Ciudad / Cartera · referencia · ${d2s(monthLabel || "")}</summary>
+      <div style="font-size:.68rem;color:#888;margin:4px 4px 8px">% Ciudad = peso real de tu partner en la ciudad (todos los partners Yango) · % Cartera = peso en tu KAM (base del reparto)</div>
+      ${_calcPctTableHTML(agg, cartTotals, cityTotals, metrics)}
+    </details>`;
+}
+function _calcPctTableHTML(agg, cartTotals, cityTotals, M) {
   const items = [...agg.values()].sort((a, b) =>
     a.partner.localeCompare(b.partner) || a.city.localeCompare(b.city));
 
@@ -387,9 +614,9 @@ function _calcSec3_pct(agg, cartTotals, cityTotals, monthLabel, opts) {
 
   const rowsHtml = items.map(e => {
     const ct = cityTotals.get(e.city) || {};
-    const cells = M.map(m => {
-      const v = m.get(e);
-      return _pctCell(v, ct[m.key]) + _pctCell(v, cartTotals[m.key]);   // Ciudad, Cartera
+    const cells = M.map(mtr => {
+      const v = mtr.get(e);
+      return _pctCell(v, ct[mtr.key]) + _pctCell(v, cartTotals[mtr.key]);   // Ciudad, Cartera
     }).join("");
     return `
       <tr>
@@ -399,35 +626,31 @@ function _calcSec3_pct(agg, cartTotals, cityTotals, monthLabel, opts) {
       </tr>`;
   }).join("");
 
-  const topHead = M.map(m => `<th class="tn" colspan="2">${escapeHTML(m.label)}</th>`).join("");
+  const topHead = M.map(mtr => `<th class="tn" colspan="2">${escapeHTML(mtr.label)}</th>`).join("");
   const subHead = M.map(() => `<th class="tn" title="Peso en la ciudad (todos los KAMs)">% Ciudad</th><th class="tn" title="Peso en tu cartera KAM">% Cartera</th>`).join("");
   const footCells = M.map(() => `<td class="tn" style="color:#aaa">—</td><td class="tn">100%</td>`).join("");
   const nCols = 2 + M.length * 2;
 
   return `
-    ${_secH(opts.icon, opts.color, `${opts.n}. ${opts.title} · ${d2s(monthLabel || "")}`,
-            "% Ciudad = peso real de tu partner en la ciudad (todos los partners Yango) · % Cartera = peso en tu KAM (base del reparto) · ventana: último mes")}
-    <div class="section">
-      <div class="tbl-wrap" style="max-height:400px;overflow-y:auto">
-        <table class="dtbl">
-          <thead>
-            <tr><th rowspan="2">Partner</th><th rowspan="2">Ciudad</th>${topHead}</tr>
-            <tr>${subHead}</tr>
-          </thead>
-          <tbody>${rowsHtml || `<tr><td colspan="${nCols}" style="text-align:center;color:#aaa;padding:20px">Sin datos.</td></tr>`}</tbody>
-          <tfoot style="font-weight:700;background:#f9f9f9">
-            <tr><td colspan="2">Total cartera</td>${footCells}</tr>
-          </tfoot>
-        </table>
-      </div>
+    <div class="tbl-wrap" style="max-height:400px;overflow-y:auto">
+      <table class="dtbl">
+        <thead>
+          <tr><th rowspan="2">Partner</th><th rowspan="2">Ciudad</th>${topHead}</tr>
+          <tr>${subHead}</tr>
+        </thead>
+        <tbody>${rowsHtml || `<tr><td colspan="${nCols}" style="text-align:center;color:#aaa;padding:20px">Sin datos.</td></tr>`}</tbody>
+        <tfoot style="font-weight:700;background:#f9f9f9">
+          <tr><td colspan="2">Total cartera</td>${footCells}</tr>
+        </tfoot>
+      </table>
     </div>`;
 }
 
-// ── SECCION 4: Distribución de metas AGREGADOR (editable) ──────────────────────
+// ── Distribución de metas AGREGADOR (editable) ────────────────────────────────
 // Ventana: último mes (misma que la representación → el % que ves reparte).
 // Fleet: base 0 (incremento mínimo, editable) + badge; el cuadre solo cuenta a los
 // agregadores no-fleet (distTotals ya los excluyó) → suma 100% de la meta KAM.
-function _calcSec4_distribucion(agg, distTotals, monthLabel, n) {
+function _calcSec4_distribucion(agg, distTotals, monthLabel) {
   const g = CALC_STATE.kamGoals;
   const items = [...agg.values()].sort((a, b) =>
     a.partner.localeCompare(b.partner) || a.city.localeCompare(b.city));
@@ -468,7 +691,7 @@ function _calcSec4_distribucion(agg, distTotals, monthLabel, n) {
 
   const noGoals = !(+g.ad || +g.sh || +g.nr);
   const hint = noGoals
-    ? `<div style="font-size:.78rem;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:8px 10px;margin-bottom:8px">⚠️ Ingresa tus metas KAM en la sección 1 y presiona <strong>"Distribuir metas"</strong> para repartirlas aquí.</div>`
+    ? `<div style="font-size:.78rem;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:8px 10px;margin-bottom:8px">⚠️ Ingresa tus metas totales arriba y presiona <strong>"↻ Recalcular distribución"</strong> para repartirlas aquí.</div>`
     : "";
   const fleetRow = (fAD || fSH || fNR) ? `
             <tr>
@@ -479,7 +702,7 @@ function _calcSec4_distribucion(agg, distTotals, monthLabel, n) {
             </tr>` : "";
 
   return `
-    ${_secH("⚙️", "#8b5cf6", n + ". Distribución de metas · Agregador · " + d2s(monthLabel || ""), "Paso 2 · Meta KAM × % Cartera (último mes) · editable · los Fleet arrancan en 0 (mínimo)")}
+    ${_secH("⚙️", "#8b5cf6", "Distribución por partner · " + d2s(monthLabel || ""), "Meta KAM × % Cartera (último mes) · editable · los Fleet arrancan en 0 (mínimo)")}
     <div class="section">
       ${hint}
       <div class="tbl-wrap" style="max-height:500px;overflow-y:auto">
@@ -522,17 +745,18 @@ function _calcCuadre(sum, target) {
   return `<div style="font-size:.7rem;line-height:1.3">${fmt(target)}<br><span style="color:${c};font-weight:800">${tag}</span></div>`;
 }
 
-// ── SECCION 4b: KPIs Fleet (opcional) ─────────────────────────────────────────
+// ── KPIs Fleet (pestaña Fleet) ────────────────────────────────────────────────
 // Metas manuales por partner-ciudad para partners fleet. NO se distribuyen ni van
-// al CSV (la tabla `metas` no las tiene); si se llenan, aparecen en la tarjeta (sec 5).
-function _calcSec4b_fleet(agg, n) {
+// al CSV; si se llenan, aparecen en la tarjeta compartible (pestaña Revisar).
+// Utilización pre-llenada en 85 (borrable) — la meta estándar.
+function _calcSec4b_fleet(agg) {
   const items = [...agg.values()]
-    .filter(e => _calcIsFleet(e.partner))       // Fase 7: solo partners fleet
+    .filter(e => _calcIsFleet(e.partner))
     .sort((a, b) => a.partner.localeCompare(b.partner) || a.city.localeCompare(b.city));
 
-  const _inp = (partner, city, metric, ph) => {
+  const _inp = (partner, city, metric, ph, def) => {
     const k = `${partner}|||${city}|||${metric}`;
-    const val = CALC_STATE.edits[k] !== undefined ? CALC_STATE.edits[k] : "";
+    const val = CALC_STATE.edits[k] !== undefined ? CALC_STATE.edits[k] : (def !== undefined ? def : "");
     return `<input type="number" step="0.1" min="0" class="calc-inp" value="${val}" placeholder="${ph}"
       data-pk="${escapeHTML(partner)}" data-city="${escapeHTML(city)}" data-metric="${metric}"
       onchange="calcOnGoalEdit(this)"
@@ -549,12 +773,12 @@ function _calcSec4b_fleet(agg, n) {
         <td>${_inp(e.partner, e.city, "shcar", "meta")}</td>
         <td class="tn" style="color:#888">${ref.accept == null ? "—" : ref.accept.toFixed(1) + "%"}</td>
         <td>${_inp(e.partner, e.city, "accept", "meta %")}</td>
-        <td>${_inp(e.partner, e.city, "util", "85")}</td>
+        <td>${_inp(e.partner, e.city, "util", "85", 85)}</td>
       </tr>`;
   }).join("");
 
   return `
-    ${_secH("🚗", "#0891b2", n + ". Metas Fleet (KPIs propios)", "Solo partners marcados Fleet · SH/Auto, Aceptación, Utilización · van a la tarjeta del partner")}
+    ${_secH("🚗", "#0891b2", "Metas Fleet (KPIs propios)", "Solo partners marcados Fleet · SH/Auto, Aceptación, Utilización · van a la tarjeta compartible")}
     <div class="section">
       <div class="tbl-wrap" style="max-height:420px;overflow-y:auto">
         <table class="dtbl">
@@ -570,15 +794,15 @@ function _calcSec4b_fleet(agg, n) {
         </table>
       </div>
       <div style="font-size:.7rem;color:#888;margin-top:6px;font-style:italic">
-        💡 Utilización: la meta suele ser <strong>85%</strong> (active cars / total) — llénala solo en los partners que aplican. Estos 3 KPIs <strong>no van al CSV</strong>; aparecen solo en la tarjeta compartible (al final). Presiona <strong>"Aplicar cambios"</strong> (bloque de acciones, al final) para reflejarlos.
+        💡 Utilización viene pre-llenada en <strong>85%</strong> (active cars / total) — ajústala o bórrala donde no aplique. Estos KPIs aparecen en la tarjeta compartible (pestaña <strong>Revisar y compartir</strong>).
       </div>
     </div>`;
 }
 
-// ── SECCION 7: Distribución de metas TukTuk (editable) ────────────────────────
+// ── Distribución de metas TukTuk (editable, pestaña TukTuk) ────────────────────
 // KPIs AD / N+R / Cars (branded_active_cars). Reparte g.tkAd/tkNr/tkCars por peso
 // dentro de la cartera TukTuk. edit-keys tk_* (disjuntas de taxi). Solo card, no CSV.
-function _calcSecTk_distribucion(agg, distTotals, monthLabel, n) {
+function _calcSecTk_distribucion(agg, distTotals, monthLabel) {
   const g = CALC_STATE.kamGoals;
   const items = [...agg.values()].sort((a, b) =>
     a.partner.localeCompare(b.partner) || a.city.localeCompare(b.city));
@@ -609,9 +833,15 @@ function _calcSecTk_distribucion(agg, distTotals, monthLabel, n) {
       </tr>`;
   }).join("");
 
+  const noGoals = !(+g.tkAd || +g.tkNr || +g.tkCars);
+  const hint = noGoals
+    ? `<div style="font-size:.78rem;color:#6b21a8;background:#faf5ff;border:1px solid #e9d5ff;border-radius:6px;padding:8px 10px;margin-bottom:8px">⚠️ Ingresa tus metas TukTuk arriba y presiona <strong>"↻ Recalcular distribución"</strong>.</div>`
+    : "";
+
   return `
-    ${_secH("🛺", "#a855f7", n + ". Distribución de metas · TukTuk · " + d2s(monthLabel || ""), "Meta TukTuk × % Cartera · AD · N+R · Cars (branded) · editable")}
+    ${_secH("🛺", "#a855f7", "Distribución TukTuk · " + d2s(monthLabel || ""), "Meta TukTuk × % Cartera · AD · N+R · Cars (branded) · editable")}
     <div class="section">
+      ${hint}
       <div class="tbl-wrap" style="max-height:460px;overflow-y:auto">
         <table class="dtbl">
           <thead>
@@ -628,33 +858,30 @@ function _calcSecTk_distribucion(agg, distTotals, monthLabel, n) {
           </tfoot>
         </table>
       </div>
-      <div style="font-size:.7rem;color:#888;margin-top:6px;font-style:italic">💡 Las metas TukTuk viven en la tarjeta compartible (al final), no en el CSV de agregador.</div>
     </div>`;
 }
 
-// ── BLOQUE DE ACCIONES (Paso 3) ───────────────────────────────────────────────
-// Consolidado al final del flujo: aplicar edits, resetear o descargar el CSV.
-// #calcApplyBtn lo muta _calcMarkDirty (estado "pendiente"). Reemplaza los botones
-// que antes vivían dentro de la Sección de distribución agregador.
+// ── BLOQUE DE ACCIONES (pestaña Revisar) ──────────────────────────────────────
+// Reset o descargar el CSV. La distribución se recalcula con "↻ Recalcular" en cada
+// pestaña o al cambiar de pestaña; ya no hay un botón "Aplicar" global.
 function _calcSecActions() {
   return `
-    ${_secH("✅", "#10b981", "Aplicar y descargar", "Paso 3 · aplica tus cambios, descarga el CSV o comparte la tarjeta")}
+    ${_secH("✅", "#10b981", "Descargar y compartir", "Descarga el CSV de metas (agregador) o comparte la tarjeta por partner")}
     <div class="section">
       <div class="tbl-wrap">
         <div style="display:flex;gap:10px;flex-wrap:wrap">
-          <button id="calcApplyBtn" style="padding:7px 14px;font-size:.78rem;background:#10b981;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer" onclick="calcApplyChanges()">✓ Aplicar cambios</button>
           <button style="padding:7px 14px;font-size:.78rem;background:#666;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer" onclick="calcResetEdits()">↺ Reset ediciones</button>
           <button style="padding:7px 14px;font-size:.78rem;background:#FF0000;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer" onclick="calcExportExcel()">📥 Descargar metas (CSV)</button>
         </div>
         <div style="font-size:.7rem;color:#888;margin-top:8px;font-style:italic">
-          💡 Edita los valores libremente; al salir de cada celda se guardan. Presiona <strong>"Aplicar cambios"</strong> para refrescar el cuadre y la vista compartible. El CSV es solo de metas agregador (Taxi); Fleet y TukTuk viven en la tarjeta.
+          💡 El CSV contiene <strong>solo metas de Agregador (Taxi)</strong> — súbelo en Configuración → Metas. Las metas <strong>Fleet</strong> y <strong>TukTuk</strong> viven en la tarjeta compartible de abajo (no en el CSV).
         </div>
       </div>
     </div>`;
 }
 
-// ── SECCION 8: Vista compartible / descarga por partner (Taxi + TukTuk) ────────
-function _calcSec5_exportPartner(agg, totals, aggTk, tkTotals, secNo) {
+// ── Vista compartible / descarga por partner (Taxi + TukTuk, pestaña Revisar) ──
+function _calcSec5_exportPartner(agg, totals, aggTk, tkTotals) {
   const g = CALC_STATE.kamGoals;
   const partners = [...new Set([
     ...[...agg.values()].map(e => e.partner),
@@ -662,7 +889,7 @@ function _calcSec5_exportPartner(agg, totals, aggTk, tkTotals, secNo) {
   ])].sort();
   if (!partners.length) {
     return `
-      ${_secH("📤", "#10b981", `${secNo}. Vista compartible por partner`, "Sin partners en este filtro")}
+      ${_secH("📤", "#10b981", "Vista compartible por partner", "Sin partners en este filtro")}
       <div class="section"><div style="font-size:.78rem;color:#aaa;padding:8px 0">No hay partners en el KAM seleccionado con datos.</div></div>`;
   }
   const sel = (CALC_STATE.selPartnerExport && partners.includes(CALC_STATE.selPartnerExport))
@@ -722,7 +949,7 @@ function _calcSec5_exportPartner(agg, totals, aggTk, tkTotals, secNo) {
   })() : "";
 
   return `
-    ${_secH("📤", "#10b981", `${secNo}. Vista compartible por partner`, "Tarjeta compartible · Taxi + TukTuk (sin mezclar otros partners)")}
+    ${_secH("📤", "#10b981", "Vista compartible por partner", "Tarjeta compartible · Taxi + TukTuk (sin mezclar otros partners)")}
     <div class="section">
       <div style="display:flex;gap:10px;align-items:end;margin-bottom:10px;flex-wrap:wrap">
         <div style="position:relative">
@@ -758,8 +985,14 @@ function _calcSec5_exportPartner(agg, totals, aggTk, tkTotals, secNo) {
 }
 
 // ── INTERACCIONES ─────────────────────────────────────────────────────────────
+function calcSetTab(tab) {
+  CALC_STATE.tab = tab;
+  renderCalculator();
+}
+
 function calcOnKamChange(v) {
   CALC_STATE.kam = v;
+  CALC_STATE.tab = "agg";               // vuelve a la pestaña base (evita quedar en una que desaparece)
   CALC_STATE.selPartnerExport = null;
   renderCalculator();
 }
@@ -791,25 +1024,18 @@ function calcOnGoalEdit(input) {
   const k = `${partner}|||${city}|||${metric}`;
   if (isNaN(val)) delete CALC_STATE.edits[k];
   else CALC_STATE.edits[k] = val;
-  // No re-render aqui (perderia el focus). El usuario edita libre y luego "Aplicar".
-  _calcMarkDirty();
+  // No re-render aqui (perderia el focus). El usuario edita libre y luego "Recalcular"
+  // o cambia de pestaña. Solo refrescamos el estado en vivo (píldoras + puntos).
+  _calcRefreshStatus();
 }
 
 function calcOnKamGoalChange(metric, val) {
   CALC_STATE.kamGoals[metric] = parseFloat(val) || 0;
-  // No re-render por keystroke: se aplica con "Distribuir metas" / "Aplicar cambios".
-  _calcMarkDirty();
+  // No re-render por keystroke: se aplica con "Recalcular distribución" / cambio de pestaña.
+  _calcRefreshStatus();
 }
 
-// Marca visualmente que hay cambios sin aplicar, sin re-renderizar.
-function _calcMarkDirty() {
-  const a = document.getElementById("calcApplyBtn");
-  if (a) { a.style.background = "#FF0000"; a.textContent = "✓ Aplicar cambios (pendiente)"; }
-  const d = document.getElementById("calcDistBtn");
-  if (d) d.textContent = "📊 Distribuir metas (pendiente)";
-}
-
-// Re-renderiza con metas + edits aplicados. Lo llaman "Distribuir metas" y "Aplicar cambios".
+// Re-renderiza con metas + edits aplicados. Lo llama "↻ Recalcular distribución".
 function calcApplyChanges() {
   renderCalculator();
 }
@@ -834,7 +1060,7 @@ function calcExportExcel() {
   const filteredRows = CALC_STATE.kam === "all"
     ? rows
     : rows.filter(r => (r.kam || getKAMForPartner(r.partner)) === CALC_STATE.kam);
-  // Mismo criterio que la UI (Sección 4): último mes + denominador non-fleet.
+  // Mismo criterio que la UI (Distribución agregador): último mes + denominador non-fleet.
   const agg = _calcAggByPartnerCity(filteredRows, new Set([lastMonth]));
   const distTotals = _calcKamTotals(agg, { excludeFleet: true });
   const g = CALC_STATE.kamGoals;
@@ -893,7 +1119,7 @@ async function calcDownloadPartnerImage() {
   }
 }
 
-// ── COMBOBOX FLOTANTE PARA VISTA COMPARTIBLE (Sec 5) ──────────────────────────
+// ── COMBOBOX FLOTANTE PARA VISTA COMPARTIBLE ──────────────────────────────────
 function calcFilterExportPartners(q) {
   calcShowExportList();
   _calcPaintExportList(q);
