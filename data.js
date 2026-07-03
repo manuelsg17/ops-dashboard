@@ -460,36 +460,37 @@ async function fetchAllPages(table, orderCol) {
 }
 
 // ── FLEETROOM-AWARE PREDICATES (slicing por sub-flota) ────────────────────────
-// Fuente de verdad por fila:
-//   - Si la fila tiene db_id real (!=''), manda el tagging del fleetroom
-//     (tabla fleetrooms → STATE.FLEETROOM_*).
-//   - Si es legacy (db_id=''), cae al flag por CLID (partners.is_tuktuk →
-//     CLID_IS_TUKTUK). Asi la data historica sigue funcionando sin db_id.
+// Fuente de verdad por fila, en orden de precedencia:
+//   1) Si el fleetroom (db_id) esta EN la tabla fleetrooms, manda su tagging
+//      explicito (STATE.FLEETROOM_*), sea true o false.
+//   2) Si la fila no tiene db_id (legacy) O su db_id NO esta en fleetrooms (aun
+//      sin clasificar a nivel sub-flota), cae al flag por CLID/partner
+//      (partners.is_fleet/is_tuktuk → CLID_IS_*). Asi un partner marcado Fleet o
+//      TukTuk cuyo fleetroom no fue clasificado individualmente IGUAL cuenta
+//      (bug: fleetrooms solo cubre ~23 de 270 db_id → los demas caian a false).
+// _frHas: el db_id tiene una entrada EXPLICITA en el mapa del fleetroom.
+function _frHas(map, id) { return !!id && Object.prototype.hasOwnProperty.call(map || {}, id); }
 
 // TRUE si la fila pertenece a una operacion TukTuk.
 function rowIsTuktuk(r) {
-  const id = r.db_id;
-  if (id) return !!(STATE.FLEETROOM_IS_TUKTUK || {})[id];
-  return !!(STATE.CLID_IS_TUKTUK || {})[r.clid];        // fallback legacy
+  if (_frHas(STATE.FLEETROOM_IS_TUKTUK, r.db_id)) return !!STATE.FLEETROOM_IS_TUKTUK[r.db_id];
+  return !!(STATE.CLID_IS_TUKTUK || {})[r.clid];        // fleetroom desconocido o legacy → flag CLID
 }
 
 // TRUE si la fila debe EXCLUIRSE del calculo Taxi.
 // = es tuktuk  O  el fleetroom esta marcado exclude_from_taxi (ej. delivery).
-// Para legacy (db_id=''), solo aplica CLID_IS_TUKTUK (no hay exclude por CLID).
 function rowExcludedFromTaxi(r) {
   const id = r.db_id;
-  if (id) {
-    return !!(STATE.FLEETROOM_IS_TUKTUK || {})[id]
-        || !!(STATE.FLEETROOM_EXCLUDE_TAXI || {})[id];
+  if (_frHas(STATE.FLEETROOM_IS_TUKTUK, id) || _frHas(STATE.FLEETROOM_EXCLUDE_TAXI, id)) {
+    return !!(STATE.FLEETROOM_IS_TUKTUK || {})[id] || !!(STATE.FLEETROOM_EXCLUDE_TAXI || {})[id];
   }
-  return !!(STATE.CLID_IS_TUKTUK || {})[r.clid];        // fallback legacy
+  return !!(STATE.CLID_IS_TUKTUK || {})[r.clid];        // fleetroom desconocido o legacy → flag CLID
 }
 
 // TRUE si la fila pertenece a una sub-flota Fleet (para KPIs Fleet en present2).
 function rowIsFleet(r) {
-  const id = r.db_id;
-  if (id) return !!(STATE.FLEETROOM_IS_FLEET || {})[id];
-  return !!(STATE.CLID_IS_FLEET || {})[r.clid];         // fallback legacy
+  if (_frHas(STATE.FLEETROOM_IS_FLEET, r.db_id)) return !!STATE.FLEETROOM_IS_FLEET[r.db_id];
+  return !!(STATE.CLID_IS_FLEET || {})[r.clid];         // fleetroom desconocido o legacy → flag CLID
 }
 
 // Anti-doble-conteo (no destructivo, load-time): si para una (clid,city,date)
@@ -1576,8 +1577,10 @@ function updateIndexes() {
     if (r.kam && !STATE._partnerKAM.has(r.partner)) {
       STATE._partnerKAM.set(r.partner, r.kam);
     }
-    // _partnerIsFleet: true si ALGÚN CLID del partner tiene is_fleet=true
-    if ((STATE.CLID_IS_FLEET || {})[r.clid] && !STATE._partnerIsFleet.get(r.partner)) {
+    // _partnerIsFleet: true si ALGUNA fila del partner es Fleet. Usa rowIsFleet
+    // (flag del fleetroom por db_id, o del CLID como fallback), NO solo CLID_IS_FLEET,
+    // para cubrir partners marcados Fleet SOLO a nivel fleetroom (p.ej. KINGO).
+    if (!STATE._partnerIsFleet.get(r.partner) && rowIsFleet(r)) {
       STATE._partnerIsFleet.set(r.partner, true);
     }
   });
@@ -1610,15 +1613,17 @@ function getKAMForPartner(partner) {
   return STATE._partnerKAM.get(partner) || "";
 }
 
-// Partner es Fleet si ALGÚN CLID suyo tiene is_fleet=true (flag manual en Config).
-// Memoizado en updateIndexes (_partnerIsFleet); lazy-build si aún no existe.
+// Partner es Fleet si ALGUNA de sus filas es Fleet (rowIsFleet: flag del fleetroom
+// por db_id, o del CLID como fallback). Cubre partners marcados Fleet a nivel
+// fleetroom O a nivel CLID. Memoizado en updateIndexes (_partnerIsFleet); si el mapa
+// aún no existe, se arma una vez escaneando las filas (mismo criterio, sin re-escaneo
+// por-llamada: solo contiene entradas true, ausente = no-fleet).
 function isFleetPartner(partner) {
-  if (STATE._partnerIsFleet?.has(partner)) return STATE._partnerIsFleet.get(partner);
-  if (!STATE._partnerIsFleet) STATE._partnerIsFleet = new Map();
-  const map = STATE.CLID_IS_FLEET || {};
-  Object.entries(STATE.CLID_MAP || {}).forEach(([clid, p]) => {
-    if (p && map[clid] && !STATE._partnerIsFleet.has(p)) STATE._partnerIsFleet.set(p, true);
-  });
+  if (!STATE._partnerIsFleet) {
+    STATE._partnerIsFleet = new Map();
+    const rows = STATE.rawDataFull || STATE.rawData || [];
+    for (const r of rows) if (rowIsFleet(r)) STATE._partnerIsFleet.set(r.partner, true);
+  }
   return STATE._partnerIsFleet.get(partner) || false;
 }
 
