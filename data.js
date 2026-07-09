@@ -596,9 +596,18 @@ async function loadFromSupabase() {
       // "Mayo", "MAYO" por uploads viejos. Sin esto, m.mes !== mesName falla
       // por casing y los %% de cumplimiento salen inflados/incompletos.
       mes:     (m.mes || "").trim().toUpperCase(),
+      mYear:   m.mes_year != null ? +m.mes_year : null,
       mA:      +m.meta_active_drivers,
       mNR:     +m.meta_nr,
-      mH:      +m.meta_supply_hours
+      mH:      +m.meta_supply_hours,
+      // Fleet + TukTuk (nullable): NULL = el partner no tiene esa línea. Se
+      // conserva null (no 0) para distinguir "sin meta" de "meta cero".
+      mSHcar:  m.meta_sh_car      != null ? +m.meta_sh_car      : null,
+      mAcc:    m.meta_acceptance  != null ? +m.meta_acceptance  : null,
+      mUtil:   m.meta_utilization != null ? +m.meta_utilization : null,
+      mtkAD:   m.meta_tk_ad       != null ? +m.meta_tk_ad       : null,
+      mtkNR:   m.meta_tk_nr       != null ? +m.meta_tk_nr       : null,
+      mtkCars: m.meta_tk_cars     != null ? +m.meta_tk_cars     : null
     }));
 
     // 5. Proyectos (tabla puede no existir aún — fallo silencioso)
@@ -1448,9 +1457,34 @@ function _clidStr(v) {
 }
 
 // ── UPLOAD METAS ──────────────────────────────────────────────────────────────
+// Columna opcional de metas: busca el header (union de claves, case/space-insensitive)
+// en el archivo. Devuelve la clave real o null. Si el header NO está en el archivo, la
+// columna NO se toca en BD (no clobber); si está, se escribe para TODAS las filas (null
+// donde la celda esté vacía) → batch homogéneo, sin sorpresas de union en PostgREST.
+function _metaOptHeader(rows, names) {
+  const norm = s => String(s).toLowerCase().replace(/\s+/g, "");
+  const wanted = names.map(norm);
+  const seen = new Set();
+  for (const r of rows) for (const k of Object.keys(r)) seen.add(k);
+  for (const k of seen) if (wanted.includes(norm(k))) return k;
+  return null;
+}
+function _metaBlankNull(v) {
+  if (v === undefined || v === null || String(v).trim() === "") return null;
+  return toN(v);
+}
+
 async function uploadMetas(rows) {
   const skippedNoCity = [];
   const skippedBadClid = [];
+  // Detección a nivel de ARCHIVO de las columnas opcionales (fleet/tuktuk/año).
+  const colYear   = _metaOptHeader(rows, ["AÑO", "ANIO", "ANO", "YEAR", "MES_YEAR", "MESYEAR"]);
+  const colShcar  = _metaOptHeader(rows, ["META SH/AUTO", "SH/AUTO", "META_SH_CAR", "SH_CAR", "META SH AUTO", "SH POR AUTO"]);
+  const colAcc    = _metaOptHeader(rows, ["META ACEPTACION", "ACEPTACION", "META_ACCEPTANCE", "ACCEPTANCE", "META ACEPTACIÓN", "ACEPTACIÓN"]);
+  const colUtil   = _metaOptHeader(rows, ["META UTILIZACION", "UTILIZACION", "META_UTILIZATION", "UTILIZATION", "META UTILIZACIÓN", "UTILIZACIÓN"]);
+  const colTkAD   = _metaOptHeader(rows, ["META TK AD", "TK AD", "TUKTUK AD", "META_TK_AD", "AD TUKTUK", "AD TK"]);
+  const colTkNR   = _metaOptHeader(rows, ["META TK N+R", "TK N+R", "TUKTUK N+R", "META_TK_NR", "N+R TUKTUK", "N+R TK"]);
+  const colTkCars = _metaOptHeader(rows, ["META TK CARS", "TK CARS", "TUKTUK CARS", "META_TK_CARS", "CARS TUKTUK", "CARS TK"]);
   const data = rows.map(row => {
     const clid       = _clidStr(row["CLID"] || row["clid"] || "");
     // Captura PARTNER en cualquier casing del Excel
@@ -1461,7 +1495,7 @@ async function uploadMetas(rows) {
     // quedaban con kam="" en BD y aparecian como "sin meta asignada" por KAM.
     const kamXls     = String(row["KAM"] || row["Kam"] || row["kam"] || "").trim();
     const kam        = (clid && STATE.KAM_MAP[clid]) || kamXls || "";
-    return {
+    const o = {
       clid, partner, kam,
       // Mes en UPPERCASE para evitar duplicados "mayo"/"Mayo"/"MAYO" en BD
       mes:  String(row["MES"]    || row["Mes"]    || "").trim().toUpperCase(),
@@ -1470,6 +1504,15 @@ async function uploadMetas(rows) {
       meta_nr:             toN(row["N+R"] || row["n+r"] || 0),
       meta_supply_hours:   toN(row["SUPPLY HOURS"] || row["Supply Hours"] || 0)
     };
+    // Columnas opcionales (solo si su header está en el archivo). Blank → null.
+    if (colYear)   o.mes_year         = _metaBlankNull(row[colYear]);
+    if (colShcar)  o.meta_sh_car      = _metaBlankNull(row[colShcar]);
+    if (colAcc)    o.meta_acceptance  = _metaBlankNull(row[colAcc]);
+    if (colUtil)   o.meta_utilization = _metaBlankNull(row[colUtil]);
+    if (colTkAD)   o.meta_tk_ad       = _metaBlankNull(row[colTkAD]);
+    if (colTkNR)   o.meta_tk_nr       = _metaBlankNull(row[colTkNR]);
+    if (colTkCars) o.meta_tk_cars     = _metaBlankNull(row[colTkCars]);
+    return o;
   }).filter(r => {
     if (r.clid === null) {
       // CLID en notacion cientifica -> degradado, no recuperable
