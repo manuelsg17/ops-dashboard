@@ -10,8 +10,18 @@ Vanilla JS dashboard para KAMs (partner performance). Frontend-only (sin build),
 
 ## Estado actual
 
-Ultimo commit relevante: **`90bc558`** (Vista Partner: conversion/canal/graficos).
-Historia reciente: `b257047` (taxiparks KPIs + fix precision GMV) → `c5006c6` (hallazgos AD unificados) → `90bc558`.
+Ultimo commit relevante: **`c155af5`** (Presentacion 2.0: metas Fleet/TukTuk + fix mes).
+Historia reciente: `75eedb8` (Fase 1: esquema metas + Calculadora) → `23e99c1` (Fases 2-3: Rendimiento + Metas por linea) → `c155af5` (Fase 4).
+
+### Sesion julio 2026 — Fleet + TukTuk de primera clase (Calculadora → BD → Rendimiento → Metas → Presentacion 2.0)
+
+Las 3 lineas de negocio (Agregador/Fleet/TukTuk) tratadas como **lentes independientes sobre datos ya deduplicados, nunca aditivas**. Fleet ⊂ Agregador (sus autos hacen Taxi); TukTuk se excluye de Taxi. Slices Fleet materializados desde el agregador deduplicado con `rowIsFleet` (`STATE.rawDataFleet` / `rawDataMensualFleet`), sin re-fetch ni doble conteo.
+
+- **Fase 1 — esquema `metas` + Calculadora** (`75eedb8`, migra `migrations/2026-07-08_metas_fleet_tuktuk.sql`): +6 cols nullable (`meta_sh_car`/`meta_acceptance`/`meta_utilization` Fleet + `meta_tk_ad`/`meta_tk_nr`/`meta_tk_cars` TukTuk) + `mes_year` (desambigua cross-year). Loader mapea a `mSHcar/mAcc/mUtil/mtkAD/mtkNR/mtkCars` (NULL≠0). `uploadMetas` detecta headers opcionales; celda vacia → omite la clave (columnas disjuntas, no pisa otras lineas). Calculadora: Fleet ENTRA al reparto con la MISMA ecuacion (goal×share, denominador = TODOS) → no sobre-exige a los no-fleet; **fix precision AD/Cars** (suma fleetrooms por fecha, max entre fechas — antes max sobre todas las filas subcontaba multi-fleetroom); guardar directo `calcSaveMetas` (admin-gated, read-merge-write upsert onConflict clid,city,mes → REEMPLAZA el mes, no acumula); tarjeta compartible **bilingue ES/EN/ES-EN** con crecimiento vs ultimo mes + bloque KPIs Fleet solo para partners fleet.
+- **Fase 2 — Rendimiento por linea** (`23e99c1`): selector `STATE.rendLine` (`_rendLine`/`_rendLineDataset`/`_rendLineFiltered`/`_rendLinePrev` en `rendimiento.js`). **NO muta `STATE.rawData`** (agregador intacto para otras pestañas); filtra el slice de la linea con los mismos filtros del sidebar. Vista **Fleet = SOLO KPIs de flota** (owned cars, SH/auto interno = Σinternal_fleet_sh/Σowned_cars, aceptacion = Σ(rate×trips)/Σtrips, branded) — NO AD/SH/N+R (a nivel fleetroom mezclan agregador+fleet → falso negativo). Diario deshabilita Fleet/TukTuk (sin db_id).
+- **Fase 3 — Metas por linea** (`23e99c1`): `STATE.metasLine` (independiente de `rendLine`). Fleet: tarjeta por (partner,ciudad) con SH/Auto + Aceptacion (meta vs actual) + Utilizacion (solo meta). TukTuk: resumen Peru (AD/N+R/Brandeados) + tarjetas por partner. Actuales de los slices; AD=max snapshot, N+R=Σ.
+- **Fase 4 — Presentacion 2.0** (`c155af5`): "Avance vs Meta" usa metas reales (TukTuk `meta_tk_*`; Fleet Aceptacion/SH-auto como metas, Utilizacion solo meta, Owned Cars referencia). `p2MetaFor` extendido. **Mes de la meta**: `p2AvanceMes()` AUTO = mes del "Hasta" (ves junio → compara vs meta de junio) + selector manual "Mes meta" (Auto/fijo); `p2MonthDates` capa en el "Hasta" (avance MTD); `applyFilters()` re-renderiza el slide. Fix preset "Este mes" (`app.js`): ancla al ULTIMO MES CON DATOS, no al mes calendario de hoy.
+- **Fase F (pendiente de DATOS, no de codigo)**: el export **diario no trae `db_id`** → Fleet/TukTuk deshabilitados en escala diaria. Cuando llegue la sub-flota diaria, reactivar sin codigo nuevo.
 
 ### Sesion junio 2026 — Taxiparks, Vista Partner, Conversion/Canal
 - **Taxiparks KPIs (esquema unificado)** — `migrations/2026-06-02_taxiparks_kpis_y_conversion.sql`: +41 columnas (GMV, ratios, fleet, funnels, shares) en `rendimiento` / `rendimiento_mensual` / `rendimiento_diario`, **conservando los nombres de las 7 columnas viejas** (no rompe graficos existentes). Parser en `data.js`: `TX_COL_BY_NORM` (match exacto header→columna normalizada) + fuzzy fallback solo para las 7 core; `txExtract` / `txConsolidate` / `txRowExtra`.
@@ -50,12 +60,14 @@ RLS estricto (`is_admin()` + 28 policies; **NUNCA revocar EXECUTE de `is_admin()
 - `data.js` — Supabase loaders, parsers Excel, `escapeHTML`, `fmtSmart`, `normCity`, `applyFlotasOverride`
 - `auth.js` — login, deteccion de rol (`STATE.isAdmin`), logout con cleanup completo
 - `app.js` — init, sidebar, filtros LRU, `renderConfig`, `deleteDashboardData` (gated)
-- `rendimiento.js` — tab Analisis (semanal/mensual)
-- `metas.js` — tab Metas
+- `rendimiento.js` — tab Analisis (semanal/mensual) + selector de linea Agregador/Fleet/TukTuk (`STATE.rendLine`, vista Fleet solo-KPIs)
+- `metas.js` — tab Metas + selector de linea (`STATE.metasLine`); secciones Fleet/TukTuk meta-vs-actual
 - `partnerView.js` — Vista Partner (i18n ES/EN, export PDF): Resumen Ejecutivo, Peru General + provincias, cohortes Top1/2-3/4-5/6-10, Embudo de Conversion y Adquisicion por canal (partner vs promedio Top5/Top10)
 - `presentacion.js` — tab Presentacion (Chart.js)
 - `rawdata.js` — raw data + Vista Flotas (CLID->nombre/KAM mapping)
-- `ops.js`, `proyectos.js`, `unifview.js`, `insights.js`, `calculator.js`, `charts.js`
+- `presentacion2.js` — tab Presentacion 2.0 (deck por partner, Taxi/TukTuk, "Avance vs Meta" con metas Fleet/TukTuk + selector "Mes meta")
+- `calculator.js` — Calculadora de Metas (pestañas por linea, reparto goal×share, guardar directo a BD, tarjeta compartible bilingue)
+- `ops.js`, `proyectos.js`, `unifview.js`, `insights.js`, `charts.js`
 - `migrations/` — SQL versionado; se aplica via MCP Supabase (`apply_migration`, project `oqakoinyzvdgqilxwjjv`) o manualmente en el SQL editor. Ver memoria `supabase-mcp-direct-changes`
 
 ## Modelo de datos
@@ -64,7 +76,7 @@ RLS estricto (`is_admin()` + 28 policies; **NUNCA revocar EXECUTE de `is_admin()
 - `flotas` (clid, nombre_asignado, kam, ciudad, activo) — solo fallback si CLID no esta en `partners`, o para marcar `activo=false`
 - `rendimiento` (semanal), `rendimiento_mensual`, `rendimiento_diario` — series temporales; ~48 columnas (7 core historicas + ~41 KPIs taxiparks, incl. `gmv`). UNIQUE (clid,city,fecha|mes|date) para el upsert
 - `conversion_pais` (clid, partner, mes; funnel `first_order`/`n5_success`..`n100_success` + 8 columnas de canal: `agency_scouts`, `organic_partner`, `organic_scouts`, `organic_yango`, `paid_yango`, `partner_scouts`, `referral_partner`, `referral_yango`). UNIQUE (clid,mes). RLS espejo del Sprint 0
-- `metas` — objetivos mensuales por partner
+- `metas` (clid, city, mes; UNIQUE clid,city,mes) — objetivos mensuales por partner. Agregador: `meta_active_drivers`/`meta_nr`/`meta_supply_hours`. Fleet: `meta_sh_car`/`meta_acceptance`/`meta_utilization` (nullable). TukTuk: `meta_tk_ad`/`meta_tk_nr`/`meta_tk_cars` (nullable). `mes` = NOMBRE mayus sin año + `mes_year` (desambigua). Ver `migrations/2026-07-08_metas_fleet_tuktuk.sql`
 - `proyectos` — proyectos en curso por partner
 
 `rebuildKAMPartners` (en `config.js`) reconstruye `STATE.KAM_PARTNERS` priorizando `partners`, y agrega flotas solo cuando el CLID NO esta cubierto.
