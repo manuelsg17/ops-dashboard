@@ -56,7 +56,7 @@ function p2IsFleetMode(partner) {
 // render EN VIVO y el PDF (una sola fuente → no divergen). build(partner,dates)
 // → HTML; charts=true + chartFn(partner,dates,root) para slides con Chart.js.
 const P2_SLIDES = [
-  { es: "Carátula",       en: "Cover",          charts: false, build: (p, d, i) => buildSlide2Cover(p) },
+  { es: "Carátula",       en: "Cover",          charts: false, build: (p, d, i) => buildSlide2Cover(p, d) },
   { es: "Avance vs Meta", en: "Goal vs Target", charts: false, build: (p, d, i) => buildSlide2Avance(p, i) },
   { es: "KPIs por Nivel", en: "KPIs by Level",  charts: true,  build: (p, d, i) => buildSlide2Matrix(p, d, i), chartFn: (p, d, root) => buildSlide2MatrixCharts(p, d, root) },
   { es: "Data Raw (#)",   en: "Data Raw (#)",   charts: false, build: (p, d, i) => buildSlide2Raw(p, d, false, i) },
@@ -75,6 +75,15 @@ function _p2TkPartnersAll() {
   return [...new Set([...(STATE._tuktukPartners || []), ...(STATE._tuktukMensualPartners || [])])];
 }
 function p2HasTuktuk(partner) { return _p2TkPartnersAll().includes(partner); }
+// Diario NO tiene slice TukTuk propio (el export diario no trae db_id, Fase F pendiente de
+// datos): sin este guard, un partner TukTuk en escala Diaria generaba una sección "TukTuk"
+// que en realidad mostraba datos SEMANALES (p2AllDates cae a _tuktukDates) pero rotulados
+// "Diario"/"DoD"/"días" (p2ModeInfo lee STATE.curMode) — inconsistencia real de escala.
+// Predicado separado de p2HasTuktuk (que solo dice "existen datos tuktuk"): esta func decide
+// si la SECCIÓN se muestra en la escala activa. Un partner tuktuk-only en Diario cae al
+// fallback de p2Deck (body con ds="taxi", vacío pero rotulado honesto) en vez de mostrar
+// data real bajo la escala equivocada.
+function p2TuktukSectionVisible(partner) { return STATE.curMode !== "diario" && p2HasTuktuk(partner); }
 function p2HasTaxi(partner)   { return (STATE.allPartners   || []).includes(partner); }
 // Lista del SELECTOR: unión taxi + tuktuk (un partner tuktuk-only debe poder elegirse).
 function p2PartnerList() {
@@ -84,11 +93,16 @@ function p2PartnerList() {
 const P2_DIVIDER = { es: "TukTuk", en: "TukTuk", charts: false, build: (p) => buildSlide2SectionCover(p, "tuktuk") };
 // Deck por partner: carátula + [sección Taxi] + [divisor + sección TukTuk].
 function p2Deck(partner) {
-  const hasTaxi = p2HasTaxi(partner), hasTk = p2HasTuktuk(partner);
+  const hasTaxi = p2HasTaxi(partner);
+  const showTk  = p2TuktukSectionVisible(partner);   // datos existen Y la escala activa los soporta (no Diario)
   const body = P2_SLIDES.slice(1);   // Avance, KPIs, Data Raw #, Data Raw %, Alertas
-  const deck = [{ def: P2_SLIDES[0], ds: hasTaxi ? "taxi" : "tuktuk" }];  // carátula
-  if (hasTaxi || !hasTk) body.forEach(def => deck.push({ def, ds: "taxi" }));  // taxi (default si no hay ninguno)
-  if (hasTk) {
+  // Cover y body por defecto van a "taxi" salvo que el partner sea tuktuk-only Y la sección
+  // tuktuk sea visible en esta escala — así cover y body NUNCA quedan en datasets distintos
+  // (antes: tuktuk-only en Diario podía dejar el cover en "tuktuk" con el body vacío en "taxi").
+  const fallbackTaxi = hasTaxi || !showTk;
+  const deck = [{ def: P2_SLIDES[0], ds: fallbackTaxi ? "taxi" : "tuktuk" }];  // carátula
+  if (fallbackTaxi) body.forEach(def => deck.push({ def, ds: "taxi" }));
+  if (showTk) {
     deck.push({ def: P2_DIVIDER, ds: "tuktuk" });
     body.forEach(def => deck.push({ def, ds: "tuktuk" }));
   }
@@ -188,13 +202,16 @@ function p2BrandFooter(idx) {
 }
 
 // ── SLIDE: CARÁTULA (branded, oscura) ─────────────────────────────────────────
-function buildSlide2Cover(partner) {
+function buildSlide2Cover(partner, dates) {
   const es = PRESENT2_STATE.lang === "es";
   const col = (STATE.partnerColors && STATE.partnerColors[partner]) || "#FF0000";
   const kam = (typeof getKAMForPartner === "function" ? getKAMForPartner(partner) : "") || "";
   const cities = p2PartnerCities(partner).map(cityLabel).join(" · ");
-  const from = document.getElementById("dateFrom") ? document.getElementById("dateFrom").value : (STATE.allDates || [])[0];
-  const to   = document.getElementById("dateTo")   ? document.getElementById("dateTo").value   : (STATE.allDates || []).slice(-1)[0];
+  // Ventana REAL que muestran las demás slides (p2SelectedDates: en mensual = tail4,
+  // ignora el "Desde" crudo) — NUNCA leer #dateFrom/#dateTo directo aquí: la carátula
+  // rotulaba un período distinto al que cubren KPIs por Nivel/Data Raw (bug de auditoría).
+  const from = (dates && dates[0]) || (document.getElementById("dateFrom") ? document.getElementById("dateFrom").value : (p2AllDates() || [])[0]);
+  const to   = (dates && dates[dates.length - 1]) || (document.getElementById("dateTo") ? document.getElementById("dateTo").value : (p2AllDates() || []).slice(-1)[0]);
   const modeLabel = es ? `Avance ${p2ModeInfo().label}` : `${p2ModeInfo().label} Update`;
   const period = `${d2s(from)} → ${d2s(to)}`;
   return `
@@ -211,7 +228,7 @@ function buildSlide2Cover(partner) {
       </div>
       <div style="color:#FF0000;font-weight:700;font-size:1.1rem;margin-bottom:8px">${modeLabel} · ${period}</div>
       ${cities ? `<div style="color:#aaa;font-size:.85rem;margin-bottom:24px">${escapeHTML(cities)}</div>` : `<div style="margin-bottom:24px"></div>`}
-      ${kam ? `<div style="background:rgba(255,255,255,.08);border-radius:8px;padding:8px 20px;color:#ccc;font-size:.8rem">Account Manager: <strong style="color:#fff">${escapeHTML(kam)}</strong></div>` : ""}
+      ${kam ? `<div style="background:rgba(255,255,255,.08);border-radius:8px;padding:8px 20px;color:#ccc;font-size:.8rem">${es ? "Ejecutivo de Cuenta" : "Account Manager"}: <strong style="color:#fff">${escapeHTML(kam)}</strong></div>` : ""}
     </div>`;
 }
 function p2SlideNames() { const es = PRESENT2_STATE.lang === "es"; return P2_SLIDES.map(s => es ? s.es : s.en); }
@@ -463,7 +480,13 @@ function p2CohortLines(scope, dates, kpiKey) {
 function p2Chart(canvasId, dates, partnerVals, cityVals, cohortLines, color, isPct, root) {
   const canvas = root ? root.querySelector(`#${canvasId}`) : document.getElementById(canvasId);
   if (!canvas || typeof Chart === "undefined") return;
-  const pWoW = getWoW(partnerVals);
+  const pWoW = getWoW(partnerVals);   // % relativo — solo para colorear el punto por signo (mismo signo que pp)
+  // Datalabel de variacion: para series de PROPORCION (isPct, ej. Acceptance Rate) debe ir en
+  // PUNTOS (pp), igual que el badge de la tarjeta (buildSlide2Matrix) y Data Raw (%) — NO el %
+  // relativo de getWoW, que para el mismo cambio da un numero distinto (bug de auditoria).
+  const pWoWLabel = isPct
+    ? partnerVals.map((v, i) => (i === 0 || v == null || partnerVals[i - 1] == null) ? null : (v - partnerVals[i - 1]) * 100)
+    : pWoW;
   const fmtV = v => isPct ? (v == null ? "" : (v * 100).toFixed(1) + "%") : fmt(v);
   // Marca Yango: la línea del partner SIEMPRE en rojo Yango; el color del KPI
   // (`color`) se usa como acento sutil en el relleno del área.
@@ -504,8 +527,8 @@ function p2Chart(canvasId, dates, partnerVals, cityVals, cohortLines, color, isP
           return `${ctx.dataset.label}: ${fmtV(raw)}`;
         } } },
         datalabels: {
-          display: ctx => ctx.datasetIndex === 0 && ctx.dataIndex > 0 && pWoW[ctx.dataIndex] !== null,
-          formatter: (_, ctx) => { const w = pWoW[ctx.dataIndex]; return (w >= 0 ? "+" : "") + w.toFixed(1) + "%"; },
+          display: ctx => ctx.datasetIndex === 0 && ctx.dataIndex > 0 && pWoWLabel[ctx.dataIndex] != null,
+          formatter: (_, ctx) => { const w = pWoWLabel[ctx.dataIndex]; return (w >= 0 ? "+" : "") + w.toFixed(1) + (isPct ? "pp" : "%"); },
           color: ctx => wowColor(pWoW[ctx.dataIndex]),
           font: { size: 8, weight: "bold" }, anchor: "end", align: "top", offset: 2
         }
@@ -581,7 +604,9 @@ function buildSlide2Matrix(partner, dates, idx) {
       let badge = "", bColor = "#aaa";
       if (k.kind === "pct") {
         if (last != null && prev != null) { const d = (last - prev) * 100; bColor = d >= 0 ? "#10b981" : "#FF0000"; badge = (d >= 0 ? "+" : "") + d.toFixed(1) + "pp"; }
-      } else if (prev != null && prev !== 0) {
+      } else if (last != null && prev != null && prev !== 0) {
+        // last != null: si el ultimo periodo no trae autos de flota (shCarInt=null), NO
+        // mostrar un badge "-100%" fantasma — debe quedar "—" (mismo guard que la rama pct).
         const w = (last - prev) / prev * 100; bColor = w >= 0 ? "#10b981" : "#FF0000"; badge = (w >= 0 ? "+" : "") + w.toFixed(1) + "%";
       }
       return `
@@ -637,14 +662,17 @@ function buildSlide2MatrixCharts(partner, dates, root) {
 // ── SLIDES 1 y 2: DATA RAW numérico / porcentual ──────────────────────────────
 // Columnas (formato de referencia): Trips · Supply Hours · Active Drivers ·
 // New Drivers · Reactivated · Partner Commission · N+R · Retención · Trips/SH · Trips/AD · SH/AD.
+// Labels espejados al ES/EN de p2KpiDefs (matriz) y buildSlide2Avance — la MISMA métrica
+// debe llamarse igual en todo el deck. Antes solo "Retención" traducía; el resto quedaba en
+// inglés fijo aun con lang=es (inconsistente con KPIs por Nivel/Avance, que sí traducen).
 function p2RawCols(es) {
   return [
-    { key: "trips", label: "Trips",           kind: "num" },
-    { key: "sh",    label: "Supply Hours",     kind: "num" },
-    { key: "ad",    label: "Active Drivers",   kind: "num" },
-    { key: "newd",  label: "New Drivers",      kind: "num" },
-    { key: "react", label: "Reactivated",      kind: "num" },
-    { key: "comm",  label: "Partner Commission", kind: "money" },
+    { key: "trips", label: es ? "Viajes" : "Trips",                 kind: "num" },
+    { key: "sh",    label: es ? "Horas de Conexión" : "Supply Hours", kind: "num" },
+    { key: "ad",    label: es ? "Conductores Activos" : "Active Drivers", kind: "num" },
+    { key: "newd",  label: es ? "Nuevos" : "New Drivers",           kind: "num" },
+    { key: "react", label: es ? "Reactivados" : "Reactivated",      kind: "num" },
+    { key: "comm",  label: es ? "Comisión Partner" : "Partner Commission", kind: "money" },
     { key: "nr",    label: "N+R",              kind: "num" },
     { key: "ret",   label: es ? "Retención" : "Retention", kind: "pct" },
     { key: "tripsPerSh", label: "Trips/SH",    kind: "ratio" },
@@ -658,16 +686,20 @@ function p2RawCols(es) {
 function p2RawColsFleet(es) {
   return [
     ...p2RawCols(es),
-    { key: "ownedFleetActiveCars", label: es ? "Owned Fleet Active Cars" : "Owned Fleet Active Cars", kind: "num" },
-    { key: "shCarInt",             label: es ? "Internal Fleet SH/Auto" : "Internal Fleet SH/Car",     kind: "ratio" },
+    { key: "ownedFleetActiveCars", label: "Owned Fleet Active Cars", kind: "num" },
+    { key: "shCarInt",             label: es ? "Internal Fleet SH/Auto" : "Internal Fleet SH/Car",     kind: "ratio1" },
     { key: "accept",               label: "Acceptance Rate", kind: "pct" }
   ];
 }
 function p2FmtRaw(kind, v) {
   if (v == null || isNaN(v)) return "—";
-  if (kind === "pct")   return (v * 100).toFixed(1) + "%";
-  if (kind === "money") return "$" + fmt(v);
-  if (kind === "ratio") return v.toFixed(2);
+  if (kind === "pct")    return (v * 100).toFixed(1) + "%";
+  if (kind === "money")  return "$" + fmt(v);
+  if (kind === "ratio")  return v.toFixed(2);
+  // ratio1: MISMA precisión que KPIs por Nivel/Avance (p2FmtVal, toFixed(1)) — antes
+  // Internal Fleet SH/Auto salía con 2 decimales acá y 1 decimal en el resto del deck
+  // para el mismo período (inconsistencia de auditoría).
+  if (kind === "ratio1") return v.toFixed(1);
   return fmt(v);
 }
 
@@ -832,7 +864,7 @@ function p2AvanceColor(pct) { return pct >= 100 ? "#10b981" : pct >= 80 ? "#f59e
 
 // Tarjeta "Referencia" (sin meta en BD, ej. Fleet): valor actual + badge WoW,
 // estilo visualmente distinto (fondo celeste) de las tarjetas con meta real.
-function p2RefCard(label, arr, kind) {
+function p2RefCard(label, arr, kind, es) {
   const last = arr[arr.length - 1], prev = arr.length > 1 ? arr[arr.length - 2] : null;
   const fmtN = kind === "pct" ? (v => v == null ? "—" : (v * 100).toFixed(1) + "%")
              : kind === "ratio1" ? (v => v == null ? "—" : v.toFixed(1))
@@ -849,7 +881,7 @@ function p2RefCard(label, arr, kind) {
       <span style="font-size:.62rem;font-weight:700;color:${bColor}">${badge}</span>
     </div>
     <div style="font-weight:900;font-size:1rem;color:#111">${fmtN(last)}</div>
-    <div style="font-size:.58rem;color:#0284c7;font-style:italic">Referencia (sin meta)</div>
+    <div style="font-size:.58rem;color:#0284c7;font-style:italic">${es ? "Referencia (sin meta)" : "Reference (no target)"}</div>
   </div>`;
 }
 
@@ -876,11 +908,11 @@ function _p2MetaCard(label, real, goal, projV, fmtN, es) {
   </div>`;
 }
 // Tarjeta solo-meta (sin actual medible, ej. Utilización Fleet).
-function _p2MetaOnlyCard(label, goal, fmtN, note) {
+function _p2MetaOnlyCard(label, goal, fmtN, note, es) {
   return `<div style="flex:1;min-width:0;background:#ecfeff;border:1px solid #a5f3fc;border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;justify-content:center;gap:2px">
     <span style="font-size:.58rem;color:#0891b2;font-weight:700;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(label)}</span>
     <div style="font-weight:900;font-size:1rem;color:#111">${fmtN(goal)}</div>
-    <div style="font-size:.58rem;color:#0891b2">meta${note ? " · " + note : ""}</div>
+    <div style="font-size:.58rem;color:#0891b2">${es ? "meta" : "target"}${note ? " · " + note : ""}</div>
   </div>`;
 }
 
@@ -969,15 +1001,15 @@ function buildSlide2Avance(partner, idx) {
       // Aceptación: meta real por ciudad SOLO si hay meta Y actual con dato; si no, referencia (— si null).
       cards += (perCity && meta.mAcc != null && accA != null)
         ? _p2MetaCard(es ? "Aceptación" : "Acceptance", accA * 100, meta.mAcc, null, v => fmt(v) + "%", es)
-        : p2RefCard(es ? "Acceptance Rate" : "Acceptance Rate", fs.accept, "pct");
+        : p2RefCard(es ? "Acceptance Rate" : "Acceptance Rate", fs.accept, "pct", es);
       // SH/Auto interno:
       cards += (perCity && meta.mSHcar != null && shcA != null)
         ? _p2MetaCard(es ? "SH/Auto (interno)" : "Internal SH/Car", shcA, meta.mSHcar, null, v => fmt(v), es)
-        : p2RefCard(es ? "Internal Fleet SH/Auto" : "Internal Fleet SH/Car", fs.shCarInt, "ratio1");
+        : p2RefCard(es ? "Internal Fleet SH/Auto" : "Internal Fleet SH/Car", fs.shCarInt, "ratio1", es);
       // Utilización: solo meta, solo por ciudad (sin actual medible).
-      if (perCity && meta.mUtil != null) cards += _p2MetaOnlyCard(es ? "Utilización" : "Utilization", meta.mUtil, v => fmt(v) + "%", es ? "sin actual" : "no actual");
+      if (perCity && meta.mUtil != null) cards += _p2MetaOnlyCard(es ? "Utilización" : "Utilization", meta.mUtil, v => fmt(v) + "%", es ? "sin actual" : "no actual", es);
       // Owned Fleet Active Cars: referencia (sin meta en BD).
-      cards += p2RefCard(es ? "Owned Fleet Active Cars" : "Owned Fleet Active Cars", fs.ownedFleetActiveCars, "num");
+      cards += p2RefCard(es ? "Owned Fleet Active Cars" : "Owned Fleet Active Cars", fs.ownedFleetActiveCars, "num", es);
     }
     return `<div style="display:flex;gap:8px;flex:1 1 0;min-height:0;max-height:200px;border-left:3px solid ${lv.color};padding-left:8px;align-items:stretch">
       <div style="flex:0 0 62px;display:flex;align-items:center"><span style="font-weight:800;font-size:.82rem;color:${lv.color}">${escapeHTML(lv.label)}</span></div>
@@ -1053,9 +1085,18 @@ function p2ComputeAlerts(partner, dates) {
         title: es ? `Park medio con Trips/AD bajo` : `Mid park, low Trips/AD`,
         detail: `${tripsPerAd.toFixed(1)} ${es ? "viajes/cond" : "trips/driver"}` });
     } else if (lastAD > 0) {
-      if ((lw != null && lw < 0) || (lastRet != null && lastRet < T.retLargeMin)) out.push({ sev: "mid", level: lv.label, kind: "largepark_decline",
-        title: es ? `Park grande con señal de caída (revisar estabilidad)` : `Large park showing decline`,
-        detail: "" });
+      // No duplicar señal: si ya salió "wowdrop" (caída >5% en ciudad) o "retención" (mismo
+      // umbral retMin===retLargeMin) para este nivel, NO emitir largepark_decline encima —
+      // antes la misma caída salía contada 2 veces (misma ciudad, misma causa, 2 pildoras).
+      // Se conserva SOLO para su ventana propia: caída leve (-5%<lw<0%) o nivel Perú (sin ciudad,
+      // donde wowdrop nunca aplica).
+      const alreadyWowdrop   = lv.city && lw != null && lw < T.wowDropCity;
+      const alreadyRetention = lastRet != null && lastRet < T.retMin;
+      if (!alreadyWowdrop && !alreadyRetention && ((lw != null && lw < 0) || (lastRet != null && lastRet < T.retLargeMin))) {
+        out.push({ sev: "mid", level: lv.label, kind: "largepark_decline",
+          title: es ? `Park grande con señal de caída (revisar estabilidad)` : `Large park showing decline`,
+          detail: "" });
+      }
     }
   });
   return out.sort((a, b) => (a.sev === "high" ? 0 : 1) - (b.sev === "high" ? 0 : 1));
@@ -1075,6 +1116,20 @@ function p2GroupAlerts(alerts) {
 }
 function buildSlide2Alerts(partner, dates, idx) {
   const es = PRESENT2_STATE.lang === "es";
+  // P2_ALERT_THRESHOLDS (retención 85%, SH/AD, Trips/AD) está calibrado para cadencia
+  // SEMANAL. Aplicado tal cual en Mensual/Diario dispara falsas alarmas partner-facing (ej.
+  // un 82% de retención MENSUAL no es comparable a un 82% semanal). En vez de inventar
+  // multiplicadores sin validar con datos reales, se restringe la slide a Semanal (ver auditoría).
+  if (STATE.curMode !== "semanal") {
+    const msg = es
+      ? "Alertas disponibles solo en escala Semanal (los umbrales están calibrados para esa cadencia)."
+      : "Alerts available only at Weekly scale (thresholds are calibrated for that cadence).";
+    return `<div style="width:100%;height:100%;background:#fff;padding:12px 14px;display:flex;flex-direction:column;overflow:hidden">
+      ${p2BrandHeader(partner, es ? "Alertas / Next Steps" : "Alerts / Next Steps", es ? "Señales automáticas para accionar con el partner" : "Automatic signals to act on with the partner")}
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:.9rem">${msg}</div>
+      ${p2BrandFooter(idx)}
+    </div>`;
+  }
   const groups = p2GroupAlerts(p2ComputeAlerts(partner, dates));
   const sevColor = s => s === "high" ? "#FF0000" : "#f59e0b";
   const sevLabel = s => s === "high" ? (es ? "Alta" : "High") : (es ? "Media" : "Medium");
@@ -1130,7 +1185,7 @@ function renderPresent2() {
   // Deck del partner: define nav, badge y sección activa del toggle.
   const deck = p2Deck(PRESENT2_STATE.partner);
   PRESENT2_STATE._deckLen = deck.length;
-  PRESENT2_STATE._showDsBadge = p2HasTuktuk(PRESENT2_STATE.partner) && p2HasTaxi(PRESENT2_STATE.partner);
+  PRESENT2_STATE._showDsBadge = p2TuktukSectionVisible(PRESENT2_STATE.partner) && p2HasTaxi(PRESENT2_STATE.partner);
   if (PRESENT2_STATE.slide >= deck.length) PRESENT2_STATE.slide = 0;
   const curDs = (deck[PRESENT2_STATE.slide] || deck[0]).ds;
 
@@ -1161,7 +1216,7 @@ function renderPresent2() {
             <button class="mode-btn ${PRESENT2_STATE.fleetMode === "fleet" ? "active" : ""}" ${canForceFleet ? `onclick="present2SetFleetMode('fleet')"` : `disabled style="opacity:.35;cursor:not-allowed"`} title="${canForceFleet ? "" : (es ? "Este partner no está marcado como Fleet" : "This partner isn't flagged as Fleet")}">Fleet</button>
           </div>
         </div>
-        ${p2HasTuktuk(PRESENT2_STATE.partner) ? `
+        ${p2TuktukSectionVisible(PRESENT2_STATE.partner) ? `
         <div>
           <label style="font-size:.72rem;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">${es ? "Sección" : "Section"}</label>
           <div class="mode-toggle" id="present2SectionBar" title="${es ? "Salta a la sección Taxi o TukTuk del deck" : "Jump to the Taxi or TukTuk section"}">${_p2SectionBarHTML(curDs)}</div>
@@ -1228,7 +1283,7 @@ function renderSlide2() {
   const partner = PRESENT2_STATE.partner;
   const deck = p2Deck(partner);
   PRESENT2_STATE._deckLen = deck.length;
-  PRESENT2_STATE._showDsBadge = p2HasTuktuk(partner) && p2HasTaxi(partner);
+  PRESENT2_STATE._showDsBadge = p2TuktukSectionVisible(partner) && p2HasTaxi(partner);
   if (PRESENT2_STATE.slide >= deck.length) PRESENT2_STATE.slide = 0;
   const entry = deck[PRESENT2_STATE.slide] || deck[0];
   PRESENT2_STATE.dataset = entry.ds;   // scope: los accesores (p2RawDataset/…) leen este global
@@ -1311,7 +1366,11 @@ function _p2PaintPartnerList(q) {
   if (!filtered.length) { list.innerHTML = `<div style="padding:8px 12px;font-size:.78rem;color:#aaa">Sin coincidencias</div>`; return; }
   list.innerHTML = filtered.slice(0, 100).map(p => {
     const sel = p === PRESENT2_STATE.partner;
-    return `<div class="pv-opt" onmousedown="p2SelectPartner('${p.replace(/'/g, "\\'")}')" style="padding:7px 12px;font-size:.78rem;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid #f3f3f3;${sel ? "background:#fff0f0;font-weight:700" : ""}">
+    // data-partner (leído via this.dataset.partner) en vez de inyectar el nombre crudo en el
+    // string JS del onmousedown: un partner con comilla doble/backslash rompía el click o
+    // podía inyectar un atributo HTML (el .replace solo escapaba comilla simple). dataset.*
+    // decodifica el atributo HTML sin pasar por un parser de string JS → sin ese riesgo.
+    return `<div class="pv-opt" data-partner="${escapeHTML(p)}" onmousedown="p2SelectPartner(this.dataset.partner)" style="padding:7px 12px;font-size:.78rem;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid #f3f3f3;${sel ? "background:#fff0f0;font-weight:700" : ""}">
       <span style="width:7px;height:7px;border-radius:50%;background:#FF0000;flex-shrink:0"></span>
       <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(p)}</span></div>`;
   }).join("");
@@ -1355,7 +1414,7 @@ async function downloadPresent2PDF() {
   // Deck combinado: incluye sección Taxi + (si aplica) sección TukTuk.
   const deck = p2Deck(partner);
   PRESENT2_STATE._deckLen = deck.length;
-  PRESENT2_STATE._showDsBadge = p2HasTuktuk(partner) && p2HasTaxi(partner);
+  PRESENT2_STATE._showDsBadge = p2TuktukSectionVisible(partner) && p2HasTaxi(partner);
   const savedDs = PRESENT2_STATE.dataset;
   try {
     const { jsPDF } = window.jspdf;
