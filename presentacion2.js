@@ -734,36 +734,34 @@ function p2AvanceMes() {
   }
   return meses[0];
 }
+// Fechas del MES META `mesName` dentro del dataset activo, ancladas al año del "Hasta"
+// y capadas MTD en el "Hasta". SIN fallback a otro mes: si el mes pedido no tiene datos
+// (≤ Hasta), devuelve [] y el slide muestra "sin datos de ese mes" (nunca actuals de un
+// mes/año bajo la etiqueta+meta de otro). Ver auditoría present2 (hallazgos mes-crossyear).
 function p2MonthDates(mesName) {
   const ord = mesName ? _metasMesOrden(mesName) : 0;   // 2000+m (nombre) o YYYYMM (iso)
   const allDates = p2AllDates();                       // dataset-scoped (tuktuk usa sus fechas)
-  let out = [];
-  if (ord >= 100000) {
-    const ym = String(Math.floor(ord / 100)) + "-" + String(ord % 100).padStart(2, "0");
-    out = allDates.filter(d => d.startsWith(ym));
-  } else if (ord > 2000 && ord < 3000) {
-    const mn = ord - 2000;
-    // metas.mes es un NOMBRE sin año ("JUNIO"); el dataset puede tener ese mes en
-    // varios años (p.ej. 2025-06 Y 2026-06). Tomar SOLO el año más reciente: sin
-    // esto Avance sumaba meses de años distintos → N+R/SH ~duplicados y AD corrupto.
-    const matches = allDates.filter(d => parseInt(d.slice(5, 7), 10) === mn);
-    const years = [...new Set(matches.map(d => d.slice(0, 4)))].sort();
-    const lastYear = years[years.length - 1];
-    out = lastYear ? matches.filter(d => d.slice(0, 4) === lastYear) : [];
-  }
-  if (!out.length) {   // fallback: último mes presente en el dataset activo
-    const last = allDates.slice(-1)[0];
-    if (last) out = allDates.filter(d => d.slice(0, 7) === last.slice(0, 7));
-  }
-  // Cap MTD por "Hasta": el avance refleja lo acumulado HASTA la fecha vista (mover el
-  // filtro dentro del mes actualiza actual + proyección). Solo si queda ≥1 fecha (si el
-  // "Hasta" es anterior al mes seleccionado manualmente, no capa → muestra el mes completo).
   const to = (typeof document !== "undefined") && document.getElementById("dateTo")
     ? document.getElementById("dateTo").value : "";
-  if (to && out.length) {
-    const capped = out.filter(d => d <= to);
-    if (capped.length) out = capped;
+  let out = [];
+  if (ord >= 100000) {                                 // mes ISO explícito "YYYY-MM"
+    const ym = String(Math.floor(ord / 100)) + "-" + String(ord % 100).padStart(2, "0");
+    out = allDates.filter(d => d.startsWith(ym));
+  } else if (ord > 2000 && ord < 3000) {               // nombre de mes sin año
+    const mn = ord - 2000;
+    const matches = allDates.filter(d => parseInt(d.slice(5, 7), 10) === mn);
+    // Cross-year: elegir el año del "Hasta" (el que el KAM está viendo), no el más
+    // reciente del dataset. Se ancla al pool de fechas ≤ Hasta; si el Hasta es anterior
+    // a TODAS las coincidencias, se usan todas (selección manual retrospectiva válida).
+    const pool = to ? matches.filter(d => d <= to) : matches;
+    const use = pool.length ? pool : matches;
+    const years = [...new Set(use.map(d => d.slice(0, 4)))].sort();
+    const lastYear = years[years.length - 1];
+    out = lastYear ? use.filter(d => d.slice(0, 4) === lastYear) : [];
   }
+  // Cap MTD en el "Hasta" (progreso acumulado hasta la fecha vista). SIN rescate: si el
+  // Hasta es anterior al mes, out queda [] → el slide muestra "sin datos" (no otro mes).
+  if (to && out.length) out = out.filter(d => d <= to);
   return out;
 }
 function p2MetaFor(partner, scopeCity, mes) {
@@ -804,8 +802,11 @@ function p2ActualsMTD(partner, scopeCity, monthDates) {
 }
 function p2ProjMTD(act, lastDate) {
   const { daysElapsed, daysRemaining } = calcProjectionDays(lastDate);
-  const projAD = (STATE.curMode === "mensual" || daysRemaining === 0) ? act.lastAD : act.lastAD * 1.4;
-  return { ad: projAD, nr: projA(act.nrV, daysElapsed, daysRemaining), sh: projA(act.shV, daysElapsed, daysRemaining) };
+  // AD es SNAPSHOT (nivel), no un flujo acumulado: la proyección honesta de cierre de mes
+  // es el nivel actual (plano), NO lastAD×1.4 (un +40% fijo que ignora los días restantes e
+  // inflaba la marca en el deck partner-facing; además contradecía a Brandeados que ya iba
+  // plano). N+R y SH (flujos) sí se extrapolan con projA por días restantes. Ver auditoría.
+  return { ad: act.lastAD, nr: projA(act.nrV, daysElapsed, daysRemaining), sh: projA(act.shV, daysElapsed, daysRemaining) };
 }
 function p2AvanceColor(pct) { return pct >= 100 ? "#10b981" : pct >= 80 ? "#f59e0b" : "#FF0000"; }
 
@@ -863,6 +864,10 @@ function _p2MetaOnlyCard(label, goal, fmtN, note) {
   </div>`;
 }
 
+// % honesto: NO redondear 99.5-99.99 a "100%" (parecería meta cumplida sin estarlo).
+// <100 → 1 decimal (99.6%); ≥100 → entero (106%). Espeja el criterio de la pestaña Metas.
+function _p2PctTxt(pct) { return (pct >= 100 ? pct.toFixed(0) : Math.min(pct, 99.9).toFixed(1)) + "%"; }
+
 function buildSlide2Avance(partner, idx) {
   const es = PRESENT2_STATE.lang === "es";
   const isTk = PRESENT2_STATE.dataset === "tuktuk";   // TukTuk: metas meta_tk_* (Fase 4)
@@ -871,8 +876,11 @@ function buildSlide2Avance(partner, idx) {
   const monthDates = p2MonthDates(mesName);
   const lastDate = monthDates.length ? monthDates[monthDates.length - 1] : p2AllDates().slice(-1)[0];
   const levels = p2Levels(partner);
-  // Necesita fechas del mes + metas cargadas (agregador o TukTuk, según dataset).
-  const noData = !monthDates.length || !(STATE.metasData || []).length;
+  // Necesita fechas del mes META + metas cargadas. Si hay metas pero el mes elegido no
+  // tiene datos (≤ Hasta), NO se muestran actuals de otro mes: se avisa "sin datos del mes".
+  const metasLoaded = !!(STATE.metasData || []).length;
+  const noMonthData = metasLoaded && !monthDates.length;
+  const noData = !monthDates.length || !metasLoaded;
   // TukTuk usa metas meta_tk_* (AD/N+R/Brandeados); Taxi usa meta_active_drivers/nr/sh.
   // `snap` marca métricas SNAPSHOT (nivel actual, no acumuladas): su "fact" es el ÚLTIMO
   // período visible (lastAD/lastCars), NO el máximo del mes — así el número coincide con
@@ -915,7 +923,7 @@ function buildSlide2Avance(partner, idx) {
       return `<div style="flex:1;min-width:0;background:#fafafa;border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:4px">
         <div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px">
           <span style="font-size:.58rem;color:#aaa;font-weight:700;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(m.label)}</span>
-          <span style="font-size:.74rem;font-weight:800;color:${col}">${pct.toFixed(0)}%</span>
+          <span style="font-size:.74rem;font-weight:800;color:${col}">${_p2PctTxt(pct)}</span>
         </div>
         <div style="display:flex;align-items:baseline;gap:5px">
           <span style="font-weight:900;font-size:1.05rem;color:#111">${fmtN(real)}</span>
@@ -925,24 +933,29 @@ function buildSlide2Avance(partner, idx) {
           <div style="height:100%;width:${Math.min(pct, 100).toFixed(1)}%;background:${col};border-radius:5px"></div>
           <div style="position:absolute;top:-1px;bottom:-1px;left:${Math.min(Math.max(ppct, 0), 100).toFixed(1)}%;width:2px;background:#111;opacity:.55"></div>
         </div>
-        <div style="font-size:.6rem;color:#999">${es ? "proy" : "proj"} ${fmtN(projV)} (${ppct.toFixed(0)}%)</div>
+        <div style="font-size:.6rem;color:#999">${es ? "proy" : "proj"} ${fmtN(projV)} (${_p2PctTxt(ppct)})</div>
       </div>`;
     }).join("");
     if (fleetMode) {
       const fs = p2FleetSeries(partner, lv.city, monthDates);
       const lastOf = arr => (arr && arr.length) ? arr[arr.length - 1] : null;
-      // Aceptación: meta real (meta_acceptance, 0-100) vs actual (accept 0-1 → ×100).
-      const accA = lastOf(fs.accept);
-      cards += meta.mAcc != null
-        ? _p2MetaCard(es ? "Aceptación" : "Acceptance", accA != null ? accA * 100 : 0, meta.mAcc, null, v => fmt(v) + "%", es)
+      // Las tasas Fleet (aceptación, SH/auto) NO se promedian entre ciudades sin ponderar,
+      // así que la comparación meta-vs-actual SOLO se muestra POR CIUDAD. A nivel Perú-general
+      // (lv.city null) se muestran como REFERENCIA (sin %), igual que hace la pestaña Metas
+      // (que no agrega Fleet a Perú). Evita "actual ponderado ÷ meta de una ciudad" engañoso.
+      const perCity = lv.city != null;
+      const accA = lastOf(fs.accept);     // 0-1 o null
+      const shcA = lastOf(fs.shCarInt);   // ratio o null
+      // Aceptación: meta real por ciudad SOLO si hay meta Y actual con dato; si no, referencia (— si null).
+      cards += (perCity && meta.mAcc != null && accA != null)
+        ? _p2MetaCard(es ? "Aceptación" : "Acceptance", accA * 100, meta.mAcc, null, v => fmt(v) + "%", es)
         : p2RefCard(es ? "Acceptance Rate" : "Acceptance Rate", fs.accept, "pct");
-      // SH/Auto interno: meta real (meta_sh_car) vs actual (shCarInt).
-      const shcA = lastOf(fs.shCarInt);
-      cards += meta.mSHcar != null
-        ? _p2MetaCard(es ? "SH/Auto (interno)" : "Internal SH/Car", shcA != null ? shcA : 0, meta.mSHcar, null, v => fmt(v), es)
+      // SH/Auto interno:
+      cards += (perCity && meta.mSHcar != null && shcA != null)
+        ? _p2MetaCard(es ? "SH/Auto (interno)" : "Internal SH/Car", shcA, meta.mSHcar, null, v => fmt(v), es)
         : p2RefCard(es ? "Internal Fleet SH/Auto" : "Internal Fleet SH/Car", fs.shCarInt, "ratio1");
-      // Utilización: solo meta (sin actual medible).
-      if (meta.mUtil != null) cards += _p2MetaOnlyCard(es ? "Utilización" : "Utilization", meta.mUtil, v => fmt(v) + "%", es ? "sin actual" : "no actual");
+      // Utilización: solo meta, solo por ciudad (sin actual medible).
+      if (perCity && meta.mUtil != null) cards += _p2MetaOnlyCard(es ? "Utilización" : "Utilization", meta.mUtil, v => fmt(v) + "%", es ? "sin actual" : "no actual");
       // Owned Fleet Active Cars: referencia (sin meta en BD).
       cards += p2RefCard(es ? "Owned Fleet Active Cars" : "Owned Fleet Active Cars", fs.ownedFleetActiveCars, "num");
     }
@@ -957,9 +970,11 @@ function buildSlide2Avance(partner, idx) {
   const avSub = es
     ? "Actual vs meta · barra = avance · marca negra = proyección"
     : "Actual vs goal · bar = progress · black mark = projection";
-  const noDataMsg = isTk
-    ? (es ? "Sin metas TukTuk para este mes." : "No TukTuk goals for this month.")
-    : (es ? "Sin metas cargadas para este mes." : "No goals loaded for this month.");
+  const noDataMsg = noMonthData
+    ? (es ? `Sin datos de ${escapeHTML(mesName)} para comparar con la meta.` : `No data for ${escapeHTML(mesName)} to compare.`)
+    : isTk
+      ? (es ? "Sin metas TukTuk para este mes." : "No TukTuk goals for this month.")
+      : (es ? "Sin metas cargadas para este mes." : "No goals loaded for this month.");
   return `<div style="width:100%;height:100%;background:#fff;padding:12px 14px;display:flex;flex-direction:column;overflow:hidden">
     ${p2BrandHeader(partner, avTitle + " · " + (mesName || "—"), avSub)}
     ${noData

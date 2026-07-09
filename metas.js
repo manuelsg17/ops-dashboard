@@ -126,9 +126,12 @@ function _metasTkActuals(from, to, selSet, cityFilter) {
     e.nr += (r.newPartner || 0) + (r.newService || 0) + (r.reactivated || 0);
   });
   by.forEach(e => {
-    const ads = Object.values(e._ad), cs = Object.values(e._cars);
-    e.ad   = ads.length ? Math.max(...ads) : 0;
-    e.cars = cs.length  ? Math.max(...cs)  : 0;
+    // AD y Brandeados son SNAPSHOTS: el "fact" es el ÚLTIMO período (nivel actual), NO el
+    // máximo del mes — así cuadra con la slide Avance TukTuk y con KPIs por Nivel del deck.
+    const dts = Object.keys(e._ad).sort();
+    const last = dts[dts.length - 1];
+    e.ad   = last != null ? e._ad[last]   : 0;
+    e.cars = last != null ? e._cars[last] : 0;
     delete e._ad; delete e._cars;
   });
   return by;
@@ -245,9 +248,9 @@ function _renderMetasTk(mesName, from, to, selSet, cityFilter, kamFilter) {
     mA += m.mtkAD || 0; mNR += m.mtkNR || 0; mCars += m.mtkCars || 0;
   });
   html += `<div class="section"><div class="metric-row">
-    ${metaResCard("Active Drivers", "máx período", tA,   mA,   tA,   "#7e22ce")}
+    ${metaResCard("Active Drivers", "último período", tA,   mA,   tA,   "#7e22ce")}
     ${metaResCard("Nuevos + React", "acumulado",   tNR,  mNR,  tNR,  "#f97316")}
-    ${metaResCard("Brandeados",     "máx período", tCars,mCars,tCars,"#0891b2")}
+    ${metaResCard("Brandeados",     "último período", tCars,mCars,tCars,"#0891b2")}
   </div></div>`;
 
   // Por partner
@@ -430,8 +433,8 @@ function _renderMetasImpl() {
       const r = getRPC(p.partner, "all");
       combos.push({ partner: p.partner, kam: p.kam, city: "Todas",
         mA: p.mA, mNR: p.mNR, mH: p.mH,
-        ad: r.ad, nr: r.nr, sh: r.sh,
-        projAD: (STATE.curMode === "mensual" || daysRemaining === 0) ? r.lastAD : r.lastAD * 1.4,
+        ad: r.lastAD, nr: r.nr, sh: r.sh,
+        projAD: r.lastAD,
         projNR: projA(r.nrV, daysElapsed, daysRemaining),
         projSH: projA(r.shV, daysElapsed, daysRemaining) });
     });
@@ -440,8 +443,8 @@ function _renderMetasImpl() {
       const r = getRPC(m.partner, m.city);
       combos.push({ partner: m.partner, kam: m.kam, city: m.city,
         mA: m.mA, mNR: m.mNR, mH: m.mH,
-        ad: r.ad, nr: r.nr, sh: r.sh,
-        projAD: (STATE.curMode === "mensual" || daysRemaining === 0) ? r.lastAD : r.lastAD * 1.4,
+        ad: r.lastAD, nr: r.nr, sh: r.sh,
+        projAD: r.lastAD,
         projNR: projA(r.nrV, daysElapsed, daysRemaining),
         projSH: projA(r.shV, daysElapsed, daysRemaining) });
     });
@@ -464,8 +467,8 @@ function _renderMetasImpl() {
       kam: partnerKam,
       city: cityFilter === "all" ? "Sin Plan" : cityFilter,
       mA: 0, mNR: 0, mH: 0,
-      ad: r.ad, nr: r.nr, sh: r.sh,
-      projAD: (STATE.curMode === "mensual" || daysRemaining === 0) ? r.lastAD : r.lastAD * 1.4,
+      ad: r.lastAD, nr: r.nr, sh: r.sh,
+      projAD: r.lastAD,
       projNR: projA(r.nrV, daysElapsed, daysRemaining),
       projSH: projA(r.shV, daysElapsed, daysRemaining),
       noMeta: true
@@ -528,7 +531,7 @@ function _renderMetasImpl() {
     : "";
   html += secH("🎯","#8b5cf6","Cumplimiento de Metas - "+mesName,"Progreso actual vs meta del mes","Peru");
   html += `<div class="section">${noMetaBanner}<div class="metric-row">
-    ${metaResCard(METRICS.ad.label, "máx semana",     tAD, tMA,  tPAD, "#8b5cf6")}
+    ${metaResCard(METRICS.ad.label, "última semana",  tAD, tMA,  tPAD, "#8b5cf6")}
     ${metaResCard(METRICS.nr.label, "acumulado mes",  tNR, tMNR, tPNR, "#f97316")}
     ${metaResCard(METRICS.sh.label, "acumulado mes",  tSH, tMH,  tPSH, "#06b6d4")}
   </div></div>`;
@@ -570,13 +573,15 @@ function _renderMetasImpl() {
       byDate[r.date].sh += r.sh;
     });
     const sorted = cityDates.map(d => byDate[d]);
-    const crAD = sorted.length ? Math.max(...sorted.map(v => v.ad)) : 0;
+    // AD = SNAPSHOT: fact = ÚLTIMO período (nivel actual), no el máx del mes; proyección
+    // plana (no ×1.4). Cuadra con la slide del deck y con KPIs por Nivel. N+R/SH = flujos.
+    const lastAD = sorted.length ? sorted[sorted.length - 1].ad : 0;
+    const crAD = lastAD;
     const crNR = sorted.reduce((s, v) => s + v.nr, 0);
     const crSH = sorted.reduce((s, v) => s + v.sh, 0);
-    const lastAD = sorted.length ? sorted[sorted.length - 1].ad : 0;
     const nrV = sorted.map(v => v.nr);
     const shV = sorted.map(v => v.sh);
-    const cpAD = (STATE.curMode === "mensual" || daysRemaining === 0) ? lastAD : lastAD * 1.4;
+    const cpAD = lastAD;
     const cpNR = projA(nrV, daysElapsed, daysRemaining);
     const cpSH = projA(shV, daysElapsed, daysRemaining);
 

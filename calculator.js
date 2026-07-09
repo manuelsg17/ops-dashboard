@@ -64,7 +64,7 @@ function _calcAggByPartnerCity(rows, monthsSet) {
     if (!e) {
       e = { clid: r.clid || "", partner: r.partner, city: r.city, kam: r.kam,
             trips: 0, sh: 0, ad: 0, np: 0, ns: 0, re: 0, bcars: 0,
-            activeCars: 0, shCarW: 0, acceptW: 0, _adByDate: {}, _bcarsByDate: {} };
+            acceptW: 0, intSh: 0, ownedCars: 0, _adByDate: {}, _bcarsByDate: {} };
       out.set(k, e);
     }
     if (!e.clid && r.clid) e.clid = r.clid;
@@ -79,11 +79,13 @@ function _calcAggByPartnerCity(rows, monthsSet) {
     e.np    += r.newPartner || 0;
     e.ns    += r.newService || 0;
     e.re    += r.reactivated || 0;
-    // Referencias fleet (tasas): sh_per_active_car ponderado por active cars (dato
-    // del export, no recalculado), acceptance (0-1) ponderado por viajes.
-    e.activeCars += r.activeCars || 0;
-    e.shCarW     += (r.shPerActiveCar || 0) * (r.activeCars || 0);
-    e.acceptW    += (r.acceptanceRate || 0) * (r.trips || 0);
+    // Referencias fleet (tasas). SH/Auto interno = Σ internal_fleet_sh / Σ owned_fleet_active_cars
+    // (MISMA definición que usa el deck/Metas como ACTUAL; antes se usaba sh_per_active_car
+    // que medía otra cosa → la meta que fijaba el KAM nunca cuadraba con el actual).
+    // Acceptance (0-1) ponderada por viajes.
+    e.intSh     += r.internalFleetSh || 0;
+    e.ownedCars += r.ownedFleetActiveCars || 0;
+    e.acceptW   += (r.acceptanceRate || 0) * (r.trips || 0);
   });
   // Colapsar snapshots: máx sobre fechas de la suma por fecha (suma de fleetrooms).
   for (const e of out.values()) {
@@ -98,7 +100,7 @@ function _calcAggByPartnerCity(rows, monthsSet) {
 // Referencia 3m (promedio ponderado) de los KPIs fleet de un partner-ciudad.
 function _calcFleetRef(e) {
   return {
-    shcar:  e.activeCars > 0 ? e.shCarW / e.activeCars : null,   // horas/auto activo
+    shcar:  e.ownedCars > 0 ? e.intSh / e.ownedCars : null,      // SH interno / auto propio (= deck/Metas)
     accept: e.trips > 0 ? (e.acceptW / e.trips) * 100 : null     // % (0-100)
   };
 }
