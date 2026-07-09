@@ -676,6 +676,12 @@ async function loadFromSupabase() {
     STATE.rawData = STATE.rawData.filter(r => !rowExcludedFromTaxi(r));
     // Referencia fija al dataset semanal filtrado (C6: elimina backup lazy _rawDataSemanal)
     STATE._semanalData = STATE.rawData;
+    // Slice Fleet semanal (Fase 2): Fleet ⊂ Agregador (sus autos SÍ hacen Taxi, no se
+    // excluyen), así que se filtra del agregador ya deduplicado con rowIsFleet. Lo usa
+    // el selector de línea de Rendimiento; NUNCA se re-fetchea (sin doble conteo).
+    STATE.rawDataFleet = STATE.rawData.filter(r => rowIsFleet(r));
+    STATE.rendLine  = "agg";   // carga fresca → vista base Agregador
+    STATE.metasLine = "agg";
 
     STATE.parseWarnings.clear();
     updateIndexes();          // construye indices secundarios sobre rawData
@@ -761,6 +767,8 @@ async function loadMensualIfNeeded() {
     STATE.rawDataMensual = STATE.rawDataMensual.filter(r => !rowExcludedFromTaxi(r));
     // Aplicar mapeo de flotas tambien al dataset mensual
     STATE.rawDataMensual = applyFlotasOverride(STATE.rawDataMensual);
+    // Slice Fleet mensual (Fase 2): espejo del semanal (Fleet ⊂ Agregador).
+    STATE.rawDataMensualFleet = STATE.rawDataMensual.filter(r => rowIsFleet(r));
     STATE._mensualLoaded = true;
   } catch(err) {
     showBanner(false, "Error al cargar mensual: " + err.message);

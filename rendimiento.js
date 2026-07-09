@@ -1,5 +1,76 @@
 // rendimiento.js — Pestaña Rendimiento
 
+// ── LÍNEA DE NEGOCIO (Agregador / Fleet / TukTuk) — Fase 2 ────────────────────
+// Localizado a Rendimiento: NO muta STATE.rawData (el agregador queda intacto para
+// Metas/Calculadora/etc). Se filtra el slice de la línea con los MISMOS filtros del
+// sidebar (ciudad/fecha/partner). Agregador incluye Fleet (Fleet ⊂ Taxi). El diario
+// no trae db_id (sin sub-flota) → Fleet/TukTuk se deshabilitan y cae a Agregador.
+function _rendLine() {
+  let line = STATE.rendLine || "agg";
+  if (STATE.curMode === "diario" && line !== "agg") line = "agg";
+  return line;
+}
+// Dataset completo (todas las fechas) de la línea activa para la escala actual.
+function _rendLineDataset() {
+  const line = _rendLine();
+  if (line === "agg") return STATE.rawData;
+  const mensual = STATE.curMode === "mensual";
+  if (line === "fleet") return (mensual ? STATE.rawDataMensualFleet  : STATE.rawDataFleet)  || [];
+  return                        (mensual ? STATE.rawDataMensualTuktuk : STATE.rawDataTuktuk) || [];
+}
+// Filas de la línea filtradas por ciudad/fecha/partner (espeja getFiltered()).
+function _rendLineFiltered() {
+  if (_rendLine() === "agg") return getFiltered();
+  const f = getCurrentFilters();
+  const selSet = new Set(f.selected);
+  return _rendLineDataset().filter(r =>
+    (f.city === "all" || r.city === f.city) &&
+    r.date >= f.from && r.date <= f.to &&
+    selSet.has(r.partner)
+  );
+}
+// Filas de prevDate (fuera del rango) para la línea. Agregador usa el índice _byDate;
+// Fleet/TukTuk filtran su slice (arrays pequeños, sin índice dedicado).
+function _rendLinePrev(prevDate, city) {
+  if (!prevDate) return [];
+  if (_rendLine() === "agg") {
+    const base = (STATE._byDate && STATE._byDate.get(prevDate))
+      || STATE.rawData.filter(r => r.date === prevDate);
+    return city ? base.filter(r => r.city === city) : base;
+  }
+  return _rendLineDataset().filter(r => r.date === prevDate && (!city || r.city === city));
+}
+
+// Barra segmentada de línea de negocio (reusa .mode-toggle-row/.mode-btn del selector
+// de escala). En diario, Fleet/TukTuk quedan deshabilitados (sin datos por sub-flota).
+function rendLineToggleHTML() {
+  const line   = _rendLine();
+  const diario = STATE.curMode === "diario";
+  const defs = [
+    { k: "agg",   emoji: "📊", label: "Agregador", tip: "Taxi — incluye la actividad de las flotas" },
+    { k: "fleet", emoji: "🚗", label: "Fleet",     tip: "Solo sub-flotas marcadas Fleet" },
+    { k: "tk",    emoji: "🛺", label: "TukTuk",    tip: "Solo TukTuk" }
+  ];
+  const btns = defs.map(d => {
+    const on  = line === d.k;
+    const dis = diario && d.k !== "agg";
+    return `<button class="mode-btn${on ? " active" : ""}" ${dis ? "disabled" : ""}
+      title="${dis ? "Sin datos diarios por sub-flota — usa escala semanal o mensual" : escapeHTML(d.tip)}"
+      ${dis ? "" : `onclick="setRendLine('${d.k}')"`}
+      style="${dis ? "opacity:.4;cursor:not-allowed" : ""}">${d.emoji} ${d.label}</button>`;
+  }).join("");
+  const note = diario
+    ? `<span style="font-size:.7rem;color:#b45309;margin-left:10px;align-self:center">Fleet/TukTuk requieren escala semanal o mensual (el diario no trae sub-flota)</span>`
+    : "";
+  return `<div class="mode-toggle-row" style="margin:0 4px 12px">${btns}${note}</div>`;
+}
+function setRendLine(line) {
+  if ((STATE.rendLine || "agg") === line) return;
+  if (STATE.curMode === "diario" && line !== "agg") return;
+  STATE.rendLine = line;
+  renderRend();
+}
+
 // Guard de reentrancia: evita que dos renderRend() concurrentes se pisen.
 // Si llega un segundo render mientras el primero corre, se descarta.
 let _renderRendBusy  = false;
@@ -27,7 +98,8 @@ function _renderRendImpl() {
   // (evita instancias huérfanas y memory leak en cada re-render)
   destroyAllCharts();
 
-  const filtered  = getFiltered();
+  const line      = _rendLine();
+  const filtered  = _rendLineFiltered();
   const apd       = aggPDc(filtered);
   const byDate    = aggDatec(filtered);
   const dates     = [...new Set(apd.map(r => r.date))].sort();
@@ -35,9 +107,23 @@ function _renderRendImpl() {
   const empty     = document.getElementById("rendEmpty");
   const content   = document.getElementById("rendContent");
 
-  if (!partners.length || !filtered.length) {
+  // Sin partners, o Agregador sin datos → empty global (mensaje de carga).
+  if (!partners.length || (!filtered.length && line === "agg")) {
     empty.style.display   = "";
     content.style.display = "none";
+    return;
+  }
+  // Fleet/TukTuk sin datos para el filtro: mantener el toggle visible (para volver a
+  // Agregador) + empty inline. NO usar el empty global (dejaría al usuario atrapado).
+  if (!filtered.length) {
+    empty.style.display   = "none";
+    content.style.display = "";
+    const lname = line === "fleet" ? "Fleet" : "TukTuk";
+    content.innerHTML = rendLineToggleHTML() +
+      `<div class="section"><div style="padding:28px 16px;text-align:center;color:#999;font-size:.85rem">
+        No hay datos de <strong>${lname}</strong> para el filtro actual.<br>
+        Cambia a <strong>📊 Agregador</strong> o ajusta ciudad / fechas / partners.
+      </div></div>`;
     return;
   }
   empty.style.display   = "none";
@@ -61,15 +147,24 @@ function _renderRendImpl() {
   // prevRows: datos de prevDate fuera del rango filtrado
   const cityFilter = document.getElementById("cityFilter").value;
   const selSet     = new Set(getSel());
-  // Lookup en _byDate si esta construido; sino fallback a filter de rawData
-  // (un solo filtro por fecha sobre rawData es barato aunque no haya indice).
-  const _prevAll = (STATE._byDate && STATE._byDate.get(prevDate))
-    || (prevDate ? STATE.rawData.filter(r => r.date === prevDate) : []);
+  // Lookup de la línea activa (agg usa _byDate; fleet/tk filtran su slice).
+  const _prevAll = _rendLinePrev(prevDate, null);
   const prevFiltered = _prevAll.filter(r =>
     (cityFilter === "all" || r.city === cityFilter) &&
     selSet.has(r.partner)
   );
   const prevAPD = aggPD(prevFiltered);
+
+  // Fleet: vista SOLO de KPIs de flota (columnas fleet-scoped). El AD/SH/N+R a nivel
+  // fleetroom mezcla actividad agregador+fleet del MISMO fleetroom → sería un falso
+  // negativo. Solo se muestran owned cars / SH-auto interno / aceptación / branded,
+  // que sí son columnas propias de la sub-flota. Se corta antes de las secciones
+  // genéricas y del pump de charts.
+  if (line === "fleet") {
+    content.innerHTML = _renderFleetView(
+      filtered.filter(r => r.date === lastDate), prevFiltered, lastDate, prevDate);
+    return;
+  }
 
   const lastRows = apd.filter(r => r.date === lastDate);
   const prevRows = prevAPD;
@@ -83,7 +178,7 @@ function _renderRendImpl() {
   const lSH = sumR(lastRows, r => r.supplyHours);
   const pSH = sumR(prevRows, r => r.supplyHours);
 
-  let html = modeToggleHTML();
+  let html = rendLineToggleHTML();
 
   // ── 1. Peru General ────────────────────────────────────────────────────────
   // Subtitulo segun modo: en diario/semanal/mensual contextualiza el dato
@@ -100,6 +195,11 @@ function _renderRendImpl() {
     ${mkMetricCard(METRICS.sh.label,"⏱️",tSH,lSH,apd,lastRows,prevRows,"sh",METRICS.sh.color,true)}
   </div></div>`;
 
+  // ── 1b. KPIs propios de TukTuk (Fleet tiene su vista dedicada arriba) ───────
+  if (line === "tk") {
+    html += _rendTkKPIs(filtered.filter(r => r.date === lastDate), prevFiltered);
+  }
+
   // ── 2. Por Ciudad ──────────────────────────────────────────────────────────
   html += secH("🏙️", "#06b6d4", "Por Ciudad", "Rendimiento y comparativo WoW", "");
   html += `<div class="section"><div class="city-grid">`;
@@ -108,9 +208,8 @@ function _renderRendImpl() {
     if (!cr.length) return;
     const ca   = aggPD(cr);
     const cL   = ca.filter(r => r.date === lastDate);
-    // prevDate para ciudad: lookup por _byCityDate o fallback a rawData
-    const _cPrev = (STATE._byCityDate && STATE._byCityDate.get(`${city}|||${prevDate}`))
-      || (prevDate ? STATE.rawData.filter(r => r.date === prevDate && r.city === city) : []);
+    // prevDate para ciudad, según la línea activa (agg usa índice; fleet/tk su slice)
+    const _cPrev = _rendLinePrev(prevDate, city);
     const cPraw = _cPrev.filter(r => selSet.has(r.partner));
     const cP   = aggPD(cPraw);
     const cAD  = sumR(cL,  r => r.activeDrivers);
@@ -294,15 +393,19 @@ function mkMetricCard(label, icon, val, prevWk, apd, lastRows, prevRows, metric,
 function buildTable(apd, lastDate, prevDate, sel) {
   const selSet = new Set(sel);
   const lR    = apd.filter(r => r.date === lastDate);
-  const _pAll = (STATE._byDate && STATE._byDate.get(prevDate))
-    || (prevDate ? STATE.rawData.filter(r => r.date === prevDate) : []);
+  const _pAll = _rendLinePrev(prevDate, null);
   const pRraw = _pAll.filter(r => selSet.has(r.partner));
   const pR    = aggPD(pRraw);
-  // Use full history (all dates) for decline detection, ignoring date range filter
-  if (!STATE._apdFull) {
-    STATE._apdFull = aggPD(STATE.rawData);
+  // Historia completa (todas las fechas) para detectar declive, ignorando el rango.
+  // Agregador cachea en STATE._apdFull; Fleet/TukTuk recomputan del slice (arrays chicos).
+  let apdFullBase;
+  if (_rendLine() === "agg") {
+    if (!STATE._apdFull) STATE._apdFull = aggPD(STATE.rawData);
+    apdFullBase = STATE._apdFull;
+  } else {
+    apdFullBase = aggPD(_rendLineDataset());
   }
-  const apdFull = STATE._apdFull.filter(r => selSet.has(r.partner));
+  const apdFull = apdFullBase.filter(r => selSet.has(r.partner));
   const partners = [...new Set(apd.map(r => r.partner))];
 
   // Pre-indexar lR, pR y apd por partner UNA vez. Reemplaza 3 filter()
@@ -438,8 +541,7 @@ function buildPartnerCards(apd, lastDate, prevDate, partners, sel) {
   if (!grid) return;
 
   const selSet  = new Set(sel);
-  const _pdAll = (STATE._byDate && STATE._byDate.get(prevDate))
-    || (prevDate ? STATE.rawData.filter(r => r.date === prevDate) : []);
+  const _pdAll = _rendLinePrev(prevDate, null);
   const prevRaw = _pdAll.filter(r => selSet.has(r.partner));
   const prevAPD = aggPD(prevRaw);
 
@@ -524,6 +626,139 @@ function buildPartnerCards(apd, lastDate, prevDate, partners, sel) {
     frag.appendChild(card);
   });
   grid.appendChild(frag); // un solo reflow al final
+}
+
+// ── KPIs DE LÍNEA (Fleet / TukTuk) — Fase 2 ───────────────────────────────────
+// Tarjeta KPI simple con badge WoW/MoM (reusa .mcard). val/prev ya agregados.
+function _rendKpiCard(label, icon, val, prev, color, fmtFn) {
+  return `
+    <div class="mcard" style="border-top:3px solid ${color}">
+      <div class="mcard-label">${icon} ${label}</div>
+      <div class="mcard-sub-label">snapshot último período</div>
+      <div class="mcard-val">${fmtFn(val)}</div>
+      <div style="margin-top:4px">${bdgMode(val, prev)}
+        <span style="font-size:.7rem;color:#bbb;margin-left:5px">vs ${STATE.curMode === 'mensual' ? 'mes' : 'sem.'} anterior</span>
+      </div>
+    </div>`;
+}
+// Suma/pondera KPIs Fleet sobre filas crudas (una por fleetroom-ciudad de una fecha).
+// SH/Auto interno = Σ internalFleetSh / Σ ownedFleetActiveCars; Aceptación = Σ(rate×trips)/Σtrips
+// (mismas fórmulas que presentacion2.p2FleetSeries). Cars/Branded = snapshots sumados.
+function _rendFleetAgg(rows) {
+  let owned = 0, intSh = 0, trips = 0, accW = 0, branded = 0, actCars = 0;
+  rows.forEach(r => {
+    owned   += r.ownedFleetActiveCars || 0;
+    intSh   += r.internalFleetSh || 0;
+    trips   += r.trips || 0;
+    accW    += (r.acceptanceRate || 0) * (r.trips || 0);
+    branded += r.brandedActiveCars || 0;
+    actCars += r.activeCars || 0;
+  });
+  return {
+    owned, branded, actCars,
+    shCar:  owned > 0 ? intSh / owned : 0,
+    accept: trips > 0 ? (accW / trips) * 100 : 0
+  };
+}
+// Vista Fleet completa (SOLO KPIs de flota): Perú general + por ciudad + por partner.
+// lastRows/prevRows = filas CRUDAS de sub-flotas Fleet (una por fleetroom-ciudad) del
+// último período y del anterior. NO se usan AD/SH/N+R (mezclados a nivel fleetroom).
+function _renderFleetView(lastRows, prevRows, lastDate, prevDate) {
+  const periodLabel = STATE.curMode === "mensual" ? "último mes" : "última semana";
+  let html = rendLineToggleHTML();
+
+  // Perú general (4 KPIs de flota)
+  html += secH("🚗", "#0891b2", "Fleet · Perú General",
+    `Solo KPIs de flota (owned cars, SH/auto interno, aceptación, branded) · snapshot ${periodLabel}`,
+    d2s(lastDate));
+  html += _rendFleetCardsBody(_rendFleetAgg(lastRows), _rendFleetAgg(prevRows));
+
+  // Por ciudad
+  html += secH("🏙️", "#06b6d4", "Fleet por Ciudad", "KPIs de flota por ciudad · comparativo con período anterior", "");
+  html += `<div class="section"><div class="city-grid">`;
+  CITIES.forEach(city => {
+    const cr = lastRows.filter(r => r.city === city);
+    if (!cr.length) return;
+    const c = _rendFleetAgg(cr);
+    const p = _rendFleetAgg(prevRows.filter(r => r.city === city));
+    const col = CITY_COLORS[city] || "#888";
+    html += `
+      <div class="city-card" style="border-top-color:${col}">
+        <div class="city-name">
+          <span style="width:10px;height:10px;border-radius:50%;background:${col};display:inline-block"></span>
+          ${cityLabel(city)}
+        </div>
+        ${_rendFleetCityKpi("Owned Fleet Cars", c.owned,   p.owned,   fmt)}
+        ${_rendFleetCityKpi("SH / Auto",        c.shCar,   p.shCar,   fmt)}
+        ${_rendFleetCityKpi("Aceptación",       c.accept,  p.accept,  v => fmt(v) + "%")}
+        ${_rendFleetCityKpi("Branded Cars",     c.branded, p.branded, fmt)}
+      </div>`;
+  });
+  html += `</div></div>`;
+
+  // Por partner (tabla)
+  html += secH("📋", "#6366f1", "Fleet por Partner", "Detalle de flota por partner · ordenado por autos propios", "");
+  html += `<div class="section"><div class="tbl-wrap">${_rendFleetPartnerTable(lastRows, prevRows)}</div></div>`;
+  return html;
+}
+function _rendFleetCardsBody(c, p) {
+  const pct = v => fmt(v) + "%";
+  return `<div class="section"><div class="metric-row">
+      ${_rendKpiCard("Owned Fleet Cars",   "🚗", c.owned,   p.owned,   "#0891b2", fmt)}
+      ${_rendKpiCard("SH / Auto (interno)", "⏱️", c.shCar,   p.shCar,   "#8b5cf6", fmt)}
+      ${_rendKpiCard("Aceptación",          "✅", c.accept,  p.accept,  "#10b981", pct)}
+      ${_rendKpiCard("Branded Active Cars", "🏷️", c.branded, p.branded, "#f59e0b", fmt)}
+    </div></div>`;
+}
+function _rendFleetCityKpi(label, val, prev, fmtFn) {
+  return `<div class="city-kpi">
+    <span class="city-kpi-label">${label}</span>
+    <div class="city-kpi-right"><span class="city-kpi-val">${fmtFn(val)}</span>${bdgMode(val, prev, "mb-badge")}</div>
+  </div>`;
+}
+function _rendFleetPartnerTable(lastRows, prevRows) {
+  const groupBy = (rows) => {
+    const m = new Map();
+    rows.forEach(r => { let a = m.get(r.partner); if (!a) { a = []; m.set(r.partner, a); } a.push(r); });
+    return m;
+  };
+  const byP = groupBy(lastRows), prevByP = groupBy(prevRows);
+  const rows = [...byP.entries()].map(([p, rs]) => {
+    const c  = _rendFleetAgg(rs);
+    const pr = _rendFleetAgg(prevByP.get(p) || []);
+    return { partner: p, kam: (rs[0] || {}).kam || "", ...c, pOwned: pr.owned };
+  }).sort((a, b) => b.owned - a.owned);
+  if (!rows.length) return `<div style="padding:12px;color:#aaa;font-size:.8rem">Sin partners Fleet en el filtro actual.</div>`;
+  let h = `<table class="dtbl"><thead><tr>
+    <th>Partner</th><th>KAM</th><th>Owned Cars</th><th>SH/Auto</th><th>Aceptación</th><th>Branded</th><th>WoW Cars</th></tr></thead><tbody>`;
+  rows.forEach(r => {
+    const kc = KAM_COLORS[r.kam] || "#ccc";
+    h += `<tr>
+      <td>${escapeHTML(r.partner)}</td>
+      <td><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${kc};margin-right:4px"></span>${escapeHTML(r.kam)}</td>
+      <td class="tn">${fmt(r.owned)}</td>
+      <td class="tn">${fmt(r.shCar)}</td>
+      <td class="tn">${fmt(r.accept)}%</td>
+      <td class="tn">${fmt(r.branded)}</td>
+      <td class="tn">${bdgMode(r.owned, r.pOwned, "tbadge")}</td>
+    </tr>`;
+  });
+  h += `</tbody></table>`;
+  return h;
+}
+function _rendTkKPIs(lastRows, prevRows) {
+  const agg = rows => {
+    let branded = 0, actCars = 0;
+    rows.forEach(r => { branded += r.brandedActiveCars || 0; actCars += r.activeCars || 0; });
+    return { branded, actCars };
+  };
+  const c = agg(lastRows), p = agg(prevRows);
+  return secH("🛺", "#7e22ce", "TukTuk · Autos",
+      "Autos brandeados y activos del último período · solo sub-flotas TukTuk", "") +
+    `<div class="section"><div class="metric-row">
+      ${_rendKpiCard("Brandeados",  "🏷️", c.branded, p.branded, "#7e22ce", fmt)}
+      ${_rendKpiCard("Active Cars", "🚗", c.actCars, p.actCars, "#0891b2", fmt)}
+    </div></div>`;
 }
 
 // ── SECTION HEADER ─────────────────────────────────────────────────────────────

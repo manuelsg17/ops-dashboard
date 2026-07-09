@@ -43,6 +43,240 @@ function setMetasMes(mes) {
   if (STATE.curTab === "metas") renderMetas();
 }
 
+// ── LÍNEA DE NEGOCIO EN METAS (Agregador / Fleet / TukTuk) — Fase 3 ────────────
+// Independiente de Rendimiento (STATE.metasLine propio). Diario no trae db_id → cae
+// a Agregador. Actuales de Fleet/TukTuk salen de los slices materializados (Fase 2).
+function _metasLine() {
+  let line = STATE.metasLine || "agg";
+  if (STATE.curMode === "diario" && line !== "agg") line = "agg";
+  return line;
+}
+function setMetasLine(line) {
+  if ((STATE.metasLine || "agg") === line) return;
+  if (STATE.curMode === "diario" && line !== "agg") return;
+  STATE.metasLine = line;
+  if (STATE.curTab === "metas") renderMetas();
+}
+function metasLineToggleHTML() {
+  const line   = _metasLine();
+  const diario = STATE.curMode === "diario";
+  const defs = [
+    { k: "agg",   emoji: "📊", label: "Agregador", tip: "Metas Taxi (AD, N+R, Horas)" },
+    { k: "fleet", emoji: "🚗", label: "Fleet",     tip: "Metas de flota (SH/auto, aceptación, utilización)" },
+    { k: "tk",    emoji: "🛺", label: "TukTuk",    tip: "Metas TukTuk (AD, N+R, Brandeados)" }
+  ];
+  const btns = defs.map(d => {
+    const on  = line === d.k;
+    const dis = diario && d.k !== "agg";
+    return `<button class="mode-btn${on ? " active" : ""}" ${dis ? "disabled" : ""}
+      title="${dis ? "Sin datos diarios por sub-flota — usa escala semanal o mensual" : escapeHTML(d.tip)}"
+      ${dis ? "" : `onclick="setMetasLine('${d.k}')"`}
+      style="${dis ? "opacity:.4;cursor:not-allowed" : ""}">${d.emoji} ${d.label}</button>`;
+  }).join("");
+  const note = diario
+    ? `<span style="font-size:.7rem;color:#b45309;margin-left:10px;align-self:center">Fleet/TukTuk requieren escala semanal o mensual</span>`
+    : "";
+  return `<div class="mode-toggle-row" style="margin:0 4px 12px">${btns}${note}</div>`;
+}
+
+// Slice de performance de la línea para la escala actual (Fase 2).
+function _metasLineDataset(line) {
+  const mensual = STATE.curMode === "mensual";
+  if (line === "fleet") return (mensual ? STATE.rawDataMensualFleet  : STATE.rawDataFleet)  || [];
+  if (line === "tk")    return (mensual ? STATE.rawDataMensualTuktuk : STATE.rawDataTuktuk) || [];
+  return STATE.rawData;
+}
+// Actuales Fleet por (partner|||city) en [from,to]: SH/auto interno y aceptación
+// ponderados (Σ internalFleetSh / Σ ownedCars; Σ(rate×trips)/Σtrips) — igual que
+// presentacion2.p2FleetSeries / rendimiento._rendFleetAgg.
+function _metasFleetActuals(from, to, selSet, cityFilter) {
+  const by = new Map();
+  _metasLineDataset("fleet").forEach(r => {
+    if (r.date < from || r.date > to) return;
+    if (cityFilter !== "all" && r.city !== cityFilter) return;
+    if (selSet.size && !selSet.has(r.partner)) return;
+    const k = `${r.partner}|||${r.city}`;
+    let e = by.get(k);
+    if (!e) { e = { owned: 0, intSh: 0, trips: 0, accW: 0, branded: 0 }; by.set(k, e); }
+    e.owned   += r.ownedFleetActiveCars || 0;
+    e.intSh   += r.internalFleetSh || 0;
+    e.trips   += r.trips || 0;
+    e.accW    += (r.acceptanceRate || 0) * (r.trips || 0);
+    e.branded += r.brandedActiveCars || 0;
+  });
+  by.forEach(e => {
+    e.shCar  = e.owned > 0 ? e.intSh / e.owned : 0;
+    e.accept = e.trips > 0 ? (e.accW / e.trips) * 100 : 0;
+  });
+  return by;
+}
+// Actuales TukTuk por (partner|||city): AD = MÁX del snapshot (Σ fleetrooms por fecha),
+// N+R = Σ, Brandeados = MÁX snapshot. Espeja getRPC / la Calculadora.
+function _metasTkActuals(from, to, selSet, cityFilter) {
+  const by = new Map();
+  _metasLineDataset("tk").forEach(r => {
+    if (r.date < from || r.date > to) return;
+    if (cityFilter !== "all" && r.city !== cityFilter) return;
+    if (selSet.size && !selSet.has(r.partner)) return;
+    const k = `${r.partner}|||${r.city}`;
+    let e = by.get(k);
+    if (!e) { e = { _ad: {}, _cars: {}, nr: 0 }; by.set(k, e); }
+    e._ad[r.date]   = (e._ad[r.date]   || 0) + (r.activeDrivers || 0);
+    e._cars[r.date] = (e._cars[r.date] || 0) + (r.brandedActiveCars || 0);
+    e.nr += (r.newPartner || 0) + (r.newService || 0) + (r.reactivated || 0);
+  });
+  by.forEach(e => {
+    const ads = Object.values(e._ad), cs = Object.values(e._cars);
+    e.ad   = ads.length ? Math.max(...ads) : 0;
+    e.cars = cs.length  ? Math.max(...cs)  : 0;
+    delete e._ad; delete e._cars;
+  });
+  return by;
+}
+
+// Fila meta-vs-actual para un KPI de tasa/valor (sin proyección). meta null → oculta.
+function _metaLineRow(label, actual, meta, fmtFn, metaOnlyNote) {
+  if (meta == null && actual == null) return "";
+  if (meta == null) {  // solo actual (sin meta cargada)
+    return `<div style="margin-bottom:9px">
+      <div style="display:flex;justify-content:space-between;font-size:.74rem"><span>${label}</span>
+        <span style="color:#999">${fmtFn(actual)} · <em style="font-size:.66rem">sin meta</em></span></div></div>`;
+  }
+  if (actual == null) {  // solo meta (ej. Utilización, sin actual medible)
+    return `<div style="margin-bottom:9px">
+      <div style="display:flex;justify-content:space-between;font-size:.74rem"><span>${label}</span>
+        <span><strong style="color:#0891b2">${fmtFn(meta)}</strong> <span style="font-size:.64rem;color:#aaa">meta${metaOnlyNote ? " · " + metaOnlyNote : ""}</span></span></div></div>`;
+  }
+  const p  = meta > 0 ? (actual / meta) * 100 : 0;
+  const pV = Math.min(p, 100);
+  const over = p > 100 ? `<span style="font-size:.63rem;color:#8b5cf6;font-weight:700;margin-left:3px">🏆</span>` : "";
+  return `
+    <div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;font-size:.74rem;margin-bottom:3px">
+        <span>${label}</span>
+        <span style="display:flex;align-items:center;gap:4px">
+          <strong style="color:${pColor(p)}">${p.toFixed(1)}%</strong>
+          <span class="sem ${semCls(p)}"></span>${over}
+        </span>
+      </div>
+      <div style="font-size:.7rem;color:#777;margin-bottom:3px">
+        Fact: <strong>${fmtFn(actual)}</strong> / Meta: <strong>${fmtFn(meta)}</strong>
+      </div>
+      ${barProj(pV, pV)}
+    </div>`;
+}
+
+// Vista Metas Fleet: una tarjeta por (partner, ciudad) con meta cargada. KPIs de tasa
+// (SH/auto, aceptación) contra su actual; Utilización solo meta (sin actual medible).
+function _renderMetasFleet(mesName, from, to, selSet, cityFilter, kamFilter) {
+  const act = _metasFleetActuals(from, to, selSet, cityFilter);
+  const rows = STATE.metasData.filter(m =>
+    m.mes === mesName &&
+    (m.mSHcar != null || m.mAcc != null || m.mUtil != null) &&
+    (kamFilter === "all" || m.kam === kamFilter) &&
+    (!selSet.size || selSet.has(m.partner)) &&
+    (cityFilter === "all" || m.city === cityFilter)
+  ).sort((a, b) => a.partner.localeCompare(b.partner));
+
+  let html = metasLineToggleHTML();
+  html += secH("🚗", "#0891b2", "Metas Fleet — " + mesName,
+    "Meta de flota vs actual del rango · SH/auto (interno), aceptación, utilización", "Peru");
+
+  if (!rows.length) {
+    html += `<div class="section"><div style="padding:26px 16px;text-align:center;color:#999;font-size:.85rem">
+      No hay metas <strong>Fleet</strong> cargadas para ${escapeHTML(mesName)}.<br>
+      Genéralas desde la <strong>Calculadora → Fleet</strong> y guárdalas, o ajusta el filtro.
+    </div></div>`;
+    return html;
+  }
+  html += `<div class="section"><div class="partner-grid">`;
+  rows.forEach(m => {
+    const a      = act.get(`${m.partner}|||${m.city}`) || { shCar: null, accept: null };
+    const col    = STATE.partnerColors[m.partner] || "#0891b2";
+    const kcolor = KAM_COLORS[m.kam] || "#888";
+    html += `
+      <div class="pcard" style="border-left-color:${col}">
+        <div class="pcard-name">
+          <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${col};margin-right:5px"></span>
+          ${escapeHTML(m.partner)}
+          <span style="font-size:.6rem;font-weight:700;background:#ecfeff;color:#0891b2;border:1px solid #a5f3fc;padding:1px 5px;border-radius:8px;margin-left:5px">🚗 Fleet</span>
+        </div>
+        <div class="pcard-sub">
+          <span style="width:7px;height:7px;border-radius:50%;background:${kcolor};display:inline-block;margin-right:3px"></span>
+          ${escapeHTML(m.kam)} &nbsp;·&nbsp; ${escapeHTML(m.city)}
+        </div>
+        ${_metaLineRow("SH / Auto (interno)", m.mSHcar != null ? a.shCar : null, m.mSHcar, v => fmt(v))}
+        ${_metaLineRow("Aceptación", m.mAcc != null ? a.accept : null, m.mAcc, v => fmt(v) + "%")}
+        ${_metaLineRow("Utilización", null, m.mUtil, v => fmt(v) + "%", "sin actual medible")}
+      </div>`;
+  });
+  html += `</div></div>`;
+  return html;
+}
+
+// Vista Metas TukTuk: KPIs aditivos (AD/N+R/Brandeados) → resumen Perú + por partner.
+function _renderMetasTk(mesName, from, to, selSet, cityFilter, kamFilter) {
+  const act = _metasTkActuals(from, to, selSet, cityFilter);
+  const rows = STATE.metasData.filter(m =>
+    m.mes === mesName &&
+    (m.mtkAD != null || m.mtkNR != null || m.mtkCars != null) &&
+    (kamFilter === "all" || m.kam === kamFilter) &&
+    (!selSet.size || selSet.has(m.partner)) &&
+    (cityFilter === "all" || m.city === cityFilter)
+  ).sort((a, b) => a.partner.localeCompare(b.partner));
+
+  let html = metasLineToggleHTML();
+  html += secH("🛺", "#7e22ce", "Metas TukTuk — " + mesName,
+    "Meta TukTuk vs actual del rango · Active Drivers, N+R, Brandeados", "Peru");
+
+  if (!rows.length) {
+    html += `<div class="section"><div style="padding:26px 16px;text-align:center;color:#999;font-size:.85rem">
+      No hay metas <strong>TukTuk</strong> cargadas para ${escapeHTML(mesName)}.<br>
+      Genéralas desde la <strong>Calculadora → TukTuk</strong> y guárdalas, o ajusta el filtro.
+    </div></div>`;
+    return html;
+  }
+
+  // Resumen Perú (AD = Σ máx por partner-ciudad; N+R = Σ; Cars = Σ máx).
+  let tA = 0, tNR = 0, tCars = 0, mA = 0, mNR = 0, mCars = 0;
+  rows.forEach(m => {
+    const a = act.get(`${m.partner}|||${m.city}`) || { ad: 0, nr: 0, cars: 0 };
+    tA += a.ad; tNR += a.nr; tCars += a.cars;
+    mA += m.mtkAD || 0; mNR += m.mtkNR || 0; mCars += m.mtkCars || 0;
+  });
+  html += `<div class="section"><div class="metric-row">
+    ${metaResCard("Active Drivers", "máx período", tA,   mA,   tA,   "#7e22ce")}
+    ${metaResCard("Nuevos + React", "acumulado",   tNR,  mNR,  tNR,  "#f97316")}
+    ${metaResCard("Brandeados",     "máx período", tCars,mCars,tCars,"#0891b2")}
+  </div></div>`;
+
+  // Por partner
+  html += secH("🃏", "#7e22ce", "TukTuk por Partner", "Meta vs actual individual", "");
+  html += `<div class="section"><div class="partner-grid">`;
+  rows.forEach(m => {
+    const a      = act.get(`${m.partner}|||${m.city}`) || { ad: 0, nr: 0, cars: 0 };
+    const col    = STATE.partnerColors[m.partner] || "#7e22ce";
+    const kcolor = KAM_COLORS[m.kam] || "#888";
+    html += `
+      <div class="pcard" style="border-left-color:${col}">
+        <div class="pcard-name">
+          <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${col};margin-right:5px"></span>
+          ${escapeHTML(m.partner)}
+          <span style="font-size:.6rem;font-weight:700;background:#faf5ff;color:#7e22ce;border:1px solid #e9d5ff;padding:1px 5px;border-radius:8px;margin-left:5px">🛺 TukTuk</span>
+        </div>
+        <div class="pcard-sub">
+          <span style="width:7px;height:7px;border-radius:50%;background:${kcolor};display:inline-block;margin-right:3px"></span>
+          ${escapeHTML(m.kam)} &nbsp;·&nbsp; ${escapeHTML(m.city)}
+        </div>
+        ${_metaLineRow("Active Drivers", m.mtkAD   != null ? a.ad   : null, m.mtkAD,   v => fmt(v))}
+        ${_metaLineRow("Nuevos + React", m.mtkNR   != null ? a.nr   : null, m.mtkNR,   v => fmt(v))}
+        ${_metaLineRow("Brandeados",     m.mtkCars != null ? a.cars : null, m.mtkCars, v => fmt(v))}
+      </div>`;
+  });
+  html += `</div></div>`;
+  return html;
+}
+
 // Guard de reentrancia: doble-click o filtros solapados no deben lanzar dos
 // renders concurrentes (mismo patron que rendimiento.js).
 let _renderMetasBusy = false;
@@ -78,6 +312,17 @@ function _renderMetasImpl() {
   const mesName = STATE.metasMesSel && mesesDisponibles.includes(STATE.metasMesSel)
     ? STATE.metasMesSel
     : (mesesDisponibles[0] || "");
+
+  // Fase 3: líneas Fleet / TukTuk. Vista dedicada (meta vs actual de la línea) que
+  // reemplaza el cuerpo de Metas. El agregador sigue con el flujo de abajo intacto.
+  if (_metasLine() !== "agg") {
+    document.getElementById("metasEmpty").style.display   = "none";
+    document.getElementById("metasContent").style.display = "";
+    document.getElementById("metasContent").innerHTML = _metasLine() === "fleet"
+      ? _renderMetasFleet(mesName, from, to, selSet, cityFilter, kamFilter)
+      : _renderMetasTk(mesName, from, to, selSet, cityFilter, kamFilter);
+    return;
+  }
 
   const metas = STATE.metasData.filter(m => {
     if (m.mes !== mesName)                        return false;
@@ -241,7 +486,7 @@ function _renderMetasImpl() {
   document.getElementById("metasEmpty").style.display   = "none";
   document.getElementById("metasContent").style.display = "";
 
-  let html = modeToggleHTML();
+  let html = metasLineToggleHTML();
   // Selector de mes (solo se muestra si hay 2+ meses cargados)
   const mesSelectorHTML = mesesDisponibles.length > 1
     ? `<div style="display:flex;align-items:center;gap:8px;background:#fff8f8;border:1px solid #fecaca;border-radius:8px;padding:6px 12px">

@@ -60,6 +60,8 @@ const STATE = {
   rawData:             [],
   rawDataMensual:      [],
   rawDataMensualTuktuk:[],   // Slice mensual TukTuk (Fase 7, para metas TukTuk)
+  rawDataFleet:        [],   // Slice semanal Fleet (Fase 2, línea Rendimiento) — Fleet ⊂ Agregador
+  rawDataMensualFleet: [],   // Slice mensual Fleet (Fase 2)
   rawDataFull:         [],   // Copia sin filtrar (incluye flotas excluidas)
   rawDataMensualFull:  [],   // Idem para mensual
   metasData:           [],
@@ -74,6 +76,8 @@ const STATE = {
   curSummaries:     [],
   curTab:           "rend",
   curMode:          "semanal",
+  rendLine:         "agg",     // Línea de negocio en Rendimiento: "agg" | "fleet" | "tk" (Fase 2)
+  metasLine:        "agg",     // Línea de negocio en Metas: "agg" | "fleet" | "tk" (Fase 3)
   declineThreshold: 3,
   declineMetric:    "activeDrivers",
   proyectosData:    [],
