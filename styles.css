@@ -523,6 +523,9 @@ input[type="file"]  { display: none; }
   color: #111;
   box-shadow: 0 1px 4px rgba(0,0,0,.1);
 }
+.mode-btn:active { transform: scale(.93); }
+@keyframes modeBtnPop { 0% { transform: scale(1); } 45% { transform: scale(1.12); } 100% { transform: scale(1); } }
+.mode-btn.just-active { animation: modeBtnPop .28s ease; }
 
 /* ── PRESENTACIÓN FULLSCREEN ─────────────────────────────────────────────── */
 body.present-mode .sidebar,

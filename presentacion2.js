@@ -899,36 +899,69 @@ function p2ComputeAlerts(partner, dates) {
     const lastRet = ret[ret.length - 1];
     const wow = getWoW(ad); const lw = wow[wow.length - 1];
     const shPerAd = m.shPerAd[m.shPerAd.length - 1], tripsPerAd = m.tripsPerAd[m.tripsPerAd.length - 1];
+    // Cada alerta lleva "kind" (tipo estable, para agrupar entre ciudades) + "title"
+    // (mensaje compartido por el tipo) + "detail" (la parte que varía por ciudad).
     // (a) AD cae 3 períodos seguidos (semanas/meses según escala)
     if (ad.length >= 3) {
       const a = ad.slice(-3);
-      if (a[0] > a[1] && a[1] > a[2]) out.push({ sev: "high", level: lv.label, msg: es ? `AD cae 3 ${mi.units} ${mi.seg} (${fmt(a[0])} → ${fmt(a[2])})` : `AD down 3 ${mi.units} ${mi.seg} (${fmt(a[0])} → ${fmt(a[2])})` });
+      if (a[0] > a[1] && a[1] > a[2]) out.push({ sev: "high", level: lv.label, kind: "ad3drop",
+        title: es ? `AD cae 3 ${mi.units} ${mi.seg}` : `AD down 3 ${mi.units} ${mi.seg}`,
+        detail: `${fmt(a[0])} → ${fmt(a[2])}` });
     }
     // (b) caída WoW > 5% en ciudad
-    if (lv.city && lw != null && lw < T.wowDropCity) out.push({ sev: "high", level: lv.label, msg: es ? `Caída ${lw.toFixed(1)}% ${mi.pop} en Conductores Activos` : `${lw.toFixed(1)}% ${mi.pop} drop in Active Drivers` });
+    if (lv.city && lw != null && lw < T.wowDropCity) out.push({ sev: "high", level: lv.label, kind: "wowdrop",
+      title: es ? `Caída ${mi.pop} en Conductores Activos` : `${mi.pop} drop in Active Drivers`,
+      detail: `${lw.toFixed(1)}%` });
     // (c) retención < retMin (85%)
-    if (lastRet != null && lastRet < T.retMin) out.push({ sev: "mid", level: lv.label, msg: es ? `Retención ${(lastRet * 100).toFixed(1)}% (bajo ${(T.retMin * 100).toFixed(0)}%)` : `Retention ${(lastRet * 100).toFixed(1)}% (below ${(T.retMin * 100).toFixed(0)}%)` });
+    if (lastRet != null && lastRet < T.retMin) out.push({ sev: "mid", level: lv.label, kind: "retention",
+      title: es ? `Retención bajo ${(T.retMin * 100).toFixed(0)}%` : `Retention below ${(T.retMin * 100).toFixed(0)}%`,
+      detail: `${(lastRet * 100).toFixed(1)}%` });
     // (d) mínimos por tamaño de park
     if (lastAD > 0 && lastAD < T.smallParkAD) {
-      if (shPerAd != null && shPerAd < T.smallShPerAdMin) out.push({ sev: "mid", level: lv.label, msg: es ? `Park chico con SH/AD bajo (${shPerAd.toFixed(1)} h/cond)` : `Small park, low SH/AD (${shPerAd.toFixed(1)} h/driver)` });
+      if (shPerAd != null && shPerAd < T.smallShPerAdMin) out.push({ sev: "mid", level: lv.label, kind: "smallpark_sh",
+        title: es ? `Park chico con SH/AD bajo` : `Small park, low SH/AD`,
+        detail: `${shPerAd.toFixed(1)} ${es ? "h/cond" : "h/driver"}` });
     } else if (lastAD < T.midParkAD) {
-      if ((tripsPerAd != null && tripsPerAd < T.midTripsPerAdMin)) out.push({ sev: "mid", level: lv.label, msg: es ? `Park medio con Trips/AD bajo (${tripsPerAd.toFixed(1)} viajes/cond)` : `Mid park, low Trips/AD (${tripsPerAd.toFixed(1)})` });
+      if ((tripsPerAd != null && tripsPerAd < T.midTripsPerAdMin)) out.push({ sev: "mid", level: lv.label, kind: "midpark_trips",
+        title: es ? `Park medio con Trips/AD bajo` : `Mid park, low Trips/AD`,
+        detail: `${tripsPerAd.toFixed(1)} ${es ? "viajes/cond" : "trips/driver"}` });
     } else if (lastAD > 0) {
-      if ((lw != null && lw < 0) || (lastRet != null && lastRet < T.retLargeMin)) out.push({ sev: "mid", level: lv.label, msg: es ? `Park grande con señal de caída (revisar estabilidad)` : `Large park showing decline` });
+      if ((lw != null && lw < 0) || (lastRet != null && lastRet < T.retLargeMin)) out.push({ sev: "mid", level: lv.label, kind: "largepark_decline",
+        title: es ? `Park grande con señal de caída (revisar estabilidad)` : `Large park showing decline`,
+        detail: "" });
     }
   });
   return out.sort((a, b) => (a.sev === "high" ? 0 : 1) - (b.sev === "high" ? 0 : 1));
 }
+// Agrupa alertas por (severidad + kind): una fila por TIPO de señal, con las
+// ciudades afectadas como chips en esa misma fila — antes salía una fila por
+// ciudad y el mismo tipo de alerta se repetía N veces (una por ciudad), ilegible
+// con 4+ ciudades. Mismo orden de severidad que antes (Map preserva inserción).
+function p2GroupAlerts(alerts) {
+  const groups = new Map();
+  alerts.forEach(a => {
+    const k = `${a.sev}|||${a.kind}`;
+    if (!groups.has(k)) groups.set(k, { sev: a.sev, title: a.title, items: [] });
+    groups.get(k).items.push({ level: a.level, detail: a.detail });
+  });
+  return [...groups.values()];
+}
 function buildSlide2Alerts(partner, dates, idx) {
   const es = PRESENT2_STATE.lang === "es";
-  const alerts = p2ComputeAlerts(partner, dates);
+  const groups = p2GroupAlerts(p2ComputeAlerts(partner, dates));
   const sevColor = s => s === "high" ? "#FF0000" : "#f59e0b";
   const sevLabel = s => s === "high" ? (es ? "Alta" : "High") : (es ? "Media" : "Medium");
-  const items = alerts.length
-    ? alerts.map(a => `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:${sevColor(a.sev)}12;border-left:4px solid ${sevColor(a.sev)};border-radius:8px;margin-bottom:7px">
-        <span style="font-size:.6rem;font-weight:800;color:#fff;background:${sevColor(a.sev)};padding:2px 7px;border-radius:10px;white-space:nowrap">${sevLabel(a.sev)}</span>
-        <span style="font-weight:800;color:#111;font-size:.8rem;flex:0 0 92px">${escapeHTML(a.level)}</span>
-        <span style="color:#333;font-size:.82rem">${escapeHTML(a.msg)}</span></div>`).join("")
+  const items = groups.length
+    ? groups.map(g => {
+        const chips = g.items.map(it => `<span style="display:inline-flex;align-items:baseline;gap:4px;background:#fff;border:1px solid #eee;border-radius:14px;padding:2px 9px;font-size:.72rem;margin:2px 4px 2px 0"><b style="color:#333">${escapeHTML(it.level)}</b>${it.detail ? ` <span style="color:#666">${escapeHTML(it.detail)}</span>` : ""}</span>`).join("");
+        return `<div style="display:flex;align-items:flex-start;gap:10px;padding:9px 12px;background:${sevColor(g.sev)}12;border-left:4px solid ${sevColor(g.sev)};border-radius:8px;margin-bottom:7px">
+          <span style="font-size:.6rem;font-weight:800;color:#fff;background:${sevColor(g.sev)};padding:2px 7px;border-radius:10px;white-space:nowrap;margin-top:2px">${sevLabel(g.sev)}</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:800;color:#111;font-size:.82rem;margin-bottom:4px">${escapeHTML(g.title)}</div>
+            <div>${chips}</div>
+          </div>
+        </div>`;
+      }).join("")
     : `<div style="padding:14px;background:#f0fdf4;border:1px solid #10b981;border-radius:10px;color:#065f46;font-weight:700">✓ ${es ? "Sin alertas — todo dentro de rango." : "No alerts — all within range."}</div>`;
   return `<div style="width:100%;height:100%;background:#fff;padding:12px 14px;display:flex;flex-direction:column;overflow:hidden">
     ${p2BrandHeader(partner, es ? "Alertas / Next Steps" : "Alerts / Next Steps", es ? "Señales automáticas para accionar con el partner" : "Automatic signals to act on with the partner")}
@@ -957,6 +990,11 @@ function renderPresent2() {
     return;
   }
   if (!PRESENT2_STATE.partner || !partners.includes(PRESENT2_STATE.partner)) PRESENT2_STATE.partner = partners[0];
+  // "Fleet" forzado solo tiene sentido si el partner está flagged Fleet — si no,
+  // los KPIs de referencia (Acceptance/Owned Cars/SH interno) no existen y solo
+  // se ven guiones. Clamp: si cambiaste de partner y el nuevo no es Fleet, vuelve a Auto.
+  const canForceFleet = typeof isFleetPartner === "function" && isFleetPartner(PRESENT2_STATE.partner);
+  if (PRESENT2_STATE.fleetMode === "fleet" && !canForceFleet) PRESENT2_STATE.fleetMode = "auto";
 
   const es = PRESENT2_STATE.lang === "es";
   // Deck del partner: define nav, badge y sección activa del toggle.
@@ -990,16 +1028,13 @@ function renderPresent2() {
           <div class="mode-toggle" title="${es ? "Auto respeta el flag Fleet de Configuración" : "Auto follows the Fleet flag in Config"}">
             <button class="mode-btn ${PRESENT2_STATE.fleetMode === "auto"  ? "active" : ""}" onclick="present2SetFleetMode('auto')">Auto</button>
             <button class="mode-btn ${PRESENT2_STATE.fleetMode === "taxi"  ? "active" : ""}" onclick="present2SetFleetMode('taxi')">${es ? "Taxi" : "Taxi"}</button>
-            <button class="mode-btn ${PRESENT2_STATE.fleetMode === "fleet" ? "active" : ""}" onclick="present2SetFleetMode('fleet')">Fleet</button>
+            <button class="mode-btn ${PRESENT2_STATE.fleetMode === "fleet" ? "active" : ""}" ${canForceFleet ? `onclick="present2SetFleetMode('fleet')"` : `disabled style="opacity:.35;cursor:not-allowed"`} title="${canForceFleet ? "" : (es ? "Este partner no está marcado como Fleet" : "This partner isn't flagged as Fleet")}">Fleet</button>
           </div>
         </div>
         ${p2HasTuktuk(PRESENT2_STATE.partner) ? `
         <div>
           <label style="font-size:.72rem;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">${es ? "Sección" : "Section"}</label>
-          <div class="mode-toggle" title="${es ? "Salta a la sección Taxi o TukTuk del deck" : "Jump to the Taxi or TukTuk section"}">
-            <button class="mode-btn ${curDs === "taxi"   ? "active" : ""}" onclick="present2JumpSection('taxi')">🚕 Taxi</button>
-            <button class="mode-btn ${curDs === "tuktuk" ? "active" : ""}" onclick="present2JumpSection('tuktuk')">🛺 TukTuk</button>
-          </div>
+          <div class="mode-toggle" id="present2SectionBar" title="${es ? "Salta a la sección Taxi o TukTuk del deck" : "Jump to the Taxi or TukTuk section"}">${_p2SectionBarHTML(curDs)}</div>
         </div>` : ""}
         <div style="margin-left:auto;display:flex;gap:8px;align-items:flex-end">
           <button onclick="switchTab('rend')" style="padding:8px 16px;border-radius:8px;font-size:.82rem;font-weight:600;border:2px solid #e5e5e5;background:#fff;color:#555;cursor:pointer">← ${es ? "Volver" : "Back"}</button>
@@ -1091,12 +1126,24 @@ function present2ToggleCity() { PRESENT2_STATE.cmpCity = !PRESENT2_STATE.cmpCity
 // Toggle Auto/Fleet/Taxi: re-renderiza el shell completo (el botón activo cambia
 // de estilo) y el slide actual, para que la matriz recalcule con el set de KPIs correcto.
 function present2SetFleetMode(mode) { PRESENT2_STATE.fleetMode = mode; renderPresent2(); }
+// Markup de los botones Taxi/TukTuk de la Sección (bar con id present2SectionBar).
+// "just-active" dispara la animación CSS de pop al repintarse (ver styles.css).
+function _p2SectionBarHTML(curDs) {
+  return `
+    <button class="mode-btn ${curDs === "taxi"   ? "active just-active" : ""}" onclick="present2JumpSection('taxi')">🚕 Taxi</button>
+    <button class="mode-btn ${curDs === "tuktuk" ? "active just-active" : ""}" onclick="present2JumpSection('tuktuk')">🛺 TukTuk</button>`;
+}
 // Salta a la primera diapositiva de la sección (Taxi/TukTuk) del deck del partner.
-// NO resetea el partner (arregla el bug de perder el partner al alternar).
+// NO resetea el partner (arregla el bug de perder el partner al alternar). goSlide2
+// no repinta este bar (solo #present2Nav y #slide2Inner) → lo hacemos aquí para que
+// el botón activo se refleje y anime en cada click (antes quedaba visualmente inerte).
 function present2JumpSection(ds) {
   const deck = p2Deck(PRESENT2_STATE.partner);
   const i = deck.findIndex(e => e.ds === ds);
   goSlide2(i < 0 ? 0 : i);
+  const actualDs = (deck[PRESENT2_STATE.slide] || deck[0]).ds;
+  const bar = document.getElementById("present2SectionBar");
+  if (bar) bar.innerHTML = _p2SectionBarHTML(actualDs);
 }
 function present2ToggleCohort(k) {
   PRESENT2_STATE.cohort = PRESENT2_STATE.cohort || {};
