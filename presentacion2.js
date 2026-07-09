@@ -874,12 +874,15 @@ function buildSlide2Avance(partner, idx) {
   // Necesita fechas del mes + metas cargadas (agregador o TukTuk, según dataset).
   const noData = !monthDates.length || !(STATE.metasData || []).length;
   // TukTuk usa metas meta_tk_* (AD/N+R/Brandeados); Taxi usa meta_active_drivers/nr/sh.
+  // `snap` marca métricas SNAPSHOT (nivel actual, no acumuladas): su "fact" es el ÚLTIMO
+  // período visible (lastAD/lastCars), NO el máximo del mes — así el número coincide con
+  // la última semana (KPIs por Nivel) y con la proyección, en vez de sobre-mostrar el pico.
   const metricDefs = isTk ? [
-    { mk: "mtkAD",   ak: "ad",   label: es ? "Conductores Activos" : "Active Drivers", kind: "num" },
+    { mk: "mtkAD",   ak: "ad",   snap: "lastAD",   label: es ? "Conductores Activos" : "Active Drivers", kind: "num" },
     { mk: "mtkNR",   ak: "nr",   label: es ? "Nuevos + Reactivados" : "New + React",   kind: "num" },
-    { mk: "mtkCars", ak: "cars", label: es ? "Brandeados" : "Branded",                 kind: "num" }
+    { mk: "mtkCars", ak: "cars", snap: "lastCars", label: es ? "Brandeados" : "Branded",                 kind: "num" }
   ] : [
-    { mk: "mA",  ak: "ad", label: es ? "Conductores Activos" : "Active Drivers", kind: "num"  },
+    { mk: "mA",  ak: "ad", snap: "lastAD", label: es ? "Conductores Activos" : "Active Drivers", kind: "num"  },
     { mk: "mNR", ak: "nr", label: es ? "Nuevos + Reactivados" : "New + React",   kind: "num"  },
     { mk: "mH",  ak: "sh", label: es ? "Horas de Conexión" : "Supply Hours",     kind: "numK" }
   ];
@@ -887,16 +890,19 @@ function buildSlide2Avance(partner, idx) {
   // / meta_sh_car); Utilización solo meta; Owned Cars como referencia. Ver bloque fleetMode.
   const rows = levels.map(lv => {
     const act = p2ActualsMTD(partner, lv.city, monthDates);
-    if (isTk) {   // Brandeados = MÁX del snapshot (Σ ciudades por fecha)
+    if (isTk) {   // Brandeados: snapshot → ÚLTIMO período (Σ ciudades en la última fecha)
       const carsV = p2Vals(partner, lv.city, monthDates, r => r.brandedActiveCars || 0);
-      act.cars = carsV.length ? Math.max(...carsV) : 0;
+      act.lastCars = carsV.length ? carsV[carsV.length - 1] : 0;
+      act.cars     = act.lastCars;   // compat
     }
     const proj = p2ProjMTD(act, lastDate);
-    if (isTk) proj.cars = act.cars;   // snapshot: proyección = actual
+    if (isTk) proj.cars = act.lastCars;   // snapshot: proyección = nivel actual
     // Metas reales de STATE.metasData (agregador: mA/mNR/mH · TukTuk: mtk*).
     const meta = p2MetaFor(partner, lv.city, mesName);
     let cards = metricDefs.map(m => {
-      const real = act[m.ak], goal = meta[m.mk] || 0, projV = proj[m.ak];
+      // Snapshot (AD/Cars) → último período; acumuladas (N+R/SH) → total del mes.
+      const real = m.snap ? (act[m.snap] != null ? act[m.snap] : act[m.ak]) : act[m.ak];
+      const goal = meta[m.mk] || 0, projV = proj[m.ak];
       const fmtN = m.kind === "numK" ? fmtSmart : fmt;
       if (!goal) {
         const subTxt = es ? "Sin meta" : "No target";
