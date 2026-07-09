@@ -19,9 +19,13 @@ let PRESENT2_STATE = {
   cmpCity:  true,       // mostrar tendencia de ciudad
   fleetMode: "auto",    // "auto" | "fleet" | "taxi" — auto = según is_fleet del partner
   dataset:  "taxi",     // "taxi" | "tuktuk" — qué slice de partners/datos se muestra
+  avanceMesSel: null,   // mes META de "Avance vs Meta": null = auto (según "Hasta")
   charts:   [],
   _renderId: 0
 };
+
+const P2_MES_NOMBRES = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
+  "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
 
 // Resuelve si el partner se muestra con KPIs Fleet (SH/Auto Activo, Acceptance,
 // Carros Fleet) o Taxi (SH, Viajes). "auto" respeta el flag is_fleet de Config.
@@ -706,11 +710,29 @@ function buildSlide2Raw(partner, dates, pct, idx) {
 // Reusa la lógica de metas.js/data.js: actuals month-to-date (AD=max, N+R/SH=sum)
 // vs meta (STATE.metasData) + proyección a fin de mes (calcProjectionDays/projA).
 // El avance es SIEMPRE del mes seleccionado (no del rango del sidebar).
-function p2SelectedMes() {
-  const meses = [...new Set((STATE.metasData || []).map(m => m.mes))].filter(Boolean)
+// Meses META disponibles (nombres, más reciente primero).
+function p2MetaMeses() {
+  return [...new Set((STATE.metasData || []).map(m => m.mes))].filter(Boolean)
     .sort((a, b) => _metasMesOrden(b) - _metasMesOrden(a));
-  if (STATE.metasMesSel && meses.includes(STATE.metasMesSel)) return STATE.metasMesSel;
-  return meses[0] || "";
+}
+// Mes META de "Avance vs Meta". Prioridad:
+//   1) selección manual (PRESENT2_STATE.avanceMesSel), si tiene metas.
+//   2) AUTO: el mes del "Hasta" (el dato que se está viendo) → si estás en junio,
+//      compara vs la meta de JUNIO, no vs la más reciente (julio).
+//   3) fallback: la meta más reciente.
+function p2AvanceMes() {
+  const meses = p2MetaMeses();
+  if (!meses.length) return "";
+  if (PRESENT2_STATE.avanceMesSel && meses.includes(PRESENT2_STATE.avanceMesSel))
+    return PRESENT2_STATE.avanceMesSel;
+  const to = (typeof document !== "undefined") && document.getElementById("dateTo")
+    ? document.getElementById("dateTo").value : "";
+  if (to) {
+    const mn = parseInt(to.slice(5, 7), 10);
+    const name = P2_MES_NOMBRES[mn - 1];
+    if (name && meses.includes(name)) return name;
+  }
+  return meses[0];
 }
 function p2MonthDates(mesName) {
   const ord = mesName ? _metasMesOrden(mesName) : 0;   // 2000+m (nombre) o YYYYMM (iso)
@@ -733,15 +755,31 @@ function p2MonthDates(mesName) {
     const last = allDates.slice(-1)[0];
     if (last) out = allDates.filter(d => d.slice(0, 7) === last.slice(0, 7));
   }
+  // Cap MTD por "Hasta": el avance refleja lo acumulado HASTA la fecha vista (mover el
+  // filtro dentro del mes actualiza actual + proyección). Solo si queda ≥1 fecha (si el
+  // "Hasta" es anterior al mes seleccionado manualmente, no capa → muestra el mes completo).
+  const to = (typeof document !== "undefined") && document.getElementById("dateTo")
+    ? document.getElementById("dateTo").value : "";
+  if (to && out.length) {
+    const capped = out.filter(d => d <= to);
+    if (capped.length) out = capped;
+  }
   return out;
 }
 function p2MetaFor(partner, scopeCity, mes) {
   return (STATE.metasData || []).reduce((o, m) => {
     if (m.partner === partner && m.mes === mes && (!scopeCity || m.city === scopeCity)) {
+      // Agregador + TukTuk son aditivos (se suman entre ciudades).
       o.mA += m.mA || 0; o.mNR += m.mNR || 0; o.mH += m.mH || 0;
+      o.mtkAD += m.mtkAD || 0; o.mtkNR += m.mtkNR || 0; o.mtkCars += m.mtkCars || 0;
+      // Fleet son TASAS (no se suman): último no-nulo. Con scopeCity=ciudad hay una
+      // sola fila; en Perú-general multi-ciudad toma una (referencia, no exacto).
+      if (m.mSHcar != null) o.mSHcar = m.mSHcar;
+      if (m.mAcc   != null) o.mAcc   = m.mAcc;
+      if (m.mUtil  != null) o.mUtil  = m.mUtil;
     }
     return o;
-  }, { mA: 0, mNR: 0, mH: 0 });
+  }, { mA: 0, mNR: 0, mH: 0, mtkAD: 0, mtkNR: 0, mtkCars: 0, mSHcar: null, mAcc: null, mUtil: null });
 }
 // Actuals: AD = máx sobre fechas de (Σciudades) — MISMO criterio que getRPC/metas.js:
 // suma las ciudades POR FECHA y LUEGO toma el máximo. NO Σciudades(máx del mes), que
@@ -794,44 +832,78 @@ function p2RefCard(label, arr, kind) {
   </div>`;
 }
 
+// Tarjeta meta-vs-actual reutilizable (Fleet/TukTuk): actual/goal + % + barra.
+// projV null → sin línea de proyección (KPIs de tasa/snapshot no proyectan).
+function _p2MetaCard(label, real, goal, projV, fmtN, es) {
+  const pct = goal > 0 ? (real / goal) * 100 : 0;
+  const col = p2AvanceColor(pct);
+  const ppct = (projV != null && goal > 0) ? (projV / goal) * 100 : null;
+  return `<div style="flex:1;min-width:0;background:#fafafa;border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:4px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px">
+      <span style="font-size:.58rem;color:#aaa;font-weight:700;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(label)}</span>
+      <span style="font-size:.74rem;font-weight:800;color:${col}">${pct.toFixed(0)}%</span>
+    </div>
+    <div style="display:flex;align-items:baseline;gap:5px">
+      <span style="font-weight:900;font-size:1.05rem;color:#111">${fmtN(real)}</span>
+      <span style="font-size:.62rem;color:#999">/ ${fmtN(goal)}</span>
+    </div>
+    <div style="height:7px;background:#eee;border-radius:5px;overflow:hidden;position:relative">
+      <div style="height:100%;width:${Math.min(pct, 100).toFixed(1)}%;background:${col};border-radius:5px"></div>
+      ${ppct != null ? `<div style="position:absolute;top:-1px;bottom:-1px;left:${Math.min(Math.max(ppct, 0), 100).toFixed(1)}%;width:2px;background:#111;opacity:.55"></div>` : ""}
+    </div>
+    ${ppct != null ? `<div style="font-size:.6rem;color:#999">${es ? "proy" : "proj"} ${fmtN(projV)} (${ppct.toFixed(0)}%)</div>` : ""}
+  </div>`;
+}
+// Tarjeta solo-meta (sin actual medible, ej. Utilización Fleet).
+function _p2MetaOnlyCard(label, goal, fmtN, note) {
+  return `<div style="flex:1;min-width:0;background:#ecfeff;border:1px solid #a5f3fc;border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;justify-content:center;gap:2px">
+    <span style="font-size:.58rem;color:#0891b2;font-weight:700;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(label)}</span>
+    <div style="font-weight:900;font-size:1rem;color:#111">${fmtN(goal)}</div>
+    <div style="font-size:.58rem;color:#0891b2">meta${note ? " · " + note : ""}</div>
+  </div>`;
+}
+
 function buildSlide2Avance(partner, idx) {
   const es = PRESENT2_STATE.lang === "es";
-  const isTk = PRESENT2_STATE.dataset === "tuktuk";   // TukTuk: metas por definir → placeholder
+  const isTk = PRESENT2_STATE.dataset === "tuktuk";   // TukTuk: metas meta_tk_* (Fase 4)
   const fleetMode = p2IsFleetMode(partner);
-  const mesName = p2SelectedMes();
+  const mesName = p2AvanceMes();
   const monthDates = p2MonthDates(mesName);
   const lastDate = monthDates.length ? monthDates[monthDates.length - 1] : p2AllDates().slice(-1)[0];
   const levels = p2Levels(partner);
-  // TukTuk aún no tiene metas → solo exige que haya fechas del mes (actuals de referencia).
-  const noData = !monthDates.length || (!isTk && !(STATE.metasData || []).length);
-  const metricDefs = [
+  // Necesita fechas del mes + metas cargadas (agregador o TukTuk, según dataset).
+  const noData = !monthDates.length || !(STATE.metasData || []).length;
+  // TukTuk usa metas meta_tk_* (AD/N+R/Brandeados); Taxi usa meta_active_drivers/nr/sh.
+  const metricDefs = isTk ? [
+    { mk: "mtkAD",   ak: "ad",   label: es ? "Conductores Activos" : "Active Drivers", kind: "num" },
+    { mk: "mtkNR",   ak: "nr",   label: es ? "Nuevos + Reactivados" : "New + React",   kind: "num" },
+    { mk: "mtkCars", ak: "cars", label: es ? "Brandeados" : "Branded",                 kind: "num" }
+  ] : [
     { mk: "mA",  ak: "ad", label: es ? "Conductores Activos" : "Active Drivers", kind: "num"  },
     { mk: "mNR", ak: "nr", label: es ? "Nuevos + Reactivados" : "New + React",   kind: "num"  },
     { mk: "mH",  ak: "sh", label: es ? "Horas de Conexión" : "Supply Hours",     kind: "numK" }
   ];
-  // Tarjetas de referencia Fleet (sin meta en BD — Utilization diferida): valor
-  // actual + WoW, etiquetadas "Referencia" para no confundir con una meta real.
-  const fleetRefDefs = [
-    { key: "accept",               label: "Acceptance Rate",                                        kind: "pct" },
-    { key: "ownedFleetActiveCars", label: es ? "Owned Fleet Active Cars" : "Owned Fleet Active Cars", kind: "num" },
-    { key: "shCarInt",             label: es ? "Internal Fleet SH/Auto" : "Internal Fleet SH/Car",   kind: "ratio1" }
-  ];
+  // KPIs Fleet (Fase 4): Aceptación y SH/Auto con meta real si está cargada (meta_acceptance
+  // / meta_sh_car); Utilización solo meta; Owned Cars como referencia. Ver bloque fleetMode.
   const rows = levels.map(lv => {
     const act = p2ActualsMTD(partner, lv.city, monthDates);
+    if (isTk) {   // Brandeados = MÁX del snapshot (Σ ciudades por fecha)
+      const carsV = p2Vals(partner, lv.city, monthDates, r => r.brandedActiveCars || 0);
+      act.cars = carsV.length ? Math.max(...carsV) : 0;
+    }
     const proj = p2ProjMTD(act, lastDate);
-    // TukTuk: sin metas en BD → meta 0 en todo (cae al branch "sin meta" con
-    // rótulo "Metas TukTuk por definir"). Taxi: metas reales de STATE.metasData.
-    const meta = isTk ? { mA: 0, mNR: 0, mH: 0 } : p2MetaFor(partner, lv.city, mesName);
+    if (isTk) proj.cars = act.cars;   // snapshot: proyección = actual
+    // Metas reales de STATE.metasData (agregador: mA/mNR/mH · TukTuk: mtk*).
+    const meta = p2MetaFor(partner, lv.city, mesName);
     let cards = metricDefs.map(m => {
       const real = act[m.ak], goal = meta[m.mk] || 0, projV = proj[m.ak];
       const fmtN = m.kind === "numK" ? fmtSmart : fmt;
       if (!goal) {
-        const subTxt = isTk ? (es ? "Meta TukTuk por definir" : "TukTuk goal TBD") : (es ? "Sin meta" : "No target");
-        const subCol = isTk ? "#b45309" : "#bbb";
-        return `<div style="flex:1;min-width:0;background:${isTk ? "#fffbeb" : "#fafafa"};border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;justify-content:center;gap:2px${isTk ? ";border:1px dashed #fde68a" : ""}">
+        const subTxt = es ? "Sin meta" : "No target";
+        return `<div style="flex:1;min-width:0;background:#fafafa;border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;justify-content:center;gap:2px">
           <div style="font-size:.58rem;color:#aaa;font-weight:700;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(m.label)}</div>
           <div style="font-weight:900;font-size:1rem;color:#111">${fmtN(real)}</div>
-          <div style="font-size:.6rem;color:${subCol}">${subTxt}</div></div>`;
+          <div style="font-size:.6rem;color:#bbb">${subTxt}</div></div>`;
       }
       const pct = (real / goal) * 100, ppct = (projV / goal) * 100, col = p2AvanceColor(pct);
       return `<div style="flex:1;min-width:0;background:#fafafa;border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:4px">
@@ -852,7 +924,21 @@ function buildSlide2Avance(partner, idx) {
     }).join("");
     if (fleetMode) {
       const fs = p2FleetSeries(partner, lv.city, monthDates);
-      cards += fleetRefDefs.map(d => p2RefCard(d.label, fs[d.key], d.kind)).join("");
+      const lastOf = arr => (arr && arr.length) ? arr[arr.length - 1] : null;
+      // Aceptación: meta real (meta_acceptance, 0-100) vs actual (accept 0-1 → ×100).
+      const accA = lastOf(fs.accept);
+      cards += meta.mAcc != null
+        ? _p2MetaCard(es ? "Aceptación" : "Acceptance", accA != null ? accA * 100 : 0, meta.mAcc, null, v => fmt(v) + "%", es)
+        : p2RefCard(es ? "Acceptance Rate" : "Acceptance Rate", fs.accept, "pct");
+      // SH/Auto interno: meta real (meta_sh_car) vs actual (shCarInt).
+      const shcA = lastOf(fs.shCarInt);
+      cards += meta.mSHcar != null
+        ? _p2MetaCard(es ? "SH/Auto (interno)" : "Internal SH/Car", shcA != null ? shcA : 0, meta.mSHcar, null, v => fmt(v), es)
+        : p2RefCard(es ? "Internal Fleet SH/Auto" : "Internal Fleet SH/Car", fs.shCarInt, "ratio1");
+      // Utilización: solo meta (sin actual medible).
+      if (meta.mUtil != null) cards += _p2MetaOnlyCard(es ? "Utilización" : "Utilization", meta.mUtil, v => fmt(v) + "%", es ? "sin actual" : "no actual");
+      // Owned Fleet Active Cars: referencia (sin meta en BD).
+      cards += p2RefCard(es ? "Owned Fleet Active Cars" : "Owned Fleet Active Cars", fs.ownedFleetActiveCars, "num");
     }
     return `<div style="display:flex;gap:8px;flex:1 1 0;min-height:0;max-height:200px;border-left:3px solid ${lv.color};padding-left:8px;align-items:stretch">
       <div style="flex:0 0 62px;display:flex;align-items:center"><span style="font-weight:800;font-size:.82rem;color:${lv.color}">${escapeHTML(lv.label)}</span></div>
@@ -860,13 +946,13 @@ function buildSlide2Avance(partner, idx) {
     </div>`;
   }).join("");
   const avTitle = isTk
-    ? (es ? "Avance TukTuk (metas por definir)" : "TukTuk Update (goals TBD)")
+    ? (es ? "Avance vs Meta TukTuk" : "TukTuk Goal vs Target")
     : (es ? "Avance vs Meta del mes" : "Goal vs Target");
-  const avSub = isTk
-    ? (es ? "Actuals del mes · metas TukTuk aún por definir" : "Month actuals · TukTuk goals TBD")
-    : (es ? "Actual vs meta · barra = avance · marca negra = proyección" : "Actual vs goal · bar = progress · black mark = projection");
+  const avSub = es
+    ? "Actual vs meta · barra = avance · marca negra = proyección"
+    : "Actual vs goal · bar = progress · black mark = projection";
   const noDataMsg = isTk
-    ? (es ? "Sin datos TukTuk para este mes." : "No TukTuk data for this month.")
+    ? (es ? "Sin metas TukTuk para este mes." : "No TukTuk goals for this month.")
     : (es ? "Sin metas cargadas para este mes." : "No goals loaded for this month.");
   return `<div style="width:100%;height:100%;background:#fff;padding:12px 14px;display:flex;flex-direction:column;overflow:hidden">
     ${p2BrandHeader(partner, avTitle + " · " + (mesName || "—"), avSub)}
@@ -1036,6 +1122,14 @@ function renderPresent2() {
           <label style="font-size:.72rem;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">${es ? "Sección" : "Section"}</label>
           <div class="mode-toggle" id="present2SectionBar" title="${es ? "Salta a la sección Taxi o TukTuk del deck" : "Jump to the Taxi or TukTuk section"}">${_p2SectionBarHTML(curDs)}</div>
         </div>` : ""}
+        ${p2MetaMeses().length ? `
+        <div title="${es ? "Mes de la meta en 'Avance vs Meta'. Auto = el mes del 'Hasta'." : "Goal month for 'Goal vs Target'. Auto = the 'To' month."}">
+          <label style="font-size:.72rem;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">${es ? "Mes meta" : "Goal month"}</label>
+          <select onchange="present2SetAvanceMes(this.value)" style="border:2px solid #e5e5e5;border-radius:8px;padding:7px 10px;font-size:.82rem;font-weight:600;background:#fff;cursor:pointer;height:38px">
+            <option value="">${es ? "Auto (según filtro)" : "Auto (by filter)"}</option>
+            ${p2MetaMeses().map(m => `<option value="${escapeHTML(m)}" ${PRESENT2_STATE.avanceMesSel === m ? "selected" : ""}>${escapeHTML(m)}</option>`).join("")}
+          </select>
+        </div>` : ""}
         <div style="margin-left:auto;display:flex;gap:8px;align-items:flex-end">
           <button onclick="switchTab('rend')" style="padding:8px 16px;border-radius:8px;font-size:.82rem;font-weight:600;border:2px solid #e5e5e5;background:#fff;color:#555;cursor:pointer">← ${es ? "Volver" : "Back"}</button>
           <button class="apply-btn" style="width:auto;padding:8px 18px" onclick="downloadPresent2PDF()">⬇ ${es ? "Descargar PDF" : "Download PDF"}</button>
@@ -1126,6 +1220,8 @@ function present2ToggleCity() { PRESENT2_STATE.cmpCity = !PRESENT2_STATE.cmpCity
 // Toggle Auto/Fleet/Taxi: re-renderiza el shell completo (el botón activo cambia
 // de estilo) y el slide actual, para que la matriz recalcule con el set de KPIs correcto.
 function present2SetFleetMode(mode) { PRESENT2_STATE.fleetMode = mode; renderPresent2(); }
+// Mes META de "Avance vs Meta": "" → auto (según "Hasta"); nombre → fijo.
+function present2SetAvanceMes(mes) { PRESENT2_STATE.avanceMesSel = mes || null; renderPresent2(); }
 // Markup de los botones Taxi/TukTuk de la Sección (bar con id present2SectionBar).
 // "just-active" dispara la animación CSS de pop al repintarse (ver styles.css).
 function _p2SectionBarHTML(curDs) {

@@ -408,12 +408,15 @@ function setDatePreset(type) {
       to   = dates[dates.length - 1];
     }
   } else if (type === 'month') {
-    const m = today.toISOString().slice(0, 7);
-    // En modo mensual los dates son "YYYY-MM" (7 chars). En diario/semanal son
-    // "YYYY-MM-DD" (10 chars). La comparacion string "2026-05" >= "2026-05-01"
-    // es FALSE, asi que en mensual hay que comparar contra m directo.
+    // "Este mes" = el ÚLTIMO MES CON DATOS (no el mes calendario de hoy). Si la data
+    // llega a junio y hoy es julio, selecciona junio COMPLETO (1ra → última semana),
+    // no solo la última semana. Antes anclaba a today → from/to colapsaban al final.
+    const lastD = dates[dates.length - 1];
+    const m = lastD.slice(0, 7);
+    // Mensual: dates son "YYYY-MM"; semanal/diario: "YYYY-MM-DD". "2026-06" >= "2026-06-01"
+    // es FALSE (string), por eso en mensual se compara contra m directo.
     const monthKey = STATE.curMode === "mensual" ? m : `${m}-01`;
-    from = dates.find(d => d >= monthKey) || dates[dates.length - 1];
+    from = dates.find(d => d >= monthKey) || dates[0];
     to   = dates[dates.length - 1];
 
   // ── Presets para escala diaria ───────────────────────────────────────────
@@ -616,6 +619,10 @@ function applyFilters() {
   if (STATE.curTab === "insights"    && STATE.rawData.length)                           renderInsights();
   if (STATE.curTab === "partnerview" && STATE.rawData.length)                           renderPartnerView();
   if (STATE.curTab === "calculator"  && STATE.rawData.length)                           renderCalculator();
+  // Presentación 2.0: al mover el filtro, re-renderiza el slide actual (Avance vs Meta
+  // deriva su mes del "Hasta" → antes no se actualizaba porque applyFilters no lo tocaba).
+  if (STATE.curTab === "present2"    && typeof renderSlide2 === "function"
+      && PRESENT2_STATE.partner && STATE.rawData.length)                                renderSlide2();
 }
 
 function updateDeclineSettings() {
