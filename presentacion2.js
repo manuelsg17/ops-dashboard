@@ -27,6 +27,22 @@ let PRESENT2_STATE = {
 const P2_MES_NOMBRES = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
   "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
 
+// Mes de REPORTE al que pertenece una fecha (para "Avance vs Meta"). En SEMANAL, una
+// semana Lun–Dom pertenece al mes donde cae su JUEVES (inicio+3 = día mediano) — así la
+// semana que arranca el Lun 29-jun (Jun 29 → Dom 05-jul, 5 de 7 días en julio) cuenta como
+// PRIMERA semana de JULIO, no como última de junio: el avance MTD y la meta caen en el mes
+// correcto y cuadran con "KPIs por Nivel" (que muestra la semana tal cual). En MENSUAL/DIARIO
+// el mes es el de la fecha misma. Devuelve { y: año, m: 1-12 }.
+function p2ReportYM(dateStr) {
+  if (!dateStr) return { y: 0, m: 0 };
+  if (STATE.curMode === "semanal") {
+    const dt = parseLocalDate(dateStr);
+    dt.setDate(dt.getDate() + 3);   // jueves de la semana (mediana Lun–Dom)
+    return { y: dt.getFullYear(), m: dt.getMonth() + 1 };
+  }
+  return { y: parseInt(dateStr.slice(0, 4), 10), m: parseInt(dateStr.slice(5, 7), 10) };
+}
+
 // Resuelve si el partner se muestra con KPIs Fleet (SH/Auto Activo, Acceptance,
 // Carros Fleet) o Taxi (SH, Viajes). "auto" respeta el flag is_fleet de Config.
 function p2IsFleetMode(partner) {
@@ -728,7 +744,8 @@ function p2AvanceMes() {
   const to = (typeof document !== "undefined") && document.getElementById("dateTo")
     ? document.getElementById("dateTo").value : "";
   if (to) {
-    const mn = parseInt(to.slice(5, 7), 10);
+    // Mes de REPORTE del "Hasta" (en semanal, el mes del jueves de esa semana): ver 29-jun → JULIO.
+    const mn = p2ReportYM(to).m;
     const name = P2_MES_NOMBRES[mn - 1];
     if (name && meses.includes(name)) return name;
   }
@@ -743,21 +760,24 @@ function p2MonthDates(mesName) {
   const allDates = p2AllDates();                       // dataset-scoped (tuktuk usa sus fechas)
   const to = (typeof document !== "undefined") && document.getElementById("dateTo")
     ? document.getElementById("dateTo").value : "";
+  // Bucketing por mes de REPORTE (p2ReportYM): en semanal la semana cuenta en el mes de su
+  // jueves → la semana del 29-jun pertenece a JULIO. En mensual/diario = el mes de la fecha.
   let out = [];
   if (ord >= 100000) {                                 // mes ISO explícito "YYYY-MM"
-    const ym = String(Math.floor(ord / 100)) + "-" + String(ord % 100).padStart(2, "0");
-    out = allDates.filter(d => d.startsWith(ym));
+    const yy = Math.floor(ord / 100), mm = ord % 100;
+    out = allDates.filter(d => { const r = p2ReportYM(d); return r.y === yy && r.m === mm; });
   } else if (ord > 2000 && ord < 3000) {               // nombre de mes sin año
     const mn = ord - 2000;
-    const matches = allDates.filter(d => parseInt(d.slice(5, 7), 10) === mn);
+    const matches = allDates.filter(d => p2ReportYM(d).m === mn);
     // Cross-year: elegir el año del "Hasta" (el que el KAM está viendo), no el más
     // reciente del dataset. Se ancla al pool de fechas ≤ Hasta; si el Hasta es anterior
     // a TODAS las coincidencias, se usan todas (selección manual retrospectiva válida).
+    // El AÑO también sale del mes de reporte (una semana de dic→ene pertenece al año del ene).
     const pool = to ? matches.filter(d => d <= to) : matches;
     const use = pool.length ? pool : matches;
-    const years = [...new Set(use.map(d => d.slice(0, 4)))].sort();
+    const years = [...new Set(use.map(d => String(p2ReportYM(d).y)))].sort();
     const lastYear = years[years.length - 1];
-    out = lastYear ? use.filter(d => d.slice(0, 4) === lastYear) : [];
+    out = lastYear ? use.filter(d => String(p2ReportYM(d).y) === lastYear) : [];
   }
   // Cap MTD en el "Hasta" (progreso acumulado hasta la fecha vista). SIN rescate: si el
   // Hasta es anterior al mes, out queda [] → el slide muestra "sin datos" (no otro mes).
@@ -1060,7 +1080,10 @@ function buildSlide2Alerts(partner, dates, idx) {
   const sevLabel = s => s === "high" ? (es ? "Alta" : "High") : (es ? "Media" : "Medium");
   const items = groups.length
     ? groups.map(g => {
-        const chips = g.items.map(it => `<span style="display:inline-flex;align-items:baseline;gap:4px;background:#fff;border:1px solid #eee;border-radius:14px;padding:2px 9px;font-size:.72rem;margin:2px 4px 2px 0"><b style="color:#333">${escapeHTML(it.level)}</b>${it.detail ? ` <span style="color:#666">${escapeHTML(it.detail)}</span>` : ""}</span>`).join("");
+        // inline-block (NO inline-flex): html2canvas no pinta el texto dentro de cajas
+        // inline-flex con align-items:baseline → los chips salian como pildoras vacias en
+        // el PDF. inline-block + white-space:nowrap se renderiza fiable en pantalla y PDF.
+        const chips = g.items.map(it => `<span style="display:inline-block;white-space:nowrap;background:#fff;border:1px solid #eee;border-radius:14px;padding:2px 9px;font-size:.72rem;margin:2px 4px 2px 0"><b style="color:#333">${escapeHTML(it.level)}</b>${it.detail ? ` <span style="color:#666">${escapeHTML(it.detail)}</span>` : ""}</span>`).join("");
         return `<div style="display:flex;align-items:flex-start;gap:10px;padding:9px 12px;background:${sevColor(g.sev)}12;border-left:4px solid ${sevColor(g.sev)};border-radius:8px;margin-bottom:7px">
           <span style="font-size:.6rem;font-weight:800;color:#fff;background:${sevColor(g.sev)};padding:2px 7px;border-radius:10px;white-space:nowrap;margin-top:2px">${sevLabel(g.sev)}</span>
           <div style="flex:1;min-width:0">
