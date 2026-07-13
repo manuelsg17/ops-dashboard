@@ -306,8 +306,12 @@ function _pvSeriesByPartnerCity(partner, city, dates) {
   rows.forEach(r => {
     if (!byDate[r.date]) byDate[r.date] = _blank(r.date, true);
     const e = byDate[r.date];
-    // AD es snapshot: max entre CLIDs duplicados del mismo partner+ciudad+fecha
-    if ((r.activeDrivers || 0) > e.ad) e.ad = r.activeDrivers || 0;
+    // AD es snapshot A NIVEL FLEETROOM: el total del partner+ciudad es la SUMA de sus
+    // sub-flotas (db_id), NO el máximo. Con el split de fleetrooms (2026-03+) el MAX se
+    // quedaba con la sub-flota más grande y sub-contaba (Lima 2,072 vs 4,057 real → total
+    // 2,420 vs 3,430). Suma = misma agregación que Presentación 2.0 (p2Vals); las filas
+    // legacy ya se descartaron en dropLegacyAggregateRows, así que no hay doble conteo.
+    e.ad += r.activeDrivers || 0;
     e.npPartner   += r.newPartner;
     e.npService   += r.newService;
     e.reactivated += r.reactivated;
@@ -386,8 +390,7 @@ function renderPartnerView() {
   const prevDate = dates.length > 1 ? dates[dates.length - 2] : null;
   const lastRows = partnerRows.filter(r => r.date === lastDate);
   const prevRows = prevDate ? partnerRows.filter(r => r.date === prevDate) : [];
-  const tAD = lastRows.reduce((s, r) => Math.max(s, r.activeDrivers), 0);  // max por ciudad
-  // Para AD a nivel global mejor sumar ciudades del último period
+  // AD global del último período = suma por ciudad (cada ciudad ya suma sus sub-flotas).
   const adByCityLast = {};
   lastRows.forEach(r => { adByCityLast[r.city] = (adByCityLast[r.city] || 0) + r.activeDrivers; });
   const tADsum = Object.values(adByCityLast).reduce((s, v) => s + v, 0);
@@ -493,9 +496,22 @@ function renderPartnerView() {
         </div>`).join("")}
     </div>`;
 
+  // Banner: sección en revisión → recomendar Presentación 2.0 (fuente 100% precisa).
+  const _pvEs = (PARTNER_VIEW_STATE.lang || "es") === "es";
+  const pvBanner = `<div style="background:#fef2f2;border:1px solid #fca5a5;border-left:5px solid #FF0000;border-radius:10px;padding:11px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
+      <span style="font-size:1.3rem;line-height:1">🚧</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:800;color:#b91c1c;font-size:.9rem">${_pvEs ? "Estamos afinando esta sección" : "We're refining this section"}</div>
+        <div style="font-size:.8rem;color:#7f1d1d;line-height:1.35">${_pvEs
+          ? "Para métricas 100% precisas usá <b>Presentación 2.0</b> mientras terminamos de validar Vista Partner."
+          : "For 100% accurate metrics use <b>Presentation 2.0</b> while we finish validating Partner View."}</div>
+      </div>
+      <button onclick="switchTab('present2')" style="flex:0 0 auto;background:#FF0000;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:.82rem;font-weight:700;cursor:pointer;white-space:nowrap">${_pvEs ? "Ir a Presentación 2.0 →" : "Go to Presentation 2.0 →"}</button>
+    </div>`;
+
   // Marca de render unica para evitar race conditions de setTimeout
   const renderId = (PARTNER_VIEW_STATE._renderId = (PARTNER_VIEW_STATE._renderId || 0) + 1);
-  el.innerHTML = html;
+  el.innerHTML = pvBanner + html;
 
   // Construir charts despues de innerHTML. Si llega otro render antes,
   // el renderId cambia y el setTimeout previo se ignora.
@@ -544,7 +560,7 @@ function _pvExecutiveSummary(ctx) {
       cityRows.forEach(r => {
         const k = `${r.date}`;
         const ex = dedup.get(k) || { partner, date: r.date, activeDrivers: 0, newPartner: 0, newService: 0, reactivated: 0, supplyHours: 0 };
-        if (r.activeDrivers > ex.activeDrivers) ex.activeDrivers = r.activeDrivers;
+        ex.activeDrivers += r.activeDrivers || 0;   // AD = suma de sub-flotas (fleetroom), no MAX
         ex.newPartner   += r.newPartner;
         ex.newService   += r.newService;
         ex.reactivated  += r.reactivated;
@@ -602,18 +618,16 @@ function _pvExecutiveSummary(ctx) {
   }
 
   // ── 5. Tendencia AD mediano plazo (avg 3 ultimos vs 3 anteriores) ────────
-  // Construir serie agregada del partner por fecha (total cross-city, dedup CLID por ciudad/fecha).
+  // Serie del partner por fecha = SUMA de todas sus filas (sub-flotas fleetroom + ciudades).
+  // Antes deduplicaba por clid|city|date quedándose con la PRIMERA fila → sub-contaba el AD
+  // desde el split de fleetrooms (2026-03), inflando volatilidad y el % de pico y disparando
+  // falsas señales de caída (contradecía el MoM que sí suma). dropLegacyAggregateRows ya quitó
+  // los agregados legacy, así que sumar = total correcto (igual que _pvSeriesByPartnerCity).
   // NO emite card aquí: alimenta adTrend, que el bloque unificado (#5b) combina con wowAD.
   let adTrend = null;  // { chg, avgL, avgP } cuando hay >= 6 periodos
   if (dates.length >= 6) {
     const adByDate = {};
-    const seen = new Set();
-    partnerRows.forEach(r => {
-      const dk = `${r.clid}|${r.city}|${r.date}`;
-      if (seen.has(dk)) return;
-      seen.add(dk);
-      adByDate[r.date] = (adByDate[r.date] || 0) + (r.activeDrivers || 0);
-    });
+    partnerRows.forEach(r => { adByDate[r.date] = (adByDate[r.date] || 0) + (r.activeDrivers || 0); });
     const serieAD = dates.map(d => adByDate[d] || 0);
     const last3 = serieAD.slice(-3);
     const prev3 = serieAD.slice(-6, -3);
@@ -1332,6 +1346,7 @@ function _pvConvData(selectedPartner) {
     .filter(r => (r.activeDrivers || 0) >= F.adMin && (r.activeDrivers || 0) <= F.adMax && (r.newDrivers || 0) >= F.ndMin)
     .slice().sort((a, b) => (b.activeDrivers || 0) - (a.activeDrivers || 0));
   const cols = ["firstOrder", "n5", "n10", "n25", "n50", "n100"];
+  // Cohorte = promedio SIMPLE de la tasa de conversión de cada partner (cada uno pesa igual).
   const avgOf = (rows, k) => { const v = rows.map(r => r[k]).filter(x => x != null && !isNaN(x)); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
   const cohortAvg = rows => { const o = {}; cols.forEach(k => o[k] = avgOf(rows, k)); return o; };
   const top5  = cohortAvg(pop.slice(0, 5));
@@ -1542,8 +1557,8 @@ function _pvScopeCohorts(scopeCity, dates) {
   const lastDate = dates[dates.length - 1];
   const rows = ((STATE._byDate && STATE._byDate.get(lastDate)) || STATE.rawData.filter(r => r.date === lastDate))
     .filter(r => !scopeCity || r.city === scopeCity);
-  const byPC = {};   // partner|city -> max AD (snapshot)
-  rows.forEach(r => { const k = `${r.partner}|||${r.city}`; if ((r.activeDrivers || 0) > (byPC[k] || 0)) byPC[k] = r.activeDrivers || 0; });
+  const byPC = {};   // partner|city -> AD total (suma de sub-flotas fleetroom)
+  rows.forEach(r => { const k = `${r.partner}|||${r.city}`; byPC[k] = (byPC[k] || 0) + (r.activeDrivers || 0); });
   const adByPartner = {};
   Object.entries(byPC).forEach(([k, v]) => { const p = k.split("|||")[0]; adByPartner[p] = (adByPartner[p] || 0) + v; });
   const ranked = Object.entries(adByPartner).sort((a, b) => b[1] - a[1]).map(e => e[0]);
@@ -1563,7 +1578,7 @@ function _pvCohortAvg(cohortPartners, scopeCity, dates, getter) {
       const e = ser[i];
       if (e && e._present) { s += getter(e) || 0; count++; }
     });
-    return count > 0 ? s / count : 0;
+    return count > 0 ? s / count : null;   // sin miembros con dato esa fecha → hueco (no punto 0 falso)
   });
 }
 
@@ -1598,12 +1613,10 @@ function _pvCmpLine(elId, labels, partnerSeries, cohortLines, color, fmtFn, mone
     chart: { type: "line", height: 210, toolbar: { show: false }, animations: { enabled: false }, fontFamily: "inherit" },
     stroke: { curve: "smooth", width: [2.5, ...cohortLines.map(() => 2)], dashArray: [0, ...cohortLines.map(() => 5)] },
     colors, markers: { size: 3 },
-    // Etiquetas en TODAS las series (partner + cohortes) para que los promedios
-    // sean legibles tambien al exportar a PDF. Cada etiqueta del color de su
-    // linea (partner en negro), con halo blanco via CSS .pv-chart.
-    // En modo compartir se ocultan SOLO las de las líneas de cohorte (seriesIndex
-    // > 0); la del partner (índice 0 = su propia serie) sigue visible.
-    dataLabels: { enabled: true, formatter: (v, opts) => (share && opts && opts.seriesIndex > 0) ? "" : pref + fn(v), style: { fontSize: "10px", colors: ["#111", ...cohortLines.map(l => l.color)], fontWeight: 700 }, background: { enabled: false }, offsetY: -10 },
+    // Etiquetas SOLO en la línea del partner (seriesIndex 0). Las etiquetas de las líneas de
+    // cohorte se encimaban con las del partner y entre sí (ilegible, sobre todo cuando el partner
+    // va cerca del promedio). El valor del cohorte sigue disponible en el tooltip y la leyenda.
+    dataLabels: { enabled: true, formatter: (v, opts) => (opts && opts.seriesIndex > 0) ? "" : pref + fn(v), style: { fontSize: "10px", colors: ["#111", ...cohortLines.map(l => l.color)], fontWeight: 700 }, background: { enabled: false }, offsetY: -10 },
     xaxis: { categories: labels, labels: { style: { fontSize: "9px" }, rotate: -30 }, axisBorder: { show: false }, axisTicks: { show: false } },
     yaxis: yAxis,
     // padding.left amplio: separa el primer dataLabel de los números del eje Y;
@@ -1723,6 +1736,10 @@ function _pvBuildScopeCharts(partner, scopeCity, idPrefix, dates, recibeLeads) {
   const tog = PARTNER_VIEW_STATE.cohort || {};
   const anyOn = PV_COHORT_BANDS.some(b => tog[b.key]);
   const cohorts = anyOn ? _pvScopeCohorts(scopeCity, dates) : null;
+  // El cohorte INCLUYE al partner seleccionado (ej. viendo Lizzo, Lizzo cuenta dentro de su
+  // Top 5): "Prom Top N" = promedio del grupo del que el partner forma parte. La superposición
+  // de líneas se resuelve mostrando etiquetas SOLO en la línea del partner (ver _pvCmpLine),
+  // no excluyéndolo del promedio.
   const lines = getter => {
     if (!cohorts) return [];
     const arr = [];
@@ -1731,6 +1748,8 @@ function _pvBuildScopeCharts(partner, scopeCity, idPrefix, dates, recibeLeads) {
       const members = cohorts.ranked.slice(b.range[0], b.range[1]);
       if (!members.length) return;
       const label = PARTNER_VIEW_STATE.lang === "en" ? b.en : b.es;
+      // Promedio SIMPLE de los partners del cohorte (cada uno pesa igual), tanto para
+      // métricas aditivas como para tasas (s.shCar/s.accept = tasa ya ponderada del partner).
       arr.push({ name: label, data: _pvCohortAvg(members, scopeCity, dates, getter), color: b.color });
     });
     return arr;
@@ -1741,7 +1760,8 @@ function _pvBuildScopeCharts(partner, scopeCity, idPrefix, dates, recibeLeads) {
   _pvCmpLine(`pvs_${idPrefix}_trips`, labels, { name: _t("trips"), data: series.map(s => s.trips) }, lines(s => s.trips), "#10b981", fmtSmart);
   _pvCmpLine(`pvs_${idPrefix}_commission`, labels, { name: _t("commission"), data: series.map(s => s.commission) }, lines(s => s.commission), "#06b6d4", fmtSmart, true);
   _pvCmpLine(`pvs_${idPrefix}_gmv`, labels, { name: "GMV", data: series.map(s => s.gmv) }, lines(s => s.gmv), "#f59e0b", fmtSmart, true);
-  // SH por auto activo (horas, 1 decimal) y Tasa de aceptación (fracción 0-1 → %).
+  // SH por auto activo (horas, 1 decimal) y Tasa de aceptación (fracción 0-1 → %). Cohorte =
+  // promedio SIMPLE de la tasa de cada partner (s.shCar/s.accept), no ponderado (decisión del KAM).
   _pvCmpLine(`pvs_${idPrefix}_shcar`, labels, { name: _t("shPerCar"), data: series.map(s => s.shCar) }, lines(s => s.shCar), "#0891b2", v => (v || 0).toFixed(1));
   _pvCmpLine(`pvs_${idPrefix}_accept`, labels, { name: _t("acceptRate"), data: series.map(s => s.accept) }, lines(s => s.accept), "#db2777", v => ((v || 0) * 100).toFixed(1) + "%");
   const tbl = document.getElementById(`pvs_${idPrefix}_nr_tbl`);
