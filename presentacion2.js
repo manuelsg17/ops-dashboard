@@ -58,6 +58,7 @@ function p2IsFleetMode(partner) {
 const P2_SLIDES = [
   { es: "Carátula",       en: "Cover",          charts: false, build: (p, d, i) => buildSlide2Cover(p, d) },
   { es: "Avance vs Meta", en: "Goal vs Target", charts: false, build: (p, d, i) => buildSlide2Avance(p, i) },
+  { es: "Proyección",     en: "Forecast",       charts: true,  noPdf: true,  build: (p, d, i) => buildSlide2Forecast(p, d, i), chartFn: (p, d, root) => buildSlide2ForecastCharts(p, d, root) },
   { es: "KPIs por Nivel", en: "KPIs by Level",  charts: true,  build: (p, d, i) => buildSlide2Matrix(p, d, i), chartFn: (p, d, root) => buildSlide2MatrixCharts(p, d, root) },
   { es: "Data Raw (#)",   en: "Data Raw (#)",   charts: false, build: (p, d, i) => buildSlide2Raw(p, d, false, i) },
   { es: "Data Raw (%)",   en: "Data Raw (%)",   charts: false, build: (p, d, i) => buildSlide2Raw(p, d, true, i) },
@@ -1155,6 +1156,294 @@ function buildSlide2Alerts(partner, dates, idx) {
   </div>`;
 }
 
+// ── SLIDE: PROYECCIÓN (pronóstico 3 meses + palancas de crecimiento) ───────────
+// Usa el motor puro forecast.js sobre la serie MENSUAL deduplicada (STATE.rawDataMensual
+// vía p2Vals). Ignora el `dates` tail-4 del deck y toma TODO el historial con p2AllDates().
+// Solo tiene sentido en escala mensual → gate como buildSlide2Alerts.
+const P2_FC_KPIS = [
+  { key: "ad",    es: "Conductores Activos", en: "Active Drivers", color: "#FF0000", kind: "num"  },
+  { key: "sh",    es: "Horas de Conexión",   en: "Supply Hours",   color: "#8b5cf6", kind: "numK" },
+  { key: "gmv",   es: "GMV",                 en: "GMV",            color: "#0ea5e9", kind: "money" },
+  { key: "trips", es: "Viajes",              en: "Trips",          color: "#10b981", kind: "num"  }
+];
+function _p2FcFmt(kind, v) {
+  if (v == null || isNaN(v)) return "—";
+  if (kind === "money") return "$" + fmtSmart(v);
+  if (kind === "numK")  return fmtSmart(v);
+  return fmt(Math.round(v));
+}
+// Serie mensual por KPI (Perú = Σ ciudades del partner) + inputs de palancas, desde el
+// dataset activo. p2Vals suma ciudades por mes; para AD/autos (snapshot) la suma de niveles
+// por ciudad ES el nivel Perú; para SH/GMV/viajes/N+R (flujos) la suma es el total.
+function p2ForecastBundle(partner) {
+  const months = p2AllDates();
+  const g = fn => p2Vals(partner, null, months, fn);
+  const kpis = {
+    ad:    g(r => r.activeDrivers || 0),
+    sh:    g(r => r.supplyHours   || 0),
+    gmv:   g(r => r.gmv           || 0),
+    trips: g(r => r.trips         || 0)
+  };
+  const leversInput = {
+    ad: kpis.ad, sh: kpis.sh, trips: kpis.trips,
+    newP:  g(r => r.newPartner  || 0),
+    newS:  g(r => r.newService  || 0),
+    react: g(r => r.reactivated || 0),
+    regP1:  g(r => r.newProfilesPartnerReg1   || 0), regP10: g(r => r.newProfilesPartnerReg10  || 0),
+    regP50: g(r => r.newProfilesPartnerReg50  || 0), regP100:g(r => r.newProfilesPartnerReg100 || 0),
+    regS1:  g(r => r.newProfilesServiceReg1   || 0), regS10: g(r => r.newProfilesServiceReg10  || 0),
+    regS50: g(r => r.newProfilesServiceReg50  || 0), regS100:g(r => r.newProfilesServiceReg100 || 0)
+  };
+  return { months, kpis, leversInput };
+}
+function _p2FcDropLast(inp) { const o = {}; for (const k in inp) o[k] = Array.isArray(inp[k]) ? inp[k].slice(0, -1) : inp[k]; return o; }
+// Meta de AD del mes más reciente cargado (Σ ciudades) para las "palancas hacia la meta".
+function p2ForecastTargetAD(partner) {
+  const rows = (STATE.metasData || []).filter(m => m.partner === partner && m.mA);
+  if (!rows.length) return null;
+  let best = null;
+  rows.forEach(m => { const o = _metasMesOrden(m.mes); if (!best || o > best.o) best = { o, mes: m.mes }; });
+  const sum = rows.filter(m => m.mes === best.mes).reduce((s, m) => s + (m.mA || 0), 0);
+  return sum || null;
+}
+// Cómputo compartido por build y chartFn (mismo patrón que p2Metrics en matriz/charts).
+function p2ForecastCompute(partner) {
+  const b = p2ForecastBundle(partner);
+  const partial = fcIsPartialLast(b.kpis.ad);
+  const drop = partial && !PRESENT2_STATE.fcInclPartial;
+  const histMonths = drop ? b.months.slice(0, -1) : b.months;
+  const lastMonth = histMonths[histMonths.length - 1];
+  const futureMonths = lastMonth ? fcFutureMonths(lastMonth, 3) : [];
+  const fc = {};
+  P2_FC_KPIS.forEach(k => { fc[k.key] = fcForecastSeries(b.kpis[k.key], { horizon: 3, dropLast: drop }); });
+  const levers = fcGrowthLevers(drop ? _p2FcDropLast(b.leversInput) : b.leversInput);
+  const target = p2ForecastTargetAD(partner);
+  return { months: b.months, histMonths, futureMonths, drop, partial, fc, levers, target };
+}
+
+function _p2FcMiniCard(label, value, hint, color, tip) {
+  return `<div ${tip ? `title="${escapeHTML(tip)}"` : ""} style="flex:1;min-width:0;background:#fafafa;border:1px solid #f0f0f0;border-radius:8px;padding:7px 9px;display:flex;flex-direction:column;gap:1px${tip ? ";cursor:help" : ""}">
+    <div style="font-size:.55rem;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:.2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(label)}${tip ? ` <span style="color:#bbb;font-weight:900">ⓘ</span>` : ""}</div>
+    <div style="font-weight:900;font-size:1rem;color:${color || "#111"}">${value}</div>
+    <div style="font-size:.56rem;color:#999;line-height:1.15">${hint}</div>
+  </div>`;
+}
+function _p2FcPalancasHTML(C, es) {
+  const L = C.levers;
+  if (!L) return "";
+  const cards = [];
+  // 1) Retención — cuántos de tus activos del mes pasado siguen activos este mes.
+  const ret = L.retention;
+  const retTxt = ret != null ? (ret * 100).toFixed(1) + "%" : "—";
+  const retCol = ret == null ? "#111" : ret >= 0.85 ? "#10b981" : ret >= 0.70 ? "#f59e0b" : "#FF0000";
+  const ret100 = ret != null ? Math.round(ret * 100) : null;
+  const churnTxt = L.churn != null ? (es ? ` · ${fmt(Math.round(L.churn))} se fueron` : ` · ${fmt(Math.round(L.churn))} left`) : "";
+  cards.push(_p2FcMiniCard(es ? "Retención" : "Retention", retTxt,
+    ret100 != null ? (es ? `${ret100} de 100 siguen${churnTxt}` : `${ret100} of 100 stay${churnTxt}`) : "", retCol,
+    es ? "De tus conductores activos del mes pasado, cuántos siguen activos este mes. Es la palanca más barata: menos fugas = necesitás menos nuevos para crecer."
+       : "Of last month's active drivers, how many stay active this month. Cheapest lever: fewer leaks = fewer new drivers needed to grow."));
+  // 2) Nuevos + Reactivados — tu motor de entrada este mes.
+  cards.push(_p2FcMiniCard(es ? "Nuevos + React." : "New + React.",
+    fmt(Math.round(L.newT + L.react)),
+    L.leadDependency != null ? (es ? `${(L.leadDependency * 100).toFixed(0)}% vía leads Yango` : `${(L.leadDependency * 100).toFixed(0)}% via Yango leads`) : (es ? "sumados este mes" : "added this month"), "#111",
+    es ? "Conductores que ingresaron o reactivaste este mes (nuevos del partner + de leads Yango + reactivados). Tu motor de entrada."
+       : "Drivers you added or reactivated this month (partner-sourced + Yango leads + reactivated). Your intake engine."));
+  // 3) Cuello del embudo — la etapa registro→viajes con MENOR conversión (auto-seleccionada).
+  if (L.funnel.hasData && L.funnel.bottleneck) {
+    const bn = L.funnel.bottleneck;
+    const pct = (bn.conv * 100).toFixed(0);
+    const stg = es ? bn.es : bn.en;
+    cards.push(_p2FcMiniCard(es ? "Cuello del embudo" : "Funnel bottleneck",
+      pct + "%", stg + (es ? " · etapa más floja" : " · weakest stage"), "#f97316",
+      es ? `Recorrido de un conductor nuevo: se registra → hace 10, 50 y 100 viajes. El "cuello" es la etapa donde MÁS se caen: acá solo ${pct}% avanza en "${stg}". Es tu mayor fuga — mejorarla sube tus activos sin traer más gente.`
+         : `A new driver's journey: signs up → does 10, 50, 100 trips. The bottleneck is where most drop off: here only ${pct}% advance at "${stg}". Your biggest leak — fixing it raises actives without more intake.`));
+  }
+  // 4) Horas por conductor (SH/AD) — aprovechamiento de la base.
+  const shad = L.prod.shPerAd, tr = L.prod.shPerAdTrend;
+  cards.push(_p2FcMiniCard(es ? "Horas / conductor" : "Hours / driver",
+    shad != null ? shad.toFixed(1) + "h" : "—",
+    tr != null ? ((tr >= 0 ? "▲ +" : "▼ ") + tr.toFixed(0) + "% vs 3m") : (es ? "al mes" : "per month"),
+    tr == null ? "#111" : tr >= 0 ? "#10b981" : "#FF0000",
+    es ? "Horas de conexión promedio por conductor activo en el mes. Mide qué tan aprovechada está tu base: si cae, tenés gente registrada pero poco activa."
+       : "Average supply hours per active driver in the month. How used your base is: if it falls, drivers are registered but barely active."));
+  // 5) Hacia la meta (si el partner tiene meta de AD cargada). Muestra los NUEVOS+REACT
+  // que hacen falta para el nivel meta CONTANDO la rotación: aunque la meta de AD sea ~igual
+  // a hoy, cada mes se van conductores (retención<100%) y hay que reponerlos. Antes se
+  // disparaba por gap de NIVEL (meta==hoy → gap 0 → "en meta" engañoso, aunque falten N+R).
+  const t = C.target ? fcLeversToTarget(L, C.target) : null;
+  if (t) {
+    const goalLbl = es ? `Para tu meta (${fmt(Math.round(C.target))} AD)` : `To hit goal (${fmt(Math.round(C.target))} AD)`;
+    const need = Math.round(t.newNeeded);
+    const now  = Math.round(t.newNow || 0);
+    const shortBy = need - now;
+    const onTrack = shortBy <= 0;
+    const retA = t.retNow    != null ? (t.retNow    * 100).toFixed(0) + "%" : "—";
+    const retB = t.retNeeded != null ? (t.retNeeded * 100).toFixed(0) + "%" : "—";
+    cards.push(_p2FcMiniCard(goalLbl,
+      (onTrack ? "✓ " : "") + fmt(need) + (es ? " N+R/mes" : " N+R/mo"),
+      onTrack ? (es ? `tu ritmo (~${fmt(now)}) alcanza` : `your pace (~${fmt(now)}) suffices`)
+              : (es ? `hoy ~${fmt(now)} · faltan ${fmt(shortBy)}` : `today ~${fmt(now)} · short ${fmt(shortBy)}`),
+      onTrack ? "#10b981" : "#0891b2",
+      es ? `Aunque tu meta de AD (${fmt(Math.round(C.target))}) sea parecida a hoy (${fmt(Math.round(L.adNow))}), cada mes se te van conductores por rotación (retención ${retA}). Para sostener/llegar a la meta necesitás ~${fmt(need)} nuevos+reactivados en el mes; hoy promediás ~${fmt(now)}${shortBy > 0 ? ` (te faltan ~${fmt(shortBy)})` : ""}. Alternativa: subir la retención de ${retA} a ${retB}.`
+         : `Even if your AD goal (${fmt(Math.round(C.target))}) is close to today (${fmt(Math.round(L.adNow))}), churn takes drivers each month (retention ${retA}). To hold/reach it you need ~${fmt(need)} new+reactivated in the month; today you average ~${fmt(now)}${shortBy > 0 ? ` (short ~${fmt(shortBy)})` : ""}. Alternative: raise retention from ${retA} to ${retB}.`));
+  }
+  const title = es ? "Palancas de crecimiento" : "Growth levers";
+  const subt = es ? "Lo que mueve tu # de Conductores Activos. La proyección de arriba asume que se mantienen — mejorá una y sube."
+                  : "What moves your Active-Driver count. The forecast above assumes they hold — improve one and it rises.";
+  return `<div style="flex:0 0 auto;margin-top:6px">
+    <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px;flex-wrap:wrap">
+      <span style="font-size:.6rem;font-weight:800;color:#888;text-transform:uppercase;letter-spacing:.4px">${title}</span>
+      <span style="font-size:.56rem;color:#aaa">${escapeHTML(subt)}</span>
+    </div>
+    <div style="display:flex;gap:6px">${cards.join("")}</div>
+  </div>`;
+}
+// Detalle solo-vivo para el KAM (NO va al PDF): método + precisión por KPI.
+function _p2FcDetailHTML(C, es) {
+  const chips = P2_FC_KPIS.map(k => {
+    const r = C.fc[k.key];
+    const acc = r.mape != null ? "±" + r.mape.toFixed(0) + "%" : "—";
+    return `<span style="display:inline-block;background:#f4f4f4;border-radius:6px;padding:2px 7px;margin:0 4px 2px 0;font-size:.58rem;color:#555"><b>${escapeHTML(es ? k.es : k.en)}</b>: ${escapeHTML(fcMethodName(r.method, es))} · ${acc}</span>`;
+  }).join("");
+  return `<div style="flex:0 0 auto;margin-top:6px;border-top:1px dashed #eee;padding-top:5px">
+    <div style="font-size:.55rem;color:#bbb;font-weight:700;text-transform:uppercase;margin-bottom:3px">${es ? "Detalle KAM (no se incluye en el PDF)" : "KAM detail (not in PDF)"}</div>
+    <div>${chips}</div>
+  </div>`;
+}
+function buildSlide2Forecast(partner, dates, idx) {
+  const es = PRESENT2_STATE.lang === "es";
+  const shell = inner => `<div style="width:100%;height:100%;background:#fff;padding:12px 14px;display:flex;flex-direction:column;overflow:hidden">
+    ${p2BrandHeader(partner, (es ? "Proyección · próximos 3 meses" : "Forecast · next 3 months"),
+      es ? "Qué esperar si la tendencia sigue igual — y qué mover para crecer" : "What to expect if the trend holds — and what to move to grow")}
+    ${inner}
+    ${p2BrandFooter(idx)}
+  </div>`;
+  if (STATE.curMode !== "mensual") {
+    return shell(`<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:.9rem;text-align:center;padding:0 40px">${es ? "El pronóstico usa la serie MENSUAL. Cambia la escala a Mensual (arriba) para ver la proyección." : "The forecast uses the MONTHLY series. Switch the scale to Monthly to see it."}</div>`);
+  }
+  const C = p2ForecastCompute(partner);
+  if (!C || C.histMonths.length < 4) {
+    return shell(`<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:.9rem;text-align:center;padding:0 40px">${es ? "Se necesitan al menos 4 meses de historia para proyectar." : "At least 4 months of history are needed to forecast."}</div>`);
+  }
+  const cards = P2_FC_KPIS.map(k => {
+    const r = C.fc[k.key];
+    const last = r.history[r.history.length - 1];
+    const f3 = r.forecast[r.forecast.length - 1];
+    const growth = last ? (f3 - last) / last * 100 : null;
+    const gcol = growth == null ? "#999" : growth >= 0 ? "#10b981" : "#FF0000";
+    const gtxt = growth == null ? "" : (growth >= 0 ? "+" : "") + growth.toFixed(1) + "%";
+    const acc = r.mape != null ? "±" + r.mape.toFixed(0) + "%" : "—";
+    // Cada tarjeta es una celda del grid 2×2 (altura acotada por grid-template-rows:1fr) →
+    // el canvas nunca se desborda sobre las palancas de abajo.
+    return `<div style="min-width:0;min-height:0;overflow:hidden;background:#fff;border:1px solid #f0f0f0;border-radius:8px;padding:5px 8px;display:flex;flex-direction:column">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:4px">
+        <span style="display:flex;align-items:center;gap:5px;min-width:0"><span style="width:7px;height:7px;border-radius:50%;background:${k.color};flex-shrink:0"></span><span style="font-size:.6rem;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:.2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(es ? k.es : k.en)}</span></span>
+        <span style="font-size:.62rem;font-weight:800;color:${gcol};background:${gcol}18;padding:1px 6px;border-radius:6px">${gtxt}</span>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:6px">
+        <span style="font-weight:900;font-size:.9rem;color:#111">${_p2FcFmt(k.kind, last)}</span>
+        <span style="font-size:.58rem;color:#bbb">${es ? "hoy → 3m" : "now → 3m"}</span>
+        <span style="font-weight:900;font-size:.9rem;color:${k.color}">${_p2FcFmt(k.kind, f3)}</span>
+        <span style="font-size:.54rem;color:#ccc;margin-left:auto">${es ? "precisión" : "accuracy"} ${acc}</span>
+      </div>
+      <div style="flex:1;min-height:0;position:relative;width:100%"><canvas id="p2fc_${k.key}" style="width:100%;height:100%"></canvas></div>
+    </div>`;
+  }).join("");
+  const partialNote = C.partial ? `<div style="flex:0 0 auto;background:#fffbeb;border:1px solid #fcd34d;border-radius:7px;padding:5px 9px;margin-bottom:5px;font-size:.62rem;color:#92400e;display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <span>⚠️ ${es ? "El último mes parece incompleto y se excluyó del pronóstico." : "The last month looks incomplete and was excluded from the forecast."}</span>
+      ${PRESENT2_STATE._exporting ? "" : `<button onclick="present2ToggleInclPartial()" style="border:1px solid #f59e0b;background:${PRESENT2_STATE.fcInclPartial ? "#f59e0b" : "#fff"};color:${PRESENT2_STATE.fcInclPartial ? "#fff" : "#b45309"};border-radius:6px;padding:2px 8px;font-size:.58rem;font-weight:700;cursor:pointer;white-space:nowrap">${PRESENT2_STATE.fcInclPartial ? (es ? "Excluir" : "Exclude") : (es ? "Incluir último mes" : "Include last month")}</button>`}
+    </div>` : "";
+  // Leyenda + encuadre en lenguaje simple (qué es la proyección). Swatches inline-block
+  // (seguros en el PDF). Incluye la validación (error del backtest) para dar confianza.
+  const mapes = P2_FC_KPIS.map(k => C.fc[k.key].mape).filter(v => v != null);
+  const avg = mapes.length ? mapes.reduce((s, v) => s + v, 0) / mapes.length : null;
+  const nBack = Math.min(6, C.histMonths.length - Math.max(4, C.histMonths.length - 6));
+  const sw = (style) => `<span style="display:inline-block;width:16px;height:0;border-top:2px ${style};vertical-align:middle;margin-right:5px"></span>`;
+  const swSolid = sw("solid #888"), swDash = sw("dashed #888"), swUp = sw("dashed #10b981"), swDown = sw("dashed #ef4444");
+  const legend = `<div style="flex:0 0 auto;display:flex;align-items:center;flex-wrap:wrap;margin-bottom:5px;font-size:.62rem;color:#666">
+      <span style="display:inline-block;margin-right:14px;white-space:nowrap">${swSolid}${es ? `Real (${C.histMonths.length} meses)` : `Actual (${C.histMonths.length} mo.)`}</span>
+      <span style="display:inline-block;margin-right:14px;white-space:nowrap">${swDash}${es ? "Proyección esperada" : "Expected forecast"}</span>
+      <span style="display:inline-block;margin-right:14px;white-space:nowrap;color:#059669">${swUp}${es ? "Si crece (máx)" : "If grows (max)"}</span>
+      <span style="display:inline-block;margin-right:14px;white-space:nowrap;color:#dc2626">${swDown}${es ? "Si decrece (mín)" : "If drops (min)"}</span>
+      ${avg != null ? `<span style="display:inline-block;margin-right:14px;color:#10b981;font-weight:700;white-space:nowrap">✓ ${es ? `Validado con tus ${nBack} meses más recientes · ±${avg.toFixed(0)}%` : `Validated on your ${nBack} most recent months · ±${avg.toFixed(0)}%`}</span>` : ""}
+      <span style="margin-left:auto;color:#999;font-style:italic">${es ? "Al ritmo actual — mové las palancas ↓ para cambiarla" : "At current pace — move the levers ↓ to change it"}</span>
+    </div>`;
+  const detail = PRESENT2_STATE._exporting ? "" : _p2FcDetailHTML(C, es);
+  const expBanner = `<div style="flex:0 0 auto;background:#fef2f2;border:1px solid #fca5a5;border-radius:7px;padding:5px 10px;margin-bottom:6px;font-size:.62rem;color:#b91c1c;font-weight:700;display:flex;align-items:center;gap:8px">
+      <span style="font-size:.9rem;line-height:1">🧪</span>
+      <span>${es ? "EXPERIMENTAL · en validación — no compartir con partners aún. No se incluye en el PDF." : "EXPERIMENTAL · under validation — do not share with partners yet. Not included in the PDF."}</span>
+    </div>`;
+  return shell(`
+    ${expBanner}
+    ${partialNote}
+    ${legend}
+    <div style="flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:8px">${cards}</div>
+    ${_p2FcPalancasHTML(C, es)}
+    ${detail}`);
+}
+// Gráfico por KPI: historia (sólida) + proyección (punteada) + banda sombreada.
+function p2ForecastChart(canvasId, labels, hist, fcObj, color, kind, root) {
+  const canvas = root ? root.querySelector(`#${canvasId}`) : document.getElementById(canvasId);
+  if (!canvas || typeof Chart === "undefined") return;
+  const nH = hist.length, H = fcObj.forecast.length;
+  const pad = n => Array(n).fill(null);
+  const histData = hist.concat(pad(H));
+  // La proyección y la banda arrancan en el último punto real (para que la línea conecte).
+  const bridge = nH ? [hist[nH - 1]] : [];
+  const fcData = pad(nH - 1).concat(bridge, fcObj.forecast);
+  const upper  = pad(nH - 1).concat(bridge, fcObj.upper);
+  const lower  = pad(nH - 1).concat(bridge, fcObj.lower);
+  const es = PRESENT2_STATE.lang === "es";
+  const lastIdx = labels.length - 1;
+  const fmtV = v => v == null ? "" : (kind === "money" ? "$" + fmtSmart(v) : kind === "numK" ? fmtSmart(v) : fmt(Math.round(v)));
+  const UP = "#10b981", DN = "#ef4444";   // verde = si crece (máx) · rojo = si decrece (mín)
+  const chart = new Chart(canvas, {
+    type: "line",
+    data: { labels: labels.map(d2s), datasets: [
+      // Escenario ALTO ("si crezco / máximo"): línea verde punteada + banda tenue hacia el bajo.
+      // Etiqueta solo en el último mes (el techo del rango) para no saturar.
+      { label: "hi", data: upper, borderColor: UP, backgroundColor: color + "12", borderWidth: 1, borderDash: [2, 3], pointRadius: 0, fill: "+1", tension: 0.25, spanGaps: true,
+        datalabels: { display: c => c.dataIndex === lastIdx, align: "top", anchor: "end", offset: 1, color: UP, font: { size: 8, weight: "bold" }, formatter: v => v == null ? "" : (es ? "máx " : "max ") + fmtV(v) } },
+      // Escenario BAJO ("si decrezco / mínimo"): línea roja punteada.
+      { label: "lo", data: lower, borderColor: DN, borderWidth: 1, borderDash: [2, 3], pointRadius: 0, fill: false, tension: 0.25, spanGaps: true,
+        datalabels: { display: c => c.dataIndex === lastIdx, align: "bottom", anchor: "start", offset: 1, color: DN, font: { size: 8, weight: "bold" }, formatter: v => v == null ? "" : (es ? "mín " : "min ") + fmtV(v) } },
+      // Real (historia) — sin etiquetas (18 puntos saturarían).
+      { label: "real", data: histData, borderColor: color, backgroundColor: "transparent", borderWidth: 2.2, pointRadius: 2, pointBackgroundColor: color, tension: 0.25, fill: false, spanGaps: false,
+        datalabels: { display: false } },
+      // Proyección ESPERADA (punteada, color del KPI): tag del número en CADA mes proyectado.
+      { label: "proy", data: fcData, borderColor: color, borderDash: [5, 4], borderWidth: 2.4, pointRadius: 3, pointBackgroundColor: "#fff", pointBorderColor: color, tension: 0.25, fill: false, spanGaps: true,
+        datalabels: { display: c => c.dataIndex >= nH, align: "top", anchor: "center", offset: 3, color: color, font: { size: 8.5, weight: "bold" }, formatter: v => v == null ? "" : fmtV(v) } }
+    ] },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      layout: { padding: { top: 16, right: 28, bottom: 6, left: 2 } },   // aire para los tags máx/mín/esperado
+      plugins: {
+        legend: { display: false },
+        tooltip: { filter: c => ["real", "proy", "hi", "lo"].includes(c.dataset.label), callbacks: { label: c => {
+          const m = { real: es ? "real" : "actual", proy: es ? "esperado" : "expected", hi: es ? "si crece" : "if grows", lo: es ? "si decrece" : "if drops" }[c.dataset.label] || "";
+          return `${m}: ${fmtV(c.raw)}`; } } },
+        datalabels: { clamp: true, clip: false }
+      },
+      scales: {
+        x: { ticks: { font: { size: 7 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 7 }, grid: { display: false } },
+        y: { beginAtZero: false, ticks: { font: { size: 7 }, maxTicksLimit: 4, callback: v => fmtV(v) }, grid: { color: "#f5f5f5" } }
+      }
+    }
+  });
+  PRESENT2_STATE.charts.push(chart);
+}
+function buildSlide2ForecastCharts(partner, dates, root) {
+  if (STATE.curMode !== "mensual") return;
+  const C = p2ForecastCompute(partner);
+  if (!C || C.histMonths.length < 4) return;
+  const labels = C.histMonths.concat(C.futureMonths);
+  P2_FC_KPIS.forEach(k => {
+    const r = C.fc[k.key];
+    p2ForecastChart(`p2fc_${k.key}`, labels, r.history, r, k.color, k.kind, root);
+  });
+}
+function present2ToggleInclPartial() { PRESENT2_STATE.fcInclPartial = !PRESENT2_STATE.fcInclPartial; renderSlide2(); }
+
 // ── RENDER PRINCIPAL (shell + slide activo) ───────────────────────────────────
 function renderPresent2() {
   ensureIndexes();
@@ -1411,11 +1700,13 @@ async function downloadPresent2PDF() {
   prog.innerHTML = `<div style="width:36px;height:36px;border:4px solid #eee;border-top-color:#FF0000;border-radius:50%;animation:spin .7s linear infinite"></div><div id="p2Msg" style="font-weight:700;color:#333">${es ? "Generando PDF..." : "Generating PDF..."}</div>`;
   document.body.appendChild(prog);
 
-  // Deck combinado: incluye sección Taxi + (si aplica) sección TukTuk.
-  const deck = p2Deck(partner);
+  // Deck combinado: incluye sección Taxi + (si aplica) sección TukTuk. Se EXCLUYEN las
+  // slides marcadas noPdf (ej. Proyección, experimental) hasta validar mejor los datos.
+  const deck = p2Deck(partner).filter(e => !e.def.noPdf);
   PRESENT2_STATE._deckLen = deck.length;
   PRESENT2_STATE._showDsBadge = p2TuktukSectionVisible(partner) && p2HasTaxi(partner);
   const savedDs = PRESENT2_STATE.dataset;
+  PRESENT2_STATE._exporting = true;   // slides omiten bloques solo-vivo (ej. detalle KAM del pronóstico)
   try {
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ orientation: "landscape", unit: "px", format: [1280, 720] });
@@ -1453,6 +1744,7 @@ async function downloadPresent2PDF() {
     document.querySelectorAll('div[data-p2slide="1"]').forEach(d => { try { d.remove(); } catch (e) {} });
   }
   PRESENT2_STATE.dataset = savedDs;   // restaurar el dataset de la vista en vivo
+  PRESENT2_STATE._exporting = false;
   document.body.removeChild(prog);
   // Restaurar la vista en vivo (los charts se destruyeron al inicio)
   try { renderSlide2(); } catch (e) {}
