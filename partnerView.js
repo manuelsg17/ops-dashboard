@@ -7,6 +7,7 @@ const PARTNER_VIEW_STATE = {
   period:  "auto",   // auto | 3m | 6m | 12m | custom
   lang:    "es",     // "es" | "en"  — afecta panel ejecutivo, headers y PDF
   shareMode: false,  // "Solo tendencias": oculta valores en los charts de comparación (para compartir)
+  showLegend: false, // Leyenda de cohortes (integrantes + cifras): OFF por defecto → no va al PDF del partner
   charts:  []        // ApexCharts instances
 };
 
@@ -152,14 +153,14 @@ const PV_I18N = {
                             en: "The uptick is encouraging, but the underlying trend is still down. We suggest confirming the improvement holds 1-2 more {periods} before considering it consolidated, and reviewing what slowed the quarter." },
   prodLowTitle:           { es: "Productividad por conductor por debajo del promedio",
                             en: "Below-average productivity per driver" },
-  prodLowBody:            { es: "Promedio de {hours}h por conductor en el último {period}. El referente esperado es superior a 20h.",
-                            en: "Average of {hours}h per driver in the last {period}. The expected benchmark is above 20h." },
+  prodLowBody:            { es: "Promedio de {hours}h semanales por conductor. El referente esperado es superior a 20h.",
+                            en: "Average of {hours}h weekly per driver. The expected benchmark is above 20h." },
   prodLowAction:          { es: "La base está activa pero podría estar siendo subutilizada. Recomendamos revisar el mix de turnos, las ofertas en hora pico y la calidad del despacho. Estamos a disposición para acompañar.",
                             en: "The base is active but may be underutilized. We recommend reviewing shift mix, peak-hour offers and dispatch quality. We're here to support." },
   prodHighTitle:           { es: "Productividad por conductor sobresaliente",
                             en: "Outstanding productivity per driver" },
-  prodHighBody:            { es: "Promedio de {hours}h por conductor en el último {period}, muy por encima del referente (>35h).",
-                            en: "Average of {hours}h per driver in the last {period}, well above the benchmark (>35h)." },
+  prodHighBody:            { es: "Promedio de {hours}h semanales por conductor, muy por encima del referente (>35h).",
+                            en: "Average of {hours}h weekly per driver, well above the benchmark (>35h)." },
   prodHighAction:          { es: "Excelente trabajo aprovechando la base de conductores. Sería muy valioso compartir qué prácticas (turnos, incentivos, comunicación) están haciendo la diferencia para sostener este nivel.",
                             en: "Excellent work leveraging the driver base. It would be very valuable to share which practices (shifts, incentives, communication) are making the difference to sustain this level." },
   volatilityTitle:         { es: "Alta volatilidad en AD",
@@ -240,7 +241,10 @@ const PV_I18N = {
   cohortTop610:   { es: "Prom. Top 6-10",  en: "Avg Top 6-10" },
   shareBtn:       { es: "Solo tendencias", en: "Trends only" },
   shareHint:      { es: "Oculta solo los valores de las líneas de promedio (Top 5 / Top 6-10); tus datos siguen visibles. Para compartir sin exponer las cifras del cohorte.",
-                    en: "Hides only the average lines' values (Top 5 / Top 6-10); your own data stays visible. To share without exposing cohort figures." }
+                    en: "Hides only the average lines' values (Top 5 / Top 6-10); your own data stays visible. To share without exposing cohort figures." },
+  legendBtn:      { es: "Leyenda", en: "Legend" },
+  legendHint:     { es: "Muestra quiénes integran cada cohorte y las cifras del promedio. Apagado por defecto: dejalo APAGADO al enviar el PDF a los partners.",
+                    en: "Shows who is in each cohort and the figures behind the average. Off by default: keep it OFF when sending the PDF to partners." }
 };
 
 // Resolver i18n: devuelve string en el lang actual.
@@ -477,6 +481,7 @@ function renderPartnerView() {
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 10px">
         <span style="font-size:.72rem;color:#666;font-weight:700">${_t("compareWith")}:</span>
         <span id="pvCohortBar" style="display:flex;gap:8px;flex-wrap:wrap">${PV_COHORT_BANDS.map(b => _pvCohortBtn(b)).join("")}</span>
+        ${_pvLegendBtnHtml()}
         ${_pvShareBtnHtml()}
       </div>
       <div class="section">${_pvScopeBlock(null, "peru")}</div>
@@ -654,8 +659,12 @@ function _pvExecutiveSummary(ctx) {
       }
     }
 
-    // ── 7. Pico historico vs actual ────────────────────────────────────────
-    const peak = Math.max(...serieAD);
+    // ── 7. Pico histórico vs actual ────────────────────────────────────────
+    // Pico sobre TODO el historial cargado del partner (todas las fechas, no solo
+    // la ventana visible) para que "mejor registro histórico" sea literal. adByDate
+    // ya agrega la suma de sub-flotas por fecha en todo el rango del dataset.
+    const allAdByDate = Object.values(adByDate);
+    const peak = allAdByDate.length ? Math.max(...allAdByDate) : 0;
     if (peak > 0 && tADsum > 0) {
       const ratio = (tADsum / peak) * 100;
       if (ratio >= 95) {
@@ -723,21 +732,29 @@ function _pvExecutiveSummary(ctx) {
     }
   }
 
-  // ── 8. Productividad SH/AD ───────────────────────────────────────────────
+  // ── 8. Productividad SH/AD (normalizada a horas SEMANALES por conductor) ───
+  // tSH es el TOTAL del período (semana/mes/día). Se normaliza a equivalente
+  // semanal para que el referente (20h/35h por conductor·semana) signifique lo
+  // mismo en cualquier escala. Antes el umbral fijo se comparaba contra el total
+  // del período → en mensual TODOS superaban 35h ("sobresaliente" falso) y en
+  // diario ninguno llegaba a 20h ("baja" falso).
   if (tADsum > 0 && tSH > 0) {
-    const ratio = tSH / tADsum;  // horas promedio por conductor en el ultimo periodo
+    const weeksPerPeriod = STATE.curMode === "mensual" ? 365.25 / 12 / 7   // ≈4.35 semanas/mes
+                         : STATE.curMode === "diario"  ? 1 / 7             // 1 día = 1/7 de semana
+                         : 1;                                              // semanal: tal cual
+    const ratio = (tSH / tADsum) / weeksPerPeriod;  // horas semanales por conductor
     if (ratio < 20) {
       findings.push({
         sev: "yellow", icon: "🟡",
         title:  _t("prodLowTitle"),
-        body:   _t("prodLowBody",  { hours: ratio.toFixed(1), period }),
+        body:   _t("prodLowBody",  { hours: ratio.toFixed(1) }),
         action: _t("prodLowAction")
       });
     } else if (ratio > 35) {
       findings.push({
         sev: "green", icon: "🟢",
         title:  _t("prodHighTitle"),
-        body:   _t("prodHighBody", { hours: ratio.toFixed(1), period }),
+        body:   _t("prodHighBody", { hours: ratio.toFixed(1) }),
         action: _t("prodHighAction")
       });
     }
@@ -1518,6 +1535,22 @@ function pvShareToggle() {
   else renderPartnerView();
 }
 
+// Botón "Leyenda": muestra/oculta el panel de integrantes + cifras del cohorte.
+// OFF por defecto para que el PDF que se envía al partner no lo incluya; el KAM lo
+// enciende solo para su análisis. Reconstruye los scopes en sitio (sin re-render total).
+function _pvLegendBtnHtml() {
+  const on = !!PARTNER_VIEW_STATE.showLegend;
+  return `<button id="pvLegendBtn" onclick="pvLegendToggle()" class="preset-btn${on ? " active" : ""}" title="${escapeHTML(_t("legendHint"))}" style="flex:0 0 auto;white-space:nowrap;padding:4px 10px;${on ? "background:#0ea5e9;color:#fff;border-color:#0ea5e9" : ""}">📋 ${escapeHTML(_t("legendBtn"))}</button>`;
+}
+
+function pvLegendToggle() {
+  PARTNER_VIEW_STATE.showLegend = !PARTNER_VIEW_STATE.showLegend;
+  const btn = document.getElementById("pvLegendBtn");
+  if (btn) btn.outerHTML = _pvLegendBtnHtml();
+  if (typeof PARTNER_VIEW_STATE._rebuildScopes === "function") PARTNER_VIEW_STATE._rebuildScopes();
+  else renderPartnerView();
+}
+
 // Serie del partner para un scope: scopeCity=null => combinado de TODAS sus
 // ciudades (Perú-General); scopeCity="LIMA" => solo esa ciudad.
 function _pvScopeSeries(partner, scopeCity, dates) {
@@ -1563,6 +1596,87 @@ function _pvScopeCohorts(scopeCity, dates) {
   Object.entries(byPC).forEach(([k, v]) => { const p = k.split("|||")[0]; adByPartner[p] = (adByPartner[p] || 0) + v; });
   const ranked = Object.entries(adByPartner).sort((a, b) => b[1] - a[1]).map(e => e[0]);
   return { ranked, top5: ranked.slice(0, 5), top610: ranked.slice(5, 10) };
+}
+
+// Leyenda + resumen de cohortes: por cada banda ACTIVA (Top 1 / Top 2-3 / Top 4-5 /
+// Top 6-10 / Top 5) lista sus partners integrantes (resaltando al seleccionado) y los
+// números del último período usados para el promedio — así el KAM sabe QUIÉNES entran
+// y CÓMO se calcula la línea de comparación. El promedio es la media SIMPLE de los
+// integrantes (coincide con el último punto de las líneas de cohorte). Respeta "Solo
+// tendencias": en modo compartir oculta integrantes y cifras (no expone al cohorte).
+function _pvCohortLegend(scopeCity, dates) {
+  if (!PARTNER_VIEW_STATE.showLegend) return "";        // OFF por defecto (no va al PDF del partner)
+  const tog = PARTNER_VIEW_STATE.cohort || {};
+  const activeBands = PV_COHORT_BANDS.filter(b => tog[b.key]);
+  if (!activeBands.length) return "";
+  const cohorts = _pvScopeCohorts(scopeCity, dates);
+  const share   = !!PARTNER_VIEW_STATE.shareMode;
+  const isEN    = PARTNER_VIEW_STATE.lang === "en";
+  const sel     = PARTNER_VIEW_STATE.partner;
+  const lastDate = dates[dates.length - 1];
+  const youTag   = isEN ? "you" : "tú";
+  const avgWord  = isEN ? "Average" : "Promedio";
+  const pWord    = "partners";
+  const hidden   = isEN ? "members and figures hidden in sharing mode"
+                        : "integrantes y cifras ocultos en modo compartir";
+  // Valores del último período por partner (misma agregación que los charts).
+  const lastVals = p => {
+    const s = _pvScopeSeries(p, scopeCity, dates);
+    const e = s[s.length - 1] || {};
+    return { ad: e.ad || 0, nr: e.nr || 0, sh: e.sh || 0, trips: e.trips || 0, commission: e.commission || 0, gmv: e.gmv || 0 };
+  };
+  const cols = [
+    { key: "ad",         label: _t("activeDrivers"), fn: v => fmt(v) },
+    { key: "nr",         label: _t("newReactShort"), fn: v => fmt(v) },
+    { key: "sh",         label: _t("supplyHours"),   fn: v => fmtSmart(v) },
+    { key: "trips",      label: _t("trips"),         fn: v => fmtSmart(v) },
+    { key: "commission", label: _t("commission"),    fn: v => "$" + fmtSmart(v) },
+    { key: "gmv",        label: "GMV",               fn: v => "$" + fmtSmart(v) }
+  ];
+  const th = (s, left) => `<th style="text-align:${left ? "left" : "right"};padding:4px 7px;border-bottom:1px solid #eee;background:#fafafa;font-size:.62rem;white-space:nowrap">${escapeHTML(s)}</th>`;
+
+  const blocks = activeBands.map(b => {
+    const members = cohorts.ranked.slice(b.range[0], b.range[1]);
+    if (!members.length) return "";
+    const label = isEN ? b.en : b.es;
+    const head = `<div style="display:flex;align-items:center;gap:7px;margin:10px 0 5px">
+      <span style="width:11px;height:11px;border-radius:2px;background:${b.color};flex:0 0 auto"></span>
+      <span style="font-weight:800;font-size:.8rem;color:#222">${escapeHTML(label)}</span>
+      <span style="font-size:.68rem;color:#999">· ${members.length} ${pWord}${scopeCity ? " · " + escapeHTML(cityLabel(scopeCity)) : ""}</span>
+    </div>`;
+    // En modo compartir: NO exponer integrantes ni cifras del cohorte.
+    if (share) {
+      return head + `<div style="font-size:.7rem;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:5px 9px">🔒 ${hidden}</div>`;
+    }
+    const vals = members.map(lastVals);
+    const avg = {};
+    cols.forEach(c => avg[c.key] = members.length ? vals.reduce((s, v) => s + v[c.key], 0) / members.length : 0);
+    const headerRow = `<tr>${th("#", true)}${th(_t("partner"), true)}${cols.map(c => th(c.label)).join("")}</tr>`;
+    const memberRows = members.map((p, i) => {
+      const isSel = p === sel, v = vals[i];
+      const cells = cols.map(c => `<td style="text-align:right;padding:3px 7px;border-bottom:1px solid #f5f5f5;font-weight:${isSel ? 800 : 500}">${c.fn(v[c.key])}</td>`).join("");
+      return `<tr style="${isSel ? "background:#fff5f5" : ""}">
+        <td style="padding:3px 7px;border-bottom:1px solid #f5f5f5;color:#999;font-size:.66rem">${b.range[0] + i + 1}</td>
+        <td style="padding:3px 7px;border-bottom:1px solid #f5f5f5;font-weight:${isSel ? 800 : 600};color:${isSel ? "#b91c1c" : "#333"};white-space:nowrap">${escapeHTML(p)}${isSel ? ` <span style="font-size:.58rem;background:#ef4444;color:#fff;padding:1px 5px;border-radius:6px;margin-left:3px">${youTag}</span>` : ""}</td>
+        ${cells}</tr>`;
+    }).join("");
+    const avgRow = `<tr style="border-top:2px solid #e5e5e5">
+      <td style="padding:4px 7px"></td>
+      <td style="padding:4px 7px;font-weight:800;color:${b.color};white-space:nowrap">${escapeHTML(avgWord)}</td>
+      ${cols.map(c => `<td style="text-align:right;padding:4px 7px;font-weight:800;color:${b.color}">${c.fn(avg[c.key])}</td>`).join("")}</tr>`;
+    return head + `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.72rem;background:#fff;border:1px solid #f0f0f0;border-radius:6px">
+      <thead>${headerRow}</thead><tbody>${memberRows}${avgRow}</tbody></table></div>`;
+  }).join("");
+
+  const title = isEN ? "Cohort members &amp; figures used" : "Integrantes y cifras del cohorte";
+  const sub = isEN
+    ? `Latest-period values (${d2s(lastDate)}); ranked by Active Drivers. The <b>Average</b> is the simple mean of the members — the value plotted in the comparison lines.`
+    : `Valores del último período (${d2s(lastDate)}); ranking por Conductores Activos. El <b>Promedio</b> es la media simple de los integrantes — el valor que grafican las líneas de comparación.`;
+  return `<div style="border:1px dashed #d4d4d4;border-radius:8px;padding:10px 12px;margin:0 0 12px;background:#fcfcfc">
+    <div style="font-weight:800;font-size:.78rem;color:#333;margin-bottom:2px">📋 ${title}</div>
+    <div style="font-size:.68rem;color:#888;margin-bottom:2px">${sub}</div>
+    ${blocks}
+  </div>`;
 }
 
 // Promedio por fecha de una métrica (getter) sobre un conjunto de partners, en el scope.
@@ -1665,8 +1779,14 @@ function _pvCmpNR(elId, labels, series, recibeLeads, cohortLines) {
       enabled: true,
       enabledOnSeries: [...colSeries.map((_, i) => i), ...lineSeries.map((_, i) => colSeries.length + i)],
       formatter: (val, opts) => {
-        // Serie de linea (cohorte): muestra su total con su color (oculto en compartir).
-        if (opts.seriesIndex >= colSeries.length) return share ? "" : (val ? fmt(val) : "");
+        // Serie de linea (cohorte): muestra su total con su color. Se oculta en modo
+        // compartir Y para bandas sensibles (<3 partners: Top 1 / Top 2-3), donde
+        // imprimir el "promedio" expondría la cifra de 1-2 competidores individuales.
+        if (opts.seriesIndex >= colSeries.length) {
+          const line = cohortLines[opts.seriesIndex - colSeries.length];
+          if (share || (line && line.sensitive)) return "";
+          return val ? fmt(val) : "";
+        }
         // Segmento de columna: solo si pesa >= 20% del total de su barra.
         if (!val || val <= 0) return "";
         const all = opts.w.config.series;
@@ -1717,7 +1837,8 @@ function _pvScopeBlock(scopeCity, idPrefix) {
   const card = (id, label, span) => `<div class="chart-card" style="${span ? "grid-column:1/-1" : ""}">
     <div class="chart-head"><span class="chart-title">${escapeHTML(label)}</span></div>
     <div id="pvs_${idPrefix}_${id}"></div><div id="pvs_${idPrefix}_${id}_tbl"></div></div>`;
-  return `<div style="${grid}">
+  return `<div id="pvs_${idPrefix}_legend"></div>
+  <div style="${grid}">
     ${card("ad", _t("activeDrivers"))}
     ${card("sh", _t("supplyHours"))}
     ${card("nr", _t("newReact"), true)}
@@ -1750,7 +1871,9 @@ function _pvBuildScopeCharts(partner, scopeCity, idPrefix, dates, recibeLeads) {
       const label = PARTNER_VIEW_STATE.lang === "en" ? b.en : b.es;
       // Promedio SIMPLE de los partners del cohorte (cada uno pesa igual), tanto para
       // métricas aditivas como para tasas (s.shCar/s.accept = tasa ya ponderada del partner).
-      arr.push({ name: label, data: _pvCohortAvg(members, scopeCity, dates, getter), color: b.color });
+      // sensitive: bandas de <3 partners (Top 1 / Top 2-3) → el "promedio" equivale a
+      // exponer las cifras de 1-2 competidores individuales; no se imprime su valor.
+      arr.push({ name: label, data: _pvCohortAvg(members, scopeCity, dates, getter), color: b.color, sensitive: members.length < 3 });
     });
     return arr;
   };
@@ -1766,6 +1889,8 @@ function _pvBuildScopeCharts(partner, scopeCity, idPrefix, dates, recibeLeads) {
   _pvCmpLine(`pvs_${idPrefix}_accept`, labels, { name: _t("acceptRate"), data: series.map(s => s.accept) }, lines(s => s.accept), "#db2777", v => ((v || 0) * 100).toFixed(1) + "%");
   const tbl = document.getElementById(`pvs_${idPrefix}_nr_tbl`);
   if (tbl) tbl.innerHTML = _pvNRTable(series, dates, recibeLeads);
+  const leg = document.getElementById(`pvs_${idPrefix}_legend`);
+  if (leg) leg.innerHTML = _pvCohortLegend(scopeCity, dates);
 }
 
 // Placeholder de canal de adquisición (formato de datos pendiente).
