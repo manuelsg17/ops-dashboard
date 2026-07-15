@@ -10,8 +10,9 @@ const RAW_STATE = {
   showBanned: true,    // true = incluir flotas excluidas del dashboard
   sortCol:    "date",
   sortDir:    "asc",
-  view:       "data",  // "data" = registros de rendimiento, "flotas" = mapeo CLID→flota
-  editingClid: null    // CLID de la fila en modo edicion en la vista Flotas
+  view:       "data",  // "data" = registros · "flotas" = mapeo CLID→flota · "recon" = conciliación por db_id
+  editingClid: null,   // CLID de la fila en modo edicion en la vista Flotas
+  expanded:   {}       // vista Conciliación: { clid: true } = CLID desglosado a db_id
 };
 
 // ── ENTRY POINT ───────────────────────────────────────────────────────────────
@@ -22,6 +23,11 @@ function renderRawData() {
   // Si la vista es "flotas", renderizamos un panel distinto
   if (RAW_STATE.view === "flotas") {
     content.innerHTML = _renderFlotasView();
+    return;
+  }
+  // Vista "Conciliación": resumen por CLID desglosable a db_id (para cuadrar vs Excel)
+  if (RAW_STATE.view === "recon") {
+    content.innerHTML = _renderReconView();
     return;
   }
 
@@ -295,6 +301,7 @@ function _rawViewToggle() {
     <div style="display:flex;gap:6px;margin-bottom:12px">
       ${btn("data",   "\uD83D\uDCCA Registros")}
       ${btn("flotas", "\uD83D\uDE9A Flotas (CLID \u2192 Nombre)")}
+      ${btn("recon",  "\uD83E\uDDFE Conciliaci\u00F3n (CLID \u2192 db_id)")}
     </div>`;
 }
 
@@ -825,6 +832,291 @@ function exportFlotasCSV() {
   const a = document.createElement("a");
   a.href = url;
   a.download = `flotas_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// \u2550\u2550 VISTA CONCILIACI\u00D3N (CLID \u2192 db_id) \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// Resumen por CLID desglosable a fleetroom (db_id) con las columnas del export de
+// Yango, para cuadrar contra el Excel de otro colega. Marca qu\u00E9 sub-flotas se
+// OMITEN del dashboard (TukTuk / Excluidas de Taxi). Corre sobre el dataset FULL
+// ya deduplicado (dropLegacyAggregateRows) \u2192 sin doble conteo legacy+fleetroom.
+
+// Formato K/M con 2 decimales (miles \u2192 "K", millones \u2192 "M"). N\u00FAmeros chicos tal
+// cual. El valor exacto va en el title (hover) para conciliaci\u00F3n fina.
+function _fmtKM2(n) {
+  if (n === null || n === undefined || isNaN(n)) return "\u2014";
+  const neg = n < 0, abs = Math.abs(n);
+  let out;
+  if (abs >= 1e6)      out = (abs / 1e6).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "M";
+  else if (abs >= 1e3) out = (abs / 1e3).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "K";
+  else                 out = abs.toLocaleString("es-PE", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  return neg ? "-" + out : out;
+}
+function _num2(n) { return (n == null || isNaN(n)) ? "\u2014" : n.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function _pct1(n) { return (n == null || isNaN(n)) ? "\u2014" : (n * 100).toLocaleString("es-PE", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%"; }
+
+function _reconNewAgg() { return { ad:0, sh:0, nuevos:0, react:0, trips:0, gmv:0, comm:0, ifsh:0, ofcars:0, accNum:0, accDen:0 }; }
+function _reconAcc(a, r) {
+  a.ad     += r.activeDrivers || 0;
+  a.sh     += r.supplyHours   || 0;
+  a.nuevos += (r.newPartner || 0) + (r.newService || 0);
+  a.react  += r.reactivated   || 0;
+  a.trips  += r.trips         || 0;
+  a.gmv    += r.gmv           || 0;
+  a.comm   += r.commission    || 0;
+  a.ifsh   += r.internalFleetSh      || 0;
+  a.ofcars += r.ownedFleetActiveCars || 0;
+  if (r.acceptanceRate != null && r.trips) { a.accNum += r.acceptanceRate * r.trips; a.accDen += r.trips; }
+}
+// Clasificaci\u00F3n de una sub-flota (usa los predicados globales de data.js sobre una
+// fila muestra; para db_id='' legacy caen al flag por CLID). Devuelve el estado y
+// si se OMITE del dashboard (Taxi).
+function _reconClasif(sample) {
+  const tuk  = typeof rowIsTuktuk        === "function" && rowIsTuktuk(sample);
+  const excl = typeof rowExcludedFromTaxi === "function" && rowExcludedFromTaxi(sample);
+  const fleet= typeof rowIsFleet          === "function" && rowIsFleet(sample);
+  if (tuk)             return { omit: true,  fleet, label: "\uD83D\uDEFA TukTuk (omitido)",   color: "#b45309", bg: "#fffbeb" };
+  if (excl)            return { omit: true,  fleet, label: "\u26D4 Excluido (omitido)",  color: "#991b1b", bg: "#fff5f5" };
+  if (fleet)           return { omit: false, fleet, label: "\uD83D\uDE97 Fleet",              color: "#166534", bg: "" };
+  return                      { omit: false, fleet, label: "Taxi",                 color: "#64748b", bg: "" };
+}
+
+function _renderReconView() {
+  const src0 = STATE.curMode === "mensual" ? STATE.rawDataMensualFull
+             : STATE.curMode === "diario"  ? STATE.rawDataDiarioFull
+             :                              STATE.rawDataFull;
+  if (!src0 || !src0.length) {
+    return secH("\uD83E\uDDFE", "#0ea5e9", "Conciliaci\u00F3n (CLID \u2192 db_id)", "Sin datos cargados.", "") + _rawViewToggle();
+  }
+  // FULL ya viene deduplicado; reaplicar es idempotente y garantiza no doble conteo.
+  const src = (typeof dropLegacyAggregateRows === "function") ? dropLegacyAggregateRows(src0) : src0;
+
+  const allDates = [...new Set(src.map(r => r.date))].sort();
+  if (!RAW_STATE.dateFrom) RAW_STATE.dateFrom = allDates[0] || "";
+  if (!RAW_STATE.dateTo)   RAW_STATE.dateTo   = allDates[allDates.length - 1] || "";
+  const allCities = [...new Set(src.map(r => r.city).filter(Boolean))].sort();
+  const q = (RAW_STATE.search || "").toLowerCase().trim();
+
+  const inRange = r =>
+    (RAW_STATE.city === "all" || r.city === RAW_STATE.city) &&
+    (!RAW_STATE.dateFrom || r.date >= RAW_STATE.dateFrom) &&
+    (!RAW_STATE.dateTo   || r.date <= RAW_STATE.dateTo);
+
+  // Agrupar por CLID \u2192 fleetroom (db_id)
+  const byClid = new Map();
+  src.forEach(r => {
+    if (!inRange(r)) return;
+    const clid = r.clid || "(sin clid)";
+    let c = byClid.get(clid);
+    if (!c) { c = { clid, partner: "", kam: "", cities: new Set(), agg: _reconNewAgg(), frooms: new Map() }; byClid.set(clid, c); }
+    c.partner = STATE.CLID_MAP[clid] || c.partner || r.partner || "";
+    c.kam     = STATE.KAM_MAP[clid]  || c.kam     || r.kam     || "";
+    if (r.city) c.cities.add(r.city);
+    _reconAcc(c.agg, r);
+    const fk = r.db_id || "";
+    let f = c.frooms.get(fk);
+    if (!f) { f = { db_id: fk, name: r.fleetroom || "", agg: _reconNewAgg(), sample: r }; c.frooms.set(fk, f); }
+    if (!f.name && r.fleetroom) f.name = r.fleetroom;
+    _reconAcc(f.agg, r);
+  });
+
+  let clids = [...byClid.values()];
+  if (q) clids = clids.filter(c =>
+    c.clid.toLowerCase().includes(q) || (c.partner || "").toLowerCase().includes(q) || (c.kam || "").toLowerCase().includes(q));
+  clids.sort((a, b) => b.agg.ad - a.agg.ad);
+
+  // Totales: full vs Taxi (lo que s\u00ED entra al dashboard) para ver lo omitido
+  const totFull = _reconNewAgg(), totTaxi = _reconNewAgg();
+  let omitCount = 0;
+  clids.forEach(c => {
+    _reconAcc2(totFull, c.agg);
+    c.frooms.forEach(f => {
+      const cl = _reconClasif(f.sample);
+      if (cl.omit) omitCount++; else _reconAcc2(totTaxi, f.agg);
+    });
+  });
+
+  // \u2500\u2500 Controles \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  const dateFromOpts = allDates.map(d => `<option value="${d}"${d === RAW_STATE.dateFrom ? " selected" : ""}>${d2s(d)}</option>`).join("");
+  const dateToOpts   = allDates.map(d => `<option value="${d}"${d === RAW_STATE.dateTo   ? " selected" : ""}>${d2s(d)}</option>`).join("");
+  const cityOpts     = allCities.map(c => `<option value="${c}"${RAW_STATE.city === c ? " selected" : ""}>${cityLabel(c)}</option>`).join("");
+  const singlePeriod = RAW_STATE.dateFrom === RAW_STATE.dateTo;
+
+  let html = secH("\uD83E\uDDFE", "#0ea5e9", "Conciliaci\u00F3n (CLID \u2192 db_id)",
+    `${fmt(clids.length)} CLID(s) \u00B7 ${fmt(omitCount)} sub-flota(s) omitida(s) del dashboard \u00B7 clic en un CLID para desglosar`, "");
+  html += _rawViewToggle();
+
+  html += `
+    <div class="section" style="margin-bottom:12px">
+      <div style="font-size:.75rem;color:#555;margin-bottom:8px;background:#f0f9ff;border-left:3px solid #0ea5e9;padding:8px 12px;border-radius:4px">
+        Resumen por <strong>CLID</strong> con desglose por <strong>db_id</strong> (fleetroom). N\u00FAmeros con <strong>K/M y 2 decimales</strong> \u2014 el valor exacto est\u00E1 en el <em>hover</em> y en el CSV. Las sub-flotas <strong>\uD83D\uDEFA TukTuk</strong> y <strong>\u26D4 Excluidas</strong> NO entran al dashboard (Taxi) y van resaltadas; <strong>\uD83D\uDE97 Fleet</strong> s\u00ED entra (es subconjunto de Taxi).
+        ${singlePeriod ? "" : `<div style="margin-top:6px;color:#b45309"><strong>Ojo:</strong> ten\u00E9s un rango de varios per\u00EDodos \u2014 AD y autos se <strong>suman</strong> entre ellos. Para cuadrar contra un Excel de un per\u00EDodo, pon\u00E9 el mismo per\u00EDodo en "Desde" y "Hasta".</div>`}
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input class="crud-input" id="rawSearchRecon" placeholder="Buscar CLID, partner o KAM..."
+          value="${(RAW_STATE.search || "").replace(/"/g, "&quot;")}" oninput="rawSearchInput(this,false)"
+          style="flex:1;min-width:180px;max-width:280px"/>
+        <select class="sb-sel" onchange="RAW_STATE.city=this.value;renderRawData()">
+          <option value="all"${RAW_STATE.city === "all" ? " selected" : ""}>Todas las ciudades</option>${cityOpts}
+        </select>
+        <select class="sb-sel" onchange="RAW_STATE.dateFrom=this.value;renderRawData()">${dateFromOpts}</select>
+        <span style="font-size:.75rem;color:#aaa">\u2192</span>
+        <select class="sb-sel" onchange="RAW_STATE.dateTo=this.value;renderRawData()">${dateToOpts}</select>
+        <button class="crud-btn" onclick="reconExpandAll(true)" style="padding:4px 10px">Expandir todo</button>
+        <button class="crud-btn" onclick="reconExpandAll(false)" style="padding:4px 10px">Colapsar</button>
+        <button class="crud-btn" onclick="exportReconCSV()" style="margin-left:auto;background:#f0fdf4;border-color:#86efac;color:#166534">\u2B07 Exportar CSV</button>
+      </div>
+    </div>`;
+
+  // \u2500\u2500 Tabla \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  const th = (l, extra = "") => `<th style="white-space:nowrap;${extra}">${l}</th>`;
+  const numCells = a => `
+    <td class="tn" title="${fmt(a.ad)}">${_fmtKM2(a.ad)}</td>
+    <td class="tn" title="${fmt(a.sh)}">${_fmtKM2(a.sh)}</td>
+    <td class="tn" title="${fmt(a.nuevos)}">${_fmtKM2(a.nuevos)}</td>
+    <td class="tn" title="${fmt(a.react)}">${_fmtKM2(a.react)}</td>
+    <td class="tn" title="${fmt(a.nuevos + a.react)}" style="font-weight:600">${_fmtKM2(a.nuevos + a.react)}</td>
+    <td class="tn" title="${fmt(a.trips)}">${_fmtKM2(a.trips)}</td>
+    <td class="tn" title="${fmt(a.gmv)}">${_fmtKM2(a.gmv)}</td>
+    <td class="tn" title="${fmt(a.comm)}">${_fmtKM2(a.comm)}</td>
+    <td class="tn" title="\u03A3 int.fleet.sh / \u03A3 autos">${a.ofcars > 0 ? _num2(a.ifsh / a.ofcars) : "\u2014"}</td>
+    <td class="tn">${a.accDen > 0 ? _pct1(a.accNum / a.accDen) : "\u2014"}</td>
+    <td class="tn" title="${fmt(a.ofcars)}">${_fmtKM2(a.ofcars)}</td>`;
+
+  html += `
+    <div class="tbl-wrap">
+      <table class="dtbl">
+        <thead><tr>
+          <th style="width:26px"></th>
+          ${th("CLID / Flota")}
+          ${th("AD")}${th("Horas")}${th("Nuevos")}${th("React")}${th("N+R")}${th("Viajes")}${th("GMV")}${th("Comisi\u00F3n")}
+          ${th("SH/auto<br>fleet")}${th("Acept.")}${th("Autos<br>fleet")}${th("Estado")}
+        </tr></thead>
+        <tbody>`;
+
+  clids.slice(0, 400).forEach(c => {
+    const clidJS = c.clid.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    const open   = !!RAW_STATE.expanded[c.clid];
+    const froomArr = [...c.frooms.values()];
+    // omitido a nivel CLID (para el resumen)
+    let omitAd = 0, omitN = 0;
+    froomArr.forEach(f => { const cl = _reconClasif(f.sample); if (cl.omit) { omitAd += f.agg.ad; omitN++; } });
+    const cityStr = [...c.cities].map(cityLabel).join(", ");
+    const omitBadge = omitN
+      ? `<span title="${omitN} sub-flota(s) fuera del dashboard \u00B7 AD omitido: ${fmt(omitAd)}" style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:8px;font-size:.66rem;font-weight:700">omite ${omitN} \u00B7 ${_fmtKM2(omitAd)} AD</span>`
+      : `<span style="color:#cbd5e1;font-size:.66rem">\u2014</span>`;
+
+    html += `
+      <tr onclick="reconToggleClid('${clidJS}')" style="cursor:pointer;background:#f9fafb;border-top:2px solid #eef2f7">
+        <td style="text-align:center;color:#0ea5e9;font-weight:700">${froomArr.length > 1 || (froomArr[0] && froomArr[0].db_id) ? (open ? "\u25BE" : "\u25B8") : ""}</td>
+        <td>
+          <span style="font-family:monospace;font-size:.72rem;color:#64748b">${escapeHTML(c.clid)}</span>
+          <span style="font-weight:700;margin-left:6px">${escapeHTML(c.partner || "(sin nombre)")}</span>
+          <div style="font-size:.66rem;color:#94a3b8">${escapeHTML(c.kam || "sin KAM")}${cityStr ? " \u00B7 " + escapeHTML(cityStr) : ""} \u00B7 ${froomArr.length} fleetroom(s)</div>
+        </td>
+        ${numCells(c.agg)}
+        <td style="text-align:center">${omitBadge}</td>
+      </tr>`;
+
+    if (open) {
+      froomArr.sort((a, b) => b.agg.ad - a.agg.ad).forEach(f => {
+        const cl = _reconClasif(f.sample);
+        const dbShort = f.db_id ? escapeHTML(f.db_id.slice(0, 12)) + "\u2026" : "(legacy s/ db_id)";
+        html += `
+      <tr style="background:${cl.bg || "#fff"};${cl.omit ? "opacity:.92" : ""}">
+        <td></td>
+        <td style="padding-left:16px">
+          <span style="color:#cbd5e1">\u21B3</span>
+          <span style="font-weight:600">${escapeHTML(f.name || "(sin nombre)")}</span>
+          <span style="font-family:monospace;font-size:.62rem;color:#94a3b8;margin-left:6px" title="${escapeHTML(f.db_id)}">${dbShort}</span>
+        </td>
+        ${numCells(f.agg)}
+        <td style="text-align:center"><span style="color:${cl.color};font-size:.66rem;font-weight:700;white-space:nowrap">${cl.label}</span></td>
+      </tr>`;
+      });
+    }
+  });
+
+  // Totales
+  html += `
+        <tr style="background:#eef6ff;font-weight:700;border-top:2px solid #bfdbfe">
+          <td></td><td style="color:#1e40af">TOTAL (todo)</td>${numCells(totFull)}<td></td>
+        </tr>
+        <tr style="background:#f0fdf4;font-weight:700">
+          <td></td><td style="color:#166534" title="Excluye TukTuk y sub-flotas excluidas">TOTAL en dashboard (Taxi)</td>${numCells(totTaxi)}<td></td>
+        </tr>
+        </tbody>
+      </table>
+    </div>`;
+
+  if (clids.length > 400) {
+    html += `<div style="text-align:center;color:#aaa;padding:10px;font-size:.75rem;font-style:italic">Mostrando primeros 400 de ${fmt(clids.length)} CLIDs. Us\u00E1 el buscador para filtrar.</div>`;
+  }
+  return html;
+}
+// Suma un agg dentro de otro (para totales).
+function _reconAcc2(dst, a) {
+  dst.ad += a.ad; dst.sh += a.sh; dst.nuevos += a.nuevos; dst.react += a.react;
+  dst.trips += a.trips; dst.gmv += a.gmv; dst.comm += a.comm;
+  dst.ifsh += a.ifsh; dst.ofcars += a.ofcars; dst.accNum += a.accNum; dst.accDen += a.accDen;
+}
+
+function reconToggleClid(clid) {
+  RAW_STATE.expanded[clid] = !RAW_STATE.expanded[clid];
+  renderRawData();
+}
+function reconExpandAll(open) {
+  RAW_STATE.expanded = {};
+  if (open) {
+    const src = STATE.curMode === "mensual" ? STATE.rawDataMensualFull
+              : STATE.curMode === "diario"  ? STATE.rawDataDiarioFull
+              :                              STATE.rawDataFull;
+    (src || []).forEach(r => { if (r.clid) RAW_STATE.expanded[r.clid] = true; });
+  }
+  renderRawData();
+}
+
+// Export CSV: una fila por (clid, db_id) con valores EXACTOS + clasificaci\u00F3n.
+function exportReconCSV() {
+  const src0 = STATE.curMode === "mensual" ? STATE.rawDataMensualFull
+             : STATE.curMode === "diario"  ? STATE.rawDataDiarioFull
+             :                              STATE.rawDataFull;
+  const src = (typeof dropLegacyAggregateRows === "function") ? dropLegacyAggregateRows(src0 || []) : (src0 || []);
+  const inRange = r =>
+    (RAW_STATE.city === "all" || r.city === RAW_STATE.city) &&
+    (!RAW_STATE.dateFrom || r.date >= RAW_STATE.dateFrom) &&
+    (!RAW_STATE.dateTo   || r.date <= RAW_STATE.dateTo);
+
+  const byKey = new Map();  // clid|db_id -> {clid, db_id, name, partner, kam, agg, sample}
+  src.forEach(r => {
+    if (!inRange(r)) return;
+    const clid = r.clid || "(sin clid)", fk = r.db_id || "";
+    const k = clid + "|" + fk;
+    let g = byKey.get(k);
+    if (!g) g = byKey.set(k, { clid, db_id: fk, name: r.fleetroom || "", partner: STATE.CLID_MAP[clid] || r.partner || "", kam: STATE.KAM_MAP[clid] || r.kam || "", agg: _reconNewAgg(), sample: r }).get(k);
+    if (!g.name && r.fleetroom) g.name = r.fleetroom;
+    _reconAcc(g.agg, r);
+  });
+
+  const header = ["CLID","db_id","Flota","Partner","KAM","Clasificacion","Omitido","AD","SupplyHours","Nuevos","Reactivados","N+R","Viajes","GMV","Comision","FleetSHxAuto","AcceptanceRate","FleetActiveCars"];
+  const lines = [header.join(",")];
+  [...byKey.values()].sort((a, b) => (a.partner || a.clid).localeCompare(b.partner || b.clid) || b.agg.ad - a.agg.ad).forEach(g => {
+    const a = g.agg, cl = _reconClasif(g.sample);
+    const clase = cl.label.replace(/[\uD83D\uDEFA\u26D4\uD83D\uDE97]/g, "").replace(/\s*\(omitido\)/, "").trim() || "Taxi";
+    const fleetShCar = a.ofcars > 0 ? (a.ifsh / a.ofcars) : "";
+    const accept = a.accDen > 0 ? (a.accNum / a.accDen) : "";
+    const row = [g.clid, g.db_id, g.name, g.partner, g.kam, clase, cl.omit ? "SI" : "",
+      a.ad, a.sh, a.nuevos, a.react, a.nuevos + a.react, a.trips, a.gmv, a.comm, fleetShCar, accept, a.ofcars]
+      .map(v => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; });
+    lines.push(row.join(","));
+  });
+
+  const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `conciliacion_${RAW_STATE.dateFrom}_${RAW_STATE.dateTo}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
