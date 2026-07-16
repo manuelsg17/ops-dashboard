@@ -92,6 +92,9 @@ function p2PartnerList() {
 }
 // Portada divisoria de sección (se inserta antes de la sección TukTuk).
 const P2_DIVIDER = { es: "TukTuk", en: "TukTuk", charts: false, build: (p) => buildSlide2SectionCover(p, "tuktuk") };
+// Slide de Seguimiento (Fase 3, render-only): solo si el partner tiene tareas cargadas.
+// Va al final del deck y entra al PDF automáticamente (no es noPdf). Definida en seguimiento.js.
+const P2_SEG_SLIDE = { es: "Seguimiento", en: "Follow-up", charts: false, build: (p, d, i) => buildSlide2Seguimiento(p, i) };
 // Deck por partner: carátula + [sección Taxi] + [divisor + sección TukTuk].
 function p2Deck(partner) {
   const hasTaxi = p2HasTaxi(partner);
@@ -107,6 +110,9 @@ function p2Deck(partner) {
     deck.push({ def: P2_DIVIDER, ds: "tuktuk" });
     body.forEach(def => deck.push({ def, ds: "tuktuk" }));
   }
+  // Seguimiento (Fase 3): al final del deck, solo si el partner tiene tareas.
+  if (typeof p2PartnerHasSeguimiento === "function" && p2PartnerHasSeguimiento(partner))
+    deck.push({ def: P2_SEG_SLIDE, ds: "taxi" });
   return deck;
 }
 // HTML del nav (prev/next + un botón por slide del deck; sección TukTuk tintada ámbar).

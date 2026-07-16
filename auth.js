@@ -68,7 +68,7 @@ function _clearStateAndLocalStorage() {
   // Drop de datos del dataset en memoria.
   ["rawData","rawDataMensual","rawDataMensualTuktuk","rawDataFleet","rawDataMensualFleet",
    "rawDataFull","rawDataMensualFull",
-   "rawDataDiario","rawDataDiarioFull","rawDataTuktuk","metasData","proyectosData",
+   "rawDataDiario","rawDataDiarioFull","rawDataTuktuk","metasData","proyectosData","seguimientoData",
    "allDates","allPartners","curSummaries"
   ].forEach(k => { if (Array.isArray(STATE[k])) STATE[k].length = 0; });
   STATE.rendLine  = "agg";

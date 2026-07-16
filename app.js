@@ -293,7 +293,7 @@ function switchTab(tab) {
     document.body.classList.toggle("present-mode", tab === "present" || tab === "present2");
     // Ocultar el sidebar de filtros en tabs donde no aplica (Fase 7): la data de
     // Configuración/Calculadora/Data Raw no depende de Escala/Fechas/Ciudad/KAM.
-    const NO_SIDEBAR_TABS = new Set(["config", "calculator", "rawdata"]);
+    const NO_SIDEBAR_TABS = new Set(["config", "calculator", "rawdata", "seguimiento"]);
     document.body.classList.toggle("no-sidebar", NO_SIDEBAR_TABS.has(tab));
     // Guardar filtros actuales antes de cambiar
     STATE.savedFilters = {
@@ -307,7 +307,7 @@ function switchTab(tab) {
 
     // Tabs bajo el dropdown "Análisis" (Fase 7: sincronizado con el nav visible —
     // incluye partnerview/calculator, excluye ops/proyectos ocultos).
-    const ANALISIS_TABS = ["rend", "partnerview", "calculator", "metas", "unifview", "rawdata"];
+    const ANALISIS_TABS = ["rend", "partnerview", "calculator", "metas", "unifview", "seguimiento", "rawdata"];
     const navAnalisis = document.getElementById("navAnalisis");
     if (navAnalisis) navAnalisis.classList.toggle("active", ANALISIS_TABS.includes(tab));
     document.querySelectorAll(".nav-tab[data-tab]").forEach(btn => {
@@ -355,6 +355,7 @@ function switchTab(tab) {
       if (tab === "proyectos")                                                      renderProyectos();
       if (tab === "unifview")                                                       renderUnifView();
       if (tab === "rawdata")                                                        renderRawData();
+      if (tab === "seguimiento")                                                    renderSeguimiento();
       if (tab === "config")                                                         renderConfig();
       if (tab === "present")                                                        renderPresent();
       if (tab === "present2"    && STATE.rawData.length)                            renderPresent2();

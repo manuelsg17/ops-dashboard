@@ -616,6 +616,13 @@ async function loadFromSupabase() {
       STATE.proyectosData = proyectos || [];
     } catch (_) { STATE.proyectosData = []; }
 
+    // 5b. Seguimiento / tracker de reuniones (Fase 3) — patrón silencioso.
+    try {
+      const { data: seguimiento } = await sb.from("seguimiento").select("*")
+        .order("partner", { ascending: true }).order("sort_order", { ascending: true }).order("start_date", { ascending: true });
+      STATE.seguimientoData = seguimiento || [];
+    } catch (_) { STATE.seguimientoData = []; }
+
     // 5b. Flotas (tabla puede no existir aún — fallo silencioso, no es critico)
     // STATE.flotasMap[clid] = { nombre_asignado, kam, ciudad, activo, nombre_original }
     // Si existe, se aplica override: el partner del rendimiento se reemplaza por
@@ -707,6 +714,7 @@ async function loadFromSupabase() {
       if (STATE.curTab === "partnerview" && typeof renderPartnerView === "function") renderPartnerView();
       if (STATE.curTab === "calculator"  && typeof renderCalculator === "function")  renderCalculator();
       if (STATE.curTab === "rawdata"     && typeof renderRawData === "function")     renderRawData();
+      if (STATE.curTab === "seguimiento" && typeof renderSeguimiento === "function") renderSeguimiento();
     }
 
   } catch (err) {

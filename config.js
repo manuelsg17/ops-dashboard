@@ -81,6 +81,7 @@ const STATE = {
   declineThreshold: 3,
   declineMetric:    "activeDrivers",
   proyectosData:    [],
+  seguimientoData:  [],     // tracker de reuniones (tabla seguimiento, Fase 3)
   parseWarnings:    new Set(),
   _mensualLoaded:   false,
   _diarioLoaded:    false,

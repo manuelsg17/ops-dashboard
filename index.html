@@ -84,6 +84,7 @@
       <!-- Ocultado (Fase 7 · sin uso): <button class="nav-dd-item" data-tab="ops" onclick="switchTabFromMenu('ops')">Operaciones</button> -->
       <!-- Ocultado (Fase 7 · sin uso): <button class="nav-dd-item" data-tab="proyectos" onclick="switchTabFromMenu('proyectos')">Proyectos</button> -->
       <button class="nav-dd-item"        data-tab="unifview"    onclick="switchTabFromMenu('unifview')">Rend + Metas</button>
+      <button class="nav-dd-item"        data-tab="seguimiento" onclick="switchTabFromMenu('seguimiento')">📋 Seguimiento</button>
       <button class="nav-dd-item"        data-tab="rawdata"     onclick="switchTabFromMenu('rawdata')">Data Raw</button>
     </div>
   </div>
@@ -271,6 +272,11 @@
         <div id="rawdataContent"></div>
       </div>
 
+      <!-- Seguimiento (tracker de reuniones · Gantt) -->
+      <div class="tab-panel" id="tab-seguimiento">
+        <div class="empty"><p>Carga datos de <strong>Rendimiento</strong> para usar Seguimiento.</p></div>
+      </div>
+
       <!-- Configuración -->
       <div class="tab-panel" id="tab-config">
         <div id="configContent">
@@ -318,6 +324,7 @@
 <script src="insights.js"></script>
 <script src="partnerView.js"></script>
 <script src="calculator.js"></script>
+<script src="seguimiento.js"></script>
 <script src="forecast.js"></script>
 <script src="presentacion2.js"></script>
 </body>
