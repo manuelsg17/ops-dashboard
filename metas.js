@@ -120,10 +120,11 @@ function _metasTkActuals(from, to, selSet, cityFilter) {
     if (selSet.size && !selSet.has(r.partner)) return;
     const k = `${r.partner}|||${r.city}`;
     let e = by.get(k);
-    if (!e) { e = { _ad: {}, _cars: {}, nr: 0 }; by.set(k, e); }
+    if (!e) { e = { _ad: {}, _cars: {}, nr: 0, sh: 0 }; by.set(k, e); }
     e._ad[r.date]   = (e._ad[r.date]   || 0) + (r.activeDrivers || 0);
     e._cars[r.date] = (e._cars[r.date] || 0) + (r.brandedActiveCars || 0);
     e.nr += (r.newPartner || 0) + (r.newService || 0) + (r.reactivated || 0);
+    e.sh += r.supplyHours || 0;   // acumulado del rango, igual que N+R (no es snapshot)
   });
   by.forEach(e => {
     // AD y Brandeados son SNAPSHOTS: el "fact" es el ÚLTIMO período (nivel actual), NO el
@@ -222,7 +223,7 @@ function _renderMetasTk(mesName, from, to, selSet, cityFilter, kamFilter) {
   const act = _metasTkActuals(from, to, selSet, cityFilter);
   const rows = STATE.metasData.filter(m =>
     m.mes === mesName &&
-    (m.mtkAD != null || m.mtkNR != null || m.mtkCars != null) &&
+    (m.mtkAD != null || m.mtkNR != null || m.mtkCars != null || m.mtkSH != null) &&
     (kamFilter === "all" || m.kam === kamFilter) &&
     (!selSet.size || selSet.has(m.partner)) &&
     (cityFilter === "all" || m.city === cityFilter)
@@ -230,7 +231,7 @@ function _renderMetasTk(mesName, from, to, selSet, cityFilter, kamFilter) {
 
   let html = metasLineToggleHTML();
   html += secH("🛺", "#7e22ce", "Metas TukTuk — " + mesName,
-    "Meta TukTuk vs actual del rango · Active Drivers, N+R, Brandeados", "Peru");
+    "Meta TukTuk vs actual del rango · Active Drivers, N+R, Brandeados, Horas de Conexión", "Peru");
 
   if (!rows.length) {
     html += `<div class="section"><div style="padding:26px 16px;text-align:center;color:#999;font-size:.85rem">
@@ -240,24 +241,25 @@ function _renderMetasTk(mesName, from, to, selSet, cityFilter, kamFilter) {
     return html;
   }
 
-  // Resumen Perú (AD = Σ máx por partner-ciudad; N+R = Σ; Cars = Σ máx).
-  let tA = 0, tNR = 0, tCars = 0, mA = 0, mNR = 0, mCars = 0;
+  // Resumen Perú (AD = Σ máx por partner-ciudad; N+R/SH = Σ; Cars = Σ máx).
+  let tA = 0, tNR = 0, tCars = 0, tSH = 0, mA = 0, mNR = 0, mCars = 0, mSH = 0;
   rows.forEach(m => {
-    const a = act.get(`${m.partner}|||${m.city}`) || { ad: 0, nr: 0, cars: 0 };
-    tA += a.ad; tNR += a.nr; tCars += a.cars;
-    mA += m.mtkAD || 0; mNR += m.mtkNR || 0; mCars += m.mtkCars || 0;
+    const a = act.get(`${m.partner}|||${m.city}`) || { ad: 0, nr: 0, cars: 0, sh: 0 };
+    tA += a.ad; tNR += a.nr; tCars += a.cars; tSH += a.sh || 0;
+    mA += m.mtkAD || 0; mNR += m.mtkNR || 0; mCars += m.mtkCars || 0; mSH += m.mtkSH || 0;
   });
-  html += `<div class="section"><div class="metric-row">
+  html += `<div class="section"><div class="metric-row" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
     ${metaResCard("Active Drivers", "último período", tA,   mA,   tA,   "#7e22ce")}
     ${metaResCard("Nuevos + React", "acumulado",   tNR,  mNR,  tNR,  "#f97316")}
     ${metaResCard("Brandeados",     "último período", tCars,mCars,tCars,"#0891b2")}
+    ${metaResCard("Horas Conexión", "acumulado",   tSH,  mSH,  tSH,  "#8b5cf6")}
   </div></div>`;
 
   // Por partner
   html += secH("🃏", "#7e22ce", "TukTuk por Partner", "Meta vs actual individual", "");
   html += `<div class="section"><div class="partner-grid">`;
   rows.forEach(m => {
-    const a      = act.get(`${m.partner}|||${m.city}`) || { ad: 0, nr: 0, cars: 0 };
+    const a      = act.get(`${m.partner}|||${m.city}`) || { ad: 0, nr: 0, cars: 0, sh: 0 };
     const col    = STATE.partnerColors[m.partner] || "#7e22ce";
     const kcolor = KAM_COLORS[m.kam] || "#888";
     html += `
@@ -274,6 +276,7 @@ function _renderMetasTk(mesName, from, to, selSet, cityFilter, kamFilter) {
         ${_metaLineRow("Active Drivers", m.mtkAD   != null ? a.ad   : null, m.mtkAD,   v => fmt(v))}
         ${_metaLineRow("Nuevos + React", m.mtkNR   != null ? a.nr   : null, m.mtkNR,   v => fmt(v))}
         ${_metaLineRow("Brandeados",     m.mtkCars != null ? a.cars : null, m.mtkCars, v => fmt(v))}
+        ${_metaLineRow("Horas Conexión", m.mtkSH   != null ? a.sh   : null, m.mtkSH,   v => fmt(v))}
       </div>`;
   });
   html += `</div></div>`;

@@ -144,6 +144,67 @@ function buildLineChart(elId, dates, series, colors) {
   STATE.charts[elId] = ch;
 }
 
+// ── DONUT CHART (composición / parts-of-whole, snapshot — NO serie de tiempo) ─
+// Genérico: cualquier módulo lo puede usar para "qué tan grande es cada parte de
+// un total en un momento dado" (ej. Fleet: owned cars por partner, brandeados vs
+// no). Comparte STATE.charts con las líneas → destroyAllCharts()/dlChart() ya
+// funcionan sin cambios.
+function buildDonutChart(elId, labels, series, colors) {
+  const total = series.reduce((a, b) => a + b, 0);
+  const opts = {
+    series,
+    labels,
+    colors,
+    chart: {
+      type:       "donut",
+      height:     220,
+      fontFamily: "inherit",
+      animations: { enabled: false }
+    },
+    stroke: { width: 1, colors: ["#fff"] },
+    dataLabels: {
+      enabled:   true,
+      formatter: (_, o) => fmt(o.w.globals.series[o.seriesIndex])
+    },
+    legend: {
+      show:       labels.length <= 8,
+      position:   "bottom",
+      fontSize:   "10px",
+      itemMargin: { horizontal: 4, vertical: 2 }
+    },
+    plotOptions: {
+      pie: {
+        donut: {
+          size: "62%",
+          labels: {
+            show: true,
+            total: { show: true, label: "Total", formatter: () => fmt(total) },
+            value: { formatter: v => fmt(Number(v)) }
+          }
+        }
+      }
+    },
+    tooltip: { y: { formatter: v => fmt(v) } }
+  };
+
+  const prev = STATE.charts[elId];
+  if (prev) {
+    if (prev.el && document.body.contains(prev.el)) {
+      prev.updateOptions({ series, labels, colors }, false, false, false);
+      return;
+    }
+    try { prev.destroy(); } catch(e) {}
+    delete STATE.charts[elId];
+  }
+
+  const el = document.getElementById(elId);
+  if (!el) return;
+
+  const ch = new ApexCharts(el, opts);
+  ch.render();
+  STATE.charts[elId] = ch;
+}
+
 // ── DOWNLOAD CHART AS PNG ─────────────────────────────────────────────────────
 function dlChart(chartId, name) {
   const ch = STATE.charts[chartId];

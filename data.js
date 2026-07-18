@@ -607,7 +607,8 @@ async function loadFromSupabase() {
       mUtil:   m.meta_utilization != null ? +m.meta_utilization : null,
       mtkAD:   m.meta_tk_ad       != null ? +m.meta_tk_ad       : null,
       mtkNR:   m.meta_tk_nr       != null ? +m.meta_tk_nr       : null,
-      mtkCars: m.meta_tk_cars     != null ? +m.meta_tk_cars     : null
+      mtkCars: m.meta_tk_cars     != null ? +m.meta_tk_cars     : null,
+      mtkSH:   m.meta_tk_sh       != null ? +m.meta_tk_sh       : null
     }));
 
     // 5. Proyectos (tabla puede no existir aún — fallo silencioso)
@@ -1501,6 +1502,7 @@ async function uploadMetas(rows) {
   const colTkAD   = _metaOptHeader(rows, ["META TK AD", "TK AD", "TUKTUK AD", "META_TK_AD", "AD TUKTUK", "AD TK"]);
   const colTkNR   = _metaOptHeader(rows, ["META TK N+R", "TK N+R", "TUKTUK N+R", "META_TK_NR", "N+R TUKTUK", "N+R TK"]);
   const colTkCars = _metaOptHeader(rows, ["META TK CARS", "TK CARS", "TUKTUK CARS", "META_TK_CARS", "CARS TUKTUK", "CARS TK"]);
+  const colTkSH   = _metaOptHeader(rows, ["META TK SH", "TK SH", "TUKTUK SH", "META_TK_SH", "SH TUKTUK", "SH TK", "HORAS TUKTUK"]);
   const data = rows.map(row => {
     const clid       = _clidStr(row["CLID"] || row["clid"] || "");
     // Captura PARTNER en cualquier casing del Excel
@@ -1528,6 +1530,7 @@ async function uploadMetas(rows) {
     if (colTkAD)   o.meta_tk_ad       = _metaBlankNull(row[colTkAD]);
     if (colTkNR)   o.meta_tk_nr       = _metaBlankNull(row[colTkNR]);
     if (colTkCars) o.meta_tk_cars     = _metaBlankNull(row[colTkCars]);
+    if (colTkSH)   o.meta_tk_sh       = _metaBlankNull(row[colTkSH]);
     return o;
   }).filter(r => {
     if (r.clid === null) {

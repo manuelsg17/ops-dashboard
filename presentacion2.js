@@ -95,7 +95,13 @@ const P2_DIVIDER = { es: "TukTuk", en: "TukTuk", charts: false, build: (p) => bu
 // Slide de Seguimiento (Fase 3, render-only): solo si el partner tiene tareas cargadas.
 // Va al final del deck y entra al PDF automáticamente (no es noPdf). Definida en seguimiento.js.
 const P2_SEG_SLIDE = { es: "Seguimiento", en: "Follow-up", charts: false, build: (p, d, i) => buildSlide2Seguimiento(p, i) };
-// Deck por partner: carátula + [sección Taxi] + [divisor + sección TukTuk].
+// Avance vs Meta Combinado (Taxi+TukTuk): NO vive en P2_SLIDES a propósito — ese
+// array se re-ejecuta completo para la sección Taxi Y para la TukTuk (ver body.forEach
+// más abajo); si el combinado estuviera ahí, se duplicaría (una vez por sección). Se
+// inserta a mano en p2Deck(), UNA sola vez, justo después de la carátula — es la vista
+// rápida "cómo va TODO mi negocio", va primero, antes del detalle Taxi/TukTuk individual.
+const P2_COMBINADO_SLIDE = { es: "Avance Combinado", en: "Combined Goal", charts: false, build: (p, d, i) => buildSlide2AvanceCombinado(p, i) };
+// Deck por partner: carátula + [Combinado si hay TukTuk] + [sección Taxi] + [divisor + sección TukTuk].
 function p2Deck(partner) {
   const hasTaxi = p2HasTaxi(partner);
   const showTk  = p2TuktukSectionVisible(partner);   // datos existen Y la escala activa los soporta (no Diario)
@@ -105,7 +111,11 @@ function p2Deck(partner) {
   // (antes: tuktuk-only en Diario podía dejar el cover en "tuktuk" con el body vacío en "taxi").
   const fallbackTaxi = hasTaxi || !showTk;
   const deck = [{ def: P2_SLIDES[0], ds: fallbackTaxi ? "taxi" : "tuktuk" }];  // carátula
-  if (fallbackTaxi) body.forEach(def => deck.push({ def, ds: "taxi" }));
+  if (fallbackTaxi) {
+    // Combinado solo si el partner tiene TukTuk (si no, sería idéntico al Taxi-only).
+    if (showTk) deck.push({ def: P2_COMBINADO_SLIDE, ds: "taxi" });
+    body.forEach(def => deck.push({ def, ds: "taxi" }));
+  }
   if (showTk) {
     deck.push({ def: P2_DIVIDER, ds: "tuktuk" });
     body.forEach(def => deck.push({ def, ds: "tuktuk" }));
@@ -174,17 +184,22 @@ function p2FreshnessWarn() {
 
 // Header de marca compartido: partner + contexto (izq) · logo + título de slide (der)
 // + línea de acento roja. Reemplaza los headers ad-hoc de cada slide.
-function p2BrandHeader(partner, title, sub) {
+// badgeOverride opcional {text, color}: para slides que no son ni Taxi ni TukTuk
+// puros (ej. Avance Combinado) — evita que el badge automático lea
+// PRESENT2_STATE.dataset (que en esos slides no representa una sola línea).
+function p2BrandHeader(partner, title, sub, badgeOverride) {
   const mi = p2ModeInfo();
   const modeChip = `<span style="display:inline-block;font-size:.6rem;font-weight:800;padding:2px 9px;border-radius:10px;color:#fff;background:${mi.color};margin-top:4px;letter-spacing:.3px">📅 ${mi.label.toUpperCase()}</span>`;
   // Badge Taxi/TukTuk: solo cuando el partner tiene AMBAS secciones (si no, no hay
   // ambigüedad). El acento del header también cambia a ámbar en la sección TukTuk.
   const tk = PRESENT2_STATE.dataset === "tuktuk";
-  const showBadge = PRESENT2_STATE._showDsBadge;
-  const accent = (showBadge && tk) ? "#f59e0b" : "#FF0000";
-  const badge = showBadge
-    ? `<span style="display:inline-block;font-size:.58rem;font-weight:800;padding:2px 8px;border-radius:10px;margin-bottom:3px;color:#fff;background:${tk ? "#f59e0b" : "#FF0000"}">${tk ? "🛺 TUKTUK" : "🚕 TAXI"}</span><br>`
-    : "";
+  const showBadge = badgeOverride ? true : PRESENT2_STATE._showDsBadge;
+  const accent = badgeOverride ? badgeOverride.color : ((showBadge && tk) ? "#f59e0b" : "#FF0000");
+  const badge = badgeOverride
+    ? `<span style="display:inline-block;font-size:.58rem;font-weight:800;padding:2px 8px;border-radius:10px;margin-bottom:3px;color:#fff;background:${badgeOverride.color}">${escapeHTML(badgeOverride.text)}</span><br>`
+    : (showBadge
+      ? `<span style="display:inline-block;font-size:.58rem;font-weight:800;padding:2px 8px;border-radius:10px;margin-bottom:3px;color:#fff;background:${tk ? "#f59e0b" : "#FF0000"}">${tk ? "🛺 TUKTUK" : "🚕 TAXI"}</span><br>`
+      : "");
   return `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;border-bottom:2px solid ${accent};padding-bottom:7px;margin-bottom:10px;flex:0 0 auto">
     <div style="min-width:0">
       ${badge}
@@ -828,7 +843,7 @@ function p2MetaFor(partner, scopeCity, mes) {
     if (m.partner === partner && m.mes === mes && (!scopeCity || m.city === scopeCity)) {
       // Agregador + TukTuk son aditivos (se suman entre ciudades).
       o.mA += m.mA || 0; o.mNR += m.mNR || 0; o.mH += m.mH || 0;
-      o.mtkAD += m.mtkAD || 0; o.mtkNR += m.mtkNR || 0; o.mtkCars += m.mtkCars || 0;
+      o.mtkAD += m.mtkAD || 0; o.mtkNR += m.mtkNR || 0; o.mtkCars += m.mtkCars || 0; o.mtkSH += m.mtkSH || 0;
       // Fleet son TASAS (no se suman): último no-nulo. Con scopeCity=ciudad hay una
       // sola fila; en Perú-general multi-ciudad toma una (referencia, no exacto).
       if (m.mSHcar != null) o.mSHcar = m.mSHcar;
@@ -836,7 +851,7 @@ function p2MetaFor(partner, scopeCity, mes) {
       if (m.mUtil  != null) o.mUtil  = m.mUtil;
     }
     return o;
-  }, { mA: 0, mNR: 0, mH: 0, mtkAD: 0, mtkNR: 0, mtkCars: 0, mSHcar: null, mAcc: null, mUtil: null });
+  }, { mA: 0, mNR: 0, mH: 0, mtkAD: 0, mtkNR: 0, mtkCars: 0, mtkSH: 0, mSHcar: null, mAcc: null, mUtil: null });
 }
 // Actuals: AD = máx sobre fechas de (Σciudades) — MISMO criterio que getRPC/metas.js:
 // suma las ciudades POR FECHA y LUEGO toma el máximo. NO Σciudades(máx del mes), que
@@ -1039,6 +1054,76 @@ function buildSlide2Avance(partner, idx) {
     ${noData
       ? `<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:.9rem">${noDataMsg}</div>`
       : `<div style="display:flex;flex-direction:column;gap:8px;flex:1;min-height:0">${rows}</div>`}
+    ${p2BrandFooter(idx)}
+  </div>`;
+}
+
+// ── SLIDE: AVANCE VS META COMBINADO (Taxi + TukTuk) ───────────────────────────
+// Vista rápida "cómo va TODO mi negocio": suma Conductores Activos, N+R y Horas de
+// Conexión de Taxi + TukTuk contra la meta combinada (meta Taxi + meta TukTuk).
+// Solo Perú-general (sin desglose por ciudad — eso ya existe por separado en las
+// slides Taxi/TukTuk individuales). Se inserta UNA VEZ en el deck vía p2Deck(), NO
+// vía P2_SLIDES (ese array se re-ejecuta completo para la sección Taxi Y para la
+// TukTuk — agregarla ahí la duplicaría). Solo aparece para partners con TukTuk
+// (p2TuktukSectionVisible) — sin TukTuk, "combinado" sería idéntico a Taxi-only.
+function buildSlide2AvanceCombinado(partner, idx) {
+  const es = PRESENT2_STATE.lang === "es";
+  const savedDs = PRESENT2_STATE.dataset;   // restaurar antes de salir (accessors globales)
+
+  const mesName = p2AvanceMes();   // dataset-agnóstico (lee metasData + "Hasta")
+
+  PRESENT2_STATE.dataset = "taxi";
+  const taxiDates = p2MonthDates(mesName);
+  const taxiLastDate = taxiDates.length ? taxiDates[taxiDates.length - 1] : p2AllDates().slice(-1)[0];
+  const taxiAct  = p2ActualsMTD(partner, null, taxiDates);
+  const taxiProj = p2ProjMTD(taxiAct, taxiLastDate);
+
+  PRESENT2_STATE.dataset = "tuktuk";
+  const tkDates = p2MonthDates(mesName);
+  const tkLastDate = tkDates.length ? tkDates[tkDates.length - 1] : p2AllDates().slice(-1)[0];
+  const tkAct  = p2ActualsMTD(partner, null, tkDates);
+  const tkProj = p2ProjMTD(tkAct, tkLastDate);
+
+  PRESENT2_STATE.dataset = savedDs;   // restaurar YA — antes de cualquier early-return
+
+  const meta = p2MetaFor(partner, null, mesName);   // dataset-agnóstico (mA/mNR/mH + mtkAD/mtkNR/mtkSH)
+  const metasLoaded = !!(STATE.metasData || []).length;
+  const noMonthData = metasLoaded && !taxiDates.length && !tkDates.length;
+  const noData = (!taxiDates.length && !tkDates.length) || !metasLoaded;
+
+  const defs = [
+    { label: es ? "Conductores Activos" : "Active Drivers",
+      real: taxiAct.lastAD + tkAct.lastAD, proj: taxiAct.lastAD + tkAct.lastAD,
+      goal: (meta.mA || 0) + (meta.mtkAD || 0), fmtN: fmt },
+    { label: es ? "Nuevos + Reactivados" : "New + React",
+      real: taxiAct.nr + tkAct.nr, proj: taxiProj.nr + tkProj.nr,
+      goal: (meta.mNR || 0) + (meta.mtkNR || 0), fmtN: fmt },
+    { label: es ? "Horas de Conexión" : "Supply Hours",
+      real: taxiAct.sh + tkAct.sh, proj: taxiProj.sh + tkProj.sh,
+      goal: (meta.mH || 0) + (meta.mtkSH || 0), fmtN: fmtSmart }
+  ];
+  const cards = defs.map(d => d.goal > 0
+    ? _p2MetaCard(d.label, d.real, d.goal, d.proj, d.fmtN, es)
+    : `<div style="flex:1;min-width:0;background:#fafafa;border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;justify-content:center;gap:2px">
+        <div style="font-size:.58rem;color:#aaa;font-weight:700;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(d.label)}</div>
+        <div style="font-weight:900;font-size:1rem;color:#111">${d.fmtN(d.real)}</div>
+        <div style="font-size:.6rem;color:#bbb">${es ? "Sin meta" : "No target"}</div>
+      </div>`
+  ).join("");
+
+  const title = es ? "Avance vs Meta Combinado" : "Combined Goal vs Target";
+  const sub   = es
+    ? "Taxi + TukTuk sumados · barra = avance · marca negra = proyección"
+    : "Taxi + TukTuk combined · bar = progress · black mark = projection";
+  const noDataMsg = noMonthData
+    ? (es ? `Sin datos de ${escapeHTML(mesName)} para comparar con la meta.` : `No data for ${escapeHTML(mesName)} to compare.`)
+    : (es ? "Sin metas cargadas para este mes." : "No goals loaded for this month.");
+
+  return `<div style="width:100%;height:100%;background:#fff;padding:12px 14px;display:flex;flex-direction:column;overflow:hidden">
+    ${p2BrandHeader(partner, title + " · " + (mesName || "—"), sub, { text: es ? "🔀 COMBINADO" : "🔀 COMBINED", color: "#8b5cf6" })}
+    ${noData
+      ? `<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:.9rem">${noDataMsg}</div>`
+      : `<div style="display:flex;gap:8px;flex:1;min-height:0;align-items:stretch">${cards}</div>`}
     ${p2BrandFooter(idx)}
   </div>`;
 }

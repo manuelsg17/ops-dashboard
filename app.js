@@ -379,66 +379,76 @@ function popDates() {
   }
 }
 
+// Suma N días a un string "YYYY-MM-DD" con aritmética 100% LOCAL (constructor y
+// getters multi-argumento de Date, nunca toISOString()/parseo de string, que son
+// UTC — Peru es UTC-5 fijo y de noche ya corre el día, desalineando el cálculo).
+function _addDaysToDateStr(str, n) {
+  const [y, m, d] = str.split("-").map(Number);
+  const dt = new Date(y, m - 1, d + n);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+}
+
 // ── DATE PRESETS ──────────────────────────────────────────────────────────────
 function setDatePreset(type) {
   const dates = STATE.allDates;
   if (!dates || !dates.length) return;
-  const today = new Date();
+  // Todo ancla al ÚLTIMO DATO disponible (lastD), NUNCA al reloj real (new Date()):
+  // si la data cargada va rezagada respecto a hoy (normal en un dashboard de carga
+  // manual), "Esta semana"/"Quincena"/7-90 días deben caer en el último período CON
+  // DATOS — igual que ya hacía "Este mes" — en vez de colapsar a un día (semana) o
+  // expandirse silenciosamente a todo el histórico (quincena, fallback a dates[0]).
+  const lastD = dates[dates.length - 1];
   let from, to;
 
   if (type === 'week') {
-    // Last Monday up to most recent date in data
-    const day = today.getDay(); // 0=Sun, 1=Mon...
-    const diff = (day + 6) % 7; // days since last Monday
-    const monday = new Date(today);
-    monday.setDate(today.getDate() - diff);
-    const mondayStr = monday.toISOString().slice(0, 10);
-    from = dates.find(d => d >= mondayStr) || dates[dates.length - 1];
-    to   = dates[dates.length - 1];
+    // Lunes de la semana de lastD, hasta lastD.
+    const [ly, lm, ld] = lastD.split("-").map(Number);
+    const dow  = new Date(ly, lm - 1, ld).getDay(); // 0=Dom, 1=Lun...
+    const diff = (dow + 6) % 7;                      // días desde el lunes
+    const mondayStr = _addDaysToDateStr(lastD, -diff);
+    from = dates.find(d => d >= mondayStr) || lastD;
+    to   = lastD;
   } else if (type === 'fortnight') {
-    const dayOfMonth = today.getDate();
-    if (dayOfMonth <= 15) {
-      // First fortnight: 1st to 15th
-      const m = today.toISOString().slice(0, 7);
+    const [ly, lm, ld] = lastD.split("-").map(Number);
+    const m = `${ly}-${String(lm).padStart(2, "0")}`;
+    if (ld <= 15) {
+      // Primera quincena: 1-15 del mes de lastD
       from = dates.find(d => d >= `${m}-01`) || dates[0];
       to   = dates.filter(d => d <= `${m}-15`).at(-1) || dates[0];
     } else {
-      // Second fortnight: 16th to end of month
-      const m = today.toISOString().slice(0, 7);
+      // Segunda quincena: 16-fin del mes de lastD
       from = dates.find(d => d >= `${m}-16`) || dates[0];
-      to   = dates[dates.length - 1];
+      to   = lastD;
     }
   } else if (type === 'month') {
     // "Este mes" = el ÚLTIMO MES CON DATOS (no el mes calendario de hoy). Si la data
     // llega a junio y hoy es julio, selecciona junio COMPLETO (1ra → última semana),
-    // no solo la última semana. Antes anclaba a today → from/to colapsaban al final.
-    const lastD = dates[dates.length - 1];
+    // no solo la última semana.
     const m = lastD.slice(0, 7);
     // Mensual: dates son "YYYY-MM"; semanal/diario: "YYYY-MM-DD". "2026-06" >= "2026-06-01"
     // es FALSE (string), por eso en mensual se compara contra m directo.
     const monthKey = STATE.curMode === "mensual" ? m : `${m}-01`;
     from = dates.find(d => d >= monthKey) || dates[0];
-    to   = dates[dates.length - 1];
+    to   = lastD;
 
   // ── Presets para escala diaria ───────────────────────────────────────────
   } else if (type === 'today') {
-    from = to = dates[dates.length - 1]; // día más reciente disponible
+    from = to = lastD; // día más reciente disponible
   } else if (type === '7d' || type === '14d' || type === '30d' || type === '90d') {
     const nDays = { '7d': 6, '14d': 13, '30d': 29, '90d': 89 }[type];
-    const cutoff = new Date(dates[dates.length - 1]);
-    cutoff.setDate(cutoff.getDate() - nDays);
-    from = dates.find(d => d >= cutoff.toISOString().slice(0, 10)) || dates[0];
-    to   = dates[dates.length - 1];
+    const cutoffStr = _addDaysToDateStr(lastD, -nDays);
+    from = dates.find(d => d >= cutoffStr) || dates[0];
+    to   = lastD;
 
   // ── Presets para escala mensual ──────────────────────────────────────────
   } else if (type === '3m' || type === '6m') {
     const nMonths = type === '3m' ? 3 : 6;
-    // En mensual, dates son "YYYY-MM". slice(0,7) sigue funcionando.
-    const cutoff  = new Date(dates[dates.length - 1].slice(0, 7) + "-01");
-    cutoff.setMonth(cutoff.getMonth() - nMonths + 1);
-    const cutoffStr = cutoff.toISOString().slice(0, 7);
+    // En mensual, dates son "YYYY-MM".
+    const [ly, lm] = lastD.slice(0, 7).split("-").map(Number);
+    const cutoffDate = new Date(ly, lm - 1 - (nMonths - 1), 1);
+    const cutoffStr  = `${cutoffDate.getFullYear()}-${String(cutoffDate.getMonth() + 1).padStart(2, "0")}`;
     from = dates.find(d => d >= cutoffStr) || dates[0];
-    to   = dates[dates.length - 1];
+    to   = lastD;
   }
 
   if (!from || !to) return;

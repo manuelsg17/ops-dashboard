@@ -107,10 +107,28 @@ function _renderRendImpl() {
   const empty     = document.getElementById("rendEmpty");
   const content   = document.getElementById("rendContent");
 
-  // Sin partners, o Agregador sin datos → empty global (mensaje de carga).
-  if (!partners.length || (!filtered.length && line === "agg")) {
+  // Sin partners seleccionados → empty global (mensaje de carga: aún no hay data en
+  // memoria, o el usuario deschequeó todo).
+  if (!partners.length) {
     empty.style.display   = "";
     content.style.display = "none";
+    return;
+  }
+  // Agregador con partners seleccionados pero 0 filas en el filtro actual: NO es "falta
+  // cargar data" (el empty global mentiría) — casi siempre Ciudad+KAM/partners sin overlap
+  // (ej. Ciudad=Arequipa + KAM cuyos partners solo operan en Lima). Mensaje inline nombrando
+  // la combinación exacta, mismo patrón que el empty de Fleet/TukTuk de abajo.
+  if (!filtered.length && line === "agg") {
+    empty.style.display   = "none";
+    content.style.display = "";
+    const f       = getCurrentFilters();
+    const kamLbl  = f.kam  !== "all" ? ` de <strong>${escapeHTML(f.kam)}</strong>` : "";
+    const cityLbl = f.city !== "all" ? ` en <strong>${cityLabel(f.city)}</strong>` : "";
+    content.innerHTML = rendLineToggleHTML() +
+      `<div class="section"><div style="padding:28px 16px;text-align:center;color:#999;font-size:.85rem">
+        No hay partners${kamLbl} con datos${cityLbl} en el rango de fechas seleccionado.<br>
+        La data SÍ está cargada — esta combinación de filtros no tiene overlap. Ajusta ciudad, KAM, fechas o partners.
+      </div></div>`;
     return;
   }
   // Fleet/TukTuk sin datos para el filtro: mantener el toggle visible (para volver a
@@ -161,8 +179,9 @@ function _renderRendImpl() {
   // que sí son columnas propias de la sub-flota. Se corta antes de las secciones
   // genéricas y del pump de charts.
   if (line === "fleet") {
-    content.innerHTML = _renderFleetView(
-      filtered.filter(r => r.date === lastDate), prevFiltered, lastDate, prevDate);
+    const fLastRows = filtered.filter(r => r.date === lastDate);
+    content.innerHTML = _renderFleetView(fLastRows, prevFiltered, lastDate, prevDate);
+    _scheduleFleetCharts(filtered, dates, fLastRows);
     return;
   }
 
@@ -644,21 +663,123 @@ function _rendKpiCard(label, icon, val, prev, color, fmtFn) {
 // Suma/pondera KPIs Fleet sobre filas crudas (una por fleetroom-ciudad de una fecha).
 // SH/Auto interno = Σ internalFleetSh / Σ ownedFleetActiveCars; Aceptación = Σ(rate×trips)/Σtrips
 // (mismas fórmulas que presentacion2.p2FleetSeries). Cars/Branded = snapshots sumados.
+// Revenue/productividad (gmv, comisión, tripsPerHour, moneyPerHour) se recalculan EXACTOS
+// desde las sumas crudas (gmv, trips, SH) — no se reusa la columna-ratio precalculada por
+// fila, para no perder precisión al agregar varias filas (misma lección que
+// excel-upload-full-precision: sumar crudo, no promediar ratios ya redondeados).
+// Calidad/riesgo/dependencia (fraude, mal calificados, completion, subsidio, soporte,
+// % SH externo) SÍ son shares sin numerador/denominador propio en la BD → se ponderan
+// por trips (o por gmv en el caso de subsidio) igual que Aceptación.
 function _rendFleetAgg(rows) {
-  let owned = 0, intSh = 0, trips = 0, accW = 0, branded = 0, actCars = 0;
+  let owned = 0, intSh = 0, extSh = 0, trips = 0, accW = 0, branded = 0, actCars = 0,
+      gmv = 0, commission = 0,
+      fraudW = 0, badRatedW = 0, complW = 0, supportW = 0, subsidyW = 0;
   rows.forEach(r => {
-    owned   += r.ownedFleetActiveCars || 0;
-    intSh   += r.internalFleetSh || 0;
-    trips   += r.trips || 0;
-    accW    += (r.acceptanceRate || 0) * (r.trips || 0);
-    branded += r.brandedActiveCars || 0;
-    actCars += r.activeCars || 0;
+    owned      += r.ownedFleetActiveCars || 0;
+    intSh      += r.internalFleetSh || 0;
+    extSh      += r.externalFleetSh || 0;
+    trips      += r.trips || 0;
+    accW       += (r.acceptanceRate || 0) * (r.trips || 0);
+    branded    += r.brandedActiveCars || 0;
+    actCars    += r.activeCars || 0;
+    gmv        += r.gmv || 0;
+    commission += r.commission || 0;
+    fraudW     += (r.fraudTripsShare || 0) * (r.trips || 0);
+    badRatedW  += (r.badRatedTripsShare || 0) * (r.trips || 0);
+    complW     += (r.completionRate || 0) * (r.trips || 0);
+    supportW   += (r.driverSupportRequestsShare || 0) * (r.trips || 0);
+    subsidyW   += (r.driverSubsidiesByGmv || 0) * (r.gmv || 0);
   });
+  const totalSh = intSh + extSh;
   return {
-    owned, branded, actCars,
-    shCar:  owned > 0 ? intSh / owned : 0,
-    accept: trips > 0 ? (accW / trips) * 100 : 0
+    owned, branded, actCars, gmv, commission,
+    shCar:            owned > 0   ? intSh / owned : 0,
+    accept:           trips > 0   ? (accW / trips) * 100 : 0,
+    pctBranded:       owned > 0   ? (branded / owned) * 100 : 0,
+    gmvPerCar:        owned > 0   ? gmv / owned : 0,
+    commissionPerCar: owned > 0   ? commission / owned : 0,
+    tripsPerCar:      owned > 0   ? trips / owned : 0,
+    tripsPerHour:     totalSh > 0 ? trips / totalSh : 0,
+    moneyPerHour:     totalSh > 0 ? gmv / totalSh : 0,
+    externalShShare:  totalSh > 0 ? (extSh / totalSh) * 100 : 0,
+    fraudShare:       trips > 0   ? (fraudW / trips) * 100 : 0,
+    badRatedShare:    trips > 0   ? (badRatedW / trips) * 100 : 0,
+    completionRate:   trips > 0   ? (complW / trips) * 100 : 0,
+    supportReqShare:  trips > 0   ? (supportW / trips) * 100 : 0,
+    subsidyByGmv:     gmv > 0     ? (subsidyW / gmv) * 100 : 0
   };
+}
+// Agrega KPIs Fleet por fecha (Peru total, todas las ciudades) — mismas fórmulas
+// que _rendFleetAgg, indexadas por fecha. Insumo de los charts de Tendencias.
+function _fleetAggByDate(rows) {
+  const m = new Map();
+  rows.forEach(r => { let a = m.get(r.date); if (!a) { a = []; m.set(r.date, a); } a.push(r); });
+  const out = {};
+  m.forEach((rs, d) => { out[d] = _rendFleetAgg(rs); });
+  return out;
+}
+// Línea de un KPI de flota (Peru total) a lo largo del rango filtrado (no solo el
+// último período — a diferencia de las tarjetas/tabla, que son snapshot).
+const _FLEET_TREND_LABEL = {
+  owned: "Owned Cars", shCar: "SH / Auto", accept: "Aceptación %", branded: "Branded Cars",
+  gmvPerCar: "GMV / Auto", externalShShare: "% SH Externo"
+};
+function buildFleetTrendLine(elId, dates, byDate, key, color) {
+  const data = dates.map(d => (byDate[d] ? byDate[d][key] : 0) || 0);
+  buildLineChart(elId, dates, [{ name: _FLEET_TREND_LABEL[key] || key, data }], [color]);
+}
+// Donut "Owned Cars por Partner" — snapshot del último período, Top 6 + Otros.
+// Parts-of-whole (dónde se concentra la flota) → donut es la elección correcta,
+// no una línea (no es serie de tiempo).
+function _buildFleetOwnedDonut(lastRows) {
+  const byP = new Map();
+  lastRows.forEach(r => {
+    const v = r.ownedFleetActiveCars || 0;
+    if (!v) return;
+    byP.set(r.partner, (byP.get(r.partner) || 0) + v);
+  });
+  const sorted  = [...byP.entries()].sort((a, b) => b[1] - a[1]);
+  const TOP     = 6;
+  const top     = sorted.slice(0, TOP);
+  const restSum = sumR(sorted.slice(TOP), ([, v]) => v);
+  const labels  = top.map(([p]) => p);
+  const series  = top.map(([, v]) => v);
+  const colors  = top.map(([p]) => STATE.partnerColors[p] || "#94a3b8");
+  if (restSum > 0) { labels.push("Otros"); series.push(restSum); colors.push("#cbd5e1"); }
+  buildDonutChart("chF_ownedDonut", labels, series, colors);
+}
+// Donut "Brandeados vs No Brandeados" — snapshot del último período, Peru total.
+function _buildFleetBrandedDonut(lastRows) {
+  const agg = _rendFleetAgg(lastRows);
+  const noBranded = Math.max(agg.owned - agg.branded, 0);
+  buildDonutChart("chF_brandedDonut", ["Brandeados", "No brandeados"], [agg.branded, noBranded], ["#f59e0b", "#e2e8f0"]);
+}
+// Programa los charts de Fleet (tendencias + composición) diferidos con RAF — mismo
+// patrón anti-freeze que pumpCharts() de Agregador. Aborta si cambia filtro/tab/línea
+// mientras corre (evita pintar charts sobre un render ya obsoleto).
+function _scheduleFleetCharts(filtered, dates, lastRows) {
+  const tokenAtSchedule = _renderRendToken;
+  const tabTokenAtSched = STATE._tabRenderId;
+  const byDate = _fleetAggByDate(filtered);
+  const jobs = [
+    () => buildFleetTrendLine("chF_owned",   dates, byDate, "owned",  "#0891b2"),
+    () => buildFleetTrendLine("chF_shcar",   dates, byDate, "shCar",  "#8b5cf6"),
+    () => buildFleetTrendLine("chF_accept",  dates, byDate, "accept", "#10b981"),
+    () => buildFleetTrendLine("chF_branded", dates, byDate, "branded","#f59e0b"),
+    () => buildFleetTrendLine("chF_gmvcar",  dates, byDate, "gmvPerCar",       "#059669"),
+    () => buildFleetTrendLine("chF_extsh",   dates, byDate, "externalShShare", "#dc2626"),
+    () => _buildFleetOwnedDonut(lastRows),
+    () => _buildFleetBrandedDonut(lastRows)
+  ];
+  function pump(i) {
+    if (i >= jobs.length) return;
+    if (_renderRendToken !== tokenAtSchedule)   return;
+    if (STATE._tabRenderId !== tabTokenAtSched) return;
+    if (STATE.curTab !== "rend")                return;
+    try { jobs[i](); } catch (e) { console.warn("Fleet chart job", i, "failed:", e); }
+    requestAnimationFrame(() => pump(i + 1));
+  }
+  requestAnimationFrame(() => pump(0));
 }
 // Vista Fleet completa (SOLO KPIs de flota): Perú general + por ciudad + por partner.
 // lastRows/prevRows = filas CRUDAS de sub-flotas Fleet (una por fleetroom-ciudad) del
@@ -667,11 +788,51 @@ function _renderFleetView(lastRows, prevRows, lastDate, prevDate) {
   const periodLabel = STATE.curMode === "mensual" ? "último mes" : "última semana";
   let html = rendLineToggleHTML();
 
-  // Perú general (4 KPIs de flota)
+  // Perú general (10 KPIs de flota: presencia/calidad + revenue/productividad)
   html += secH("🚗", "#0891b2", "Fleet · Perú General",
-    `Solo KPIs de flota (owned cars, SH/auto interno, aceptación, branded) · snapshot ${periodLabel}`,
+    `Presencia, calidad y revenue/productividad de flota · snapshot ${periodLabel}`,
     d2s(lastDate));
   html += _rendFleetCardsBody(_rendFleetAgg(lastRows), _rendFleetAgg(prevRows));
+
+  // Tendencias (línea, Peru total, evolución del rango filtrado — no solo el
+  // último período). Series continuas → línea es la lectura correcta (mismo
+  // patrón que la sección "Tendencias" del Agregador).
+  html += secH("📈", "#10b981", "Fleet · Tendencias", "Evolución Peru total en el rango filtrado", "");
+  html += `<div class="section"><div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px">
+    <div class="chart-card"><div class="chart-head"><span class="chart-title">Owned Fleet Cars</span><button class="png-btn" onclick="dlChart('chF_owned','Fleet_OwnedCars')">PNG</button></div><div id="chF_owned"></div></div>
+    <div class="chart-card"><div class="chart-head"><span class="chart-title">SH / Auto (interno)</span><button class="png-btn" onclick="dlChart('chF_shcar','Fleet_SHAuto')">PNG</button></div><div id="chF_shcar"></div></div>
+    <div class="chart-card"><div class="chart-head"><span class="chart-title">Aceptación %</span><button class="png-btn" onclick="dlChart('chF_accept','Fleet_Aceptacion')">PNG</button></div><div id="chF_accept"></div></div>
+    <div class="chart-card"><div class="chart-head"><span class="chart-title">Branded Active Cars</span><button class="png-btn" onclick="dlChart('chF_branded','Fleet_Branded')">PNG</button></div><div id="chF_branded"></div></div>
+    <div class="chart-card"><div class="chart-head"><span class="chart-title">GMV / Auto</span><button class="png-btn" onclick="dlChart('chF_gmvcar','Fleet_GMVporAuto')">PNG</button></div><div id="chF_gmvcar"></div></div>
+    <div class="chart-card"><div class="chart-head"><span class="chart-title">% SH Externo (dependencia)</span><button class="png-btn" onclick="dlChart('chF_extsh','Fleet_PctSHExterno')">PNG</button></div><div id="chF_extsh"></div></div>
+  </div></div>`;
+
+  // Composición (donut, snapshot del último período) — dónde se concentra la
+  // flota y qué tan brandeada está. Parts-of-whole (pocas categorías, una foto
+  // en el tiempo) → donut, no línea.
+  html += secH("🥯", "#7e22ce", "Fleet · Composición", `Snapshot ${d2s(lastDate)} · distribución, no tendencia`, "");
+  html += `<div class="section"><div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px">
+    <div class="chart-card"><div class="chart-head"><span class="chart-title">Owned Cars por Partner</span><button class="png-btn" onclick="dlChart('chF_ownedDonut','Fleet_OwnedPorPartner')">PNG</button></div><div id="chF_ownedDonut"></div></div>
+    <div class="chart-card"><div class="chart-head"><span class="chart-title">Brandeados vs No Brandeados</span><button class="png-btn" onclick="dlChart('chF_brandedDonut','Fleet_Brandeados')">PNG</button></div><div id="chF_brandedDonut"></div></div>
+  </div></div>`;
+
+  // Calidad y dependencia (scorecard, Perú total, snapshot) — métricas de riesgo/
+  // madurez del negocio: se leen mejor como checklist compacto que como tiles
+  // grandes (son secundarias frente a presencia/revenue de arriba).
+  html += secH("🛡️", "#64748b", "Fleet · Calidad y Dependencia",
+    `Riesgo operativo y madurez del negocio · snapshot ${periodLabel}`, "");
+  {
+    const c = _rendFleetAgg(lastRows), p = _rendFleetAgg(prevRows);
+    const pct = v => fmt(v) + "%";
+    html += `<div class="section">${_rendFleetScorecard([
+      { label: "% SH Externo (no propio)",        val: c.externalShShare, prev: p.externalShShare, fmtFn: pct },
+      { label: "% Viajes con Fraude",              val: c.fraudShare,      prev: p.fraudShare,      fmtFn: pct },
+      { label: "% Viajes Mal Calificados",         val: c.badRatedShare,   prev: p.badRatedShare,   fmtFn: pct },
+      { label: "% Completion Rate",                val: c.completionRate,  prev: p.completionRate,  fmtFn: pct },
+      { label: "Subsidio Yango / GMV",             val: c.subsidyByGmv,    prev: p.subsidyByGmv,    fmtFn: pct },
+      { label: "% Solicitudes de Soporte",         val: c.supportReqShare, prev: p.supportReqShare, fmtFn: pct }
+    ])}</div>`;
+  }
 
   // Por ciudad
   html += secH("🏙️", "#06b6d4", "Fleet por Ciudad", "KPIs de flota por ciudad · comparativo con período anterior", "");
@@ -688,10 +849,11 @@ function _renderFleetView(lastRows, prevRows, lastDate, prevDate) {
           <span style="width:10px;height:10px;border-radius:50%;background:${col};display:inline-block"></span>
           ${cityLabel(city)}
         </div>
-        ${_rendFleetCityKpi("Owned Fleet Cars", c.owned,   p.owned,   fmt)}
-        ${_rendFleetCityKpi("SH / Auto",        c.shCar,   p.shCar,   fmt)}
-        ${_rendFleetCityKpi("Aceptación",       c.accept,  p.accept,  v => fmt(v) + "%")}
-        ${_rendFleetCityKpi("Branded Cars",     c.branded, p.branded, fmt)}
+        ${_rendFleetCityKpi("Owned Fleet Cars", c.owned,      p.owned,      fmt)}
+        ${_rendFleetCityKpi("SH / Auto",        c.shCar,      p.shCar,      fmt)}
+        ${_rendFleetCityKpi("Aceptación",       c.accept,     p.accept,     v => fmt(v) + "%")}
+        ${_rendFleetCityKpi("Branded Cars",     c.branded,    p.branded,    fmt)}
+        ${_rendFleetCityKpi("% Brandeado",      c.pctBranded, p.pctBranded, v => fmt(v) + "%")}
       </div>`;
   });
   html += `</div></div>`;
@@ -703,12 +865,34 @@ function _renderFleetView(lastRows, prevRows, lastDate, prevDate) {
 }
 function _rendFleetCardsBody(c, p) {
   const pct = v => fmt(v) + "%";
-  return `<div class="section"><div class="metric-row">
-      ${_rendKpiCard("Owned Fleet Cars",   "🚗", c.owned,   p.owned,   "#0891b2", fmt)}
-      ${_rendKpiCard("SH / Auto (interno)", "⏱️", c.shCar,   p.shCar,   "#8b5cf6", fmt)}
-      ${_rendKpiCard("Aceptación",          "✅", c.accept,  p.accept,  "#10b981", pct)}
-      ${_rendKpiCard("Branded Active Cars", "🏷️", c.branded, p.branded, "#f59e0b", fmt)}
+  // 10 tarjetas: el grid de 3 columnas de .metric-row se sobre-escribe inline con
+  // auto-fit (no tocar la clase global — la usa también el Agregador con 3 cards).
+  // auto-fit/minmax evita que se aplasten en pantallas angostas (envuelve a 2 filas).
+  return `<div class="section"><div class="metric-row" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+      ${_rendKpiCard("Owned Fleet Cars",   "🚗", c.owned,      p.owned,      "#0891b2", fmt)}
+      ${_rendKpiCard("SH / Auto (interno)", "⏱️", c.shCar,      p.shCar,      "#8b5cf6", fmt)}
+      ${_rendKpiCard("Aceptación",          "✅", c.accept,     p.accept,     "#10b981", pct)}
+      ${_rendKpiCard("Branded Active Cars", "🏷️", c.branded,    p.branded,    "#f59e0b", fmt)}
+      ${_rendKpiCard("% Brandeado",         "🎯", c.pctBranded, p.pctBranded, "#7e22ce", pct)}
+      ${_rendKpiCard("GMV / Auto",          "💰", c.gmvPerCar,        p.gmvPerCar,        "#059669", fmt)}
+      ${_rendKpiCard("Comisión / Auto",     "💵", c.commissionPerCar, p.commissionPerCar, "#059669", fmt)}
+      ${_rendKpiCard("Viajes / Auto",       "🧭", c.tripsPerCar,      p.tripsPerCar,      "#0ea5e9", fmt)}
+      ${_rendKpiCard("Viajes / Hora",       "⚡", c.tripsPerHour,     p.tripsPerHour,     "#0ea5e9", fmt)}
+      ${_rendKpiCard("GMV / Hora",          "📈", c.moneyPerHour,     p.moneyPerHour,     "#059669", fmt)}
     </div></div>`;
+}
+// Scorecard compacto: filas label+valor+badge WoW/MoM apiladas en 1 tarjeta (a
+// diferencia de _rendKpiCard, que es 1 tarjeta grande por métrica). Métricas de
+// calidad/riesgo/dependencia son secundarias — se leen mejor como checklist que
+// como 6 tiles gigantes.
+function _rendFleetScorecard(items) {
+  return `<div class="mcard" style="border-top:3px solid #64748b">
+    ${items.map(it => `
+      <div class="city-kpi">
+        <span class="city-kpi-label">${it.label}</span>
+        <div class="city-kpi-right"><span class="city-kpi-val">${it.fmtFn(it.val)}</span>${bdgMode(it.val, it.prev, "mb-badge")}</div>
+      </div>`).join("")}
+  </div>`;
 }
 function _rendFleetCityKpi(label, val, prev, fmtFn) {
   return `<div class="city-kpi">
@@ -726,21 +910,25 @@ function _rendFleetPartnerTable(lastRows, prevRows) {
   const rows = [...byP.entries()].map(([p, rs]) => {
     const c  = _rendFleetAgg(rs);
     const pr = _rendFleetAgg(prevByP.get(p) || []);
-    return { partner: p, kam: (rs[0] || {}).kam || "", ...c, pOwned: pr.owned };
+    return { partner: p, kam: (rs[0] || {}).kam || "", ...c, prev: pr };
   }).sort((a, b) => b.owned - a.owned);
   if (!rows.length) return `<div style="padding:12px;color:#aaa;font-size:.8rem">Sin partners Fleet en el filtro actual.</div>`;
+  // Delta inline junto al valor (mismo patrón que _rendFleetCityKpi) en vez de una
+  // sola columna "WoW Cars" — así cada métrica trae su propio WoW/MoM.
   let h = `<table class="dtbl"><thead><tr>
-    <th>Partner</th><th>KAM</th><th>Owned Cars</th><th>SH/Auto</th><th>Aceptación</th><th>Branded</th><th>WoW Cars</th></tr></thead><tbody>`;
+    <th>Partner</th><th>KAM</th><th>Owned Cars</th><th>SH/Auto</th><th>Aceptación</th><th>Branded</th><th>% Brandeado</th><th>GMV/Auto</th><th>Comisión/Auto</th></tr></thead><tbody>`;
   rows.forEach(r => {
     const kc = KAM_COLORS[r.kam] || "#ccc";
     h += `<tr>
       <td>${escapeHTML(r.partner)}</td>
       <td><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${kc};margin-right:4px"></span>${escapeHTML(r.kam)}</td>
-      <td class="tn">${fmt(r.owned)}</td>
-      <td class="tn">${fmt(r.shCar)}</td>
-      <td class="tn">${fmt(r.accept)}%</td>
+      <td class="tn">${fmt(r.owned)} ${bdgMode(r.owned, r.prev.owned, "tbadge")}</td>
+      <td class="tn">${fmt(r.shCar)} ${bdgMode(r.shCar, r.prev.shCar, "tbadge")}</td>
+      <td class="tn">${fmt(r.accept)}% ${bdgMode(r.accept, r.prev.accept, "tbadge")}</td>
       <td class="tn">${fmt(r.branded)}</td>
-      <td class="tn">${bdgMode(r.owned, r.pOwned, "tbadge")}</td>
+      <td class="tn">${fmt(r.pctBranded)}% ${bdgMode(r.pctBranded, r.prev.pctBranded, "tbadge")}</td>
+      <td class="tn">${fmt(r.gmvPerCar)} ${bdgMode(r.gmvPerCar, r.prev.gmvPerCar, "tbadge")}</td>
+      <td class="tn">${fmt(r.commissionPerCar)} ${bdgMode(r.commissionPerCar, r.prev.commissionPerCar, "tbadge")}</td>
     </tr>`;
   });
   h += `</tbody></table>`;
