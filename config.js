@@ -5,6 +5,11 @@
 const SUPABASE_URL      = "https://oqakoinyzvdgqilxwjjv.supabase.co";  // ← reemplaza
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9xYWtvaW55enZkZ3FpbHh3amp2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MTgyMTQsImV4cCI6MjA5MDI5NDIxNH0.ODvMd19d7FoPZnYYdHl2a6ifQYVIO9YT8l8UrCMjyiI";                   // ← reemplaza
 
+// Flag de debug: en false por default para no filtrar CLIDs/partners en consola
+// (visibles para cualquiera con DevTools abiertas). Activar manualmente desde la
+// consola del navegador (`DEBUG = true`) cuando se necesite diagnosticar un upload.
+let DEBUG = false;
+
 // Colores fijos por KAM
 const KAM_COLORS = {
   Miguel:  "#FF0000",
@@ -56,6 +61,25 @@ const METRICS = {
 };
 
 // Estado global de la aplicación
+// ── FLEET EXTERNO (Supabase de un colega, solo-lectura) ──────────────────────
+// Se lee EN VIVO desde el navegador con un segundo cliente Supabase (patrón igual
+// al tuyo: anon key pública protegida por RLS del lado del colega). NO poner aquí
+// contraseñas ni service_role — solo la anon/publishable key de solo-lectura.
+// Se configura desde la UI (tab Fleet Externo) y se guarda en localStorage — así
+// NO se commitea la credencial del colega al repo. Pedirle: URL del proyecto,
+// anon key, y una VISTA de solo-lectura con SELECT habilitado para el rol anónimo
+// (que exponga solo columnas de fleet).
+const FLEET_EXT = (function () {
+  const def = { enabled: false, url: "", anonKey: "", table: "" };
+  try {
+    const s = JSON.parse(localStorage.getItem("yangoFleetExtConfig") || "null");
+    if (s && s.url && s.anonKey) {   // tabla opcional: el explorador la descubre
+      return { enabled: true, url: s.url.trim(), anonKey: s.anonKey.trim(), table: (s.table || "").trim() };
+    }
+  } catch (_) {}
+  return def;
+})();
+
 const STATE = {
   rawData:             [],
   rawDataMensual:      [],
@@ -82,6 +106,10 @@ const STATE = {
   declineMetric:    "activeDrivers",
   proyectosData:    [],
   seguimientoData:  [],     // tracker de reuniones (tabla seguimiento, Fase 3)
+  fleetExterno:     [],     // filas de fleet leídas de la Supabase del colega (solo-lectura)
+  fleetExternoCols: [],     // nombres de columnas detectados (auto) para render genérico
+  fleetExternoError: null,  // mensaje de error de la última lectura (RLS, red, config)
+  fleetExternoLoaded: false,
   parseWarnings:    new Set(),
   _mensualLoaded:   false,
   _diarioLoaded:    false,

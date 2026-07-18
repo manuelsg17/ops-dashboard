@@ -277,7 +277,7 @@ function _renderOpsImpl() {
           <div style="font-weight:700;font-size:.82rem;margin-bottom:8px;color:${cityColor}">${cityLabel(city)}</div>
           ${sorted.map(p => `
             <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #f5f5f5;font-size:.78rem">
-              <span style="color:#333">${p.partner}</span>
+              <span style="color:#333">${escapeHTML(p.partner)}</span>
               <span class="leads-badge">★ ${fmt(p.ns)}</span>
             </div>`).join("")}
         </div>`;

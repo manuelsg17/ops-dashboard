@@ -127,7 +127,7 @@ function renderUnifView() {
     tbody += `
       <tr style="background:${col}18;border-top:2px solid ${col}20">
         <td colspan="10" style="font-size:.78rem;font-weight:700;color:${col};padding:6px 8px">
-          <span style="width:8px;height:8px;border-radius:50%;background:${col};display:inline-block;margin-right:5px"></span>${kam}
+          <span style="width:8px;height:8px;border-radius:50%;background:${col};display:inline-block;margin-right:5px"></span>${escapeHTML(kam)}
           <span style="font-size:.7rem;color:#aaa;font-weight:400">(${group.length} partners)</span>
         </td>
       </tr>`;
@@ -140,7 +140,7 @@ function renderUnifView() {
         <tr class="dtbl-row">
           <td style="font-size:.78rem">
             <span style="width:7px;height:7px;border-radius:50%;background:${col};display:inline-block;margin-right:5px"></span>
-            ${r.partner}
+            ${escapeHTML(r.partner)}
           </td>
           <td style="font-size:.78rem;text-align:right">${fmt(r.ad)}</td>
           <td style="font-size:.72rem;color:#aaa;text-align:right">${m ? fmt(m.mA) : "—"}</td>
@@ -162,7 +162,7 @@ function renderUnifView() {
     const kmH  = group.reduce((s, r) => s + (metaByPartner[r.partner]?.mH  || 0), 0);
     tbody += `
       <tr style="background:#f5f5f5;font-weight:700;font-size:.78rem">
-        <td style="padding-left:16px;color:${col}">Total ${kam}</td>
+        <td style="padding-left:16px;color:${col}">Total ${escapeHTML(kam)}</td>
         <td style="text-align:right">${fmt(kAD)}</td><td style="text-align:right;color:#aaa">${fmt(kmA)}</td>${pCell(kAD, kmA)}
         <td style="text-align:right">${fmt(kNR)}</td><td style="text-align:right;color:#aaa">${fmt(kmNR)}</td>${pCell(kNR, kmNR)}
         <td style="text-align:right">${fmt(kSH)}</td><td style="text-align:right;color:#aaa">${fmt(kmH)}</td>${pCell(kSH, kmH)}

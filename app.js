@@ -810,7 +810,7 @@ function renderConfig() {
       <div class="mcard" style="border-left:3px solid ${color}">
         <div class="mcard-label">
           <span style="width:8px;height:8px;border-radius:50%;background:${color};display:inline-block"></span>
-          ${kam}
+          ${escapeHTML(kam)}
         </div>
         <div class="mcard-val">${count}</div>
         <div style="font-size:.75rem;color:#aaa">CLIDs asignados</div>
@@ -883,7 +883,7 @@ function renderConfigResults() {
       const partnerH = escapeHTML(partner);
       const kamH     = escapeHTML(kam);
       // Para uso dentro de comillas simples de onclick, escapar apostrofes
-      const clidJS   = clid.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+      const clidJS   = escapeJSAttr(clid);
       const isFleet  = !!(STATE.CLID_IS_FLEET  || {})[clid];
       const isTuktuk = !!(STATE.CLID_IS_TUKTUK || {})[clid];
       html += `
@@ -950,7 +950,7 @@ function kamMakeEditable(clid) {
   const editKamOpts = kams.map(k => `<option value="${escapeHTML(k)}"${k===kam?" selected":""}>${escapeHTML(k)}</option>`).join("");
   const clidH    = escapeHTML(clid);
   const partnerH = escapeHTML(partner);
-  const clidJS   = clid.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  const clidJS   = escapeJSAttr(clid);
   const isFleet  = !!(STATE.CLID_IS_FLEET  || {})[clid];
   const isTuktuk = !!(STATE.CLID_IS_TUKTUK || {})[clid];
   row.innerHTML = `

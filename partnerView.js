@@ -1223,7 +1223,7 @@ function _pvPaintPartnerList(q) {
   list.innerHTML = filtered.slice(0, 100).map(p => {
     const c = STATE.partnerColors[p] || "#888";
     const sel = p === PARTNER_VIEW_STATE.partner;
-    return `<div class="pv-opt" onmousedown="pvSelectPartner('${p.replace(/'/g,"\\'")}')"
+    return `<div class="pv-opt" onmousedown="pvSelectPartner('${escapeJSAttr(p)}')"
       style="padding:7px 12px;font-size:.78rem;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid #f3f3f3;${sel?'background:#fff0f0;font-weight:700':''}">
       <span style="width:7px;height:7px;border-radius:50%;background:${c};flex-shrink:0"></span>
       <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(p)}</span>

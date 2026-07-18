@@ -243,7 +243,7 @@ function renderPresent() {
           <label style="font-size:.72rem;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Partner</label>
           <input id="presentPartnerSearch" type="text" class="sb-inp" style="width:200px;margin-bottom:4px" placeholder="${es?"Buscar partner...":"Search partner..."}" oninput="filterPresentPartners(this.value)"/>
           <select id="presentPartnerSel" class="sb-sel" style="width:200px" onchange="onPresentPartnerChange(this.value)">
-            ${partners.map(p => `<option value="${p}" ${p===sel?"selected":""}>${p}</option>`).join("")}
+            ${partners.map(p => `<option value="${escapeHTML(p)}" ${p===sel?"selected":""}>${escapeHTML(p)}</option>`).join("")}
           </select>
         </div>
         <div>
@@ -291,7 +291,7 @@ function filterPresentPartners(q) {
     ? STATE.allPartners.filter(p => p.toLowerCase().includes(lower))
     : STATE.allPartners;
   sel.innerHTML = filtered.map(p =>
-    `<option value="${p}" ${p === PRESENT_STATE.partner ? "selected" : ""}>${p}</option>`
+    `<option value="${escapeHTML(p)}" ${p === PRESENT_STATE.partner ? "selected" : ""}>${escapeHTML(p)}</option>`
   ).join("");
   // Auto-select if exactly 1 match
   if (filtered.length === 1 && filtered[0] !== PRESENT_STATE.partner) {
@@ -369,12 +369,12 @@ function buildSlide0(partner, from, to, mode) {
       </div>
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
         <div style="width:14px;height:14px;border-radius:50%;background:${col}"></div>
-        <div style="color:#fff;font-weight:900;font-size:2.4rem;letter-spacing:-1px">${partner}</div>
+        <div style="color:#fff;font-weight:900;font-size:2.4rem;letter-spacing:-1px">${escapeHTML(partner)}</div>
       </div>
       <div style="color:#FF0000;font-weight:700;font-size:1.1rem;margin-bottom:8px">${modeLabel} · ${dateLabel}</div>
-      <div style="color:#aaa;font-size:.85rem;margin-bottom:24px">${cities}</div>
+      <div style="color:#aaa;font-size:.85rem;margin-bottom:24px">${escapeHTML(cities)}</div>
       <div style="background:rgba(255,255,255,.08);border-radius:8px;padding:8px 20px;color:#ccc;font-size:.8rem">
-        Account Manager: <strong style="color:#fff">${kam}</strong>
+        Account Manager: <strong style="color:#fff">${escapeHTML(kam)}</strong>
       </div>
     </div>`;
 }
@@ -400,7 +400,7 @@ function buildSlide1(partner, from, to, mode) {
   return `
     <div style="width:100%;height:100%;background:#fff;padding:16px 20px;display:flex;flex-direction:column;overflow:hidden">
       <div style="font-weight:900;font-size:.9rem;color:#111;margin-bottom:2px">
-        ${partner} <span style="color:#aaa;font-weight:400;font-size:.72rem">· ${es?"KPIs por Ciudad":"KPIs by City"} · ${d2s(from)} → ${d2s(to)}</span>
+        ${escapeHTML(partner)} <span style="color:#aaa;font-weight:400;font-size:.72rem">· ${es?"KPIs por Ciudad":"KPIs by City"} · ${d2s(from)} → ${d2s(to)}</span>
       </div>
       <div style="font-size:.62rem;color:#aaa;margin-bottom:8px;display:flex;gap:16px">
         <span style="display:inline-flex;align-items:center;gap:4px">
@@ -517,7 +517,7 @@ function buildSlide3(partner, from, to, mode) {
   return `
     <div style="width:100%;height:100%;background:#fff;padding:16px 20px;display:flex;flex-direction:column;overflow:hidden">
       <div style="font-weight:900;font-size:.9rem;color:#111;margin-bottom:2px">
-        ${partner} <span style="color:#aaa;font-weight:400;font-size:.72rem">· ${es?"Ranking por Ciudad":"City Ranking"} · ${d2s(lastDate)}</span>
+        ${escapeHTML(partner)} <span style="color:#aaa;font-weight:400;font-size:.72rem">· ${es?"Ranking por Ciudad":"City Ranking"} · ${d2s(lastDate)}</span>
       </div>
       <div style="font-size:.62rem;color:#aaa;margin-bottom:8px">${es?"Posición vs competidores":"Position vs competitors"}</div>
       <div style="display:grid;grid-template-columns:repeat(${cities.length},1fr);gap:10px;flex:1;min-height:0">
@@ -627,7 +627,7 @@ function buildSlide5(partner, from, to, mode) {
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
         <div style="width:32px;height:32px;background:${col}20;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1rem">📊</div>
         <div>
-          <div style="font-weight:900;font-size:.95rem;color:#111">${partner}</div>
+          <div style="font-weight:900;font-size:.95rem;color:#111">${escapeHTML(partner)}</div>
           <div style="font-size:.72rem;color:#aaa">${mode === "mensual" ? (es ? "Comparativo MoM vs Ciudad · últimos " + dates.length + " meses" : "MoM Comparison vs City · last " + dates.length + " months") : (es ? "Comparativo WoW vs Ciudad · últimas " + dates.length + " semanas" : "WoW Comparison vs City · last " + dates.length + " weeks")}</div>
         </div>
         <div style="margin-left:auto;font-size:.68rem;color:#bbb;text-align:right">

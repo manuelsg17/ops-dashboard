@@ -952,7 +952,7 @@ function _calcSecTk_distribucion(agg, distTotals, monthLabel) {
 // Reset o descargar el CSV. La distribución se recalcula con "↻ Recalcular" en cada
 // pestaña o al cambiar de pestaña; ya no hay un botón "Aplicar" global.
 function _calcSecActions() {
-  const canSave = !!STATE.isAdmin;
+  const canSave = !!STATE.canWrite;
   const kamAll  = CALC_STATE.kam === "all";
   const saveBtn = !canSave
     ? `<button disabled title="Requiere permisos de administrador" style="padding:8px 16px;font-size:.8rem;background:#ccc;color:#fff;border:none;border-radius:8px;font-weight:800;cursor:not-allowed">💾 Actualizar metas (requiere admin)</button>`
@@ -1379,7 +1379,7 @@ function calcExportExcel() {
 // Guarda las metas del KAM directo en Supabase (sin round-trip de Excel).
 // read-merge-write: preserva columnas de otras líneas que este guardado no tocó.
 async function calcSaveMetas() {
-  if (!STATE.isAdmin) { alert("Guardar metas requiere permisos de administrador."); return; }
+  if (!STATE.canWrite) { alert("Guardar metas requiere rol de KAM o administrador."); return; }
   if (CALC_STATE.kam === "all") { alert("Elige un KAM específico (no 'Todos los KAMs') para guardar sus metas."); return; }
   const m = _calcComputeModel();
   const { rows, mesName, mesYear } = _calcBuildMetaRows(m);
@@ -1503,7 +1503,7 @@ function _calcPaintExportList(q) {
   list.innerHTML = filtered.slice(0, 100).map(p => {
     const c = STATE.partnerColors[p] || "#888";
     const sel = p === CALC_STATE.selPartnerExport;
-    return `<div class="pv-opt" onmousedown="calcSelectExportPartner('${p.replace(/'/g, "\\'")}')"
+    return `<div class="pv-opt" onmousedown="calcSelectExportPartner('${escapeJSAttr(p)}')"
       style="padding:7px 12px;font-size:.78rem;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid #f3f3f3;${sel ? 'background:#fff0f0;font-weight:700' : ''}">
       <span style="width:7px;height:7px;border-radius:50%;background:${c};flex-shrink:0"></span>
       <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(p)}</span>

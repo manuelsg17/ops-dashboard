@@ -2,24 +2,29 @@
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Estado de sesion. STATE.isAdmin gate el UI destructivo (subir Excels,
-// borrar tablas, editar Partners). RLS en el servidor es el guard real:
-// aunque un atacante modifique STATE.isAdmin en DevTools, los writes fallan.
+// Estado de sesion. 3 roles via JWT app_metadata.role: admin > kam > viewer
+// (default). STATE.isAdmin sigue gateando lo exclusivo de admin (borrado
+// masivo, Config, Seguimiento, eliminar metas). STATE.canWrite (admin O kam)
+// gatea subir Excels y guardar en la Calculadora. RLS en el servidor es el
+// guard real: aunque un atacante modifique STATE en DevTools, los writes
+// fallan si el JWT no tiene el rol correspondiente.
 function _setRoleFromUser(user) {
   const role = (user && user.app_metadata && user.app_metadata.role) || "viewer";
-  STATE.userRole = role;
-  STATE.isAdmin  = role === "admin";
+  STATE.userRole  = role;
+  STATE.isAdmin   = role === "admin";
+  STATE.canWrite  = role === "admin" || role === "kam";
   _applyRoleGate();
 }
 
 function _applyRoleGate() {
-  // Esconde UI destructiva si no es admin. Se llama tras login y tras tab switch.
-  const isAdmin = !!STATE.isAdmin;
+  // Esconde UI destructiva/de escritura segun rol. Se llama tras login y tras tab switch.
+  const canWrite = !!STATE.canWrite;
   const up = document.getElementById("uploadDropdown");
-  if (up) up.style.display = isAdmin ? "" : "none";
+  if (up) up.style.display = canWrite ? "" : "none";
   // Marcamos el body para usos via CSS si hace falta.
-  document.body.classList.toggle("role-admin",  isAdmin);
-  document.body.classList.toggle("role-viewer", !isAdmin);
+  document.body.classList.toggle("role-admin",  !!STATE.isAdmin);
+  document.body.classList.toggle("role-kam",    STATE.userRole === "kam");
+  document.body.classList.toggle("role-viewer", STATE.userRole === "viewer");
 }
 
 async function initAuth() {
@@ -69,8 +74,11 @@ function _clearStateAndLocalStorage() {
   ["rawData","rawDataMensual","rawDataMensualTuktuk","rawDataFleet","rawDataMensualFleet",
    "rawDataFull","rawDataMensualFull",
    "rawDataDiario","rawDataDiarioFull","rawDataTuktuk","metasData","proyectosData","seguimientoData",
+   "fleetExterno","fleetExternoCols",
    "allDates","allPartners","curSummaries"
   ].forEach(k => { if (Array.isArray(STATE[k])) STATE[k].length = 0; });
+  STATE.fleetExternoLoaded = false;
+  STATE.fleetExternoError  = null;
   STATE.rendLine  = "agg";
   STATE.metasLine = "agg";
   STATE._tuktukMensualByCityDate = null;
@@ -89,6 +97,7 @@ function _clearStateAndLocalStorage() {
   STATE._diarioLoaded   = false;
   STATE.userRole        = null;
   STATE.isAdmin         = false;
+  STATE.canWrite        = false;
   if (STATE.flotasMap) STATE.flotasMap = null;
   // Charts: destruir instancias para liberar memoria.
   if (STATE.charts) {
@@ -99,6 +108,7 @@ function _clearStateAndLocalStorage() {
   try {
     localStorage.removeItem("yangoFilters");
     localStorage.removeItem("yangoDecline");
+    localStorage.removeItem("yangoFleetExtConfig");
   } catch {}
 }
 
@@ -110,6 +120,7 @@ function showLoginScreen() {
   // Aplica role-viewer al body para esconder UI destructiva incluso pre-login.
   STATE.isAdmin = false;
   STATE.userRole = null;
+  STATE.canWrite = false;
   _applyRoleGate();
   setTimeout(() => document.getElementById("loginEmail").focus(), 100);
 }

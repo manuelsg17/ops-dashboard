@@ -63,6 +63,17 @@ function escapeHTML(s) {
     .replace(/'/g, "&#39;");
 }
 
+// Para interpolar un valor DENTRO de un argumento de string JS de un manejador inline
+// (onclick="fn('...')") que a su vez vive en un atributo HTML entre comillas dobles.
+// Orden importa: escapar PRIMERO para el string JS (\ y '), LUEGO para el atributo HTML.
+// Así el navegador decodifica las entidades de vuelta a \' y \\ ANTES de que el motor JS
+// los lea, sin que ninguno de los dos contextos (atributo / string JS) pueda romperse.
+// NUNCA usar escapeHTML(x).replace(/'/g,"\\'") — para cuando corre el replace, escapeHTML
+// ya convirtió ' en &#39; y el replace es un no-op (la comilla cruda vuelve al decodificar).
+function escapeJSAttr(s) {
+  return escapeHTML(String(s ?? "").replace(/\\/g, "\\\\").replace(/'/g, "\\'"));
+}
+
 // Full-precision number parser — never rounds internally.
 // Maneja formato ES ("1.234,56") y US ("1,234.56"). Si solo hay un tipo
 // de separador, decide por la cantidad de digitos despues del ultimo:
@@ -1290,7 +1301,7 @@ async function uploadFlotas(rows) {
 
   if (skippedNoClid.length) {
     showBanner(false, `Aviso: ${skippedNoClid.length} fila(s) sin CLID descartada(s).`);
-    console.warn("uploadFlotas: filas sin CLID:", skippedNoClid);
+    if (DEBUG) console.warn("uploadFlotas: filas sin CLID:", skippedNoClid);
   }
 
   // Dedup por CLID: ultima fila gana (igual que uploadMetas)
@@ -1308,7 +1319,7 @@ async function uploadFlotas(rows) {
       `Aviso: ${dupKeys.length} fila(s) con CLID duplicado consolidada(s). Se conservo la ULTIMA ocurrencia. Ej: ${sample}` +
       (dupKeys.length > 5 ? "  (ver consola)" : "")
     );
-    console.warn("uploadFlotas: duplicados consolidados:", dupKeys);
+    if (DEBUG) console.warn("uploadFlotas: duplicados consolidados:", dupKeys);
   }
 
   if (!data.length) throw new Error("No se encontraron CLIDs validos en el archivo");
@@ -1552,7 +1563,7 @@ async function uploadMetas(rows) {
       `${skippedBadClid.length} fila(s) con CLID en notacion cientifica DESCARTADAS. ` +
       `Formatea la columna CLID como TEXTO en el Excel y resube.`
     );
-    console.error("uploadMetas: CLIDs degradados:", skippedBadClid);
+    if (DEBUG) console.error("uploadMetas: CLIDs degradados:", skippedBadClid);
   }
   if (skippedNoCity.length) {
     const sample = skippedNoCity.slice(0, 3).map(s => `${s.partner}·${s.mes}`).join("  |  ");
@@ -1560,7 +1571,7 @@ async function uploadMetas(rows) {
       `Aviso: ${skippedNoCity.length} fila(s) sin CIUDAD ignorada(s). Ej: ${sample}` +
       (skippedNoCity.length > 3 ? "  (ver consola)" : "")
     );
-    console.warn("uploadMetas: filas sin city descartadas:", skippedNoCity);
+    if (DEBUG) console.warn("uploadMetas: filas sin city descartadas:", skippedNoCity);
   }
 
   // Dedupe por (clid, city, mes): mantener la ULTIMA ocurrencia. Postgres falla
@@ -1583,7 +1594,7 @@ async function uploadMetas(rows) {
       `Aviso: ${dupKeys.length} fila(s) duplicada(s) consolidada(s). Ej: ${sample}` +
       (dupKeys.length > 3 ? "  (ver consola para lista completa)" : "")
     );
-    console.warn("uploadMetas: duplicados consolidados:", dupKeys);
+    if (DEBUG) console.warn("uploadMetas: duplicados consolidados:", dupKeys);
   }
 
   const { error } = await sb.from("metas")

@@ -399,7 +399,7 @@ function mkMetricCard(label, icon, val, prevWk, apd, lastRows, prevRows, metric,
     if (!kv) return;
     const dot = KAM_COLORS[kam] || "#888";
     html += `<div class="mb-row">
-      <span class="mb-name"><span class="mb-dot" style="background:${dot}"></span>${kam}</span>
+      <span class="mb-name"><span class="mb-dot" style="background:${dot}"></span>${escapeHTML(kam)}</span>
       <span class="mb-val">${fmt(kv)}</span>${bdgMode(kv, kpv, "mb-badge")}
     </div>`;
   });

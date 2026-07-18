@@ -452,7 +452,7 @@ function _renderFlotasView() {
         ${(STATE.tuktukPatterns || []).map(w => `
           <span style="display:inline-flex;align-items:center;gap:4px;background:#fff;border:1px solid #fde68a;border-radius:12px;padding:2px 4px 2px 9px;font-size:.7rem;color:#92400e">
             ${escapeHTML(w)}
-            <button onclick="removeTuktukPattern('${w.replace(/'/g, "\\'")}')" title="Quitar" style="border:none;background:none;color:#b45309;cursor:pointer;font-weight:700;padding:0 4px">\u00D7</button>
+            <button onclick="removeTuktukPattern('${escapeJSAttr(w)}')" title="Quitar" style="border:none;background:none;color:#b45309;cursor:pointer;font-weight:700;padding:0 4px">\u00D7</button>
           </span>`).join("")}
         <input id="newTuktukPattern" class="crud-input" placeholder="ej. mototaxi" style="width:130px;font-size:.72rem" onkeydown="if(event.key==='Enter')addTuktukPattern()"/>
         <button class="crud-btn" onclick="addTuktukPattern()" style="font-size:.7rem">+ Agregar</button>
@@ -500,8 +500,8 @@ function _renderFlotasView() {
     const isFleet   = !!(STATE.CLID_IS_FLEET  || {})[r.clid];
     const isTuktuk  = !!(STATE.CLID_IS_TUKTUK || {})[r.clid];
     const suggested = !isTuktuk && _tuktukSuggested(r.nombre_excel);
-    const pFall = escapeHTML(r.nombre_efectivo === "—" ? "" : r.nombre_efectivo).replace(/'/g, "\\'");
-    const kFall = escapeHTML(r.kam_efectivo === "—" ? "" : r.kam_efectivo).replace(/'/g, "\\'");
+    const pFall = escapeJSAttr(r.nombre_efectivo === "—" ? "" : r.nombre_efectivo);
+    const kFall = escapeJSAttr(r.kam_efectivo === "—" ? "" : r.kam_efectivo);
     return `
           <td style="text-align:center">
             <input type="checkbox" title="Fleet" onchange="flotaSetFlag('${clidJS}','is_fleet',this.checked,'${pFall}','${kFall}')" ${isFleet ? "checked" : ""}/>
@@ -517,12 +517,12 @@ function _renderFlotasView() {
   // con 3 checkboxes (Fleet/TukTuk/Excluir Taxi) → fleetroomSetFlag(db_id,...).
   // La sugerencia TukTuk se evalúa sobre el NOMBRE del fleetroom.
   function _fleetroomSubRows(r, clidJS, froomMap) {
-    const kamCtx  = escapeHTML(r.kam_efectivo === "—" ? "" : r.kam_efectivo).replace(/'/g, "\\'");
-    const cityCtx = escapeHTML(r.ciudad || "").replace(/'/g, "\\'");
+    const kamCtx  = escapeJSAttr(r.kam_efectivo === "—" ? "" : r.kam_efectivo);
+    const cityCtx = escapeJSAttr(r.ciudad || "");
     return [...froomMap.entries()].sort((a, b) => (a[1] || a[0]).localeCompare(b[1] || b[0]))
       .map(([dbId, name]) => {
-        const dbIdJS   = String(dbId).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
-        const nameJS   = escapeHTML(name || "").replace(/'/g, "\\'");
+        const dbIdJS   = escapeJSAttr(dbId);
+        const nameJS   = escapeJSAttr(name || "");
         const isFleet  = !!(STATE.FLEETROOM_IS_FLEET     || {})[dbId];
         const isTuktuk = !!(STATE.FLEETROOM_IS_TUKTUK    || {})[dbId];
         const isExcl   = !!(STATE.FLEETROOM_EXCLUDE_TAXI || {})[dbId];
@@ -547,7 +547,7 @@ function _renderFlotasView() {
   }
 
   rows.slice(0, 500).forEach(r => {
-    const clidJS = r.clid.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    const clidJS = escapeJSAttr(r.clid);
     const clidH  = escapeHTML(r.clid);
     const isEditing = RAW_STATE.editingClid === r.clid;
     const froomMap = fleetroomsByClid.get(r.clid);
@@ -996,7 +996,7 @@ function _renderReconView() {
         <tbody>`;
 
   clids.slice(0, 400).forEach(c => {
-    const clidJS = c.clid.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    const clidJS = escapeJSAttr(c.clid);
     const open   = !!RAW_STATE.expanded[c.clid];
     const froomArr = [...c.frooms.values()];
     // omitido a nivel CLID (para el resumen)

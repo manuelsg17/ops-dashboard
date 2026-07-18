@@ -46,7 +46,7 @@ function renderProyectos() {
           <label class="proj-label">Partner</label>
           <select class="sb-sel" id="pj_partner">
             <option value="">Seleccionar...</option>
-            ${partners.map(p => `<option value="${p}">${p}</option>`).join("")}
+            ${partners.map(p => `<option value="${escapeHTML(p)}">${escapeHTML(p)}</option>`).join("")}
           </select>
         </div>
         <div>
@@ -75,7 +75,7 @@ function renderProyectos() {
       <div style="font-size:.75rem;color:#aaa;font-weight:700">Filtrar historial:</div>
       <select class="sb-sel" id="proyPartnerFilter" onchange="renderProyectos()" style="width:auto;min-width:160px">
         <option value="all">Todos los partners</option>
-        ${partners.map(p => `<option value="${p}"${filterP===p?" selected":""}>${p}</option>`).join("")}
+        ${partners.map(p => `<option value="${escapeHTML(p)}"${filterP===p?" selected":""}>${escapeHTML(p)}</option>`).join("")}
       </select>
       <select class="sb-sel" id="proyTipoFilter" onchange="renderProyectos()" style="width:auto;min-width:160px">
         <option value="all">Todos los tipos</option>
@@ -102,9 +102,9 @@ function renderProyectos() {
       const pdot = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${STATE.partnerColors[r.partner]||"#ccc"};margin-right:5px"></span>`;
       html += `<tr>
         <td style="font-size:.78rem">${d2s(r.semana)}</td>
-        <td>${pdot}${r.partner}</td>
-        <td style="font-size:.78rem">${r.city || "–"}</td>
-        <td><span style="background:#f0f0f0;padding:2px 7px;border-radius:10px;font-size:.72rem">${PROYECTO_TIPOS[r.tipo]||r.tipo}</span></td>
+        <td>${pdot}${escapeHTML(r.partner)}</td>
+        <td style="font-size:.78rem">${escapeHTML(r.city || "–")}</td>
+        <td><span style="background:#f0f0f0;padding:2px 7px;border-radius:10px;font-size:.72rem">${escapeHTML(PROYECTO_TIPOS[r.tipo]||r.tipo)}</span></td>
         ${cols.map(c => `<td class="tn" style="font-size:.78rem">${c}</td>`).join("")}
         <td><button class="crud-btn crud-btn-del" onclick="eliminarProyecto(${r.id})">✕</button></td>
       </tr>`;
