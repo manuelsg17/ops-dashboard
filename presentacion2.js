@@ -882,7 +882,10 @@ function p2ProjMTD(act, lastDate) {
   // plano). N+R y SH (flujos) sí se extrapolan con projA por días restantes. Ver auditoría.
   return { ad: act.lastAD, nr: projA(act.nrV, daysElapsed, daysRemaining), sh: projA(act.shV, daysElapsed, daysRemaining) };
 }
-function p2AvanceColor(pct) { return pct >= 100 ? "#10b981" : pct >= 80 ? "#f59e0b" : "#FF0000"; }
+// Mismos rangos que pColor() (data.js), usado en Metas/Ops/Insights: >100 morado,
+// >=80 verde, >=50 amarillo, <50 rojo. Antes esta función tenía su propio corte en
+// 80/100 (todo <80 salía rojo) — desalineado con el resto del dashboard.
+function p2AvanceColor(pct) { return pColor(pct); }
 
 // Tarjeta "Referencia" (sin meta en BD, ej. Fleet): valor actual + badge WoW,
 // estilo visualmente distinto (fondo celeste) de las tarjetas con meta real.
@@ -923,8 +926,8 @@ function _p2MetaCard(label, real, goal, projV, fmtN, es) {
       <span style="font-size:.62rem;color:#999">/ ${fmtN(goal)}</span>
     </div>
     <div style="height:7px;background:#eee;border-radius:5px;overflow:hidden;position:relative">
-      <div style="height:100%;width:${Math.min(pct, 100).toFixed(1)}%;background:${col};border-radius:5px"></div>
-      ${ppct != null ? `<div style="position:absolute;top:-1px;bottom:-1px;left:${Math.min(Math.max(ppct, 0), 100).toFixed(1)}%;width:2px;background:#111;opacity:.55"></div>` : ""}
+      ${ppct != null && ppct > pct ? `<div style="position:absolute;top:0;left:0;height:100%;width:${Math.min(Math.max(ppct, 0), 100).toFixed(1)}%;background:${p2AvanceColor(ppct)};opacity:.35;border-radius:5px"></div>` : ""}
+      <div style="position:absolute;top:0;left:0;height:100%;width:${Math.min(pct, 100).toFixed(1)}%;background:${col};border-radius:5px"></div>
     </div>
     ${ppct != null ? `<div style="font-size:.6rem;color:#999">${es ? "proy" : "proj"} ${fmtN(projV)} (${ppct.toFixed(0)}%)</div>` : ""}
   </div>`;
@@ -1004,8 +1007,8 @@ function buildSlide2Avance(partner, idx) {
           <span style="font-size:.62rem;color:#999">/ ${fmtN(goal)}</span>
         </div>
         <div style="height:7px;background:#eee;border-radius:5px;overflow:hidden;position:relative">
-          <div style="height:100%;width:${Math.min(pct, 100).toFixed(1)}%;background:${col};border-radius:5px"></div>
-          <div style="position:absolute;top:-1px;bottom:-1px;left:${Math.min(Math.max(ppct, 0), 100).toFixed(1)}%;width:2px;background:#111;opacity:.55"></div>
+          ${ppct > pct ? `<div style="position:absolute;top:0;left:0;height:100%;width:${Math.min(Math.max(ppct, 0), 100).toFixed(1)}%;background:${p2AvanceColor(ppct)};opacity:.35;border-radius:5px"></div>` : ""}
+          <div style="position:absolute;top:0;left:0;height:100%;width:${Math.min(pct, 100).toFixed(1)}%;background:${col};border-radius:5px"></div>
         </div>
         <div style="font-size:.6rem;color:#999">${es ? "proy" : "proj"} ${fmtN(projV)} (${_p2PctTxt(ppct)})</div>
       </div>`;
