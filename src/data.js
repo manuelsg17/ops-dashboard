@@ -1,4 +1,11 @@
-// data.js — Toda la lógica de datos
+// data.js — Toda la lógica de datos (Fase A2: módulo ES).
+// Cada export se espeja a window por vendor.js para que los archivos aún
+// clásicos de public/ lo sigan leyendo como global. Depende de STATE/KAM_COLORS
+// (core/config.js), fmt*/escapeHTML/etc. (core/format.js, core/security.js),
+// parseLocalDate (core/dates.js) y de `sb`/funciones de UI (showLoad, showBanner,
+// renderRend, etc.) como identificador bare vía window — sin import explícito,
+// porque el navegador resuelve nombres no ligados localmente contra el objeto
+// global sea cual sea el tipo de script (módulo o clásico).
 
 // hashColor/normCity/cityLabel → src/core/format.js (Fase A2, espejadas a window)
 
@@ -12,7 +19,7 @@
 // Si un CLID esta en partners, su nombre y KAM vienen de alli y `flotas` no
 // los puede sobrescribir. Esto evita que el upload de un Excel de Flotas pise
 // la configuracion manual del equipo.
-function applyFlotasOverride(rows) {
+export function applyFlotasOverride(rows) {
   const map = STATE && STATE.flotasMap;
   if (!map || !Object.keys(map).length) return rows;
   return rows.reduce((acc, r) => {
@@ -41,7 +48,7 @@ function applyFlotasOverride(rows) {
 // de separador, decide por la cantidad de digitos despues del ultimo:
 // exactamente 3 = separador de miles; 1-2 = decimal.
 // Registra en STATE.parseWarnings cuando una celda no es numerica.
-function toN(v, label) {
+export function toN(v, label) {
   if (v === null || v === undefined || v === "") return 0;
   // Si XLSX entregó un número (raw:true), ESE es el valor exacto y completo.
   // No aplicar heurísticas de separador/sufijo: romperían decimales reales
@@ -101,7 +108,7 @@ function toN(v, label) {
 // fmt/fmt5/fmtK/fmtSmart/d2s/semCls/pColor/trendI → src/core/format.js (Fase A2)
 
 // Badge HTML
-function bdg(c, p, cls = "mcard-badge") {
+export function bdg(c, p, cls = "mcard-badge") {
   // Tooltip: contexto del modo para que el usuario sepa contra que se compara
   const compLabel = STATE.curMode === "mensual" ? "mes anterior"
                   : STATE.curMode === "diario"  ? "dia anterior"
@@ -120,7 +127,7 @@ function bdg(c, p, cls = "mcard-badge") {
 
 // Versión que respeta el modo: en diario no muestra comparativa (no aporta valor día-a-día).
 // En semanal y mensual delega a bdg() para mostrar WoW / MoM.
-function bdgMode(c, p, cls = "mcard-badge") {
+export function bdgMode(c, p, cls = "mcard-badge") {
   if (STATE.curMode === "diario") return "";
   return bdg(c, p, cls);
 }
@@ -131,7 +138,7 @@ function bdgMode(c, p, cls = "mcard-badge") {
 // - mensual: daysRemaining = 0 (mes ya cerrado)
 // - semanal: lastDate = inicio de semana, fin = lastDate + 6 días
 // - diario:  lastDate = el día exacto, no se suma nada
-function calcProjectionDays(lastDate) {
+export function calcProjectionDays(lastDate) {
   if (!lastDate) return { daysElapsed: 28, daysRemaining: 0, daysInMonth: 30 };
   const start  = parseLocalDate(lastDate);   // inicio del periodo = mes de referencia
   const refEnd = parseLocalDate(lastDate);
@@ -160,7 +167,7 @@ function calcProjectionDays(lastDate) {
 // Proyeccion lineal por avance del mes: total acumulado escalado al mes completo
 // (total * daysInMonth / daysElapsed). Devuelve `total` tal cual en mensual o si ya
 // no quedan dias. Ver detalle en el cuerpo.
-function projA(vals, daysElapsed, daysRemaining) {
+export function projA(vals, daysElapsed, daysRemaining) {
   const v = vals.filter(x => x > 0);
   if (!v.length) return 0;
   const total = v.reduce((s, x) => s + x, 0);
@@ -176,12 +183,12 @@ function projA(vals, daysElapsed, daysRemaining) {
   return (total * daysInMonth) / daysElapsed;
 }
 
-function sumR(rows, fn) { return rows.reduce((s, r) => s + fn(r), 0); }
+export function sumR(rows, fn) { return rows.reduce((s, r) => s + fn(r), 0); }
 
 // Detects if a partner has strictly declined for N consecutive periods.
 // Skips partners with gaps in their date sequence (missing weeks = no false positives).
 // Soporta metric "nr" como suma de newPartner + newService + reactivated.
-function hasConsecutiveDecline(apdByPartner, partner) {
+export function hasConsecutiveDecline(apdByPartner, partner) {
   const n      = STATE.declineThreshold || 3;
   const metric = STATE.declineMetric || "activeDrivers";
   const rows   = (apdByPartner.get(partner) || [])
@@ -214,10 +221,10 @@ function hasConsecutiveDecline(apdByPartner, partner) {
 // El match es EXACTO sobre el nombre normalizado (lower + solo [a-z0-9] + espacios)
 // para evitar colisiones por substring (ej. "new drivers from partner" vs
 // "new profiles from partner").
-function _txNorm(s) { return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); }
-function _snakeToCamel(s) { return s.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase()); }
+export function _txNorm(s) { return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); }
+export function _snakeToCamel(s) { return s.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase()); }
 
-const TX_COL_BY_NORM = {
+export const TX_COL_BY_NORM = {
   // ── core (nombre historico, NO cambiar) ──
   "active drivers": "active_drivers",
   "new drivers from partner": "new_from_partner",
@@ -273,7 +280,7 @@ const TX_COL_BY_NORM = {
 
 // Columnas que se SUMAN al consolidar duplicados (clid|city|periodo). El resto
 // (ratios/shares/promedios) se asignan: ultima ocurrencia con valor gana.
-const TX_COUNT_COLS = new Set([
+export const TX_COUNT_COLS = new Set([
   "active_drivers", "new_drivers", "new_from_partner", "new_from_service", "reactivated",
   "supply_hours", "commission", "trips", "gmv", "new_from_partner_50t", "new_from_service_50t",
   "active_cars", "branded_active_cars", "owned_fleet_active_cars", "owned_fleet_branded_active_cars",
@@ -282,7 +289,7 @@ const TX_COUNT_COLS = new Set([
 ]);
 
 // Columnas NUEVAS (no-core) que viajan en memoria como camelCase (gmv, acceptanceRate, …).
-const TX_NEW_COLS = [
+export const TX_NEW_COLS = [
   "gmv", "new_drivers", "new_drivers_share", "new_from_partner_50t", "new_from_service_50t",
   "acceptance_rate", "completion_rate", "trips_per_hour", "money_per_hour", "avg_driver_rating",
   "avg_fare_after_surge", "bad_rated_trips_share", "fraud_trips_share", "driver_subsidies_by_gmv",
@@ -296,7 +303,7 @@ const TX_NEW_COLS = [
 ];
 
 // Mapea las columnas NUEVAS de una fila BD -> objeto camelCase (null si sin dato).
-function txRowExtra(r) {
+export function txRowExtra(r) {
   const out = {};
   for (const col of TX_NEW_COLS) {
     const v = r[col];
@@ -307,7 +314,7 @@ function txRowExtra(r) {
 
 // Extrae todas las metricas reconocidas de una fila para un periodo.
 // mc: { metricLower -> excelColKey }. Devuelve { colSnake: valor }.
-function txExtract(row, mc) {
+export function txExtract(row, mc) {
   const out = {};
   // 1) Match EXACTO por nombre normalizado (cubre el export ancho de taxiparks
   //    sin colisiones, p.ej. "new drivers from partner" vs "new profiles from partner").
@@ -345,7 +352,7 @@ function txExtract(row, mc) {
 }
 
 // Consolida `m` dentro de `target` (suma counts, ultima-con-valor gana en ratios).
-function txConsolidate(target, m) {
+export function txConsolidate(target, m) {
   for (const col in m) {
     const v = m[col];
     if (TX_COUNT_COLS.has(col)) target[col] = (target[col] || 0) + (v || 0);
@@ -355,7 +362,7 @@ function txConsolidate(target, m) {
 
 // ── PAGINACIÓN PARALELA ───────────────────────────────────────────────────────
 // Descarga todas las páginas de una tabla en paralelo (sin esperar página a página)
-async function fetchAllPages(table, orderCol) {
+export async function fetchAllPages(table, orderCol) {
   // 1. Contar filas
   const { count, error: cErr } = await sb
     .from(table).select("*", { count: "exact", head: true });
@@ -387,17 +394,17 @@ async function fetchAllPages(table, orderCol) {
 //      TukTuk cuyo fleetroom no fue clasificado individualmente IGUAL cuenta
 //      (bug: fleetrooms solo cubre ~23 de 270 db_id → los demas caian a false).
 // _frHas: el db_id tiene una entrada EXPLICITA en el mapa del fleetroom.
-function _frHas(map, id) { return !!id && Object.prototype.hasOwnProperty.call(map || {}, id); }
+export function _frHas(map, id) { return !!id && Object.prototype.hasOwnProperty.call(map || {}, id); }
 
 // TRUE si la fila pertenece a una operacion TukTuk.
-function rowIsTuktuk(r) {
+export function rowIsTuktuk(r) {
   if (_frHas(STATE.FLEETROOM_IS_TUKTUK, r.db_id)) return !!STATE.FLEETROOM_IS_TUKTUK[r.db_id];
   return !!(STATE.CLID_IS_TUKTUK || {})[r.clid];        // fleetroom desconocido o legacy → flag CLID
 }
 
 // TRUE si la fila debe EXCLUIRSE del calculo Taxi.
 // = es tuktuk  O  el fleetroom esta marcado exclude_from_taxi (ej. delivery).
-function rowExcludedFromTaxi(r) {
+export function rowExcludedFromTaxi(r) {
   const id = r.db_id;
   if (_frHas(STATE.FLEETROOM_IS_TUKTUK, id) || _frHas(STATE.FLEETROOM_EXCLUDE_TAXI, id)) {
     return !!(STATE.FLEETROOM_IS_TUKTUK || {})[id] || !!(STATE.FLEETROOM_EXCLUDE_TAXI || {})[id];
@@ -406,7 +413,7 @@ function rowExcludedFromTaxi(r) {
 }
 
 // TRUE si la fila pertenece a una sub-flota Fleet (para KPIs Fleet en present2).
-function rowIsFleet(r) {
+export function rowIsFleet(r) {
   if (_frHas(STATE.FLEETROOM_IS_FLEET, r.db_id)) return !!STATE.FLEETROOM_IS_FLEET[r.db_id];
   return !!(STATE.CLID_IS_FLEET || {})[r.clid];         // fleetroom desconocido o legacy → flag CLID
 }
@@ -415,7 +422,7 @@ function rowIsFleet(r) {
 // existe >=1 fila con db_id real, descarta la fila legacy agregada (db_id='')
 // de esa misma clave. Evita sumar dos veces cuando un periodo se resubio con
 // detalle por fleetroom sin borrar el agregado viejo. La fila legacy sigue en BD.
-function dropLegacyAggregateRows(rows) {
+export function dropLegacyAggregateRows(rows) {
   const hasReal = new Set();
   for (const r of rows) {
     if (r.db_id) hasReal.add(`${r.clid}|||${r.city}|||${r.date}`);
@@ -427,7 +434,7 @@ function dropLegacyAggregateRows(rows) {
 }
 
 // ── LOAD FROM SUPABASE ────────────────────────────────────────────────────────
-async function loadFromSupabase() {
+export async function loadFromSupabase() {
   showLoad(true, "Cargando datos desde Supabase...");
   try {
     // 1. Partners + Rendimiento semanal en paralelo
@@ -642,7 +649,7 @@ async function loadFromSupabase() {
 }
 
 // ── LAZY LOAD MENSUAL ─────────────────────────────────────────────────────────
-async function loadMensualIfNeeded() {
+export async function loadMensualIfNeeded() {
   if (STATE._mensualLoaded) return; // ya cargado
   showLoad(true, "Cargando datos mensuales...");
   try {
@@ -702,7 +709,7 @@ async function loadMensualIfNeeded() {
 }
 
 // ── LAZY LOAD DIARIO ──────────────────────────────────────────────────────────
-async function loadDiarioIfNeeded() {
+export async function loadDiarioIfNeeded() {
   if (STATE._diarioLoaded) return;
   showLoad(true, "Cargando datos diarios...");
   try {
@@ -744,7 +751,7 @@ async function loadDiarioIfNeeded() {
 }
 
 // ── LAZY LOAD CONVERSION (funnel por CLID, nivel pais) ────────────────────────
-async function loadConversionIfNeeded() {
+export async function loadConversionIfNeeded() {
   if (STATE._conversionLoaded) return;
   try {
     const rows = await fetchAllPages("conversion_pais", "mes");
@@ -783,7 +790,7 @@ async function loadConversionIfNeeded() {
 }
 
 // ── UPLOAD RENDIMIENTO MENSUAL ────────────────────────────────────────────────
-async function uploadRendimientoMensual(rows) {
+export async function uploadRendimientoMensual(rows) {
   if (!rows.length) throw new Error("Archivo vacío");
 
   const keys = Object.keys(rows[0]);
@@ -838,7 +845,7 @@ async function uploadRendimientoMensual(rows) {
 }
 
 // ── UPLOAD RENDIMIENTO DIARIO ─────────────────────────────────────────────────
-async function uploadRendimientoDiario(rows) {
+export async function uploadRendimientoDiario(rows) {
   if (!rows.length) throw new Error("Archivo vacío");
 
   const keys = Object.keys(rows[0]);
@@ -894,7 +901,7 @@ async function uploadRendimientoDiario(rows) {
 //        02 n5_success | 03 n10_success | 04 n25_success | 05 n50_success | 06 n100_success
 // El mes se toma de: (1) prefijo de fecha en algun header, (2) columna MES,
 // (3) fallback al mes mas reciente ya cargado (con aviso).
-async function uploadConversion(rows) {
+export async function uploadConversion(rows) {
   if (!rows.length) throw new Error("Archivo vacío");
   const keys = Object.keys(rows[0]);
 
@@ -974,7 +981,7 @@ async function uploadConversion(rows) {
 //        Referral Yango | Suma total
 // Mismo grano que conversion_pais (clid, mes). Upsert por (clid, mes) actualizando
 // SOLO las columnas de canal (deja intactas las del funnel y viceversa).
-async function uploadChannels(rows) {
+export async function uploadChannels(rows) {
   if (!rows || !rows.length) return;
   const keys = Object.keys(rows[0]);
   // mes: de header con fecha, columna MES, o el ultimo mes ya cargado (como conversion).
@@ -1026,7 +1033,7 @@ async function uploadChannels(rows) {
 }
 
 // ── FILE UPLOAD HANDLERS ──────────────────────────────────────────────────────
-function initFileHandlers() {
+export function initFileHandlers() {
   document.getElementById("fileRend")
     .addEventListener("change", e => handleFile(e.target.files[0], "rendimiento"));
   document.getElementById("fileMetas")
@@ -1044,7 +1051,7 @@ function initFileHandlers() {
 }
 
 // Classifies upload errors into user-friendly messages
-function describeUploadError(type, err) {
+export function describeUploadError(type, err) {
   const base = err.message || "Error desconocido";
   const typeLabel = { rendimiento: "Rendimiento Semanal", rendimientoMensual: "Rendimiento Mensual",
                       rendimientoDiario: "Rendimiento Diario", conversion: "Conversión",
@@ -1060,7 +1067,7 @@ function describeUploadError(type, err) {
   return `Error al procesar ${typeLabel}: ${base}`;
 }
 
-async function handleFile(file, type) {
+export async function handleFile(file, type) {
   if (!file) return;
 
   // Validación de tamaño máximo (10 MB)
@@ -1136,7 +1143,7 @@ async function handleFile(file, type) {
 }
 
 // ── UPLOAD PARTNERS ───────────────────────────────────────────────────────────
-async function uploadPartners(rows) {
+export async function uploadPartners(rows) {
   const seen = new Set();
   const data = rows.map(r => ({
     clid:    String(r["CLID"]    || r["clid"]    || "").trim(),
@@ -1168,7 +1175,7 @@ async function uploadPartners(rows) {
 //                    Nombre, ALIAS, Alias, FLOTA, Flota, PARTNER, Partner, partner
 //   KAM:             KAM, Kam, kam
 //   Activo:          ACTIVO, Activo, activo  (true / false / 1 / 0 / si / no)
-async function uploadFlotas(rows) {
+export async function uploadFlotas(rows) {
   if (!rows.length) throw new Error("Archivo vacío");
 
   // Helper local: busca en row el primer valor no vacio entre varias keys
@@ -1237,7 +1244,7 @@ async function uploadFlotas(rows) {
 }
 
 // ── ACTUALIZAR UN CAMPO DE UNA FLOTA (edicion inline desde la vista) ──────────
-async function updateFlotaField(clid, patch) {
+export async function updateFlotaField(clid, patch) {
   if (!clid) throw new Error("Falta CLID");
   // Normalizaciones defensivas
   const upd = { ...patch };
@@ -1249,7 +1256,7 @@ async function updateFlotaField(clid, patch) {
 }
 
 // ── CREAR UNA FLOTA NUEVA (cuando no existe registro en la tabla) ─────────────
-async function createFlota(clid, partial) {
+export async function createFlota(clid, partial) {
   if (!clid) throw new Error("Falta CLID");
   const row = {
     clid,
@@ -1267,7 +1274,7 @@ async function createFlota(clid, partial) {
 // Escribe a `partners` (NO a `flotas`) — es un flag independiente del
 // edit-mode de flotas. Preserva partner/kam efectivos (fallback si el CLID aun
 // no existe en `partners`) y el OTRO flag (para no resetearlo a false).
-async function setPartnerFlag(clid, key, value, partnerFallback, kamFallback) {
+export async function setPartnerFlag(clid, key, value, partnerFallback, kamFallback) {
   if (!clid) throw new Error("Falta CLID");
   const partner  = STATE.CLID_MAP[clid] || partnerFallback || "";
   const kam      = STATE.KAM_MAP[clid]  || kamFallback || "";
@@ -1282,7 +1289,7 @@ async function setPartnerFlag(clid, key, value, partnerFallback, kamFallback) {
 // Granularidad por sub-flota: escribe a `fleetrooms` (PK db_id). Preserva los
 // OTROS dos flags (leidos de STATE.FLEETROOM_*) para no resetearlos a false, y
 // el clid/name/kam/city de contexto (para un CLID/fleetroom aun sin fila).
-async function setFleetroomFlag(dbId, key, value, ctx = {}) {
+export async function setFleetroomFlag(dbId, key, value, ctx = {}) {
   if (!dbId) throw new Error("Falta db_id");
   const isFleet   = key === "is_fleet"          ? value : !!(STATE.FLEETROOM_IS_FLEET     || {})[dbId];
   const isTuktuk  = key === "is_tuktuk"         ? value : !!(STATE.FLEETROOM_IS_TUKTUK    || {})[dbId];
@@ -1303,7 +1310,7 @@ async function setFleetroomFlag(dbId, key, value, ctx = {}) {
 }
 
 // ── UPLOAD RENDIMIENTO (pivot → flat rows) ────────────────────────────────────
-async function uploadRendimiento(rows) {
+export async function uploadRendimiento(rows) {
   if (!rows.length) throw new Error("Archivo vacío");
 
   const keys = Object.keys(rows[0]);
@@ -1356,7 +1363,7 @@ async function uploadRendimiento(rows) {
 // por header normalizado. Tolerante a casing/espacios ("DB ID", "db_id",
 // "Fleetroom", "Sala", "Sub Flota"). Devuelve { cDbId, cName } (claves de
 // columna del Excel o undefined). Mismo patron que pickKey de uploadConversion.
-function _fleetroomCols(keys) {
+export function _fleetroomCols(keys) {
   const pick = (except, ...needles) => keys.find(k => {
     if (k === except) return false;
     const n = _txNorm(k);
@@ -1376,7 +1383,7 @@ function _fleetroomCols(keys) {
 // Normaliza un valor de CLID a string entero. Maneja: number (raw),
 // string entero, string con decimal trailing, string en notacion cientifica.
 // Si detecta cientifica devuelve null (CLID degradado, no usable).
-function _clidStr(v) {
+export function _clidStr(v) {
   if (v == null || v === "") return "";
   if (typeof v === "number") {
     if (!Number.isFinite(v)) return "";
@@ -1394,7 +1401,7 @@ function _clidStr(v) {
 // en el archivo. Devuelve la clave real o null. Si el header NO está en el archivo, la
 // columna NO se toca en BD (no clobber); si está, se escribe para TODAS las filas (null
 // donde la celda esté vacía) → batch homogéneo, sin sorpresas de union en PostgREST.
-function _metaOptHeader(rows, names) {
+export function _metaOptHeader(rows, names) {
   const norm = s => String(s).toLowerCase().replace(/\s+/g, "");
   const wanted = names.map(norm);
   const seen = new Set();
@@ -1402,12 +1409,12 @@ function _metaOptHeader(rows, names) {
   for (const k of seen) if (wanted.includes(norm(k))) return k;
   return null;
 }
-function _metaBlankNull(v) {
+export function _metaBlankNull(v) {
   if (v === undefined || v === null || String(v).trim() === "") return null;
   return toN(v);
 }
 
-async function uploadMetas(rows) {
+export async function uploadMetas(rows) {
   const skippedNoCity = [];
   const skippedBadClid = [];
   // Detección a nivel de ARCHIVO de las columnas opcionales (fleet/tuktuk/año).
@@ -1520,7 +1527,7 @@ async function uploadMetas(rows) {
 }
 
 // ── UPDATE STATE INDEXES ──────────────────────────────────────────────────────
-function updateIndexes() {
+export function updateIndexes() {
   STATE.allDates    = [...new Set(STATE.rawData.map(r => r.date))].sort();
   STATE.allPartners = [...new Set(STATE.rawData.map(r => r.partner))].sort();
   STATE.allPartners.forEach(p => {
@@ -1570,11 +1577,11 @@ function updateIndexes() {
 // Garantiza que los índices secundarios existan antes de leerlos. Si un caller
 // se ejecuta antes que updateIndexes (race condition o cache stale), construye
 // los índices on-demand. Es no-op si ya están listos.
-function ensureIndexes() {
+export function ensureIndexes() {
   if (!STATE._byCity || !STATE._byDate) updateIndexes();
 }
 
-function getKAMForPartner(partner) {
+export function getKAMForPartner(partner) {
   if (STATE._partnerKAM?.has(partner)) return STATE._partnerKAM.get(partner);
   // Lazy-build _partnerKAM si fue invalidado o aun no construido (O(n) una sola vez,
   // luego O(1) en lookups subsecuentes). Evita el find() lineal en hot paths.
@@ -1596,7 +1603,7 @@ function getKAMForPartner(partner) {
 // fleetroom O a nivel CLID. Memoizado en updateIndexes (_partnerIsFleet); si el mapa
 // aún no existe, se arma una vez escaneando las filas (mismo criterio, sin re-escaneo
 // por-llamada: solo contiene entradas true, ausente = no-fleet).
-function isFleetPartner(partner) {
+export function isFleetPartner(partner) {
   if (!STATE._partnerIsFleet) {
     STATE._partnerIsFleet = new Map();
     const rows = STATE.rawDataFull || STATE.rawData || [];
@@ -1605,7 +1612,7 @@ function isFleetPartner(partner) {
   return STATE._partnerIsFleet.get(partner) || false;
 }
 
-function getFilteredByDateRange(from, to) {
+export function getFilteredByDateRange(from, to) {
   if (!STATE._byDate || !STATE._byDate.size) {
     return STATE.rawData.filter(r => r.date >= from && r.date <= to);
   }
@@ -1616,7 +1623,7 @@ function getFilteredByDateRange(from, to) {
   return rows;
 }
 
-function getApdFull() {
+export function getApdFull() {
   if (!STATE._apdFull) STATE._apdFull = aggPD(STATE.rawData);
   return STATE._apdFull;
 }
@@ -1628,7 +1635,7 @@ function getApdFull() {
 
 // Step 1: dedup by partner+city+date (consolidates multiple CLIDs)
 // Step 2: collapse into partner+date (sums across cities)
-function aggPD(data) {
+export function aggPD(data) {
   const s1 = {};
   data.forEach(r => {
     const k = `${r.partner}|||${r.city}|||${r.date}`;
@@ -1652,7 +1659,7 @@ function aggPD(data) {
 }
 
 // date → partner → metrics  (for chart series)
-function aggDate(data) {
+export function aggDate(data) {
   const s1 = {};
   data.forEach(r => {
     const k = `${r.partner}|||${r.city}|||${r.date}`;
@@ -1676,7 +1683,7 @@ function aggDate(data) {
 }
 
 // date → {ad, nr, sh}  (for city line charts)
-function aggCityDate(data) {
+export function aggCityDate(data) {
   const s1 = {};
   data.forEach(r => {
     const k = `${r.partner}|||${r.city}|||${r.date}`;
@@ -1696,7 +1703,7 @@ function aggCityDate(data) {
 // ── FILTROS CENTRALIZADOS ─────────────────────────────────────────────────────
 // Lectura unica de los inputs del sidebar. Usar SIEMPRE en lugar de leer el DOM
 // directo desde cada modulo: si cambia el HTML, solo se actualiza aqui.
-function getCurrentFilters() {
+export function getCurrentFilters() {
   return {
     city: document.getElementById("cityFilter")?.value || "all",
     from: document.getElementById("dateFrom")?.value   || "",
@@ -1710,21 +1717,21 @@ function getCurrentFilters() {
 // LRU de 4 slots. Evita re-computar cuando se alterna entre filtros recientes
 // (ej. usuario cambia ciudad A -> B -> A, o vuelve a un tab con filtros previos).
 // El slot 0 es el "actual" — aggPDc/aggDatec/aggCityDatec lo usan para sub-caches.
-const _CACHE_SIZE = 4;
-const _CACHE = [];   // [{ key, filtered, pd, byDate, cityByDate }, ...] (slot 0 = most recent)
+export const _CACHE_SIZE = 4;
+export const _CACHE = [];   // [{ key, filtered, pd, byDate, cityByDate }, ...] (slot 0 = most recent)
 
-function _filterKey() {
+export function _filterKey() {
   const f = getCurrentFilters();
   return `${STATE.curMode}|${f.city}|${f.from}|${f.to}|${f.selected.slice().sort().join(",")}`;
 }
 
-function clearAggCache() { _CACHE.length = 0; }
+export function clearAggCache() { _CACHE.length = 0; }
 
 // Slot "current" (top of LRU). Mantiene compatibilidad con aggPDc/aggDatec/aggCityDatec
 // que comparaban contra _C.filtered. Se actualiza al final de getFiltered().
-const _C = { filtered: null, pd: null, byDate: null, cityByDate: {} };
+export const _C = { filtered: null, pd: null, byDate: null, cityByDate: {} };
 
-function getFiltered() {
+export function getFiltered() {
   const key = _filterKey();
   // Hit en LRU: promover a slot 0 y restaurar _C
   const hitIdx = _CACHE.findIndex(s => s.key === key);
@@ -1773,7 +1780,7 @@ function getFiltered() {
   return rows;
 }
 
-function aggPDc(data) {
+export function aggPDc(data) {
   if (data === _C.filtered) {
     if (!_C.pd) _C.pd = aggPD(data);
     // Sincronizar con el slot 0 para que el LRU conserve los sub-caches
@@ -1783,7 +1790,7 @@ function aggPDc(data) {
   return aggPD(data);
 }
 
-function aggDatec(data) {
+export function aggDatec(data) {
   if (data === _C.filtered) {
     if (!_C.byDate) _C.byDate = aggDate(data);
     if (_CACHE[0]) _CACHE[0].byDate = _C.byDate;
@@ -1792,7 +1799,7 @@ function aggDatec(data) {
   return aggDate(data);
 }
 
-function aggCityDatec(data, cityKey) {
+export function aggCityDatec(data, cityKey) {
   if (data === _C.filtered) {
     if (!_C.cityByDate[cityKey]) _C.cityByDate[cityKey] = aggCityDate(data);
     if (_CACHE[0]) _CACHE[0].cityByDate = _C.cityByDate;

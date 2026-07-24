@@ -1,6 +1,10 @@
 // auth.js — Autenticación con Supabase Auth
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Fase A2: `const` NO se adjunta a window en un script clasico (a diferencia de
+// `function`), asi que los modulos ES (ej. data.js una vez convertido) no verian
+// `sb` por identificador bare sin este assign explicito.
+window.sb = sb;
 
 // Estado de sesion. Roles via JWT app_metadata.role: admin > kam > viewer
 // (default). STATE.isAdmin gatea lo exclusivo de admin. STATE.perms (Set) trae

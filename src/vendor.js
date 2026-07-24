@@ -39,4 +39,5 @@ import * as config   from "./core/config.js";
 import * as security from "./core/security.js";
 import * as format   from "./core/format.js";
 import * as dates    from "./core/dates.js";
-Object.assign(window, config, security, format, dates);
+import * as data     from "./data.js";
+Object.assign(window, config, security, format, dates, data);
