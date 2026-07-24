@@ -360,18 +360,61 @@ export function txConsolidate(target, m) {
   }
 }
 
+// ── VENTANA DE CARGA (Fase A3: paginación por rango de fechas) ────────────────
+// Cuántos períodos se traen por defecto en cada escala. El objetivo es que el
+// payload quede acotado por la VENTANA y no por el tamaño de la tabla — que
+// crece ~180 filas/semana para siempre. El usuario puede pedir más hacia atrás
+// (el sidebar ofrece TODOS los períodos vía dashboard_dates) y ahí se re-fetchea.
+export const LOAD_WINDOW = { semanal: 16, mensual: 6, diario: 90 };
+
+// Columna de período por escala (cada tabla la nombra distinto).
+export const DATE_COL = { semanal: "fecha", mensual: "mes", diario: "date" };
+
+// Lista COMPLETA de períodos disponibles (RPC dashboard_dates). Alimenta los
+// selectores Desde/Hasta del sidebar SIN depender de qué ventana de datos esté
+// cargada — si dependiera, el usuario quedaría encerrado en la ventana inicial.
+// Devuelve [] ante error (ej. la función aún no existe en un entorno viejo):
+// el caller cae al comportamiento anterior (derivar las fechas de los datos).
+export async function fetchAllPeriods(scale) {
+  try {
+    const { data, error } = await sb.rpc("dashboard_dates", { scale });
+    if (error) return [];
+    return (data || []).map(r => r.periodo).filter(Boolean).sort();
+  } catch (_) { return []; }
+}
+
+// Desde qué período cargar datos. Toma los últimos LOAD_WINDOW períodos, pero
+// respeta `wantFrom` si el usuario tenía guardado un rango más viejo (así no se
+// le "corta" su vista al recargar). Siempre suma UN período extra hacia atrás:
+// las comparativas WoW/MoM del primer período de la ventana necesitan el
+// anterior para calcular su badge — sin él, el primer período mostraría "NEW".
+export function computeWindowStart(allPeriods, scale, wantFrom) {
+  if (!allPeriods || !allPeriods.length) return null;
+  const n   = LOAD_WINDOW[scale] || 16;
+  let start = allPeriods[Math.max(0, allPeriods.length - n)];
+  if (wantFrom && wantFrom < start) start = wantFrom;
+  const si = allPeriods.indexOf(start);
+  return si > 0 ? allPeriods[si - 1] : allPeriods[0];
+}
+
 // ── PAGINACIÓN PARALELA ───────────────────────────────────────────────────────
-// Descarga todas las páginas de una tabla en paralelo (sin esperar página a página)
-export async function fetchAllPages(table, orderCol) {
-  // 1. Contar filas
-  const { count, error: cErr } = await sb
-    .from(table).select("*", { count: "exact", head: true });
+// Descarga todas las páginas de una tabla en paralelo (sin esperar página a
+// página). `opts.gte` = { col, value } aplica un filtro de rango EN EL SERVIDOR
+// (Fase A3) — antes siempre traía la tabla entera y se filtraba en el navegador.
+export async function fetchAllPages(table, orderCol, opts = {}) {
+  const gte = opts.gte;
+  const withFilter = q => (gte && gte.value) ? q.gte(gte.col, gte.value) : q;
+
+  // 1. Contar filas (del rango, no de la tabla entera)
+  const { count, error: cErr } = await withFilter(
+    sb.from(table).select("*", { count: "exact", head: true })
+  );
   if (cErr || !count) return []; // fallback a array vacío si falla el count
 
   const PAGE   = 1000;
   const pages  = Math.ceil(count / PAGE);
   const reqs   = Array.from({ length: pages }, (_, i) =>
-    sb.from(table).select("*")
+    withFilter(sb.from(table).select("*"))
       .order(orderCol, { ascending: true })
       .range(i * PAGE, (i + 1) * PAGE - 1)
   );
@@ -434,13 +477,32 @@ export function dropLegacyAggregateRows(rows) {
 }
 
 // ── LOAD FROM SUPABASE ────────────────────────────────────────────────────────
-export async function loadFromSupabase() {
+export async function loadFromSupabase(opts = {}) {
   showLoad(true, "Cargando datos desde Supabase...");
   try {
-    // 1. Partners + Rendimiento semanal en paralelo
+    // ── Ventana de carga (Fase A3) ─────────────────────────────────────────
+    // Antes se traía la tabla ENTERA (crece ~180 filas/semana, sin techo) y se
+    // filtraba en el navegador. Ahora: se pide la lista de períodos (RPC, 37
+    // filas) y con eso se calcula desde dónde traer DATOS. `opts.from` permite
+    // pedir explícitamente una ventana más vieja (lo usa ensureRangeLoaded
+    // cuando el usuario elige un "Desde" fuera de lo cargado).
+    if (!STATE._allPeriods) STATE._allPeriods = {};
+    const periodosSem = await fetchAllPeriods("semanal");
+    if (periodosSem.length) STATE._allPeriods.semanal = periodosSem;
+
+    // Respetar el rango que el usuario tenía guardado: si su "Desde" es más
+    // viejo que la ventana por defecto, se carga hasta ahí (si no, al recargar
+    // vería su vista recortada sin haber pedido nada).
+    let savedFrom = null;
+    try { savedFrom = (JSON.parse(lsGet("yangoFilters") || "{}") || {}).dateFrom || null; } catch (_) {}
+    const wantFrom   = opts.from || savedFrom;
+    const winStart   = computeWindowStart(periodosSem, "semanal", wantFrom);
+    STATE._loadedFrom = winStart;   // desde qué período hay datos en memoria
+
+    // 1. Partners + Rendimiento semanal (ventaneado) en paralelo
     const [partners, rend] = await Promise.all([
       sb.from("partners").select("*").then(r => { if (r.error) throw r.error; return r.data; }),
-      fetchAllPages("rendimiento", "fecha")
+      fetchAllPages("rendimiento", "fecha", { gte: { col: "fecha", value: winStart } })
     ]);
 
     if (partners && partners.length) {
@@ -646,6 +708,14 @@ export async function loadFromSupabase() {
     console.error(err);
   }
   showLoad(false);
+}
+
+// ¿El "Desde" que pide el usuario está fuera de la ventana cargada? (Fase A3)
+// Solo aplica a semanal: mensual y diario ya tienen su propio lazy load y son
+// datasets chicos (1.8k y 6.5k filas) que se traen completos.
+export function needsWiderRange(from) {
+  return !!(from && STATE.curMode === "semanal"
+            && STATE._loadedFrom && from < STATE._loadedFrom);
 }
 
 // ── LAZY LOAD MENSUAL ─────────────────────────────────────────────────────────
@@ -1528,7 +1598,16 @@ export async function uploadMetas(rows) {
 
 // ── UPDATE STATE INDEXES ──────────────────────────────────────────────────────
 export function updateIndexes() {
-  STATE.allDates    = [...new Set(STATE.rawData.map(r => r.date))].sort();
+  // allDates = TODOS los períodos existentes en la BD para la escala actual
+  // (RPC dashboard_dates, cacheado en STATE._allPeriods), NO solo los de la
+  // ventana cargada (Fase A3). Esto es lo que alimenta los selectores del
+  // sidebar: si se derivara de rawData (ventaneado), el usuario no podría
+  // navegar a fechas anteriores a la ventana. Fallback a derivarlo de rawData
+  // si la RPC no está disponible → comportamiento idéntico al previo a A3.
+  const periods = (STATE._allPeriods || {})[STATE.curMode];
+  STATE.allDates = (periods && periods.length)
+    ? periods.slice()
+    : [...new Set(STATE.rawData.map(r => r.date))].sort();
   STATE.allPartners = [...new Set(STATE.rawData.map(r => r.partner))].sort();
   STATE.allPartners.forEach(p => {
     if (!STATE.partnerColors[p]) STATE.partnerColors[p] = hashColor(p);

@@ -625,6 +625,16 @@ export function applyFilters() {
     [elFrom.value, elTo.value] = [elTo.value, elFrom.value];
   }
   saveFilters();
+
+  // Fase A3: los datos se cargan por VENTANA (últimas N semanas), no la tabla
+  // entera. Los selectores sí ofrecen todos los períodos, así que el usuario
+  // puede pedir uno anterior a lo que hay en memoria — ahí se re-fetchea
+  // ampliando la ventana. saveFilters() ya corrió arriba, así que la recarga
+  // (que repuebla el sidebar vía restoreFilters) conserva el rango elegido.
+  if (typeof needsWiderRange === "function" && needsWiderRange(elFrom?.value)) {
+    loadFromSupabase({ from: elFrom.value });   // re-renderiza al terminar
+    return;
+  }
   if (STATE.curTab === "rend"        && STATE.rawData.length)                           renderRend();
   if (STATE.curTab === "metas"       && STATE.metasData.length && STATE.rawData.length) renderMetas();
   if (STATE.curTab === "unifview"    && STATE.rawData.length)                           renderUnifView();
