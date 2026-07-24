@@ -965,6 +965,7 @@ export async function downloadMetasPDF() {
     const mes = (STATE.metasMesSel && mesesDisp.includes(STATE.metasMesSel))
       ? STATE.metasMesSel
       : (mesesDisp[0] || "metas");
+    stampPDF(pdf, `Metas — ${mes}`);
     pdf.save(`Metas_${mes}.pdf`);
   } catch(err) {
     alert("Error al generar PDF: " + err.message);
@@ -1024,6 +1025,7 @@ export async function deleteMetasMes(mes) {
 
 // ── ACCIONES DELEGADAS (Fase A2) ─────────────────────────────────────────────
 import { registerActions } from "./shared/actions.js";
+import { stampPDF } from "./shared/pdfmeta.js";
 
 registerActions({
   setMetasLine:    d => setMetasLine(d.line),

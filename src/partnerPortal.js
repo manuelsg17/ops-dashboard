@@ -15,6 +15,7 @@
 // los agregados de abajo son "su total" sin filtrar nada explícitamente.
 
 import { registerActions } from "./shared/actions.js";
+import { stampPDF } from "./shared/pdfmeta.js";
 
 export const PORTAL_STATE = { city: "all" };
 
@@ -144,16 +145,19 @@ export function renderPartnerPortal() {
     `Activos: último período · N+R y Horas: acumulado del rango`,
     d2s(k.last));
 
-  // Filtro de ciudad (solo si opera en más de una)
+  // Barra de herramientas: filtro de ciudad (solo si opera en más de una) + PDF.
+  // El botón lleva data-html2canvas-ignore para no salir dentro del propio PDF.
+  html += `<div class="section" style="margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">`;
   if (ciudades.length > 1) {
-    html += `<div class="section" style="margin-bottom:12px">
-      <label style="font-size:.75rem;color:#888;margin-right:6px">Ciudad</label>
+    html += `<label style="font-size:.75rem;color:#888">Ciudad</label>
       <select class="sb-sel" data-act-change="portalSetCity" style="width:auto">
         <option value="all">Todas</option>
         ${ciudades.map(c => `<option value="${escapeHTML(c)}"${PORTAL_STATE.city === c ? " selected" : ""}>${cityLabel(c)}</option>`).join("")}
-      </select>
-    </div>`;
+      </select>`;
   }
+  html += `<button class="apply-btn" id="portalPdfBtn" data-html2canvas-ignore="true"
+      data-act="portalDownloadPDF" style="margin-left:auto">📄 Descargar PDF</button>
+    </div>`;
 
   html += `<div class="section"><div class="metric-row">
     ${_kpiCard("📊 Conductores Activos", "último período", k.ad,  k.ad,  k.adP, "#FF0000")}
@@ -200,6 +204,35 @@ export function portalSetCity(city) {
   renderPartnerPortal();
 }
 
+// Export PDF del portal. Sellado con el email de la sesión + timestamp
+// (shared/pdfmeta.js): si un partner reenvía el PDF, queda claro de qué cuenta
+// salió y que es material de uso restringido.
+export async function portalDownloadPDF() {
+  if (!window.jspdf || !window.html2canvas) { alert("Librerías PDF no disponibles. Recargá la página."); return; }
+  const content = document.getElementById("portalContent");
+  if (!content) return;
+  const btn = document.getElementById("portalPdfBtn");
+  if (btn) { btn.textContent = "⏳ Generando..."; btn.disabled = true; }
+  try {
+    let bg = getComputedStyle(document.body).backgroundColor;
+    if (!bg || bg === "transparent" || bg === "rgba(0, 0, 0, 0)") bg = "#F2F2F2";
+    const canvas = await html2canvas(content, { scale: 2, useCORS: true, logging: false, backgroundColor: bg });
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: "portrait", unit: "px", format: [canvas.width, canvas.height] });
+    pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, canvas.width, canvas.height);
+    stampPDF(pdf, "Mi desempeño — Yango Perú");
+    pdf.save(`MiDesempeno_${(new Date()).toISOString().slice(0, 10)}.pdf`);
+  } catch (err) {
+    // Mensaje genérico a propósito: el portal es de cara externa, no le eco
+    // detalles internos (payloads de Supabase, stacks) a un partner.
+    alert("No se pudo generar el PDF. Intentá de nuevo o escribile a tu KAM.");
+    if (DEBUG) console.error(err);
+  } finally {
+    if (btn) { btn.textContent = "📄 Descargar PDF"; btn.disabled = false; }
+  }
+}
+
 registerActions({
-  portalSetCity: (d, el) => portalSetCity(el.value)
+  portalSetCity: (d, el) => portalSetCity(el.value),
+  portalDownloadPDF
 });

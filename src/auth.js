@@ -170,6 +170,7 @@ export function _clearStateAndLocalStorage() {
   STATE._mensualLoaded  = false;
   STATE._diarioLoaded   = false;
   STATE.userRole        = null;
+  STATE.userEmail       = null;
   STATE.isAdmin         = false;
   STATE.canWrite        = false;
   if (STATE.perms) STATE.perms = new Set();
@@ -206,6 +207,7 @@ export function showApp(user) {
   document.getElementById("loginScreen").style.display  = "none";
   document.getElementById("appContainer").style.display = "flex";
   document.getElementById("userBadge").textContent      = user.email;
+  STATE.userEmail = user.email;   // firma de los PDFs exportados (shared/pdfmeta.js)
 
   _setRoleFromUser(user);
 

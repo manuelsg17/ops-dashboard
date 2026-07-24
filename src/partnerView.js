@@ -1286,6 +1286,7 @@ export async function pvDownloadPDF() {
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ orientation: "portrait", unit: "px", format: [canvas.width, canvas.height] });
     pdf.addImage(imgData, "JPEG", 0, 0, canvas.width, canvas.height);
+    stampPDF(pdf, `Vista Partner — ${partner}`);
     const langSfx = (PARTNER_VIEW_STATE.lang || "es").toUpperCase();
     pdf.save(`${partner}_${STATE.curMode}_${(new Date()).toISOString().slice(0,10)}_${langSfx}.pdf`);
     showBanner(true, "PDF descargado");
@@ -2005,6 +2006,7 @@ export function _pvChannelMountChart(selectedPartner) {
 
 // ── ACCIONES DELEGADAS (Fase A2) ─────────────────────────────────────────────
 import { registerActions } from "./shared/actions.js";
+import { stampPDF } from "./shared/pdfmeta.js";
 
 registerActions({
   pvFilterPartners: (d, el) => pvFilterPartners(el.value),

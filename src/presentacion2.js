@@ -1890,6 +1890,7 @@ export async function downloadPresent2PDF() {
       if (i > 0) pdf.addPage();
       pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, 1280, 720);
     }
+    stampPDF(pdf, `Presentación 2.0 — ${partner}`);
     pdf.save(`${partner}_Presentacion2_${to}.pdf`);
   } catch (err) {
     console.error(err);
@@ -1905,6 +1906,7 @@ export async function downloadPresent2PDF() {
 
 // ── ACCIONES DELEGADAS (Fase A2) ─────────────────────────────────────────────
 import { registerActions } from "./shared/actions.js";
+import { stampPDF } from "./shared/pdfmeta.js";
 
 registerActions({
   goSlide2:   d => goSlide2(+d.i),
