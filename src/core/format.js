@@ -2,6 +2,24 @@
 // Puros = no leen STATE. bdg()/bdgMode() (dependen de STATE.curMode) se quedan
 // en data.js por ahora.
 
+export function hashColor(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = s.charCodeAt(i) + ((h << 5) - h);
+  return `hsl(${Math.abs(h) % 360},62%,46%)`;
+}
+
+// Normaliza ciudad: trim + UPPERCASE. Llamar SIEMPRE al leer/escribir ciudad
+// (BD, uploads, comparaciones). Evita fragmentacion "Lima"/"lima"/"LIMA".
+export function normCity(c) {
+  return String(c || "").trim().toUpperCase();
+}
+// Para display amigable: "LIMA" -> "Lima". Usar al renderizar en UI.
+export function cityLabel(c) {
+  const s = String(c || "").trim();
+  if (!s) return "";
+  return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+}
+
 // Display formatters — max 2 decimal places
 export function fmt(n) {
   return (n || 0).toLocaleString("es-PE", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
