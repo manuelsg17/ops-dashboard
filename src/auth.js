@@ -65,13 +65,40 @@ export function userCan(perm) {
 
 export function _applyRoleGate() {
   // Esconde UI destructiva/de escritura segun rol. Se llama tras login y tras tab switch.
-  const canWrite = !!STATE.canWrite;
+  const esPartner = STATE.userRole === "partner";
+  // Un partner NUNCA sube archivos, sin importar canWrite: si por error alguien
+  // le otorgara un permiso de escritura, igual no debe ver la UI de subida
+  // (y RLS lo rechazaría de todos modos — esto solo evita ofrecerle algo que
+  // no puede hacer).
+  const canWrite = !!STATE.canWrite && !esPartner;
   const up = document.getElementById("uploadDropdown");
   if (up) up.style.display = canWrite ? "" : "none";
   // Marcamos el body para usos via CSS si hace falta.
   document.body.classList.toggle("role-admin",  !!STATE.isAdmin);
   document.body.classList.toggle("role-kam",    STATE.userRole === "kam");
   document.body.classList.toggle("role-viewer", STATE.userRole === "viewer");
+  document.body.classList.toggle("role-partner", esPartner);
+
+  // ── Partner externo (Track C2): superficie mínima ────────────────────────
+  // Se esconde TODA la navegación interna y se fuerza el portal. Esto es
+  // conveniencia/UX, NO el control de seguridad: aunque alguien restaure el
+  // nav desde DevTools, RLS solo le devuelve las filas de SUS CLIDs, y las
+  // tablas que no le corresponden (seguimiento, proyectos, audit_log) no
+  // tienen política para su rol, así que le vuelven vacías.
+  document.querySelectorAll(".nav-tabs").forEach(n => { n.style.display = esPartner ? "none" : ""; });
+  if (esPartner) {
+    // Sin lista de partners (solo se ve a sí mismo) ni selector de KAM.
+    ["pList", "kamFilter", "partnerSearch"].forEach(id => {
+      const el = document.getElementById(id);
+      const wrap = el?.previousElementSibling;   // su <div class="sb-label">
+      if (el)   el.style.display = "none";
+      if (wrap && wrap.classList.contains("sb-label")) wrap.style.display = "none";
+    });
+    document.querySelectorAll(".sb-row").forEach(r => { r.style.display = "none"; }); // Todos/Ninguno
+    STATE.curTab = "portal";
+    document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+    document.getElementById("tab-portal")?.classList.add("active");
+  }
 }
 
 export async function initAuth() {

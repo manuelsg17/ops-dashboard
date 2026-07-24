@@ -55,9 +55,10 @@ import * as seguimiento  from "./seguimiento.js";
 import * as fleetexterno from "./fleetexterno.js";
 import * as forecast     from "./forecast.js";
 import * as adminUsers   from "./adminUsers.js";
+import * as partnerPortal from "./partnerPortal.js";
 import * as presentacion2 from "./presentacion2.js";
 Object.assign(window,
   config, security, format, dates, data, auth, charts,
   rendimiento, metas, app, unifview, rawdata, partnerView,
-  calculator, seguimiento, fleetexterno, forecast, presentacion2, adminUsers
+  calculator, seguimiento, fleetexterno, forecast, presentacion2, adminUsers, partnerPortal
 );

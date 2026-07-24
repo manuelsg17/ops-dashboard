@@ -626,6 +626,12 @@ export function applyFilters() {
   }
   saveFilters();
 
+  // Partner externo: su unica vista es el portal (Track C2).
+  if (STATE.userRole === "partner") {
+    if (typeof renderPartnerPortal === "function") renderPartnerPortal();
+    return;
+  }
+
   // Fase A3: los datos se cargan por VENTANA (últimas N semanas), no la tabla
   // entera. Los selectores sí ofrecen todos los períodos, así que el usuario
   // puede pedir uno anterior a lo que hay en memoria — ahí se re-fetchea

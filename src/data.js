@@ -694,6 +694,10 @@ export async function loadFromSupabase(opts = {}) {
     // desperdiciado si el usuario estaba en otro tab al terminar el upload,
     // y race condition con applyFilters() debounced.
     if (STATE.rawData.length) {
+      // Partner externo: su unica vista es el portal (Track C2).
+      if (STATE.userRole === "partner" && typeof renderPartnerPortal === "function") {
+        renderPartnerPortal();
+      } else {
       if (STATE.curTab === "rend")                                        renderRend();
       if (STATE.curTab === "metas"       && STATE.metasData.length)       renderMetas();
       if (STATE.curTab === "unifview"    && typeof renderUnifView === "function")    renderUnifView();
@@ -701,6 +705,7 @@ export async function loadFromSupabase(opts = {}) {
       if (STATE.curTab === "calculator"  && typeof renderCalculator === "function")  renderCalculator();
       if (STATE.curTab === "rawdata"     && typeof renderRawData === "function")     renderRawData();
       if (STATE.curTab === "seguimiento" && typeof renderSeguimiento === "function") renderSeguimiento();
+      }
     }
 
   } catch (err) {
