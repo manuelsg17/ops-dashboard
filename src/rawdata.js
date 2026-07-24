@@ -101,7 +101,7 @@ export function renderRawData() {
     const active = RAW_STATE.sortCol === colKey;
     const arrow  = active ? (RAW_STATE.sortDir === "asc" ? " ↑" : " ↓") : "";
     const cls    = active ? (RAW_STATE.sortDir === "asc" ? "sa" : "sd") : "";
-    return `<th class="${cls}" onclick="rawSortBy('${colKey}')" style="cursor:pointer;white-space:nowrap">${label}${arrow}</th>`;
+    return `<th class="${cls}" data-act="rawSort" data-col="${escapeHTML(colKey)}" style="cursor:pointer;white-space:nowrap">${label}${arrow}</th>`;
   }
 
   // ── Date selects ─────────────────────────────────────────────────────────
@@ -128,25 +128,25 @@ export function renderRawData() {
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <input class="crud-input" id="rawSearchReg" placeholder="Buscar partner o KAM..."
           value="${RAW_STATE.search.replace(/"/g, "&quot;")}"
-          oninput="rawSearchInput(this,true)"
+          data-act-input="rawSearch" data-reset="1"
           style="flex:1;min-width:160px;max-width:260px"/>
-        <select class="sb-sel" onchange="RAW_STATE.city=this.value;RAW_STATE.page=0;renderRawData()">
+        <select class="sb-sel" data-act-change="rawSetCity" data-reset="1">
           <option value="all"${RAW_STATE.city === "all" ? " selected" : ""}>Todas las ciudades</option>
           ${cityOpts}
         </select>
-        <select class="sb-sel" onchange="RAW_STATE.dateFrom=this.value;RAW_STATE.page=0;renderRawData()">
+        <select class="sb-sel" data-act-change="rawSetDateFrom" data-reset="1">
           ${dateFromOpts}
         </select>
         <span style="font-size:.75rem;color:#aaa">→</span>
-        <select class="sb-sel" onchange="RAW_STATE.dateTo=this.value;RAW_STATE.page=0;renderRawData()">
+        <select class="sb-sel" data-act-change="rawSetDateTo" data-reset="1">
           ${dateToOpts}
         </select>
         <label style="display:flex;align-items:center;gap:5px;font-size:.75rem;color:#555;cursor:pointer;white-space:nowrap">
           <input type="checkbox" ${RAW_STATE.showBanned ? "checked" : ""}
-            onchange="RAW_STATE.showBanned=this.checked;RAW_STATE.page=0;renderRawData()"/>
+            data-act-change="rawToggleBanned"/>
           Mostrar excluidos 🚫
         </label>
-        <button class="crud-btn" onclick="exportRawCSV()"
+        <button class="crud-btn" data-act="exportRawCSV"
           style="margin-left:auto;background:#f0fdf4;border-color:#86efac;color:#166534">
           ⬇ Exportar CSV
         </button>
@@ -216,10 +216,10 @@ export function renderRawData() {
   if (totalPages > 1) {
     html += `
     <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.78rem;color:#555">
-      <button class="crud-btn" onclick="RAW_STATE.page=Math.max(0,RAW_STATE.page-1);renderRawData()"
+      <button class="crud-btn" data-act="rawPagePrev"
         ${RAW_STATE.page === 0 ? "disabled" : ""} style="padding:4px 10px">← Anterior</button>
       <span>Página <strong>${RAW_STATE.page + 1}</strong> de <strong>${totalPages}</strong></span>
-      <button class="crud-btn" onclick="RAW_STATE.page=Math.min(${totalPages - 1},RAW_STATE.page+1);renderRawData()"
+      <button class="crud-btn" data-act="rawPageNext" data-total="${totalPages}"
         ${RAW_STATE.page === totalPages - 1 ? "disabled" : ""} style="padding:4px 10px">Siguiente →</button>
     </div>`;
   }
@@ -293,7 +293,7 @@ export function exportRawCSV() {
 export function _rawViewToggle() {
   const isData   = RAW_STATE.view !== "flotas";
   const btn = (v, label) => `
-    <button onclick="rawSwitchView('${v}')"
+    <button data-act="rawSwitchView" data-view="${escapeHTML(v)}"
       style="padding:6px 14px;font-size:.78rem;font-weight:700;border:1px solid #ddd;cursor:pointer;
         background:${RAW_STATE.view===v?'#FF0000':'#fff'};color:${RAW_STATE.view===v?'#fff':'#555'};
         border-radius:6px">${label}</button>`;
@@ -438,13 +438,13 @@ export function _renderFlotasView() {
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
         <input class="crud-input" id="rawSearchFlotas" placeholder="Buscar CLID, partner, KAM, ciudad..."
           value="${(RAW_STATE.search || "").replace(/"/g, "&quot;")}"
-          oninput="rawSearchInput(this,false)"
+          data-act-input="rawSearch"
           style="flex:1;min-width:200px;max-width:340px"/>
-        <select class="sb-sel" onchange="RAW_STATE.city=this.value;renderRawData()">
+        <select class="sb-sel" data-act-change="rawSetCity">
           <option value="all"${RAW_STATE.city==="all"?" selected":""}>Todas las ciudades</option>
           ${cityOpts}
         </select>
-        <button class="crud-btn" onclick="exportFlotasCSV()"
+        <button class="crud-btn" data-act="exportFlotasCSV"
           style="margin-left:auto;background:#f0fdf4;border-color:#86efac;color:#166534">\u2B07 Exportar CSV</button>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:8px 10px">
@@ -452,10 +452,10 @@ export function _renderFlotasView() {
         ${(STATE.tuktukPatterns || []).map(w => `
           <span style="display:inline-flex;align-items:center;gap:4px;background:#fff;border:1px solid #fde68a;border-radius:12px;padding:2px 4px 2px 9px;font-size:.7rem;color:#92400e">
             ${escapeHTML(w)}
-            <button onclick="removeTuktukPattern('${escapeJSAttr(w)}')" title="Quitar" style="border:none;background:none;color:#b45309;cursor:pointer;font-weight:700;padding:0 4px">\u00D7</button>
+            <button data-act="removeTuktukPattern" data-word="${escapeHTML(w)}" title="Quitar" style="border:none;background:none;color:#b45309;cursor:pointer;font-weight:700;padding:0 4px">\u00D7</button>
           </span>`).join("")}
-        <input id="newTuktukPattern" class="crud-input" placeholder="ej. mototaxi" style="width:130px;font-size:.72rem" onkeydown="if(event.key==='Enter')addTuktukPattern()"/>
-        <button class="crud-btn" onclick="addTuktukPattern()" style="font-size:.7rem">+ Agregar</button>
+        <input id="newTuktukPattern" class="crud-input" placeholder="ej. mototaxi" style="width:130px;font-size:.72rem" data-act-keydown="addTuktukPatternEnter"/>
+        <button class="crud-btn" data-act="addTuktukPattern" style="font-size:.7rem">+ Agregar</button>
       </div>
     </div>
     <div class="tbl-wrap">
@@ -489,7 +489,7 @@ export function _renderFlotasView() {
   // tagging es por sub-flota (sub-filas debajo) → aquí solo una nota "↓ por
   // fleetroom", sin checkbox por CLID (evita ambigüedad). La sugerencia TukTuk
   // (badge + resalte) nunca auto-marca ni auto-guarda.
-  function _flotaFlagCells(r, clidJS, hasFleetrooms) {
+  function _flotaFlagCells(r, clidH, hasFleetrooms) {
     if (hasFleetrooms) {
       const note = `<span style="font-size:.6rem;color:#0284c7;font-style:italic">↓ fleetroom</span>`;
       return `
@@ -500,15 +500,17 @@ export function _renderFlotasView() {
     const isFleet   = !!(STATE.CLID_IS_FLEET  || {})[r.clid];
     const isTuktuk  = !!(STATE.CLID_IS_TUKTUK || {})[r.clid];
     const suggested = !isTuktuk && _tuktukSuggested(r.nombre_excel);
-    const pFall = escapeJSAttr(r.nombre_efectivo === "—" ? "" : r.nombre_efectivo);
-    const kFall = escapeJSAttr(r.kam_efectivo === "—" ? "" : r.kam_efectivo);
+    // escapeHTML (no escapeJSAttr): ahora van en data-attributes, no dentro de
+    // un string JS de un handler inline — un solo contexto, un solo escape.
+    const pFall = escapeHTML(r.nombre_efectivo === "—" ? "" : r.nombre_efectivo);
+    const kFall = escapeHTML(r.kam_efectivo === "—" ? "" : r.kam_efectivo);
     return `
           <td style="text-align:center">
-            <input type="checkbox" title="Fleet" onchange="flotaSetFlag('${clidJS}','is_fleet',this.checked,'${pFall}','${kFall}')" ${isFleet ? "checked" : ""}/>
+            <input type="checkbox" title="Fleet" data-act-change="flotaSetFlag" data-clid="${clidH}" data-key="is_fleet" data-pfall="${pFall}" data-kfall="${kFall}" ${isFleet ? "checked" : ""}/>
           </td>
           <td style="text-align:center">
             ${suggested ? `<div title="El Nombre Excel sugiere TukTuk" style="font-size:.62rem;color:#b45309;font-weight:700;margin-bottom:2px">\u{1F6FA}?</div>` : ""}
-            <input type="checkbox" title="TukTuk" onchange="flotaSetFlag('${clidJS}','is_tuktuk',this.checked,'${pFall}','${kFall}')" ${isTuktuk ? "checked" : ""} style="${suggested ? "outline:2px solid #f59e0b" : ""}"/>
+            <input type="checkbox" title="TukTuk" data-act-change="flotaSetFlag" data-clid="${clidH}" data-key="is_tuktuk" data-pfall="${pFall}" data-kfall="${kFall}" ${isTuktuk ? "checked" : ""} style="${suggested ? "outline:2px solid #f59e0b" : ""}"/>
           </td>
           <td style="text-align:center"><span style="color:#ccc" title="Excluir de Taxi solo aplica por fleetroom">—</span></td>`;
   }
@@ -516,19 +518,19 @@ export function _renderFlotasView() {
   // Sub-filas por fleetroom (una por db_id) debajo de la fila del CLID. Cada una
   // con 3 checkboxes (Fleet/TukTuk/Excluir Taxi) → fleetroomSetFlag(db_id,...).
   // La sugerencia TukTuk se evalúa sobre el NOMBRE del fleetroom.
-  function _fleetroomSubRows(r, clidJS, froomMap) {
-    const kamCtx  = escapeJSAttr(r.kam_efectivo === "—" ? "" : r.kam_efectivo);
-    const cityCtx = escapeJSAttr(r.ciudad || "");
+  function _fleetroomSubRows(r, clidH, froomMap) {
+    const kamCtx  = escapeHTML(r.kam_efectivo === "—" ? "" : r.kam_efectivo);
+    const cityCtx = escapeHTML(r.ciudad || "");
     return [...froomMap.entries()].sort((a, b) => (a[1] || a[0]).localeCompare(b[1] || b[0]))
       .map(([dbId, name]) => {
-        const dbIdJS   = escapeJSAttr(dbId);
-        const nameJS   = escapeJSAttr(name || "");
+        const dbIdH    = escapeHTML(dbId);
+        const nameH    = escapeHTML(name || "");
         const isFleet  = !!(STATE.FLEETROOM_IS_FLEET     || {})[dbId];
         const isTuktuk = !!(STATE.FLEETROOM_IS_TUKTUK    || {})[dbId];
         const isExcl   = !!(STATE.FLEETROOM_EXCLUDE_TAXI || {})[dbId];
         const sugg     = !isTuktuk && _tuktukSuggested(name);
         const cb = (key, checked, extraStyle = "") =>
-          `<input type="checkbox" onchange="fleetroomSetFlag('${dbIdJS}','${key}',this.checked,'${nameJS}','${clidJS}','${kamCtx}','${cityCtx}')" ${checked ? "checked" : ""} style="${extraStyle}"/>`;
+          `<input type="checkbox" data-act-change="fleetroomSetFlag" data-dbid="${dbIdH}" data-key="${escapeHTML(key)}" data-name="${nameH}" data-clid="${clidH}" data-kam="${kamCtx}" data-city="${cityCtx}" ${checked ? "checked" : ""} style="${extraStyle}"/>`;
         const dbShort = escapeHTML(String(dbId).slice(0, 10));
         return `
         <tr style="background:#f8fbff">
@@ -547,7 +549,6 @@ export function _renderFlotasView() {
   }
 
   rows.slice(0, 500).forEach(r => {
-    const clidJS = escapeJSAttr(r.clid);
     const clidH  = escapeHTML(r.clid);
     const isEditing = RAW_STATE.editingClid === r.clid;
     const froomMap = fleetroomsByClid.get(r.clid);
@@ -581,7 +582,7 @@ export function _renderFlotasView() {
             <select id="flEdKam_${clidH}" class="crud-input" style="min-width:110px">${kamOpts}</select>
             ${kamWarning}
           </td>
-          ${_flotaFlagCells(r, clidJS, hasFleetrooms)}
+          ${_flotaFlagCells(r, clidH, hasFleetrooms)}
           <td style="text-align:center;vertical-align:top">
             <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:.72rem">
               <input id="flEdActivo_${clidH}" type="checkbox"${r.activo?" checked":""}/>
@@ -589,8 +590,8 @@ export function _renderFlotasView() {
             </label>
           </td>
           <td style="text-align:center;white-space:nowrap;vertical-align:top">
-            <button onclick="flotaSaveEdit('${clidJS}')" style="padding:3px 8px;font-size:.7rem;background:#10b981;color:#fff;border:none;border-radius:5px;font-weight:700;cursor:pointer;margin-right:3px">\u2713 Guardar</button>
-            <button onclick="flotaCancelEdit()"          style="padding:3px 8px;font-size:.7rem;background:#888;color:#fff;border:none;border-radius:5px;font-weight:700;cursor:pointer">\u2715</button>
+            <button data-act="flotaSaveEdit" data-clid="${clidH}" style="padding:3px 8px;font-size:.7rem;background:#10b981;color:#fff;border:none;border-radius:5px;font-weight:700;cursor:pointer;margin-right:3px">\u2713 Guardar</button>
+            <button data-act="flotaCancelEdit"          style="padding:3px 8px;font-size:.7rem;background:#888;color:#fff;border:none;border-radius:5px;font-weight:700;cursor:pointer">\u2715</button>
           </td>
         </tr>`;
     } else {
@@ -627,17 +628,17 @@ export function _renderFlotasView() {
           <td style="color:#666;font-size:.78rem">${escapeHTML(r.nombre_excel || "\u2014")}</td>
           <td>${nombreCell}</td>
           <td>${kamCell}</td>
-          ${_flotaFlagCells(r, clidJS, hasFleetrooms)}
+          ${_flotaFlagCells(r, clidH, hasFleetrooms)}
           <td style="text-align:center">${badge}</td>
           <td style="text-align:center;white-space:nowrap">
-            <button onclick="flotaStartEdit('${clidJS}')" title="Editar ciudad/activo/fallback" style="padding:3px 8px;font-size:.7rem;background:#fff;border:1px solid #ddd;border-radius:5px;cursor:pointer;margin-right:3px">\u270F\uFE0F</button>
+            <button data-act="flotaStartEdit" data-clid="${clidH}" title="Editar ciudad/activo/fallback" style="padding:3px 8px;font-size:.7rem;background:#fff;border:1px solid #ddd;border-radius:5px;cursor:pointer;margin-right:3px">\u270F\uFE0F</button>
             ${r.tieneFlota
-              ? `<button onclick="flotaToggleActivo('${clidJS}', ${!r.activo})" title="${r.activo?'Marcar inactiva':'Reactivar'}" style="padding:3px 8px;font-size:.7rem;background:${r.activo?'#fff5f5':'#f0fdf4'};border:1px solid ${r.activo?'#fecaca':'#86efac'};color:${r.activo?'#991b1b':'#166534'};border-radius:5px;cursor:pointer">${r.activo?'\uD83D\uDEAB':'\u2713'}</button>`
-              : `<button onclick="flotaToggleActivo('${clidJS}', false)" title="Marcar inactiva (crear flota)" style="padding:3px 8px;font-size:.7rem;background:#fff5f5;border:1px solid #fecaca;color:#991b1b;border-radius:5px;cursor:pointer">\uD83D\uDEAB</button>`}
+              ? `<button data-act="flotaToggleActivo" data-clid="${clidH}" data-activo="${!r.activo ? 1 : 0}" title="${r.activo?'Marcar inactiva':'Reactivar'}" style="padding:3px 8px;font-size:.7rem;background:${r.activo?'#fff5f5':'#f0fdf4'};border:1px solid ${r.activo?'#fecaca':'#86efac'};color:${r.activo?'#991b1b':'#166534'};border-radius:5px;cursor:pointer">${r.activo?'\uD83D\uDEAB':'\u2713'}</button>`
+              : `<button data-act="flotaToggleActivo" data-clid="${clidH}" data-activo="0" title="Marcar inactiva (crear flota)" style="padding:3px 8px;font-size:.7rem;background:#fff5f5;border:1px solid #fecaca;color:#991b1b;border-radius:5px;cursor:pointer">\uD83D\uDEAB</button>`}
           </td>
         </tr>`;
       // Sub-filas por fleetroom (solo lectura; el tagging es por db_id).
-      if (hasFleetrooms) html += _fleetroomSubRows(r, clidJS, froomMap);
+      if (hasFleetrooms) html += _fleetroomSubRows(r, clidH, froomMap);
     }
   });
 
@@ -955,17 +956,17 @@ export function _renderReconView() {
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <input class="crud-input" id="rawSearchRecon" placeholder="Buscar CLID, partner o KAM..."
-          value="${(RAW_STATE.search || "").replace(/"/g, "&quot;")}" oninput="rawSearchInput(this,false)"
+          value="${(RAW_STATE.search || "").replace(/"/g, "&quot;")}" data-act-input="rawSearch"
           style="flex:1;min-width:180px;max-width:280px"/>
-        <select class="sb-sel" onchange="RAW_STATE.city=this.value;renderRawData()">
+        <select class="sb-sel" data-act-change="rawSetCity">
           <option value="all"${RAW_STATE.city === "all" ? " selected" : ""}>Todas las ciudades</option>${cityOpts}
         </select>
-        <select class="sb-sel" onchange="RAW_STATE.dateFrom=this.value;renderRawData()">${dateFromOpts}</select>
+        <select class="sb-sel" data-act-change="rawSetDateFrom">${dateFromOpts}</select>
         <span style="font-size:.75rem;color:#aaa">\u2192</span>
-        <select class="sb-sel" onchange="RAW_STATE.dateTo=this.value;renderRawData()">${dateToOpts}</select>
-        <button class="crud-btn" onclick="reconExpandAll(true)" style="padding:4px 10px">Expandir todo</button>
-        <button class="crud-btn" onclick="reconExpandAll(false)" style="padding:4px 10px">Colapsar</button>
-        <button class="crud-btn" onclick="exportReconCSV()" style="margin-left:auto;background:#f0fdf4;border-color:#86efac;color:#166534">\u2B07 Exportar CSV</button>
+        <select class="sb-sel" data-act-change="rawSetDateTo">${dateToOpts}</select>
+        <button class="crud-btn" data-act="reconExpandAll" data-open="1" style="padding:4px 10px">Expandir todo</button>
+        <button class="crud-btn" data-act="reconExpandAll" data-open="0" style="padding:4px 10px">Colapsar</button>
+        <button class="crud-btn" data-act="exportReconCSV" style="margin-left:auto;background:#f0fdf4;border-color:#86efac;color:#166534">\u2B07 Exportar CSV</button>
       </div>
     </div>`;
 
@@ -996,7 +997,7 @@ export function _renderReconView() {
         <tbody>`;
 
   clids.slice(0, 400).forEach(c => {
-    const clidJS = escapeJSAttr(c.clid);
+    const clidH  = escapeHTML(c.clid);
     const open   = !!RAW_STATE.expanded[c.clid];
     const froomArr = [...c.frooms.values()];
     // omitido a nivel CLID (para el resumen)
@@ -1008,7 +1009,7 @@ export function _renderReconView() {
       : `<span style="color:#cbd5e1;font-size:.66rem">\u2014</span>`;
 
     html += `
-      <tr onclick="reconToggleClid('${clidJS}')" style="cursor:pointer;background:#f9fafb;border-top:2px solid #eef2f7">
+      <tr data-act="reconToggleClid" data-clid="${clidH}" style="cursor:pointer;background:#f9fafb;border-top:2px solid #eef2f7">
         <td style="text-align:center;color:#0ea5e9;font-weight:700">${froomArr.length > 1 || (froomArr[0] && froomArr[0].db_id) ? (open ? "\u25BE" : "\u25B8") : ""}</td>
         <td>
           <span style="font-family:monospace;font-size:.72rem;color:#64748b">${escapeHTML(c.clid)}</span>
@@ -1120,3 +1121,41 @@ export function exportReconCSV() {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+// ── ACCIONES DELEGADAS (Fase A2: reemplazan los handlers inline) ──────────────
+// Cada entrada mapea un data-act/data-act-* del HTML a su función. El dispatcher
+// (shared/actions.js) las invoca con (dataset, elemento, evento).
+import { registerActions } from "./shared/actions.js";
+
+registerActions({
+  // tabla de registros
+  rawSort:        d => rawSortBy(d.col),
+  rawSearch:      (d, el) => rawSearchInput(el, d.reset === "1"),
+  rawSetCity:     (d, el) => { RAW_STATE.city = el.value;     if (d.reset === "1") RAW_STATE.page = 0; renderRawData(); },
+  rawSetDateFrom: (d, el) => { RAW_STATE.dateFrom = el.value; if (d.reset === "1") RAW_STATE.page = 0; renderRawData(); },
+  rawSetDateTo:   (d, el) => { RAW_STATE.dateTo = el.value;   if (d.reset === "1") RAW_STATE.page = 0; renderRawData(); },
+  rawToggleBanned:(d, el) => { RAW_STATE.showBanned = el.checked; RAW_STATE.page = 0; renderRawData(); },
+  rawPagePrev:    () => { RAW_STATE.page = Math.max(0, RAW_STATE.page - 1); renderRawData(); },
+  rawPageNext:    d  => { RAW_STATE.page = Math.min((+d.total || 1) - 1, RAW_STATE.page + 1); renderRawData(); },
+  rawSwitchView:  d  => rawSwitchView(d.view),
+  exportRawCSV, exportFlotasCSV, exportReconCSV,
+
+  // patrones TukTuk
+  addTuktukPattern,
+  addTuktukPatternEnter: (d, el, e) => { if (e.key === "Enter") addTuktukPattern(); },
+  removeTuktukPattern:   d => removeTuktukPattern(d.word),
+
+  // flags por CLID / fleetroom
+  flotaSetFlag:     (d, el) => flotaSetFlag(d.clid, d.key, el.checked, d.pfall, d.kfall),
+  fleetroomSetFlag: (d, el) => fleetroomSetFlag(d.dbid, d.key, el.checked, d.name, d.clid, d.kam, d.city),
+
+  // edición de flotas
+  flotaStartEdit:    d => flotaStartEdit(d.clid),
+  flotaCancelEdit,
+  flotaSaveEdit:     d => flotaSaveEdit(d.clid),
+  flotaToggleActivo: d => flotaToggleActivo(d.clid, d.activo === "1"),
+
+  // conciliación
+  reconExpandAll:  d => reconExpandAll(d.open === "1"),
+  reconToggleClid: d => reconToggleClid(d.clid)
+});
