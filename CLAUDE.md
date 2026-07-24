@@ -1,17 +1,37 @@
 # Dashboard KAMS V1 — Yango Peru
 
-Vanilla JS dashboard para KAMs (partner performance). Frontend-only (sin build), Supabase como backend (auth + REST).
+Dashboard para KAMs (partner performance) en JS moderno **sin framework**: modulos ES bundleados con **Vite**, Supabase como backend (auth + REST + RLS + 1 Edge Function).
 
 ## Stack
-- HTML + vanilla JS (funciones globales, scripts en orden via `index.html`)
-- Charts: ApexCharts (Vista Partner) + Chart.js (Presentacion)
+- Modulos ES (`src/`), bundleados por Vite. Sin framework, sin JSX. `index.html` carga UN solo `<script type="module">`
+- Charts: ApexCharts (Vista Partner) + Chart.js (Presentacion 2.0)
 - XLSX para subir Excels; html2canvas + jspdf para PDFs
-- Supabase JS pineado a `@2.45.4`. Las 7 librerias CDN tienen SRI sha384
+- Las 7 librerias vienen de **npm** (pineadas en `package-lock`), NO de CDN. Ya no se usa SRI
+- CSP estricta: `script-src 'self'` (sin `'unsafe-inline'`, sin dominios externos). Ver A2 abajo
 
 ## Estado actual
 
-Ultimo commit relevante: **`a237ff0`** (fix colores Avance Presentacion 2.0).
-Historia reciente: `bce50ff` (Fleet propio + TukTuk SH + Avance Combinado) → `b269b07` (Seguridad: XSS/CSP/rol KAM) → `a237ff0` (fix colores/proyeccion Presentacion 2.0).
+Ultimo commit relevante: **`868f648`** (watermark en PDFs).
+Historia reciente: `a237ff0` (fix colores Presentacion 2.0) → **plan de arquitectura jul 2026, 20 commits** (`0d0a...`→`868f648`).
+
+### Sesion julio 2026 (cont.) — Plan de arquitectura completo (Vite + seguridad + portal de partners)
+
+Plan de 3 tracks ejecutado entero. **Track A** (frontend), **Track B** (SQL, corrio en paralelo), **Track C** (pantallas nuevas).
+
+- **A0** — `fmt5()` (Data Raw a 5 decimales; las sumas internas SIEMPRE fueron exactas, solo el display truncaba), fix del contador de Configuracion (mezclaba palabras prohibidas con flotas inactivas → 2 contadores), borrado de JS muerto (`ops.js`/`proyectos.js`/`insights.js`/`presentacion.js`), reorden del nav, y **toggle "🔀 Combinado"** (Taxi+TukTuk, lineas disjuntas) en Rendimiento y Metas.
+- **A1** — scaffold Vite: `npm run dev` reemplaza a `python3 -m http.server`; las 7 libs CDN pasan a npm.
+- **A2** — los 17 .js convertidos a modulos ES (`public/` → `src/`), **173 handlers inline → event delegation** (`data-act`/`data-act-change`/`-input`/`-keydown`/`-mousedown`, dispatcher en `src/shared/actions.js`), y con eso **CSP `script-src 'self'`**. Al desaparecer el contexto "string JS dentro de atributo HTML", **`escapeJSAttr` se ELIMINO** (queda una nota explicando por que ya no hace falta) — con data-attributes alcanza `escapeHTML`.
+- **A3** — **paginacion por ventana de fechas**: `loadFromSupabase` ya no trae la tabla entera; filtra server-side con `.gte()` (16 semanas / 6 meses / 90 dias por defecto) → −61% de payload, y desacoplado del crecimiento de la tabla para siempre. Bloqueador que hubo que resolver antes: `STATE.allDates` se derivaba de la data cargada, asi que ventanear a secas dejaba al usuario atrapado en la ventana inicial → RPC `dashboard_dates(scale)` (**SECURITY INVOKER** a proposito: asi un partner solo ve SUS periodos). `computeWindowStart` carga 1 periodo extra para no romper el WoW.
+- **B1** — `audit_log` + `audit_trigger()` en 10 tablas. **Tamper-evident**: la tabla NO tiene politicas de INSERT/UPDATE/DELETE, solo escribe el trigger (SECURITY DEFINER) — ni un admin reescribe la historia via API. Un audit del lado del cliente seria decorativo (con la anon key se llama a PostgREST directo sin pasar por nuestro JS).
+- **B2** — `user_permissions` + `can(perm)`: grants que **SUMAN** sobre el rol (nunca deny — evita la clase clasica de bugs de autorizacion). `STATE.perms` en el cliente solo decide que UI mostrar; el guard real es RLS.
+- **B3** — hardening de cuentas (leaked-password protection, `search_path` de `_fleetrooms_touch`).
+- **B4** — **RLS del portal de partners**: `partner_users` (user→CLID, N CLIDs por usuario), `is_partner()`, `my_clids()`. Detalle de diseño que casi sale mal: las politicas permissive se **OR-ean**, asi que agregar una politica scoped NO alcanzaba (la vieja `USING(true)` seguia dando todo) → hubo que partir en `_select_internal USING (NOT is_partner())` + `_select_partner`. `my_clids()` vacio = **kill-switch**: un partner sin mapeo no ve NADA (nunca "ve todo por error").
+- **B5** — tests de RLS a nivel SQL (`SET ROLE` + `request.jwt.claims`): kill-switch (0 filas), scoping (863 filas / 1 partner vs 9458 / 69), KAM sin regresiones, escrituras de partner → 42501.
+- **C1** — administracion de usuarios en Configuracion + **Edge Function `admin-users`**: unica pieza server-side nueva, porque setear `app_metadata.role` necesita la Admin API (`service_role`, que **JAMAS** puede tocar el cliente). Valida el JWT del llamador con la anon key ANTES de instanciar el cliente service_role.
+- **C2** — portal de partner (`src/partnerPortal.js`): KPIs, metas vs actual, evolucion y detalle. **No tiene ningun filtro `where clid=...`, a proposito**: el recorte lo hace RLS. Un filtro en el cliente seria teatro y daria la falsa impresion de que la seguridad vive en el frontend.
+- **Watermark en PDFs** (`src/shared/pdfmeta.js`, backlog Sprint 1 #2) — `stampPDF(pdf, titulo)` sella metadatos (author = email de la sesion, subject "uso interno") + un pie visible en CADA pagina con email y timestamp. Trampa resuelta: el tamaño de fuente de jsPDF va en PUNTOS pero las coordenadas en la unidad del doc — sin dividir por `internal.scaleFactor`, el pie quedaba microscopico en los PDFs con `unit:"px"` (paginas de ~2400 de ancho). Aplicado en Vista Partner, Presentacion 2.0, Metas y el portal.
+
+**Pendientes menores** (nada bloqueante): test del 403 de `admin-users` con un JWT no-admin (requiere loguearse con una cuenta no-admin — verificado solo por lectura de codigo); end-to-end con sesion real de partner (el scoping SI esta probado a nivel SQL en B5, lo que falta es la vuelta completa por el navegador); recorte opcional de 17 columnas sin uso (no aplicado: el analisis estatico no descarta acceso dinamico `r[key]`); MFA/TOTP para admins.
 
 ### Sesion julio 2026 (cont.) — Seguridad (3 fases) + fix Presentacion 2.0 + Fleet Externo (pausado)
 
@@ -51,13 +71,13 @@ Las 3 lineas de negocio (Agregador/Fleet/TukTuk) tratadas como **lentes independ
 ### Seguridad (Sprint 0, base vigente — commit `93ef1be`)
 RLS estricto (`is_admin()` + 28 policies; **NUNCA revocar EXECUTE de `is_admin()` a `authenticated`** → rompe escrituras admin con 42501, ver memoria `is-admin-execute-required-for-rls`), XSS (`escapeHTML` en todas las interpolaciones + `bannedWords` re-escapado), borrado masivo gated por `STATE.isAdmin`, SRI sha384 en las 7 librerias CDN. `auth.js` detecta rol desde `user.app_metadata.role`.
 
-## Sprint 1 pendiente (backlog priorizado)
+## Sprint 1 — estado del backlog
 
-1. **CSP** en `<meta http-equiv="Content-Security-Policy">` de `index.html`. Allowlist: `script-src 'self' cdn.jsdelivr.net cdnjs.cloudflare.com; connect-src 'self' *.supabase.co`. Ojo con ApexCharts que inyecta SVG inline.
-2. **Watermark en PDFs** — email del exportador + timestamp en `jspdf.setProperties()` y como texto faded en el footer. Editar `partnerView.js` (`exportPartnerPDF`) y `presentacion.js`.
-3. **Limpiar `console.*`** — 16+ logs filtran data de negocio (CLIDs, breakdowns N+R, errores de upload con nombres). Sustituir por flag `DEBUG` global.
-4. **Custom claim por KAM** — ampliar `is_admin()` a tabla `app_users(user_id, role, kam, city)` y policies que filtren por KAM/ciudad. Asi los KAMs solo ven su slice.
-5. **Headers HTTP** en el hosting (HSTS, X-Frame-Options DENY, Referrer-Policy strict-origin-when-cross-origin, Permissions-Policy minima).
+1. ~~**CSP**~~ — HECHO y endurecido en A2: `script-src 'self'` (sin `'unsafe-inline'`, sin CDNs). `style-src` conserva `'unsafe-inline'` a proposito (1200+ atributos `style=` + ApexCharts; el costo/beneficio no paga, esta documentado como aceptado en `index.html`).
+2. ~~**Watermark en PDFs**~~ — HECHO (`src/shared/pdfmeta.js`).
+3. ~~**Limpiar `console.*`**~~ — HECHO (flag `DEBUG` en `core/config.js`).
+4. ~~**Custom claim por KAM**~~ — **DESCARTADO por decision del usuario**: los roles internos son de PERMISOS, no de filtrado de datos. Todos los KAMs siguen viendo lo mismo. El scoping por CLID aplica SOLO al rol `partner` (B4). No reintentar filtrar data por KAM sin pedirselo de nuevo.
+5. **Headers HTTP** en el hosting (HSTS, X-Frame-Options DENY, Referrer-Policy strict-origin-when-cross-origin, Permissions-Policy minima) — PENDIENTE, depende del hosting definitivo.
 
 ## Git workflow — CRITICO
 
@@ -73,19 +93,29 @@ RLS estricto (`is_admin()` + 28 policies; **NUNCA revocar EXECUTE de `is_admin()
 
 ## Estructura de archivos
 
-- `config.js` — STATE global, KAM_COLORS, CITY_COLORS, METRICS, anon key
-- `data.js` — Supabase loaders, parsers Excel, `escapeHTML`, `fmtSmart`, `normCity`, `applyFlotasOverride`
-- `auth.js` — login, deteccion de rol (`STATE.isAdmin`), logout con cleanup completo
-- `app.js` — init, sidebar, filtros LRU, `renderConfig`, `deleteDashboardData` (gated)
-- `rendimiento.js` — tab Analisis (semanal/mensual) + selector de linea Agregador/Fleet/TukTuk (`STATE.rendLine`, vista Fleet solo-KPIs)
-- `metas.js` — tab Metas + selector de linea (`STATE.metasLine`); secciones Fleet/TukTuk meta-vs-actual
-- `partnerView.js` — Vista Partner (i18n ES/EN, export PDF): Resumen Ejecutivo, Peru General + provincias, cohortes Top1/2-3/4-5/6-10, Embudo de Conversion y Adquisicion por canal (partner vs promedio Top5/Top10)
-- `presentacion.js` — tab Presentacion (Chart.js)
-- `rawdata.js` — raw data + Vista Flotas (CLID->nombre/KAM mapping)
-- `presentacion2.js` — tab Presentacion 2.0 (deck por partner, Taxi/TukTuk, "Avance vs Meta" con metas Fleet/TukTuk + selector "Mes meta")
-- `calculator.js` — Calculadora de Metas (pestañas por linea, reparto goal×share, guardar directo a BD, tarjeta compartible bilingue)
-- `ops.js`, `proyectos.js`, `unifview.js`, `insights.js`, `charts.js`
-- `migrations/` — SQL versionado; se aplica via MCP Supabase (`apply_migration`, project `oqakoinyzvdgqilxwjjv`) o manualmente en el SQL editor. Ver memoria `supabase-mcp-direct-changes`
+Todo el codigo de app vive en `src/` como modulos ES. `index.html` esta en la raiz y carga solo `src/vendor.js`.
+
+- `src/vendor.js` — entry: importa los 19 modulos + las libs npm y espeja los globales (`Object.assign(window, ...)`). **Ojo con el orden**: los imports de un modulo se resuelven ANTES del cuerpo del archivo que los importa, asi que cualquier codigo top-level que corra al evaluar un modulo NO puede depender de esos globales (ver el comentario largo en `auth.js` — esto rompio el login una vez, en silencio)
+- `src/core/config.js` — STATE global, KAM_COLORS, CITY_COLORS, METRICS, DEBUG, anon key
+- `src/core/security.js` — `escapeHTML`
+- `src/core/format.js` — `fmt`, `fmt5`, `fmtK`, `fmtSmart`, `pColor`, `normCity`, `cityLabel`, `hashColor`
+- `src/core/dates.js` — `parseLocalDate`
+- `src/shared/actions.js` — dispatcher del event delegation (`registerActions`). Todo handler nuevo va aca, NUNCA `onclick=` inline (rompe la CSP)
+- `src/shared/pdfmeta.js` — `stampPDF`: watermark + metadatos de exportacion. Llamar justo antes de `pdf.save()`
+- `src/data.js` — loaders Supabase (ventaneados por fecha, A3), parsers Excel, `applyFlotasOverride`
+- `src/auth.js` — login, rol (`STATE.userRole`/`isAdmin`/`canWrite`/`perms`), gate de UI por rol, logout con cleanup
+- `src/app.js` — init, sidebar, filtros LRU, `renderConfig`, `deleteDashboardData` (gated)
+- `src/rendimiento.js` — tab Analisis + selector de linea Agregador/Fleet/TukTuk/Combinado (`STATE.rendLine`)
+- `src/metas.js` — tab Metas + selector de linea (`STATE.metasLine`); Fleet/TukTuk/Combinado meta-vs-actual
+- `src/partnerView.js` — Vista Partner (i18n ES/EN, PDF): Resumen Ejecutivo, Peru General + provincias, cohortes, Embudo de Conversion y Adquisicion por canal
+- `src/presentacion2.js` — tab Presentacion 2.0 (deck por partner, Taxi/TukTuk, "Avance vs Meta")
+- `src/calculator.js` — Calculadora de Metas (reparto goal×share, guardar a BD, tarjeta bilingue)
+- `src/rawdata.js` — Data Raw + Vista Flotas
+- `src/adminUsers.js` — administracion de usuarios (roles, permisos, mapeo de partners). Admin-only
+- `src/partnerPortal.js` — portal del rol `partner`
+- `src/unifview.js`, `src/seguimiento.js`, `src/charts.js`
+- `supabase/functions/admin-users/` — Edge Function (Deno). Lo unico que usa `service_role`
+- `migrations/` — SQL versionado; se aplica via MCP Supabase (`apply_migration`, project `oqakoinyzvdgqilxwjjv`) o en el SQL editor. Ver memoria `supabase-mcp-direct-changes`
 
 ## Modelo de datos
 
@@ -95,13 +125,16 @@ RLS estricto (`is_admin()` + 28 policies; **NUNCA revocar EXECUTE de `is_admin()
 - `conversion_pais` (clid, partner, mes; funnel `first_order`/`n5_success`..`n100_success` + 8 columnas de canal: `agency_scouts`, `organic_partner`, `organic_scouts`, `organic_yango`, `paid_yango`, `partner_scouts`, `referral_partner`, `referral_yango`). UNIQUE (clid,mes). RLS espejo del Sprint 0
 - `metas` (clid, city, mes; UNIQUE clid,city,mes) — objetivos mensuales por partner. Agregador: `meta_active_drivers`/`meta_nr`/`meta_supply_hours`. Fleet: `meta_sh_car`/`meta_acceptance`/`meta_utilization` (nullable). TukTuk: `meta_tk_ad`/`meta_tk_nr`/`meta_tk_cars` (nullable). `mes` = NOMBRE mayus sin año + `mes_year` (desambigua). Ver `migrations/2026-07-08_metas_fleet_tuktuk.sql`
 - `proyectos` — proyectos en curso por partner
+- `audit_log` (at, user_id, user_email, action, table_name, row_key, old_data, new_data) — lo escriben SOLO los triggers. SELECT admin-only; **sin politicas de escritura a proposito** (tamper-evident). Retencion: purga manual >180 dias, comando en la migracion
+- `user_permissions` (user_id, permission) — grants que SUMAN sobre el rol. `can(perm)` los lee desde RLS
+- `partner_users` (user_id, clid) — mapeo del rol `partner` a sus CLIDs. Sin filas para un usuario = no ve nada
 
 `rebuildKAMPartners` (en `config.js`) reconstruye `STATE.KAM_PARTNERS` priorizando `partners`, y agrega flotas solo cuando el CLID NO esta cubierto.
 
 ## Comandos comunes
 
 ```bash
-# Dev local (Fase A1: migrado a Vite — ya NO python http.server)
+# Dev local (Vite — ya NO python http.server)
 npm install        # primera vez
 npm run dev        # dev server en http://localhost:8765 (HMR)
 npm run build      # build de produccion a dist/
@@ -115,11 +148,17 @@ SELECT tablename, policyname, cmd, roles
   FROM pg_policies WHERE schemaname='public'
  ORDER BY tablename, cmd;
 
-# Promover otro admin
+# Promover otro admin (o 'kam' / 'partner'). Preferir la UI de Configuracion →
+# Usuarios (C1), que ademas queda auditada. Este SQL es el fallback.
+# OJO: el rol se hornea al emitir el JWT → el usuario debe RE-LOGUEARSE.
 UPDATE auth.users
    SET raw_app_meta_data = coalesce(raw_app_meta_data,'{}'::jsonb)
                          || jsonb_build_object('role','admin')
  WHERE email = '...@...';
+
+# Quien cambio que (auditoria)
+SELECT at, user_email, action, table_name, row_key
+  FROM audit_log ORDER BY at DESC LIMIT 50;
 ```
 
 ## Caveats
@@ -127,8 +166,10 @@ UPDATE auth.users
 - **Proton Drive sync** ha causado archivos de conflicto silenciosos (`(# Edit conflict ... #).js`) que sobreescribieron cambios. Si aparecen archivos desconocidos, NO borrar — investigar primero y consultar al usuario.
 - **Excel en varios formatos** (numero completo o texto "1.8M"). Los uploads de rendimiento/conversion usan `raw:true` + `toN` (expande K/M/B y pasa numeros tal cual). NO volver a `raw:false` ni quitar el passthrough de numeros en `toN` → rompe precision/decimales. Ver memoria `excel-upload-full-precision`.
 - **Excel de Conversion = 2 pestañas**: "Conversion" (funnel) y "Adquisition by channel". `handleFile` lee ambas en una sola subida; el upsert por (clid,mes) actualiza solo funnel o solo canal sin pisar el otro.
-- Gate de sintaxis antes de commitear: `npm run build` (reemplaza al viejo `node --check`; Vite valida al bundlear). `node --check public/<archivo>.js` sigue sirviendo para un check rapido de un archivo suelto.
-- **Fase A1 (Vite) en curso**: los 15 .js de app viven en `public/` (scripts clasicos `defer`, scope global, se sirven verbatim), `src/vendor.js` (modulo ES) bundlea las librerias npm y expone los globales. `index.html` en la raiz. Conversion de los .js a modulos ES + event delegation = Fase A2 (pendiente): a medida que se conviertan, migran de `public/` a `src/`. NO agregar libs por CDN — usar npm.
-- El anon key vive en `config.js` (es publico por diseno, pero no debe filtrarse en screenshots ni en repos publicos).
+- Gate antes de commitear: `npm run build` sin errores (Vite valida al bundlear) + smoke test del tab tocado en `npm run dev`.
+- **NUNCA agregar `onclick=`/`onchange=` inline** — la CSP (`script-src 'self'`) los bloquea. Usar `data-act="..."` + `registerActions({...})` de `src/shared/actions.js`.
+- **NO agregar libs por CDN** — van por npm, se bundlean.
+- Cuidado con el codigo **top-level** en un modulo: corre antes de que `vendor.js` espeje los globales. Si necesita algo de otro modulo, importarlo explicitamente (ver `auth.js`).
+- El anon key vive en `core/config.js` (es publico por diseno, pero no debe filtrarse en screenshots ni en repos publicos). El `service_role` **solo** existe dentro de la Edge Function.
 - `bannedWords` viene de `localStorage` y puede ser manipulado — siempre re-escapar al renderizar.
-- Si cambias la URL/version de una libreria CDN, recalcula su SRI o el browser bloquea el script.
+- **Proton Drive**: `node_modules/` debe quedar fuera del sync ademas del `.gitignore`.
