@@ -2,18 +2,49 @@
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Estado de sesion. 3 roles via JWT app_metadata.role: admin > kam > viewer
-// (default). STATE.isAdmin sigue gateando lo exclusivo de admin (borrado
-// masivo, Config, Seguimiento, eliminar metas). STATE.canWrite (admin O kam)
-// gatea subir Excels y guardar en la Calculadora. RLS en el servidor es el
-// guard real: aunque un atacante modifique STATE en DevTools, los writes
-// fallan si el JWT no tiene el rol correspondiente.
+// Estado de sesion. Roles via JWT app_metadata.role: admin > kam > viewer
+// (default). STATE.isAdmin gatea lo exclusivo de admin. STATE.perms (Set) trae
+// los grants granulares por usuario de la tabla user_permissions (Fase B2) —
+// permisos que SUMAN sobre el rol (ej. un viewer con 'write:metas'). userCan()
+// combina admin + grants. RLS en el servidor es el guard real: aunque se
+// modifique STATE en DevTools, el write falla si el JWT/uid no tiene el permiso.
 function _setRoleFromUser(user) {
   const role = (user && user.app_metadata && user.app_metadata.role) || "viewer";
   STATE.userRole  = role;
   STATE.isAdmin   = role === "admin";
-  STATE.canWrite  = role === "admin" || role === "kam";
+  if (!STATE.perms) STATE.perms = new Set();
+  _recomputeCanWrite();
   _applyRoleGate();
+  _loadPerms();   // async, refina STATE.perms + re-aplica el gate al volver
+}
+
+// Permisos de escritura/borrado que, otorgados a un usuario, deben mostrarle la
+// UI de escritura (upload). El guard real por-tabla lo hace RLS via can().
+const _WRITE_PERMS = ["write:performance", "write:metas", "write:config", "write:seguimiento", "delete:data"];
+
+function _recomputeCanWrite() {
+  const base = STATE.userRole === "admin" || STATE.userRole === "kam";
+  const granted = STATE.perms && _WRITE_PERMS.some(p => STATE.perms.has(p));
+  STATE.canWrite = base || !!granted;
+}
+
+// Carga los grants del usuario (RLS self_select → solo los propios). Silencioso
+// ante error (tabla ausente / offline): el usuario simplemente queda sin grants
+// extra, nunca con permisos de más.
+async function _loadPerms() {
+  try {
+    const { data, error } = await sb.from("user_permissions").select("permission");
+    if (error) return;
+    STATE.perms = new Set((data || []).map(r => r.permission));
+    _recomputeCanWrite();
+    _applyRoleGate();
+  } catch (_) { /* offline / tabla ausente → sin grants extra */ }
+}
+
+// Helper global de permiso: admin siempre; si no, el grant puntual. Usar para
+// gatear UI de escritura fina (nunca como seguridad — eso es RLS).
+function userCan(perm) {
+  return !!STATE.isAdmin || (STATE.perms && STATE.perms.has(perm));
 }
 
 function _applyRoleGate() {
@@ -98,6 +129,7 @@ function _clearStateAndLocalStorage() {
   STATE.userRole        = null;
   STATE.isAdmin         = false;
   STATE.canWrite        = false;
+  if (STATE.perms) STATE.perms = new Set();
   if (STATE.flotasMap) STATE.flotasMap = null;
   // Charts: destruir instancias para liberar memoria.
   if (STATE.charts) {

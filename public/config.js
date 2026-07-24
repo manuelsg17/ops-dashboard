@@ -110,6 +110,7 @@ const STATE = {
   fleetExternoCols: [],     // nombres de columnas detectados (auto) para render genérico
   fleetExternoError: null,  // mensaje de error de la última lectura (RLS, red, config)
   fleetExternoLoaded: false,
+  perms:            new Set(),   // grants granulares por usuario (Fase B2, user_permissions)
   parseWarnings:    new Set(),
   _mensualLoaded:   false,
   _diarioLoaded:    false,
