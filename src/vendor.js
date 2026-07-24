@@ -29,3 +29,11 @@ window.ApexCharts  = ApexCharts;
 window.Chart       = Chart;
 window.html2canvas = html2canvas;
 window.jspdf       = { jsPDF };
+
+// ── Módulos de app ya convertidos a ES (Fase A2) ─────────────────────────────
+// Se importan acá (parte del grafo de módulos, corren antes que los <script
+// defer> clásicos de public/) y se espejan a window para que los archivos aún
+// clásicos los sigan leyendo como globales. A medida que cada consumidor se
+// convierta a módulo, importará directo desde el módulo y saldrá de este espejo.
+import * as config from "./core/config.js";
+Object.assign(window, config);   // SUPABASE_URL, STATE, KAM_COLORS, METRICS, rebuildKAMPartners, ...

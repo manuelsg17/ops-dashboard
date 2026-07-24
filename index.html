@@ -298,7 +298,7 @@
      después del parseo y antes de DOMContentLoaded, DESPUÉS del módulo vendor
      (que setea los globales). Siguen en scope global clásico hasta la Fase A2
      (conversión a módulos ES + event delegation). -->
-<script defer src="/config.js"></script>
+<!-- config.js convertido a módulo ES (src/core/config.js), lo importa vendor.js -->
 <script defer src="/data.js"></script>
 <script defer src="/auth.js"></script>
 <script defer src="/charts.js"></script>
