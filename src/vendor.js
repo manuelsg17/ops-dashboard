@@ -35,5 +35,8 @@ window.jspdf       = { jsPDF };
 // defer> clásicos de public/) y se espejan a window para que los archivos aún
 // clásicos los sigan leyendo como globales. A medida que cada consumidor se
 // convierta a módulo, importará directo desde el módulo y saldrá de este espejo.
-import * as config from "./core/config.js";
-Object.assign(window, config);   // SUPABASE_URL, STATE, KAM_COLORS, METRICS, rebuildKAMPartners, ...
+import * as config   from "./core/config.js";
+import * as security from "./core/security.js";
+import * as format   from "./core/format.js";
+import * as dates    from "./core/dates.js";
+Object.assign(window, config, security, format, dates);

@@ -51,28 +51,7 @@ function applyFlotasOverride(rows) {
   }, []);
 }
 
-// Escapa caracteres HTML peligrosos en strings de input (partner names, tooltips, etc.).
-// Usar SIEMPRE al interpolar valores no controlados en HTML.
-function escapeHTML(s) {
-  if (s === null || s === undefined) return "";
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-// Para interpolar un valor DENTRO de un argumento de string JS de un manejador inline
-// (onclick="fn('...')") que a su vez vive en un atributo HTML entre comillas dobles.
-// Orden importa: escapar PRIMERO para el string JS (\ y '), LUEGO para el atributo HTML.
-// Así el navegador decodifica las entidades de vuelta a \' y \\ ANTES de que el motor JS
-// los lea, sin que ninguno de los dos contextos (atributo / string JS) pueda romperse.
-// NUNCA usar escapeHTML(x).replace(/'/g,"\\'") — para cuando corre el replace, escapeHTML
-// ya convirtió ' en &#39; y el replace es un no-op (la comilla cruda vuelve al decodificar).
-function escapeJSAttr(s) {
-  return escapeHTML(String(s ?? "").replace(/\\/g, "\\\\").replace(/'/g, "\\'"));
-}
+// escapeHTML / escapeJSAttr → src/core/security.js (Fase A2, espejadas a window por vendor.js)
 
 // Full-precision number parser — never rounds internally.
 // Maneja formato ES ("1.234,56") y US ("1,234.56"). Si solo hay un tipo
@@ -136,39 +115,7 @@ function toN(v, label) {
   return isNaN(n) ? 0 : n;
 }
 
-// Display formatters — max 2 decimal places
-function fmt(n) {
-  return (n || 0).toLocaleString("es-PE", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-}
-// Alta precisión (hasta 5 decimales) — SOLO para Data Raw/Conciliación, donde se
-// cuadra contra Excel. El resto del dashboard usa fmt() (2 decimales).
-function fmt5(n) {
-  return (n || 0).toLocaleString("es-PE", { minimumFractionDigits: 0, maximumFractionDigits: 5 });
-}
-function fmtK(n) {
-  return "$" + ((n || 0) / 1000).toLocaleString("es-PE",
-    { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "K";
-}
-// fmtSmart: compresion automatica K/M con 1 decimal fijo.
-// Usar para metricas grandes (Supply Hours, Trips, Commission) donde el numero
-// completo no entra en charts/KPI cards. Mantiene 1 decimal siempre para no
-// hacer redondeos fuertes (12,500 -> "12.5K" en vez de "13K").
-// Para Conductores Activos NO usar — el numero exacto es sensible.
-function fmtSmart(n) {
-  if (n === null || n === undefined || isNaN(n)) return "0";
-  const neg = n < 0;
-  const abs = Math.abs(n);
-  let out;
-  if (abs >= 1_000_000) {
-    out = (abs / 1_000_000).toLocaleString("es-PE", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "M";
-  } else if (abs >= 1_000) {
-    out = (abs / 1_000).toLocaleString("es-PE", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "K";
-  } else {
-    out = fmt(abs);
-  }
-  return neg ? "-" + out : out;
-}
-function d2s(d) { return d ? d.split("-").reverse().join("/") : "--"; }
+// fmt/fmt5/fmtK/fmtSmart/d2s/semCls/pColor/trendI → src/core/format.js (Fase A2)
 
 // Badge HTML
 function bdg(c, p, cls = "mcard-badge") {
@@ -195,35 +142,7 @@ function bdgMode(c, p, cls = "mcard-badge") {
   return bdg(c, p, cls);
 }
 
-// Semaphore
-function semCls(p) { return p > 100 ? "sem-g" : p >= 80 ? "sem-g" : p >= 50 ? "sem-y" : "sem-r"; }
-function pColor(p) { return p > 100 ? "#8b5cf6" : p >= 80 ? "#10b981" : p >= 50 ? "#f59e0b" : "#FF0000"; }
-
-// Trend over last 3 periods
-function trendI(vals) {
-  const v = vals.filter(x => x > 0);
-  if (v.length < 2) return { i: "→", c: "" };
-  const l = v.slice(-3);
-  let u = 0, d = 0;
-  for (let i = 1; i < l.length; i++) {
-    if (l[i] > l[i - 1]) u++;
-    else if (l[i] < l[i - 1]) d++;
-  }
-  if (u > d) return { i: "↑", c: "color:#10b981" };
-  if (d > u) return { i: "↓", c: "color:#FF0000" };
-  return { i: "→", c: "color:#888" };
-}
-
-// Parsea "YYYY-MM-DD" o "YYYY-MM" como fecha LOCAL (medianoche local), no UTC.
-// `new Date("2026-06-01")` se interpreta como UTC y en zonas con offset negativo
-// (Perú UTC-5) cae el día anterior (2026-05-31), corriendo mes/día. Eso rompía la
-// proyección: la semana del 1 de junio parecía "cruzar al mes siguiente" y forzaba
-// daysRemaining=0 (Proy = Fact). Construir desde las partes evita el corrimiento.
-// Acepta "YYYY-MM" (modo mensual usa date=mes sin día) defaulteando al día 1.
-function parseLocalDate(s) {
-  const m = String(s).match(/^(\d{4})-(\d{1,2})(?:-(\d{1,2}))?/);
-  return m ? new Date(+m[1], +m[2] - 1, +(m[3] || 1)) : new Date(s);
-}
+// semCls/pColor/trendI → src/core/format.js · parseLocalDate → src/core/dates.js (Fase A2)
 
 // Calcula días transcurridos y restantes del mes según el modo:
 // - mensual: daysRemaining = 0 (mes ya cerrado)
