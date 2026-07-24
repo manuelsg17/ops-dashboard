@@ -17,32 +17,20 @@
        <meta> (solo funciona como header HTTP) — requeriria configurarlo en el hosting. -->
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
-    script-src 'self' 'unsafe-inline' cdn.jsdelivr.net cdnjs.cloudflare.com;
-    style-src 'self' 'unsafe-inline' cdn.jsdelivr.net cdnjs.cloudflare.com;
+    script-src 'self' 'unsafe-inline';
+    style-src 'self' 'unsafe-inline';
     img-src 'self' data: blob:;
     font-src 'self' data:;
-    connect-src 'self' https://*.supabase.co wss://*.supabase.co;
+    connect-src 'self' https://*.supabase.co wss://*.supabase.co ws://127.0.0.1:8765 ws://localhost:8765;
     object-src 'none';
     base-uri 'self';
   "/>
 
-  <!-- External libraries (pinned + SRI). Si actualizas una version, recalcula el hash:
-       curl -sSL <url> | openssl dgst -sha384 -binary | openssl base64 -A -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4"
-          integrity="sha384-GFr3yTh5lJznCbZfpTtXnwboFsxqtTQoeTZCRHhE0579KrRmlCzen5AA8ohaB5ug"
-          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"
-          integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw"
-          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/apexcharts/3.41.0/apexcharts.min.js"
-          integrity="sha384-AZAR82W+ffd2z1uC1LxsIQlrDkg/m9b9EAIS8tBhEiN1GUmO+y7FerqaYyEh/ZPX"
-          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"
-          integrity="sha384-DhxhYObIMeMNGyAG7iK11OHzBIKyEIeRL0ad1iFPAOwZB8iirUlTT0O/WJJUk8+o"
-          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"
-          integrity="sha384-y49Zu59jZHJL/PLKgZPv3k2WI9c0Yp3pWB76V8OBVCb0QBKS8l4Ff3YslzHVX76Y"
-          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <!-- Librerías de terceros: ahora vía npm (Vite), no CDN. Ver src/vendor.js.
+       Este módulo corre antes que los <script defer> de la app (orden de
+       documento) y expone los globales (supabase/XLSX/ApexCharts/Chart/
+       html2canvas/jspdf) que el código de app aún usa durante la transición. -->
+  <script type="module" src="/src/vendor.js"></script>
 
   <!-- App styles -->
   <link rel="stylesheet" href="styles.css"/>
@@ -96,19 +84,18 @@
       </svg>
     </button>
     <div class="nav-dropdown-menu" id="analisisMenu">
+      <!-- Orden: análisis de uso frecuente primero; herramientas al final tras el divisor. -->
       <button class="nav-dd-item active" data-tab="rend"        onclick="switchTabFromMenu('rend')">Rendimiento</button>
-      <!-- Ocultado (Fase 7 · sin uso): <button class="nav-dd-item" data-tab="insights" onclick="switchTabFromMenu('insights')">💡 Insights</button> -->
-      <button class="nav-dd-item"        data-tab="partnerview" onclick="switchTabFromMenu('partnerview')">📊 Vista Partner</button>
-      <button class="nav-dd-item"        data-tab="calculator"  onclick="switchTabFromMenu('calculator')">🎯 Calculadora</button>
       <button class="nav-dd-item"        data-tab="metas"       onclick="switchTabFromMenu('metas')">Metas</button>
-      <!-- Ocultado (Fase 7 · sin uso): <button class="nav-dd-item" data-tab="ops" onclick="switchTabFromMenu('ops')">Operaciones</button> -->
-      <!-- Ocultado (Fase 7 · sin uso): <button class="nav-dd-item" data-tab="proyectos" onclick="switchTabFromMenu('proyectos')">Proyectos</button> -->
+      <button class="nav-dd-item"        data-tab="calculator"  onclick="switchTabFromMenu('calculator')">🎯 Calculadora</button>
+      <button class="nav-dd-item"        data-tab="partnerview" onclick="switchTabFromMenu('partnerview')">📊 Vista Partner</button>
       <button class="nav-dd-item"        data-tab="unifview"    onclick="switchTabFromMenu('unifview')">Rend + Metas</button>
+      <div style="height:1px;background:#eee;margin:4px 8px"></div>
       <button class="nav-dd-item"        data-tab="seguimiento" onclick="switchTabFromMenu('seguimiento')">📋 Seguimiento</button>
       <button class="nav-dd-item"        data-tab="rawdata"     onclick="switchTabFromMenu('rawdata')">Data Raw</button>
+      <!-- Fleet Externo fuera del menú hasta tener datos reales (scaffold pausado; tab-panel y script se conservan). -->
     </div>
   </div>
-  <!-- Ocultado (Fase 7): Presentación v1 reemplazada por Presentación 2.0. <button class="nav-tab" data-tab="present" onclick="switchTab('present')">Presentación</button> -->
   <button class="nav-tab" data-tab="present2" onclick="switchTab('present2')">Presentación 2.0</button>
   <button class="nav-tab" data-tab="config"   onclick="switchTab('config')">Configuración</button>
 </nav>
@@ -257,16 +244,6 @@
         <div id="metasContent" style="display:none"></div>
       </div>
 
-      <!-- Operaciones -->
-      <div class="tab-panel" id="tab-ops">
-        <div id="opsContent"></div>
-      </div>
-
-      <!-- Insights / Análisis para reuniones -->
-      <div class="tab-panel" id="tab-insights">
-        <div id="insightsContent"></div>
-      </div>
-
       <!-- Vista Partner Individual (incluye Perú-General del partner + provincias) -->
       <div class="tab-panel" id="tab-partnerview">
         <div id="partnerViewContent"></div>
@@ -275,11 +252,6 @@
       <!-- Calculadora de Metas -->
       <div class="tab-panel" id="tab-calculator">
         <div id="calculatorContent"></div>
-      </div>
-
-      <!-- Proyectos -->
-      <div class="tab-panel" id="tab-proyectos">
-        <div id="proyectosContent"></div>
       </div>
 
       <!-- Rend + Metas (Vista Unificada) -->
@@ -297,6 +269,11 @@
         <div class="empty"><p>Carga datos de <strong>Rendimiento</strong> para usar Seguimiento.</p></div>
       </div>
 
+      <!-- Fleet Externo (lectura en vivo de la Supabase de un colega) -->
+      <div class="tab-panel" id="tab-fleetext">
+        <div id="fleetExternoContent"></div>
+      </div>
+
       <!-- Configuración -->
       <div class="tab-panel" id="tab-config">
         <div id="configContent">
@@ -311,41 +288,30 @@
         </div>
       </div>
     </div>
-<!-- Presentación -->
-    <div class="tab-panel" id="tab-present">
-      <div id="presentContent"></div>
-    </div>
 <!-- Presentación 2.0 -->
     <div class="tab-panel" id="tab-present2">
       <div id="present2Content"></div>
     </div>
   </div><!-- end .layout -->
 </div><!-- end #appContainer -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"
-        integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H"
-        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
-        integrity="sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk"
-        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-
-<!-- App scripts (order matters) -->
-<script src="config.js"></script>
-<script src="data.js"></script>
-<script src="auth.js"></script>
-<script src="charts.js"></script>
-<script src="rendimiento.js"></script>
-<script src="metas.js"></script>
-<script src="app.js"></script>
-<script src="ops.js"></script>
-<script src="proyectos.js"></script>
-<script src="unifview.js"></script>
-<script src="rawdata.js"></script>
-<script src="presentacion.js"></script>
-<script src="insights.js"></script>
-<script src="partnerView.js"></script>
-<script src="calculator.js"></script>
-<script src="seguimiento.js"></script>
-<script src="forecast.js"></script>
-<script src="presentacion2.js"></script>
+<!-- App scripts (order matters). `defer` → se ejecutan en orden de documento
+     después del parseo y antes de DOMContentLoaded, DESPUÉS del módulo vendor
+     (que setea los globales). Siguen en scope global clásico hasta la Fase A2
+     (conversión a módulos ES + event delegation). -->
+<script defer src="/config.js"></script>
+<script defer src="/data.js"></script>
+<script defer src="/auth.js"></script>
+<script defer src="/charts.js"></script>
+<script defer src="/rendimiento.js"></script>
+<script defer src="/metas.js"></script>
+<script defer src="/app.js"></script>
+<script defer src="/unifview.js"></script>
+<script defer src="/rawdata.js"></script>
+<script defer src="/partnerView.js"></script>
+<script defer src="/calculator.js"></script>
+<script defer src="/seguimiento.js"></script>
+<script defer src="/fleetexterno.js"></script>
+<script defer src="/forecast.js"></script>
+<script defer src="/presentacion2.js"></script>
 </body>
 </html>

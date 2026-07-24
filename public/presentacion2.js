@@ -1,15 +1,74 @@
 // presentacion2.js — "Presentación 2.0" (Fase 1a)
 // Presentación semanal estandarizada para enviar al partner. Sección NUEVA e
-// independiente: no toca "Vista Partner" (partnerView.js) ni "Presentación"
-// (presentacion.js). Reusa helpers globales (getPartnerVals, getCityVals,
-// getSelectedDates, _presOrderCities, getWoW, wowColor, fmt, fmtSmart, d2s,
-// CITY_COLORS, cityLabel, escapeHTML, ensureIndexes) pero mantiene su PROPIO
-// registro de charts (PRESENT2_STATE.charts) para no chocar con presentacion.js.
+// independiente: no toca "Vista Partner" (partnerView.js). Reusa helpers
+// globales (fmt, fmtSmart, d2s, CITY_COLORS, cityLabel, escapeHTML,
+// ensureIndexes) y define abajo los helpers de presentación (getPartnerVals,
+// getCityVals, getSelectedDates, _presOrderCities, getWoW, wowColor) que
+// heredó de la Presentación v1 al retirarse esta (Fase 7 → borrada).
 //
 // Fase 1a incluye: selector de partner + idioma + comparativas (vs Top-N / vs
 // ciudad), slide de MATRIZ (Perú + ciudades × AD, N+R, SH, Comisión, Viajes,
 // Retención), slides de DATA RAW numérica y porcentual (WoW), y export a PDF.
-// Pendiente (fases siguientes): Avance vs Meta, alertas KAM, variante Fleet, TukTuk.
+
+// ── Helpers de presentación (ex-presentacion.js) ──────────────────────────────
+const PRES_CITY_ORDER = ["LIMA", "AREQUIPA", "TRUJILLO"];
+
+function _presOrderCities(cities) {
+  const rank = c => {
+    const i = PRES_CITY_ORDER.indexOf(String(c).toUpperCase());
+    return i === -1 ? PRES_CITY_ORDER.length : i;
+  };
+  return [...cities].sort((a, b) => rank(a) - rank(b) || String(a).localeCompare(String(b)));
+}
+
+function getSelectedDates(from, to, mode) {
+  const all = STATE.allDates;
+  if (mode === "mensual") {
+    const idx = all.findIndex(d => d > to);
+    const end = idx === -1 ? all.length - 1 : idx - 1;
+    return all.slice(Math.max(0, end - 3), end + 1);
+  }
+  const datesInRange = all.filter(d => d >= from && d <= to);
+  if (datesInRange.length > 0) return datesInRange;
+  const idx = all.findIndex(d => d > to);
+  const end = idx === -1 ? all.length - 1 : idx - 1;
+  return all.slice(Math.max(0, end - 3), end + 1);
+}
+
+function getWoW(vals) {
+  // Returns array of WoW % for each index (null for first)
+  return vals.map((v, i) => {
+    if (i === 0) return null;
+    const prev = vals[i-1];
+    if (!prev) return null;
+    return ((v - prev) / prev * 100);
+  });
+}
+
+function wowColor(pct) {
+  if (pct === null) return "#aaa";
+  return pct >= 0 ? "#10b981" : "#FF0000";
+}
+
+function getPartnerVals(partner, city, dates, metricFn) {
+  return dates.map(d => {
+    const rows = STATE._byCityDate?.get(`${city}|||${d}`) || [];
+    let s = 0;
+    for (const r of rows) {
+      if (r.partner === partner) s += metricFn(r);
+    }
+    return s;
+  });
+}
+
+function getCityVals(city, dates, metricFn) {
+  return dates.map(d => {
+    const rows = STATE._byCityDate?.get(`${city}|||${d}`) || [];
+    let s = 0;
+    for (const r of rows) s += metricFn(r);
+    return s;
+  });
+}
 
 let PRESENT2_STATE = {
   partner:  null,

@@ -140,6 +140,11 @@ function toN(v, label) {
 function fmt(n) {
   return (n || 0).toLocaleString("es-PE", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
+// Alta precisión (hasta 5 decimales) — SOLO para Data Raw/Conciliación, donde se
+// cuadra contra Excel. El resto del dashboard usa fmt() (2 decimales).
+function fmt5(n) {
+  return (n || 0).toLocaleString("es-PE", { minimumFractionDigits: 0, maximumFractionDigits: 5 });
+}
 function fmtK(n) {
   return "$" + ((n || 0) / 1000).toLocaleString("es-PE",
     { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "K";
@@ -720,8 +725,6 @@ async function loadFromSupabase() {
     if (STATE.rawData.length) {
       if (STATE.curTab === "rend")                                        renderRend();
       if (STATE.curTab === "metas"       && STATE.metasData.length)       renderMetas();
-      if (STATE.curTab === "ops"         && typeof renderOps === "function")         renderOps();
-      if (STATE.curTab === "insights"    && typeof renderInsights === "function")    renderInsights();
       if (STATE.curTab === "unifview"    && typeof renderUnifView === "function")    renderUnifView();
       if (STATE.curTab === "partnerview" && typeof renderPartnerView === "function") renderPartnerView();
       if (STATE.curTab === "calculator"  && typeof renderCalculator === "function")  renderCalculator();

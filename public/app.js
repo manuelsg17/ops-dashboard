@@ -236,8 +236,6 @@ async function switchMode(mode) {
   // Render unico del tab activo (restoreFilters no rendero por _suppressRestoreRender)
   if (STATE.curTab === "rend"        && STATE.rawData.length) renderRend();
   if (STATE.curTab === "metas"       && STATE.metasData.length && STATE.rawData.length) renderMetas();
-  if (STATE.curTab === "ops")                                  renderOps();
-  if (STATE.curTab === "insights"    && STATE.rawData.length) renderInsights();
   if (STATE.curTab === "unifview"    && STATE.rawData.length) renderUnifView();
   if (STATE.curTab === "partnerview" && STATE.rawData.length) renderPartnerView();
   if (STATE.curTab === "calculator"  && STATE.rawData.length) renderCalculator();
@@ -278,9 +276,8 @@ function switchTab(tab) {
     if (prevTab && prevTab !== tab) {
       if (prevTab === "calculator"  && typeof calcCancelPendingRender === "function") calcCancelPendingRender();
       if (prevTab === "partnerview" && typeof _pvDestroyCharts === "function")        _pvDestroyCharts();
-      if (prevTab === "present"     && typeof destroyPresentCharts === "function")    destroyPresentCharts();
       if (prevTab === "present2"    && typeof destroyPresent2Charts === "function")   destroyPresent2Charts();
-      const apexConsumers = new Set(["rend","metas","ops","insights","unifview"]);
+      const apexConsumers = new Set(["rend","metas","unifview"]);
       if (apexConsumers.has(prevTab) && !apexConsumers.has(tab) && typeof destroyAllCharts === "function") {
         destroyAllCharts();
       }
@@ -290,10 +287,10 @@ function switchTab(tab) {
     }
 
     // Pantalla completa en presentación
-    document.body.classList.toggle("present-mode", tab === "present" || tab === "present2");
+    document.body.classList.toggle("present-mode", tab === "present2");
     // Ocultar el sidebar de filtros en tabs donde no aplica (Fase 7): la data de
     // Configuración/Calculadora/Data Raw no depende de Escala/Fechas/Ciudad/KAM.
-    const NO_SIDEBAR_TABS = new Set(["config", "calculator", "rawdata", "seguimiento"]);
+    const NO_SIDEBAR_TABS = new Set(["config", "calculator", "rawdata", "seguimiento", "fleetext"]);
     document.body.classList.toggle("no-sidebar", NO_SIDEBAR_TABS.has(tab));
     // Guardar filtros actuales antes de cambiar
     STATE.savedFilters = {
@@ -307,7 +304,7 @@ function switchTab(tab) {
 
     // Tabs bajo el dropdown "Análisis" (Fase 7: sincronizado con el nav visible —
     // incluye partnerview/calculator, excluye ops/proyectos ocultos).
-    const ANALISIS_TABS = ["rend", "partnerview", "calculator", "metas", "unifview", "seguimiento", "rawdata"];
+    const ANALISIS_TABS = ["rend", "partnerview", "calculator", "metas", "unifview", "seguimiento", "fleetext", "rawdata"];
     const navAnalisis = document.getElementById("navAnalisis");
     if (navAnalisis) navAnalisis.classList.toggle("active", ANALISIS_TABS.includes(tab));
     document.querySelectorAll(".nav-tab[data-tab]").forEach(btn => {
@@ -351,15 +348,12 @@ function switchTab(tab) {
 
       if (tab === "rend"        && STATE.rawData.length)                           renderRend();
       if (tab === "metas"       && STATE.metasData.length && STATE.rawData.length) renderMetas();
-      if (tab === "ops")                                                            renderOps();
-      if (tab === "proyectos")                                                      renderProyectos();
       if (tab === "unifview")                                                       renderUnifView();
       if (tab === "rawdata")                                                        renderRawData();
       if (tab === "seguimiento")                                                    renderSeguimiento();
+      if (tab === "fleetext")                                                       renderFleetExterno();
       if (tab === "config")                                                         renderConfig();
-      if (tab === "present")                                                        renderPresent();
       if (tab === "present2"    && STATE.rawData.length)                            renderPresent2();
-      if (tab === "insights"    && STATE.rawData.length)                            renderInsights();
       if (tab === "partnerview" && STATE.rawData.length)                            renderPartnerView();
       if (tab === "calculator"  && STATE.rawData.length)                            renderCalculator();
     }));
@@ -604,8 +598,6 @@ function onKAMChange() {
   if (STATE._suppressRestoreRender) return;
   if (STATE.curTab === "rend"        && STATE.rawData.length)                           renderRend();
   if (STATE.curTab === "metas"       && STATE.metasData.length && STATE.rawData.length) renderMetas();
-  if (STATE.curTab === "ops"         && STATE.rawData.length)                           renderOps();
-  if (STATE.curTab === "insights"    && STATE.rawData.length)                           renderInsights();
   if (STATE.curTab === "unifview"    && STATE.rawData.length)                           renderUnifView();
   if (STATE.curTab === "partnerview" && STATE.rawData.length)                           renderPartnerView();
   if (STATE.curTab === "calculator"  && STATE.rawData.length)                           renderCalculator();
@@ -626,8 +618,6 @@ function applyFilters() {
   if (STATE.curTab === "rend"        && STATE.rawData.length)                           renderRend();
   if (STATE.curTab === "metas"       && STATE.metasData.length && STATE.rawData.length) renderMetas();
   if (STATE.curTab === "unifview"    && STATE.rawData.length)                           renderUnifView();
-  if (STATE.curTab === "ops"         && STATE.rawData.length)                           renderOps();
-  if (STATE.curTab === "insights"    && STATE.rawData.length)                           renderInsights();
   if (STATE.curTab === "partnerview" && STATE.rawData.length)                           renderPartnerView();
   if (STATE.curTab === "calculator"  && STATE.rawData.length)                           renderCalculator();
   // Presentación 2.0: al mover el filtro, re-renderiza el slide actual (Avance vs Meta
@@ -729,7 +719,15 @@ function renderConfig() {
   }
 
   // ── Sección: Filtros de Flota (palabras prohibidas) ──────────────────────────
+  // rawDataFull − rawData mezcla DOS causas: palabras prohibidas y sub-flotas
+  // TukTuk/excluidas-de-Taxi (Vista Flotas). Se desglosan por separado para no
+  // atribuir a "palabras prohibidas" exclusiones que vienen del tagging por fleetroom.
   const excludedCount = STATE.rawDataFull.length - STATE.rawData.length;
+  const _bannedLowerCnt = (STATE.bannedWords || []).map(w => w.toLowerCase());
+  const bannedRowCount = _bannedLowerCnt.length
+    ? STATE.rawDataFull.filter(r => _bannedLowerCnt.some(w => (r.partner || "").toLowerCase().includes(w))).length
+    : 0;
+  const taxiExclCount = Math.max(0, excludedCount - bannedRowCount);
   // bannedWords viene de localStorage y puede ser manipulado: escapamos siempre,
   // y pasamos el valor como JSON HTML-encodeado para no romper el atributo onclick.
   const bannedBadges  = STATE.bannedWords.map(w => {
@@ -761,7 +759,8 @@ function renderConfig() {
       <div style="font-size:.8rem;font-weight:700;color:#555;margin-bottom:10px">🚫 Filtros de Flota — Palabras Prohibidas</div>
       <div style="font-size:.75rem;color:#888;margin-bottom:10px">
         Los partners cuyo nombre contenga alguna de estas palabras (sin importar mayúsculas) quedan excluidos del dashboard.
-        Actualmente excluidos: <strong style="color:#FF0000">${excludedCount}</strong> registro(s) · <strong>${excludedPartners.size}</strong> partner(s) en el período cargado.
+        Por palabra prohibida: <strong style="color:#FF0000">${bannedRowCount}</strong> registro(s) · <strong>${excludedPartners.size}</strong> partner(s).
+        ${taxiExclCount ? `Aparte hay <strong style="color:#b45309">${taxiExclCount}</strong> registro(s) fuera de Taxi por marcado <strong>🛺 TukTuk / ⛔ Excluir</strong> (se gestionan en <strong>Data Raw → Vista Flotas</strong>, no aquí).` : ""}
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
         ${bannedBadges || `<span style="font-size:.75rem;color:#aaa">Sin palabras prohibidas configuradas.</span>`}

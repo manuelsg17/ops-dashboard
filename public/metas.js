@@ -63,7 +63,8 @@ function metasLineToggleHTML() {
   const defs = [
     { k: "agg",   emoji: "📊", label: "Agregador", tip: "Metas Taxi (AD, N+R, Horas)" },
     { k: "fleet", emoji: "🚗", label: "Fleet",     tip: "Metas de flota (SH/auto, aceptación, utilización)" },
-    { k: "tk",    emoji: "🛺", label: "TukTuk",    tip: "Metas TukTuk (AD, N+R, Brandeados)" }
+    { k: "tk",    emoji: "🛺", label: "TukTuk",    tip: "Metas TukTuk (AD, N+R, Brandeados)" },
+    { k: "comb",  emoji: "🔀", label: "Combinado", tip: "Taxi + TukTuk sumados vs meta combinada — avance total del partner" }
   ];
   const btns = defs.map(d => {
     const on  = line === d.k;
@@ -74,16 +75,18 @@ function metasLineToggleHTML() {
       style="${dis ? "opacity:.4;cursor:not-allowed" : ""}">${d.emoji} ${d.label}</button>`;
   }).join("");
   const note = diario
-    ? `<span style="font-size:.7rem;color:#b45309;margin-left:10px;align-self:center">Fleet/TukTuk requieren escala semanal o mensual</span>`
+    ? `<span style="font-size:.7rem;color:#b45309;margin-left:10px;align-self:center">Fleet/TukTuk/Combinado requieren escala semanal o mensual</span>`
     : "";
   return `<div class="mode-toggle-row" style="margin:0 4px 12px">${btns}${note}</div>`;
 }
 
 // Slice de performance de la línea para la escala actual (Fase 2).
+// "comb" = Taxi + TukTuk (disjuntos: TukTuk se excluye de rawData al cargar → sin doble conteo).
 function _metasLineDataset(line) {
   const mensual = STATE.curMode === "mensual";
   if (line === "fleet") return (mensual ? STATE.rawDataMensualFleet  : STATE.rawDataFleet)  || [];
   if (line === "tk")    return (mensual ? STATE.rawDataMensualTuktuk : STATE.rawDataTuktuk) || [];
+  if (line === "comb")  return STATE.rawData.concat((mensual ? STATE.rawDataMensualTuktuk : STATE.rawDataTuktuk) || []);
   return STATE.rawData;
 }
 // Actuales Fleet por (partner|||city) en [from,to]: SH/auto interno y aceptación
@@ -91,10 +94,11 @@ function _metasLineDataset(line) {
 // presentacion2.p2FleetSeries / rendimiento._rendFleetAgg.
 function _metasFleetActuals(from, to, selSet, cityFilter) {
   const by = new Map();
+  const _sidebar = new Set(STATE.allPartners);
   _metasLineDataset("fleet").forEach(r => {
     if (r.date < from || r.date > to) return;
     if (cityFilter !== "all" && r.city !== cityFilter) return;
-    if (selSet.size && !selSet.has(r.partner)) return;
+    if (selSet.size && !_lineSelHas(selSet, _sidebar, r.partner)) return;
     const k = `${r.partner}|||${r.city}`;
     let e = by.get(k);
     if (!e) { e = { owned: 0, intSh: 0, trips: 0, accW: 0, branded: 0 }; by.set(k, e); }
@@ -114,10 +118,11 @@ function _metasFleetActuals(from, to, selSet, cityFilter) {
 // N+R = Σ, Brandeados = MÁX snapshot. Espeja getRPC / la Calculadora.
 function _metasTkActuals(from, to, selSet, cityFilter) {
   const by = new Map();
+  const _sidebar = new Set(STATE.allPartners);
   _metasLineDataset("tk").forEach(r => {
     if (r.date < from || r.date > to) return;
     if (cityFilter !== "all" && r.city !== cityFilter) return;
-    if (selSet.size && !selSet.has(r.partner)) return;
+    if (selSet.size && !_lineSelHas(selSet, _sidebar, r.partner)) return;
     const k = `${r.partner}|||${r.city}`;
     let e = by.get(k);
     if (!e) { e = { _ad: {}, _cars: {}, nr: 0, sh: 0 }; by.set(k, e); }
@@ -134,6 +139,32 @@ function _metasTkActuals(from, to, selSet, cityFilter) {
     e.ad   = last != null ? e._ad[last]   : 0;
     e.cars = last != null ? e._cars[last] : 0;
     delete e._ad; delete e._cars;
+  });
+  return by;
+}
+// Actuales COMBINADOS (Taxi+TukTuk) por (partner|||city): AD = snapshot del ÚLTIMO
+// período (misma convención que la slide "Avance Combinado" del deck), N+R y SH = Σ
+// del rango. Opera sobre el dataset concat — las filas de ambas líneas de una misma
+// fecha se suman antes de tomar el snapshot.
+function _metasCombActuals(from, to, selSet, cityFilter) {
+  const by = new Map();
+  const _sidebar = new Set(STATE.allPartners);
+  _metasLineDataset("comb").forEach(r => {
+    if (r.date < from || r.date > to) return;
+    if (cityFilter !== "all" && r.city !== cityFilter) return;
+    if (selSet.size && !_lineSelHas(selSet, _sidebar, r.partner)) return;
+    const k = `${r.partner}|||${r.city}`;
+    let e = by.get(k);
+    if (!e) { e = { _ad: {}, nr: 0, sh: 0 }; by.set(k, e); }
+    e._ad[r.date] = (e._ad[r.date] || 0) + (r.activeDrivers || 0);
+    e.nr += (r.newPartner || 0) + (r.newService || 0) + (r.reactivated || 0);
+    e.sh += r.supplyHours || 0;
+  });
+  by.forEach(e => {
+    const dts = Object.keys(e._ad).sort();
+    const last = dts[dts.length - 1];
+    e.ad = last != null ? e._ad[last] : 0;
+    delete e._ad;
   });
   return by;
 }
@@ -178,7 +209,7 @@ function _renderMetasFleet(mesName, from, to, selSet, cityFilter, kamFilter) {
     m.mes === mesName &&
     (m.mSHcar != null || m.mAcc != null || m.mUtil != null) &&
     (kamFilter === "all" || m.kam === kamFilter) &&
-    (!selSet.size || selSet.has(m.partner)) &&
+    (!selSet.size || _lineSelHas(selSet, new Set(STATE.allPartners), m.partner)) &&
     (cityFilter === "all" || m.city === cityFilter)
   ).sort((a, b) => a.partner.localeCompare(b.partner));
 
@@ -225,7 +256,7 @@ function _renderMetasTk(mesName, from, to, selSet, cityFilter, kamFilter) {
     m.mes === mesName &&
     (m.mtkAD != null || m.mtkNR != null || m.mtkCars != null || m.mtkSH != null) &&
     (kamFilter === "all" || m.kam === kamFilter) &&
-    (!selSet.size || selSet.has(m.partner)) &&
+    (!selSet.size || _lineSelHas(selSet, new Set(STATE.allPartners), m.partner)) &&
     (cityFilter === "all" || m.city === cityFilter)
   ).sort((a, b) => a.partner.localeCompare(b.partner));
 
@@ -283,6 +314,81 @@ function _renderMetasTk(mesName, from, to, selSet, cityFilter, kamFilter) {
   return html;
 }
 
+// Vista Metas COMBINADO (Taxi+TukTuk): actuales sumados de ambas líneas vs meta
+// combinada (meta agregador + meta TukTuk). Misma fórmula que la slide "Avance
+// Combinado" de Presentación 2.0 — si el partner se enfoca en TukTuk, ese avance
+// también cuenta para su meta. AD = snapshot último período; N+R/SH = Σ del rango.
+function _renderMetasComb(mesName, from, to, selSet, cityFilter, kamFilter) {
+  const act = _metasCombActuals(from, to, selSet, cityFilter);
+  const rows = STATE.metasData.filter(m =>
+    m.mes === mesName &&
+    ((m.mA || 0) > 0 || (m.mNR || 0) > 0 || (m.mH || 0) > 0 ||
+     m.mtkAD != null || m.mtkNR != null || m.mtkSH != null) &&
+    (kamFilter === "all" || m.kam === kamFilter) &&
+    (!selSet.size || _lineSelHas(selSet, new Set(STATE.allPartners), m.partner)) &&
+    (cityFilter === "all" || m.city === cityFilter)
+  ).sort((a, b) => a.partner.localeCompare(b.partner));
+
+  let html = metasLineToggleHTML();
+  html += secH("🔀", "#8b5cf6", "Metas Combinado (Taxi + TukTuk) — " + mesName,
+    "Actual del RANGO seleccionado (ambas líneas sumadas) vs meta combinada · si el partner empuja TukTuk también avanza su meta · para % reales usa el preset del mes de la meta", "Peru");
+
+  if (!rows.length) {
+    html += `<div class="section"><div style="padding:26px 16px;text-align:center;color:#999;font-size:.85rem">
+      No hay metas cargadas para ${escapeHTML(mesName)} con el filtro actual.<br>
+      Genéralas desde la <strong>Calculadora</strong> y guárdalas, o ajusta el filtro.
+    </div></div>`;
+    return html;
+  }
+
+  // Resumen Perú: Σ de actuales y de metas combinadas de los partners visibles.
+  let tA = 0, tNR = 0, tSH = 0, mA = 0, mNR = 0, mSH = 0;
+  rows.forEach(m => {
+    const a = act.get(`${m.partner}|||${m.city}`) || { ad: 0, nr: 0, sh: 0 };
+    tA += a.ad; tNR += a.nr; tSH += a.sh;
+    mA  += (m.mA  || 0) + (m.mtkAD || 0);
+    mNR += (m.mNR || 0) + (m.mtkNR || 0);
+    mSH += (m.mH  || 0) + (m.mtkSH || 0);
+  });
+  html += `<div class="section"><div class="metric-row" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+    ${metaResCard("Active Drivers", "último período", tA,  mA,  tA,  "#8b5cf6")}
+    ${metaResCard("Nuevos + React", "acumulado",      tNR, mNR, tNR, "#f97316")}
+    ${metaResCard("Horas Conexión", "acumulado",      tSH, mSH, tSH, "#0891b2")}
+  </div></div>`;
+
+  // Por partner: meta combinada por KPI. Desglose Taxi/TukTuk de la meta en el sub.
+  html += secH("🃏", "#8b5cf6", "Combinado por Partner", "Meta (Taxi + TukTuk) vs actual sumado", "");
+  html += `<div class="section"><div class="partner-grid">`;
+  rows.forEach(m => {
+    const a      = act.get(`${m.partner}|||${m.city}`) || { ad: 0, nr: 0, sh: 0 };
+    const col    = STATE.partnerColors[m.partner] || "#8b5cf6";
+    const kcolor = KAM_COLORS[m.kam] || "#888";
+    const gAD = (m.mA  || 0) + (m.mtkAD || 0);
+    const gNR = (m.mNR || 0) + (m.mtkNR || 0);
+    const gSH = (m.mH  || 0) + (m.mtkSH || 0);
+    const hasTk = m.mtkAD != null || m.mtkNR != null || m.mtkSH != null;
+    html += `
+      <div class="pcard" style="border-left-color:${col}">
+        <div class="pcard-name">
+          <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${col};margin-right:5px"></span>
+          ${escapeHTML(m.partner)}
+          <span style="font-size:.6rem;font-weight:700;background:#f5f3ff;color:#8b5cf6;border:1px solid #ddd6fe;padding:1px 5px;border-radius:8px;margin-left:5px">🔀 Combinado</span>
+          ${hasTk ? "" : `<span style="font-size:.6rem;color:#aaa;margin-left:4px" title="Este partner no tiene metas TukTuk — su combinado equivale al agregador">solo Taxi</span>`}
+        </div>
+        <div class="pcard-sub">
+          <span style="width:7px;height:7px;border-radius:50%;background:${kcolor};display:inline-block;margin-right:3px"></span>
+          ${escapeHTML(m.kam)} &nbsp;·&nbsp; ${escapeHTML(m.city)}
+        </div>
+        ${_metaLineRow("Active Drivers", gAD > 0 ? a.ad : null, gAD > 0 ? gAD : null, v => fmt(v))}
+        ${_metaLineRow("Nuevos + React", gNR > 0 ? a.nr : null, gNR > 0 ? gNR : null, v => fmt(v))}
+        ${_metaLineRow("Horas Conexión", gSH > 0 ? a.sh : null, gSH > 0 ? gSH : null, v => fmt(v))}
+        ${hasTk ? `<div style="font-size:.62rem;color:#999;margin-top:2px">Meta = Taxi ${fmt(m.mA || 0)} + TukTuk ${fmt(m.mtkAD || 0)} AD · N+R ${fmt(m.mNR || 0)}+${fmt(m.mtkNR || 0)} · SH ${fmtSmart(m.mH || 0)}+${fmtSmart(m.mtkSH || 0)}</div>` : ""}
+      </div>`;
+  });
+  html += `</div></div>`;
+  return html;
+}
+
 // Guard de reentrancia: doble-click o filtros solapados no deben lanzar dos
 // renders concurrentes (mismo patron que rendimiento.js).
 let _renderMetasBusy = false;
@@ -324,9 +430,11 @@ function _renderMetasImpl() {
   if (_metasLine() !== "agg") {
     document.getElementById("metasEmpty").style.display   = "none";
     document.getElementById("metasContent").style.display = "";
-    document.getElementById("metasContent").innerHTML = _metasLine() === "fleet"
-      ? _renderMetasFleet(mesName, from, to, selSet, cityFilter, kamFilter)
-      : _renderMetasTk(mesName, from, to, selSet, cityFilter, kamFilter);
+    const _line = _metasLine();
+    document.getElementById("metasContent").innerHTML =
+        _line === "fleet" ? _renderMetasFleet(mesName, from, to, selSet, cityFilter, kamFilter)
+      : _line === "comb"  ? _renderMetasComb(mesName, from, to, selSet, cityFilter, kamFilter)
+      :                     _renderMetasTk(mesName, from, to, selSet, cityFilter, kamFilter);
     return;
   }
 

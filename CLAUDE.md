@@ -101,12 +101,14 @@ RLS estricto (`is_admin()` + 28 policies; **NUNCA revocar EXECUTE de `is_admin()
 ## Comandos comunes
 
 ```bash
-# Dev local
-python3 -m http.server 8765 --bind 127.0.0.1
-open http://127.0.0.1:8765/index.html
+# Dev local (Fase A1: migrado a Vite — ya NO python http.server)
+npm install        # primera vez
+npm run dev        # dev server en http://localhost:8765 (HMR)
+npm run build      # build de produccion a dist/
+npm run preview    # sirve dist/ para verificar el build
 
-# Recalcular SRI tras actualizar una libreria
-curl -sSL <url> | openssl dgst -sha384 -binary | openssl base64 -A
+# Ya NO se usa SRI: las 7 librerias vienen de npm (pineadas en package.json +
+# package-lock), bundleadas por Vite. Ver src/vendor.js.
 
 # Verificar policies en Supabase SQL editor
 SELECT tablename, policyname, cmd, roles
@@ -125,7 +127,8 @@ UPDATE auth.users
 - **Proton Drive sync** ha causado archivos de conflicto silenciosos (`(# Edit conflict ... #).js`) que sobreescribieron cambios. Si aparecen archivos desconocidos, NO borrar — investigar primero y consultar al usuario.
 - **Excel en varios formatos** (numero completo o texto "1.8M"). Los uploads de rendimiento/conversion usan `raw:true` + `toN` (expande K/M/B y pasa numeros tal cual). NO volver a `raw:false` ni quitar el passthrough de numeros en `toN` → rompe precision/decimales. Ver memoria `excel-upload-full-precision`.
 - **Excel de Conversion = 2 pestañas**: "Conversion" (funnel) y "Adquisition by channel". `handleFile` lee ambas en una sola subida; el upsert por (clid,mes) actualiza solo funnel o solo canal sin pisar el otro.
-- `node` SI esta disponible: usar `node --check <archivo>` como gate de sintaxis antes de commitear. No hay bundler — los scripts se cargan en orden via `index.html`.
+- Gate de sintaxis antes de commitear: `npm run build` (reemplaza al viejo `node --check`; Vite valida al bundlear). `node --check public/<archivo>.js` sigue sirviendo para un check rapido de un archivo suelto.
+- **Fase A1 (Vite) en curso**: los 15 .js de app viven en `public/` (scripts clasicos `defer`, scope global, se sirven verbatim), `src/vendor.js` (modulo ES) bundlea las librerias npm y expone los globales. `index.html` en la raiz. Conversion de los .js a modulos ES + event delegation = Fase A2 (pendiente): a medida que se conviertan, migran de `public/` a `src/`. NO agregar libs por CDN — usar npm.
 - El anon key vive en `config.js` (es publico por diseno, pero no debe filtrarse en screenshots ni en repos publicos).
 - `bannedWords` viene de `localStorage` y puede ser manipulado — siempre re-escapar al renderizar.
 - Si cambias la URL/version de una libreria CDN, recalcula su SRI o el browser bloquea el script.

@@ -1,3 +1,7 @@
+# Node / Vite (build step — Fase A1)
+node_modules/
+dist/
+
 # Claude Code internal files
 .claude/
 

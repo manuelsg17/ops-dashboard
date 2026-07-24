@@ -188,11 +188,11 @@ function renderRawData() {
             </td>
             <td style="font-size:.73rem;color:#555">${escapeHTML(r.kam) || "–"}</td>
             <td style="font-size:.73rem;color:#555">${escapeHTML(r.city) || "–"}</td>
-            <td class="tn">${fmt(r.activeDrivers)}</td>
-            <td class="tn">${fmt(nr)}</td>
-            <td class="tn">${fmt(r.supplyHours)}</td>
-            <td class="tn">${fmtK(r.commission)}</td>
-            <td class="tn">${fmt(r.trips)}</td>
+            <td class="tn">${fmt5(r.activeDrivers)}</td>
+            <td class="tn">${fmt5(nr)}</td>
+            <td class="tn">${fmt5(r.supplyHours)}</td>
+            <td class="tn" title="$${fmt5(r.commission)}">${fmtK(r.commission)}</td>
+            <td class="tn">${fmt5(r.trips)}</td>
             <td style="text-align:center">${statusIco}</td>
           </tr>`;
   });
@@ -201,11 +201,11 @@ function renderRawData() {
   html += `
           <tr style="background:#f9fffe;font-weight:700;border-top:2px solid #e5e7eb">
             <td colspan="4" style="font-size:.75rem;color:#555">TOTAL (${fmt(total)} filas)</td>
-            <td class="tn" style="color:#111">${fmt(totAD)}</td>
-            <td class="tn" style="color:#111">${fmt(totNR)}</td>
-            <td class="tn" style="color:#111">${fmt(totSH)}</td>
-            <td class="tn" style="color:#111">${fmtK(totCom)}</td>
-            <td class="tn" style="color:#111">${fmt(totTrip)}</td>
+            <td class="tn" style="color:#111">${fmt5(totAD)}</td>
+            <td class="tn" style="color:#111">${fmt5(totNR)}</td>
+            <td class="tn" style="color:#111">${fmt5(totSH)}</td>
+            <td class="tn" style="color:#111" title="$${fmt5(totCom)}">${fmtK(totCom)}</td>
+            <td class="tn" style="color:#111">${fmt5(totTrip)}</td>
             <td></td>
           </tr>
         </tbody>
@@ -972,17 +972,17 @@ function _renderReconView() {
   // \u2500\u2500 Tabla \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   const th = (l, extra = "") => `<th style="white-space:nowrap;${extra}">${l}</th>`;
   const numCells = a => `
-    <td class="tn" title="${fmt(a.ad)}">${_fmtKM2(a.ad)}</td>
-    <td class="tn" title="${fmt(a.sh)}">${_fmtKM2(a.sh)}</td>
-    <td class="tn" title="${fmt(a.nuevos)}">${_fmtKM2(a.nuevos)}</td>
-    <td class="tn" title="${fmt(a.react)}">${_fmtKM2(a.react)}</td>
-    <td class="tn" title="${fmt(a.nuevos + a.react)}" style="font-weight:600">${_fmtKM2(a.nuevos + a.react)}</td>
-    <td class="tn" title="${fmt(a.trips)}">${_fmtKM2(a.trips)}</td>
-    <td class="tn" title="${fmt(a.gmv)}">${_fmtKM2(a.gmv)}</td>
-    <td class="tn" title="${fmt(a.comm)}">${_fmtKM2(a.comm)}</td>
+    <td class="tn" title="${fmt5(a.ad)}">${_fmtKM2(a.ad)}</td>
+    <td class="tn" title="${fmt5(a.sh)}">${_fmtKM2(a.sh)}</td>
+    <td class="tn" title="${fmt5(a.nuevos)}">${_fmtKM2(a.nuevos)}</td>
+    <td class="tn" title="${fmt5(a.react)}">${_fmtKM2(a.react)}</td>
+    <td class="tn" title="${fmt5(a.nuevos + a.react)}" style="font-weight:600">${_fmtKM2(a.nuevos + a.react)}</td>
+    <td class="tn" title="${fmt5(a.trips)}">${_fmtKM2(a.trips)}</td>
+    <td class="tn" title="${fmt5(a.gmv)}">${_fmtKM2(a.gmv)}</td>
+    <td class="tn" title="${fmt5(a.comm)}">${_fmtKM2(a.comm)}</td>
     <td class="tn" title="\u03A3 int.fleet.sh / \u03A3 autos">${a.ofcars > 0 ? _num2(a.ifsh / a.ofcars) : "\u2014"}</td>
     <td class="tn">${a.accDen > 0 ? _pct1(a.accNum / a.accDen) : "\u2014"}</td>
-    <td class="tn" title="${fmt(a.ofcars)}">${_fmtKM2(a.ofcars)}</td>`;
+    <td class="tn" title="${fmt5(a.ofcars)}">${_fmtKM2(a.ofcars)}</td>`;
 
   html += `
     <div class="tbl-wrap">
@@ -1004,7 +1004,7 @@ function _renderReconView() {
     froomArr.forEach(f => { const cl = _reconClasif(f.sample); if (cl.omit) { omitAd += f.agg.ad; omitN++; } });
     const cityStr = [...c.cities].map(cityLabel).join(", ");
     const omitBadge = omitN
-      ? `<span title="${omitN} sub-flota(s) fuera del dashboard \u00B7 AD omitido: ${fmt(omitAd)}" style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:8px;font-size:.66rem;font-weight:700">omite ${omitN} \u00B7 ${_fmtKM2(omitAd)} AD</span>`
+      ? `<span title="${omitN} sub-flota(s) fuera del dashboard \u00B7 AD omitido: ${fmt5(omitAd)}" style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:8px;font-size:.66rem;font-weight:700">omite ${omitN} \u00B7 ${_fmtKM2(omitAd)} AD</span>`
       : `<span style="color:#cbd5e1;font-size:.66rem">\u2014</span>`;
 
     html += `

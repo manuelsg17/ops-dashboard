@@ -1,10 +1,12 @@
 // rendimiento.js — Pestaña Rendimiento
 
-// ── LÍNEA DE NEGOCIO (Agregador / Fleet / TukTuk) — Fase 2 ────────────────────
+// ── LÍNEA DE NEGOCIO (Agregador / Fleet / TukTuk / Combinado) ─────────────────
 // Localizado a Rendimiento: NO muta STATE.rawData (el agregador queda intacto para
 // Metas/Calculadora/etc). Se filtra el slice de la línea con los MISMOS filtros del
-// sidebar (ciudad/fecha/partner). Agregador incluye Fleet (Fleet ⊂ Taxi). El diario
-// no trae db_id (sin sub-flota) → Fleet/TukTuk se deshabilitan y cae a Agregador.
+// sidebar (ciudad/fecha/partner). Agregador incluye Fleet (Fleet ⊂ Taxi). Combinado
+// = Taxi + TukTuk (conjuntos disjuntos: TukTuk se excluye de rawData al cargar, así
+// que el concat no double-cuenta). El diario no trae db_id (sin sub-flota) →
+// Fleet/TukTuk/Combinado se deshabilitan y cae a Agregador.
 function _rendLine() {
   let line = STATE.rendLine || "agg";
   if (STATE.curMode === "diario" && line !== "agg") line = "agg";
@@ -15,18 +17,27 @@ function _rendLineDataset() {
   const line = _rendLine();
   if (line === "agg") return STATE.rawData;
   const mensual = STATE.curMode === "mensual";
-  if (line === "fleet") return (mensual ? STATE.rawDataMensualFleet  : STATE.rawDataFleet)  || [];
-  return                        (mensual ? STATE.rawDataMensualTuktuk : STATE.rawDataTuktuk) || [];
+  const tk = (mensual ? STATE.rawDataMensualTuktuk : STATE.rawDataTuktuk) || [];
+  if (line === "fleet") return (mensual ? STATE.rawDataMensualFleet : STATE.rawDataFleet) || [];
+  if (line === "comb")  return STATE.rawData.concat(tk);
+  return tk;
+}
+// Partners fuera de la lista del sidebar (solo-TukTuk, ej. PIAGGIO): el usuario no
+// puede (des)marcarlos porque la lista se construye del dataset Taxi → en las líneas
+// TukTuk/Combinado se tratan como siempre-incluidos (excluirlos mudo sub-contaba).
+function _lineSelHas(selSet, sidebarSet, partner) {
+  return selSet.has(partner) || !sidebarSet.has(partner);
 }
 // Filas de la línea filtradas por ciudad/fecha/partner (espeja getFiltered()).
 function _rendLineFiltered() {
   if (_rendLine() === "agg") return getFiltered();
   const f = getCurrentFilters();
   const selSet = new Set(f.selected);
+  const sidebar = new Set(STATE.allPartners);
   return _rendLineDataset().filter(r =>
     (f.city === "all" || r.city === f.city) &&
     r.date >= f.from && r.date <= f.to &&
-    selSet.has(r.partner)
+    _lineSelHas(selSet, sidebar, r.partner)
   );
 }
 // Filas de prevDate (fuera del rango) para la línea. Agregador usa el índice _byDate;
@@ -49,7 +60,8 @@ function rendLineToggleHTML() {
   const defs = [
     { k: "agg",   emoji: "📊", label: "Agregador", tip: "Taxi — incluye la actividad de las flotas" },
     { k: "fleet", emoji: "🚗", label: "Fleet",     tip: "Solo sub-flotas marcadas Fleet" },
-    { k: "tk",    emoji: "🛺", label: "TukTuk",    tip: "Solo TukTuk" }
+    { k: "tk",    emoji: "🛺", label: "TukTuk",    tip: "Solo TukTuk" },
+    { k: "comb",  emoji: "🔀", label: "Combinado", tip: "Taxi + TukTuk sumados — avance total del partner" }
   ];
   const btns = defs.map(d => {
     const on  = line === d.k;
@@ -60,7 +72,7 @@ function rendLineToggleHTML() {
       style="${dis ? "opacity:.4;cursor:not-allowed" : ""}">${d.emoji} ${d.label}</button>`;
   }).join("");
   const note = diario
-    ? `<span style="font-size:.7rem;color:#b45309;margin-left:10px;align-self:center">Fleet/TukTuk requieren escala semanal o mensual (el diario no trae sub-flota)</span>`
+    ? `<span style="font-size:.7rem;color:#b45309;margin-left:10px;align-self:center">Fleet/TukTuk/Combinado requieren escala semanal o mensual (el diario no trae sub-flota)</span>`
     : "";
   return `<div class="mode-toggle-row" style="margin:0 4px 12px">${btns}${note}</div>`;
 }
@@ -136,7 +148,7 @@ function _renderRendImpl() {
   if (!filtered.length) {
     empty.style.display   = "none";
     content.style.display = "";
-    const lname = line === "fleet" ? "Fleet" : "TukTuk";
+    const lname = line === "fleet" ? "Fleet" : line === "comb" ? "Combinado (Taxi+TukTuk)" : "TukTuk";
     content.innerHTML = rendLineToggleHTML() +
       `<div class="section"><div style="padding:28px 16px;text-align:center;color:#999;font-size:.85rem">
         No hay datos de <strong>${lname}</strong> para el filtro actual.<br>
@@ -165,11 +177,12 @@ function _renderRendImpl() {
   // prevRows: datos de prevDate fuera del rango filtrado
   const cityFilter = document.getElementById("cityFilter").value;
   const selSet     = new Set(getSel());
-  // Lookup de la línea activa (agg usa _byDate; fleet/tk filtran su slice).
+  const _sidebarSet = new Set(STATE.allPartners);
+  // Lookup de la línea activa (agg usa _byDate; fleet/tk/comb filtran su slice).
   const _prevAll = _rendLinePrev(prevDate, null);
   const prevFiltered = _prevAll.filter(r =>
     (cityFilter === "all" || r.city === cityFilter) &&
-    selSet.has(r.partner)
+    _lineSelHas(selSet, _sidebarSet, r.partner)
   );
   const prevAPD = aggPD(prevFiltered);
 
@@ -227,9 +240,9 @@ function _renderRendImpl() {
     if (!cr.length) return;
     const ca   = aggPD(cr);
     const cL   = ca.filter(r => r.date === lastDate);
-    // prevDate para ciudad, según la línea activa (agg usa índice; fleet/tk su slice)
+    // prevDate para ciudad, según la línea activa (agg usa índice; fleet/tk/comb su slice)
     const _cPrev = _rendLinePrev(prevDate, city);
-    const cPraw = _cPrev.filter(r => selSet.has(r.partner));
+    const cPraw = _cPrev.filter(r => _lineSelHas(selSet, _sidebarSet, r.partner));
     const cP   = aggPD(cPraw);
     const cAD  = sumR(cL,  r => r.activeDrivers);
     const cNR  = sumR(cL,  r => r.newPartner + r.newService + r.reactivated);
