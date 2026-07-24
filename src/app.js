@@ -45,8 +45,18 @@ export function initApp() {
     _pSearchTimer = setTimeout(filterPList, 300);
   });
 
-  // Cerrar dropdowns al hacer clic fuera
-  document.addEventListener("click", () => {
+  // Cerrar dropdowns al hacer clic fuera.
+  // OJO (Fase A2, event delegation): antes los botones que ABREN estos menús
+  // usaban onclick inline con e.stopPropagation() para que el click no llegara
+  // hasta acá y los cerrara al instante. Ahora esos handlers son delegados y
+  // viven TAMBIÉN en `document`, asi que stopPropagation ya no los separa (solo
+  // frena la propagación entre nodos, no entre listeners del mismo nodo). Por
+  // eso el guard explícito: si el click fue sobre un botón que abre un menú, no
+  // cerramos nada — de lo contrario el menú se abriría y cerraría en el mismo
+  // click y no se abriría nunca.
+  const _MENU_TOGGLES = '[data-act="toggleUploadMenu"],[data-act="toggleAnalisisMenu"]';
+  document.addEventListener("click", e => {
+    if (e.target.closest(_MENU_TOGGLES)) return;
     const m = document.getElementById("uploadMenu");
     if (m) m.classList.remove("open");
     const a = document.getElementById("analisisMenu");
@@ -69,7 +79,7 @@ export function initApp() {
 
   // Filtros reactivos: cualquier cambio dispara applyFilters() debounced.
   // No hay boton "Aplicar Filtros" — se elimino porque era redundante.
-  // kamFilter NO se incluye: ya tiene su propio handler inline onchange="onKAMChange()"
+  // kamFilter NO se incluye: ya tiene su propia accion delegada (onKAMChange)
   // que es mas completo (actualiza checkboxes ademas de renderizar). Agregarlo aqui
   // causa DOBLE render: onKAMChange sincrono + applyFilters debounced 250ms despues.
   _debouncedApply = debounce(applyFilters, 250);
@@ -464,7 +474,7 @@ export function getPresetButtonsHTML() {
     mensual: [["month","Este mes"],["3m","Últ. 3 meses"],["6m","Últ. 6 meses"]]
   };
   return (defs[STATE.curMode] || defs.semanal)
-    .map(([k, l]) => `<button class="preset-btn" onclick="setDatePreset('${k}')">${l}</button>`)
+    .map(([k, l]) => `<button class="preset-btn" data-act="setDatePreset" data-preset="${escapeHTML(k)}">${l}</button>`)
     .join("");
 }
 
@@ -665,7 +675,7 @@ export function renderConfig() {
       <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
         <div>
           <label style="font-size:.75rem;color:#aaa;display:block;margin-bottom:4px">Métrica</label>
-          <select class="sb-sel" id="declineMetricSel" onchange="updateDeclineSettings()" style="width:auto;min-width:180px">
+          <select class="sb-sel" id="declineMetricSel" data-act-change="updateDeclineSettings" style="width:auto;min-width:180px">
             <option value="activeDrivers"${STATE.declineMetric==="activeDrivers"?" selected":""}>Conductores Activos</option>
             <option value="supplyHours"${STATE.declineMetric==="supplyHours"?" selected":""}>Horas de Conexión</option>
             <option value="nr"${STATE.declineMetric==="nr"?" selected":""}>Nuevos + Reactivados</option>
@@ -673,7 +683,7 @@ export function renderConfig() {
         </div>
         <div>
           <label style="font-size:.75rem;color:#aaa;display:block;margin-bottom:4px">Semanas consecutivas</label>
-          <select class="sb-sel" id="declineThresholdSel" onchange="updateDeclineSettings()" style="width:auto">
+          <select class="sb-sel" id="declineThresholdSel" data-act-change="updateDeclineSettings" style="width:auto">
             ${[2,3,4,5].map(n => `<option value="${n}"${STATE.declineThreshold===n?" selected":""}>${n} semanas</option>`).join("")}
           </select>
         </div>
@@ -710,7 +720,7 @@ export function renderConfig() {
           <input class="crud-input" id="delMonthInput" placeholder="2026-04 o vacío"
             style="width:140px" maxlength="7"/>
         </div>
-        <button class="crud-btn crud-btn-del" onclick="deleteDashboardData()"
+        <button class="crud-btn crud-btn-del" data-act="deleteDashboardData"
           style="background:#FF0000;color:#fff;font-weight:700;padding:8px 14px;margin-top:18px">
           🗑️ Eliminar
         </button>
@@ -732,10 +742,9 @@ export function renderConfig() {
   // y pasamos el valor como JSON HTML-encodeado para no romper el atributo onclick.
   const bannedBadges  = STATE.bannedWords.map(w => {
     const wText = escapeHTML(w);
-    const wAttr = escapeHTML(JSON.stringify(w));
     return `<span style="display:inline-flex;align-items:center;gap:4px;background:#fff0f0;border:1px solid #fecaca;border-radius:20px;padding:3px 10px;font-size:.73rem;font-weight:600;color:#991b1b">
       ${wText}
-      <button onclick="removeBannedWord(${wAttr})"
+      <button data-act="removeBannedWord" data-word="${wText}"
         style="background:none;border:none;cursor:pointer;color:#FF0000;font-size:.85rem;line-height:1;padding:0 2px;margin-left:2px" title="Eliminar">✕</button>
     </span>`;
   }).join("");
@@ -768,8 +777,8 @@ export function renderConfig() {
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
         <input class="crud-input" id="newBannedWord" placeholder="Nueva palabra (ej: mototaxi)"
           style="flex:1;min-width:180px;max-width:280px"
-          onkeydown="if(event.key==='Enter') addBannedWord()"/>
-        <button class="crud-btn crud-btn-add" onclick="addBannedWord()">+ Agregar</button>
+          data-act-keydown="addBannedWordEnter"/>
+        <button class="crud-btn crud-btn-add" data-act="addBannedWord">+ Agregar</button>
       </div>
       ${excludedList.length ? `
         <details style="border:1px solid #fecaca;border-radius:6px;background:#fffafa;margin-top:8px">
@@ -826,8 +835,8 @@ export function renderConfig() {
     <div style="margin-bottom:10px;font-size:.8rem;font-weight:700;color:#555">👥 Partners &amp; CLIDs</div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
       <input class="crud-input" id="configSearch" placeholder="Buscar CLID, partner o KAM..." value="${CONFIG_STATE.search.replace(/"/g,'&quot;')}"
-        oninput="CONFIG_STATE.search=this.value;CONFIG_STATE.page=0;renderConfigResults()" style="flex:1;min-width:160px;max-width:300px"/>
-      <select class="crud-input" id="configKamFilter" onchange="CONFIG_STATE.kamFilter=this.value;CONFIG_STATE.page=0;renderConfigResults()" style="width:auto">
+        data-act-input="cfgSearch" style="flex:1;min-width:160px;max-width:300px"/>
+      <select class="crud-input" id="configKamFilter" data-act-change="cfgKamFilter" style="width:auto">
         <option value="all"${cfgKamF==="all"?" selected":""}>Todos los KAMs</option>
         ${kamFilterOpts}
       </select>
@@ -882,7 +891,6 @@ export function renderConfigResults() {
       const partnerH = escapeHTML(partner);
       const kamH     = escapeHTML(kam);
       // Para uso dentro de comillas simples de onclick, escapar apostrofes
-      const clidJS   = escapeJSAttr(clid);
       const isFleet  = !!(STATE.CLID_IS_FLEET  || {})[clid];
       const isTuktuk = !!(STATE.CLID_IS_TUKTUK || {})[clid];
       html += `
@@ -899,8 +907,8 @@ export function renderConfigResults() {
           <td style="text-align:center">${isFleet ? `<span style="font-size:.68rem;background:#ecfdf5;color:#059669;padding:2px 7px;border-radius:10px;font-weight:700">🚗 Fleet</span>` : `<span style="color:#ddd">—</span>`}</td>
           <td style="text-align:center">${isTuktuk ? `<span style="font-size:.68rem;background:#fff7ed;color:#c2410c;padding:2px 7px;border-radius:10px;font-weight:700">🛺 TukTuk</span>` : `<span style="color:#ddd">—</span>`}</td>
           <td style="text-align:center">
-            <button class="crud-btn crud-btn-edit" onclick="kamMakeEditable('${clidJS}')">Editar</button>
-            <button class="crud-btn crud-btn-del"  onclick="kamCrudDelete('${clidJS}')">Eliminar</button>
+            <button class="crud-btn crud-btn-edit" data-act="kamMakeEditable" data-clid="${clidH}">Editar</button>
+            <button class="crud-btn crud-btn-del"  data-act="kamCrudDelete" data-clid="${clidH}">Eliminar</button>
           </td>
         </tr>`;
     });
@@ -912,7 +920,7 @@ export function renderConfigResults() {
           <td><input class="crud-input" id="newClid"    placeholder="CLID"/></td>
           <td><input class="crud-input" id="newPartner" placeholder="Nombre del partner"/></td>
           <td>
-            <select class="crud-input" id="newKam" onchange="kamNewKamChange()" style="width:100%">
+            <select class="crud-input" id="newKam" data-act-change="kamNewKamChange" style="width:100%">
               ${kamOpts}
               <option value="__new__">+ Añadir nuevo KAM...</option>
             </select>
@@ -921,17 +929,17 @@ export function renderConfigResults() {
           <td style="text-align:center"><input type="checkbox" id="newFleet" title="Fleet"/></td>
           <td style="text-align:center"><input type="checkbox" id="newTuktuk" title="TukTuk"/></td>
           <td style="text-align:center">
-            <button class="crud-btn crud-btn-add" onclick="kamCrudAdd()">+ Agregar</button>
+            <button class="crud-btn crud-btn-add" data-act="kamCrudAdd">+ Agregar</button>
           </td>
         </tr>
       </tbody></table>
     </div>
     ${totalPages > 1 ? `
     <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.78rem;color:#555">
-      <button class="crud-btn" onclick="CONFIG_STATE.page=Math.max(0,CONFIG_STATE.page-1);renderConfigResults()"
+      <button class="crud-btn" data-act="cfgPagePrev"
         ${CONFIG_STATE.page===0?"disabled":""} style="padding:4px 10px">← Anterior</button>
       <span>Página <strong>${CONFIG_STATE.page+1}</strong> de <strong>${totalPages}</strong></span>
-      <button class="crud-btn" onclick="CONFIG_STATE.page=Math.min(${totalPages-1},CONFIG_STATE.page+1);renderConfigResults()"
+      <button class="crud-btn" data-act="cfgPageNext" data-total="${totalPages}"
         ${CONFIG_STATE.page===totalPages-1?"disabled":""} style="padding:4px 10px">Siguiente →</button>
     </div>` : ""}`;
   box.innerHTML = html;
@@ -949,14 +957,13 @@ export function kamMakeEditable(clid) {
   const editKamOpts = kams.map(k => `<option value="${escapeHTML(k)}"${k===kam?" selected":""}>${escapeHTML(k)}</option>`).join("");
   const clidH    = escapeHTML(clid);
   const partnerH = escapeHTML(partner);
-  const clidJS   = escapeJSAttr(clid);
   const isFleet  = !!(STATE.CLID_IS_FLEET  || {})[clid];
   const isTuktuk = !!(STATE.CLID_IS_TUKTUK || {})[clid];
   row.innerHTML = `
     <td style="font-size:.75rem;color:#aaa;font-family:monospace">${clidH}</td>
     <td><input class="crud-input" id="edit_partner_${clidH}" value="${partnerH}"/></td>
     <td>
-      <select class="crud-input" id="edit_kam_${clidH}" onchange="kamEditKamChange('${clidJS}')" style="width:100%">
+      <select class="crud-input" id="edit_kam_${clidH}" data-act-change="kamEditKamChange" data-clid="${clidH}" style="width:100%">
         ${editKamOpts}
         <option value="__new__">+ Añadir nuevo KAM...</option>
       </select>
@@ -965,8 +972,8 @@ export function kamMakeEditable(clid) {
     <td style="text-align:center"><input type="checkbox" id="edit_fleet_${clidH}" ${isFleet ? "checked" : ""} title="Fleet"/></td>
     <td style="text-align:center"><input type="checkbox" id="edit_tuktuk_${clidH}" ${isTuktuk ? "checked" : ""} title="TukTuk"/></td>
     <td style="text-align:center">
-      <button class="crud-btn crud-btn-save"   onclick="kamCrudEdit('${clidJS}')">Guardar</button>
-      <button class="crud-btn crud-btn-cancel" onclick="renderConfig()">Cancelar</button>
+      <button class="crud-btn crud-btn-save"   data-act="kamCrudEdit" data-clid="${clidH}">Guardar</button>
+      <button class="crud-btn crud-btn-cancel" data-act="renderConfig">Cancelar</button>
     </td>`;
 }
 
@@ -1177,3 +1184,37 @@ export async function deleteDashboardData() {
     showLoad(false);
   }
 }
+
+// ── ACCIONES DELEGADAS (Fase A2) ─────────────────────────────────────────────
+import { registerActions } from "./shared/actions.js";
+
+registerActions({
+  // sidebar / filtros
+  setDatePreset: d => setDatePreset(d.preset),
+  onKAMChange, selectAll, deselectAll, toggleSidebar,
+  switchMode:      d => switchMode(d.mode),
+  switchTab:       d => switchTab(d.tab),
+  switchTabFromMenu: d => switchTabFromMenu(d.tab),
+  toggleUploadMenu:  (d, el, e) => toggleUploadMenu(e),
+  toggleAnalisisMenu:(d, el, e) => toggleAnalisisMenu(e),
+
+  // configuración
+  updateDeclineSettings,
+  deleteDashboardData,
+  addBannedWord,
+  addBannedWordEnter: (d, el, e) => { if (e.key === "Enter") addBannedWord(); },
+  removeBannedWord:   d => removeBannedWord(d.word),
+  cfgSearch:    (d, el) => { CONFIG_STATE.search = el.value; CONFIG_STATE.page = 0; renderConfigResults(); },
+  cfgKamFilter: (d, el) => { CONFIG_STATE.kamFilter = el.value; CONFIG_STATE.page = 0; renderConfigResults(); },
+  cfgPagePrev:  () => { CONFIG_STATE.page = Math.max(0, CONFIG_STATE.page - 1); renderConfigResults(); },
+  cfgPageNext:  d  => { CONFIG_STATE.page = Math.min((+d.total || 1) - 1, CONFIG_STATE.page + 1); renderConfigResults(); },
+
+  // CRUD de partners
+  kamMakeEditable:  d => kamMakeEditable(d.clid),
+  kamCrudDelete:    d => kamCrudDelete(d.clid),
+  kamCrudEdit:      d => kamCrudEdit(d.clid),
+  kamCrudAdd,
+  kamNewKamChange,
+  kamEditKamChange: d => kamEditKamChange(d.clid),
+  renderConfig
+});
