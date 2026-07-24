@@ -40,4 +40,6 @@ import * as security from "./core/security.js";
 import * as format   from "./core/format.js";
 import * as dates    from "./core/dates.js";
 import * as data     from "./data.js";
-Object.assign(window, config, security, format, dates, data);
+import * as auth     from "./auth.js";
+import * as charts   from "./charts.js";
+Object.assign(window, config, security, format, dates, data, auth, charts);

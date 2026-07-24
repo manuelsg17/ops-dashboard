@@ -1,10 +1,22 @@
 // auth.js — Autenticación con Supabase Auth
 
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-// Fase A2: `const` NO se adjunta a window en un script clasico (a diferencia de
-// `function`), asi que los modulos ES (ej. data.js una vez convertido) no verian
-// `sb` por identificador bare sin este assign explicito.
-window.sb = sb;
+// Import DIRECTO (no via window) — a diferencia de todo el resto del archivo
+// (que son declaraciones cuyo cuerpo corre recién cuando se LLAMAN, mucho
+// después de que vendor.js terminó de espejar sus globales), esta línea
+// ejecuta AL EVALUAR el módulo. Y los imports de un módulo ES se resuelven
+// ANTES que el cuerpo del archivo que los importa (vendor.js), sin importar
+// el orden textual — o sea: cuando este `const sb = ...` corre, el
+// `Object.assign(window, config, ...)` de vendor.js TODAVÍA no se ejecutó.
+// Depender de `supabase`/`SUPABASE_URL` como globales bare acá rompía el login
+// (createClient is not a function). Import directo = no depende del orden.
+import { createClient } from "@supabase/supabase-js";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./core/config.js";
+
+export const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// El resto del código (funciones, no top-level) sigue usando `STATE`, `showApp`,
+// etc. como globales bare vía window — eso sí es seguro, porque solo se
+// ejecuta cuando el usuario interactúa, mucho después del bootstrap inicial.
+window.sb = sb;   // data.js (módulo) y otros consumidores leen `sb` bare vía window
 
 // Estado de sesion. Roles via JWT app_metadata.role: admin > kam > viewer
 // (default). STATE.isAdmin gatea lo exclusivo de admin. STATE.perms (Set) trae
@@ -12,7 +24,7 @@ window.sb = sb;
 // permisos que SUMAN sobre el rol (ej. un viewer con 'write:metas'). userCan()
 // combina admin + grants. RLS en el servidor es el guard real: aunque se
 // modifique STATE en DevTools, el write falla si el JWT/uid no tiene el permiso.
-function _setRoleFromUser(user) {
+export function _setRoleFromUser(user) {
   const role = (user && user.app_metadata && user.app_metadata.role) || "viewer";
   STATE.userRole  = role;
   STATE.isAdmin   = role === "admin";
@@ -24,9 +36,9 @@ function _setRoleFromUser(user) {
 
 // Permisos de escritura/borrado que, otorgados a un usuario, deben mostrarle la
 // UI de escritura (upload). El guard real por-tabla lo hace RLS via can().
-const _WRITE_PERMS = ["write:performance", "write:metas", "write:config", "write:seguimiento", "delete:data"];
+export const _WRITE_PERMS = ["write:performance", "write:metas", "write:config", "write:seguimiento", "delete:data"];
 
-function _recomputeCanWrite() {
+export function _recomputeCanWrite() {
   const base = STATE.userRole === "admin" || STATE.userRole === "kam";
   const granted = STATE.perms && _WRITE_PERMS.some(p => STATE.perms.has(p));
   STATE.canWrite = base || !!granted;
@@ -35,7 +47,7 @@ function _recomputeCanWrite() {
 // Carga los grants del usuario (RLS self_select → solo los propios). Silencioso
 // ante error (tabla ausente / offline): el usuario simplemente queda sin grants
 // extra, nunca con permisos de más.
-async function _loadPerms() {
+export async function _loadPerms() {
   try {
     const { data, error } = await sb.from("user_permissions").select("permission");
     if (error) return;
@@ -47,11 +59,11 @@ async function _loadPerms() {
 
 // Helper global de permiso: admin siempre; si no, el grant puntual. Usar para
 // gatear UI de escritura fina (nunca como seguridad — eso es RLS).
-function userCan(perm) {
+export function userCan(perm) {
   return !!STATE.isAdmin || (STATE.perms && STATE.perms.has(perm));
 }
 
-function _applyRoleGate() {
+export function _applyRoleGate() {
   // Esconde UI destructiva/de escritura segun rol. Se llama tras login y tras tab switch.
   const canWrite = !!STATE.canWrite;
   const up = document.getElementById("uploadDropdown");
@@ -62,7 +74,7 @@ function _applyRoleGate() {
   document.body.classList.toggle("role-viewer", STATE.userRole === "viewer");
 }
 
-async function initAuth() {
+export async function initAuth() {
   const { data: { session } } = await sb.auth.getSession();
   if (session) {
     showApp(session.user);
@@ -76,7 +88,7 @@ async function initAuth() {
   });
 }
 
-async function handleLogin() {
+export async function handleLogin() {
   const email    = document.getElementById("loginEmail").value.trim();
   const password = document.getElementById("loginPassword").value;
   const errEl    = document.getElementById("loginError");
@@ -96,7 +108,7 @@ async function handleLogin() {
   }
 }
 
-async function handleLogout() {
+export async function handleLogout() {
   // Limpiamos STATE y caches sensibles ANTES de signOut para que el siguiente
   // usuario del navegador no vea data del anterior ni en memoria ni en LS.
   _clearStateAndLocalStorage();
@@ -104,7 +116,7 @@ async function handleLogout() {
   await sb.auth.signOut();
 }
 
-function _clearStateAndLocalStorage() {
+export function _clearStateAndLocalStorage() {
   // Drop de datos del dataset en memoria.
   ["rawData","rawDataMensual","rawDataMensualTuktuk","rawDataFleet","rawDataMensualFleet",
    "rawDataFull","rawDataMensualFull",
@@ -148,7 +160,7 @@ function _clearStateAndLocalStorage() {
   } catch {}
 }
 
-function showLoginScreen() {
+export function showLoginScreen() {
   document.getElementById("loginScreen").style.display    = "flex";
   document.getElementById("appContainer").style.display   = "none";
   document.getElementById("loginPassword").value          = "";
@@ -161,9 +173,9 @@ function showLoginScreen() {
   setTimeout(() => document.getElementById("loginEmail").focus(), 100);
 }
 
-let _appInitialized = false;
+export let _appInitialized = false;
 
-function showApp(user) {
+export function showApp(user) {
   document.getElementById("loginScreen").style.display  = "none";
   document.getElementById("appContainer").style.display = "flex";
   document.getElementById("userBadge").textContent      = user.email;
