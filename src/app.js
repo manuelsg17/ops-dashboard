@@ -738,6 +738,22 @@ export function renderConfig() {
     </div>`;
   }
 
+  // ── Sección: Usuarios y accesos (solo admin) ────────────────────────────────
+  // El contenido lo pinta renderAdminUsers() (adminUsers.js) sobre #adminUsersBox,
+  // y solo tras un click explícito en "Cargar usuarios" — listar usuarios pega a
+  // la Edge Function, no hace falta hacerlo en cada render de Configuración.
+  if (STATE.isAdmin) {
+    html += `
+    <div class="section" style="margin-bottom:16px">
+      <div style="font-size:.8rem;font-weight:700;color:#555;margin-bottom:4px">👥 Usuarios y Accesos</div>
+      <div style="font-size:.72rem;color:#888;margin-bottom:8px">
+        Roles (admin / kam / viewer / partner), permisos extra por usuario y —para partners— qué CLIDs puede ver cada uno.
+        Un partner sin CLIDs asignados no ve ningún dato: es el comportamiento seguro por defecto.
+      </div>
+      <div id="adminUsersBox"></div>
+    </div>`;
+  }
+
   // ── Sección: Filtros de Flota (palabras prohibidas) ──────────────────────────
   // rawDataFull − rawData mezcla DOS causas: palabras prohibidas y sub-flotas
   // TukTuk/excluidas-de-Taxi (Vista Flotas). Se desglosan por separado para no
@@ -856,6 +872,8 @@ export function renderConfig() {
     </div>`;   // cierra la .section abierta arriba (stats KAM + Partners & CLIDs)
   content.innerHTML = html;
   renderConfigResults();
+  // Panel de usuarios (admin): pinta su propio estado sobre #adminUsersBox.
+  if (typeof renderAdminUsers === "function") renderAdminUsers();
 }
 
 // Repinta SOLO contador + tabla + paginación (sin re-crear el input de búsqueda).
