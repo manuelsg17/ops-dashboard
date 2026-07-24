@@ -68,7 +68,7 @@ export function rendLineToggleHTML() {
     const dis = diario && d.k !== "agg";
     return `<button class="mode-btn${on ? " active" : ""}" ${dis ? "disabled" : ""}
       title="${dis ? "Sin datos diarios por sub-flota — usa escala semanal o mensual" : escapeHTML(d.tip)}"
-      ${dis ? "" : `onclick="setRendLine('${d.k}')"`}
+      ${dis ? "" : `data-act="setRendLine" data-line="${escapeHTML(d.k)}"`}
       style="${dis ? "opacity:.4;cursor:not-allowed" : ""}">${d.emoji} ${d.label}</button>`;
   }).join("");
   const note = diario
@@ -310,9 +310,9 @@ export function _renderRendImpl() {
   html += `<div class="section">`;
   html += `<div style="font-weight:700;font-size:.78rem;color:#666;margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px">Peru Total</div>`;
   html += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px">
-    <div class="chart-card"><div class="chart-head"><span class="chart-title">Conductores Activos</span><button class="png-btn" onclick="dlChart('chP_ad','AD_Peru')">PNG</button></div><div id="chP_ad"></div></div>
-    <div class="chart-card"><div class="chart-head"><span class="chart-title">Nuevos + Reactivados</span><button class="png-btn" onclick="dlChart('chP_nr','NR_Peru')">PNG</button></div><div id="chP_nr"></div></div>
-    <div class="chart-card"><div class="chart-head"><span class="chart-title">Horas de Conexión</span><button class="png-btn" onclick="dlChart('chP_sh','SH_Peru')">PNG</button></div><div id="chP_sh"></div></div>
+    <div class="chart-card"><div class="chart-head"><span class="chart-title">Conductores Activos</span><button class="png-btn" data-act="dlChart" data-chart="chP_ad" data-name="AD_Peru">PNG</button></div><div id="chP_ad"></div></div>
+    <div class="chart-card"><div class="chart-head"><span class="chart-title">Nuevos + Reactivados</span><button class="png-btn" data-act="dlChart" data-chart="chP_nr" data-name="NR_Peru">PNG</button></div><div id="chP_nr"></div></div>
+    <div class="chart-card"><div class="chart-head"><span class="chart-title">Horas de Conexión</span><button class="png-btn" data-act="dlChart" data-chart="chP_sh" data-name="SH_Peru">PNG</button></div><div id="chP_sh"></div></div>
   </div>`;
   CITIES.forEach(city => {
     const cr = filteredByCity[city];
@@ -321,9 +321,9 @@ export function _renderRendImpl() {
     const col = CITY_COLORS[city] || "#888";
     html += `<div style="font-weight:700;font-size:.78rem;color:${col};margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px">${city}</div>`;
     html += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px">
-      <div class="chart-card"><div class="chart-head"><span class="chart-title">Conductores Activos</span><button class="png-btn" onclick="dlChart('ch_${cid}_ad','AD_${city}')">PNG</button></div><div id="ch_${cid}_ad"></div></div>
-      <div class="chart-card"><div class="chart-head"><span class="chart-title">Nuevos + Reactivados</span><button class="png-btn" onclick="dlChart('ch_${cid}_nr','NR_${city}')">PNG</button></div><div id="ch_${cid}_nr"></div></div>
-      <div class="chart-card"><div class="chart-head"><span class="chart-title">Horas de Conexión</span><button class="png-btn" onclick="dlChart('ch_${cid}_sh','SH_${city}')">PNG</button></div><div id="ch_${cid}_sh"></div></div>
+      <div class="chart-card"><div class="chart-head"><span class="chart-title">Conductores Activos</span><button class="png-btn" data-act="dlChart" data-chart="ch_${cid}_ad" data-name="AD_${city}">PNG</button></div><div id="ch_${cid}_ad"></div></div>
+      <div class="chart-card"><div class="chart-head"><span class="chart-title">Nuevos + Reactivados</span><button class="png-btn" data-act="dlChart" data-chart="ch_${cid}_nr" data-name="NR_${city}">PNG</button></div><div id="ch_${cid}_nr"></div></div>
+      <div class="chart-card"><div class="chart-head"><span class="chart-title">Horas de Conexión</span><button class="png-btn" data-act="dlChart" data-chart="ch_${cid}_sh" data-name="SH_${city}">PNG</button></div><div id="ch_${cid}_sh"></div></div>
     </div>`;
   });
   html += `</div>`;
@@ -506,7 +506,7 @@ export function renderTable() {
   let h = `<table class="dtbl"><thead><tr>`;
   cols.forEach(c => {
     const s = STATE.tblSort.col === c.k ? (STATE.tblSort.dir === "asc" ? "sa" : "sd") : "";
-    h += `<th class="${s}" onclick="sortTbl('${c.k}')">${c.l}</th>`;
+    h += `<th class="${s}" data-act="sortTbl" data-col="${escapeHTML(c.k)}">${c.l}</th>`;
   });
   h += `<th>WoW</th><th>Tend.</th></tr></thead><tbody>`;
 
@@ -812,12 +812,12 @@ export function _renderFleetView(lastRows, prevRows, lastDate, prevDate) {
   // patrón que la sección "Tendencias" del Agregador).
   html += secH("📈", "#10b981", "Fleet · Tendencias", "Evolución Peru total en el rango filtrado", "");
   html += `<div class="section"><div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px">
-    <div class="chart-card"><div class="chart-head"><span class="chart-title">Owned Fleet Cars</span><button class="png-btn" onclick="dlChart('chF_owned','Fleet_OwnedCars')">PNG</button></div><div id="chF_owned"></div></div>
-    <div class="chart-card"><div class="chart-head"><span class="chart-title">SH / Auto (interno)</span><button class="png-btn" onclick="dlChart('chF_shcar','Fleet_SHAuto')">PNG</button></div><div id="chF_shcar"></div></div>
-    <div class="chart-card"><div class="chart-head"><span class="chart-title">Aceptación %</span><button class="png-btn" onclick="dlChart('chF_accept','Fleet_Aceptacion')">PNG</button></div><div id="chF_accept"></div></div>
-    <div class="chart-card"><div class="chart-head"><span class="chart-title">Branded Active Cars</span><button class="png-btn" onclick="dlChart('chF_branded','Fleet_Branded')">PNG</button></div><div id="chF_branded"></div></div>
-    <div class="chart-card"><div class="chart-head"><span class="chart-title">GMV / Auto</span><button class="png-btn" onclick="dlChart('chF_gmvcar','Fleet_GMVporAuto')">PNG</button></div><div id="chF_gmvcar"></div></div>
-    <div class="chart-card"><div class="chart-head"><span class="chart-title">% SH Externo (dependencia)</span><button class="png-btn" onclick="dlChart('chF_extsh','Fleet_PctSHExterno')">PNG</button></div><div id="chF_extsh"></div></div>
+    <div class="chart-card"><div class="chart-head"><span class="chart-title">Owned Fleet Cars</span><button class="png-btn" data-act="dlChart" data-chart="chF_owned" data-name="Fleet_OwnedCars">PNG</button></div><div id="chF_owned"></div></div>
+    <div class="chart-card"><div class="chart-head"><span class="chart-title">SH / Auto (interno)</span><button class="png-btn" data-act="dlChart" data-chart="chF_shcar" data-name="Fleet_SHAuto">PNG</button></div><div id="chF_shcar"></div></div>
+    <div class="chart-card"><div class="chart-head"><span class="chart-title">Aceptación %</span><button class="png-btn" data-act="dlChart" data-chart="chF_accept" data-name="Fleet_Aceptacion">PNG</button></div><div id="chF_accept"></div></div>
+    <div class="chart-card"><div class="chart-head"><span class="chart-title">Branded Active Cars</span><button class="png-btn" data-act="dlChart" data-chart="chF_branded" data-name="Fleet_Branded">PNG</button></div><div id="chF_branded"></div></div>
+    <div class="chart-card"><div class="chart-head"><span class="chart-title">GMV / Auto</span><button class="png-btn" data-act="dlChart" data-chart="chF_gmvcar" data-name="Fleet_GMVporAuto">PNG</button></div><div id="chF_gmvcar"></div></div>
+    <div class="chart-card"><div class="chart-head"><span class="chart-title">% SH Externo (dependencia)</span><button class="png-btn" data-act="dlChart" data-chart="chF_extsh" data-name="Fleet_PctSHExterno">PNG</button></div><div id="chF_extsh"></div></div>
   </div></div>`;
 
   // Composición (donut, snapshot del último período) — dónde se concentra la
@@ -825,8 +825,8 @@ export function _renderFleetView(lastRows, prevRows, lastDate, prevDate) {
   // en el tiempo) → donut, no línea.
   html += secH("🥯", "#7e22ce", "Fleet · Composición", `Snapshot ${d2s(lastDate)} · distribución, no tendencia`, "");
   html += `<div class="section"><div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px">
-    <div class="chart-card"><div class="chart-head"><span class="chart-title">Owned Cars por Partner</span><button class="png-btn" onclick="dlChart('chF_ownedDonut','Fleet_OwnedPorPartner')">PNG</button></div><div id="chF_ownedDonut"></div></div>
-    <div class="chart-card"><div class="chart-head"><span class="chart-title">Brandeados vs No Brandeados</span><button class="png-btn" onclick="dlChart('chF_brandedDonut','Fleet_Brandeados')">PNG</button></div><div id="chF_brandedDonut"></div></div>
+    <div class="chart-card"><div class="chart-head"><span class="chart-title">Owned Cars por Partner</span><button class="png-btn" data-act="dlChart" data-chart="chF_ownedDonut" data-name="Fleet_OwnedPorPartner">PNG</button></div><div id="chF_ownedDonut"></div></div>
+    <div class="chart-card"><div class="chart-head"><span class="chart-title">Brandeados vs No Brandeados</span><button class="png-btn" data-act="dlChart" data-chart="chF_brandedDonut" data-name="Fleet_Brandeados">PNG</button></div><div id="chF_brandedDonut"></div></div>
   </div></div>`;
 
   // Calidad y dependencia (scorecard, Perú total, snapshot) — métricas de riesgo/
@@ -988,3 +988,11 @@ export function _secH(emoji, color, title, subtitle) {
       </div>
     </div>`;
 }
+// ── ACCIONES DELEGADAS (Fase A2) ─────────────────────────────────────────────
+import { registerActions } from "./shared/actions.js";
+
+registerActions({
+  setRendLine: d => setRendLine(d.line),
+  sortTbl:     d => sortTbl(d.col),
+  dlChart:     d => dlChart(d.chart, d.name)
+});

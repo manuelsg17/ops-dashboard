@@ -195,9 +195,9 @@ export function p2NavHTML() {
     const bd = on ? activeBg : (tk ? "#fde68a" : "#e5e5e5");
     const bg = on ? activeBg : (tk ? "#fffbeb" : "#fff");
     const co = on ? "#fff" : (tk ? "#b45309" : "#555");
-    return `<button data-slide2="${i}" onclick="goSlide2(${i})" style="padding:6px 14px;border-radius:6px;font-size:.78rem;font-weight:600;border:2px solid ${bd};background:${bg};color:${co};cursor:pointer">${tk ? "🛺 " : ""}${escapeHTML(label)}</button>`;
+    return `<button data-slide2="${i}" data-act="goSlide2" data-i="${i}" style="padding:6px 14px;border-radius:6px;font-size:.78rem;font-weight:600;border:2px solid ${bd};background:${bg};color:${co};cursor:pointer">${tk ? "🛺 " : ""}${escapeHTML(label)}</button>`;
   }).join("");
-  return `<button class="png-btn" onclick="prevSlide2()" style="padding:6px 12px">◀</button>${btns}<button class="png-btn" onclick="nextSlide2()" style="padding:6px 12px">▶</button>`;
+  return `<button class="png-btn" data-act="prevSlide2" style="padding:6px 12px">◀</button>${btns}<button class="png-btn" data-act="nextSlide2" style="padding:6px 12px">▶</button>`;
 }
 
 // Logo de marca (inline SVG, mismo ícono que la app). P2_LOGO_MARK = versión chica
@@ -1504,7 +1504,7 @@ export function buildSlide2Forecast(partner, dates, idx) {
   }).join("");
   const partialNote = C.partial ? `<div style="flex:0 0 auto;background:#fffbeb;border:1px solid #fcd34d;border-radius:7px;padding:5px 9px;margin-bottom:5px;font-size:.62rem;color:#92400e;display:flex;justify-content:space-between;align-items:center;gap:8px">
       <span>⚠️ ${es ? "El último mes parece incompleto y se excluyó del pronóstico." : "The last month looks incomplete and was excluded from the forecast."}</span>
-      ${PRESENT2_STATE._exporting ? "" : `<button onclick="present2ToggleInclPartial()" style="border:1px solid #f59e0b;background:${PRESENT2_STATE.fcInclPartial ? "#f59e0b" : "#fff"};color:${PRESENT2_STATE.fcInclPartial ? "#fff" : "#b45309"};border-radius:6px;padding:2px 8px;font-size:.58rem;font-weight:700;cursor:pointer;white-space:nowrap">${PRESENT2_STATE.fcInclPartial ? (es ? "Excluir" : "Exclude") : (es ? "Incluir último mes" : "Include last month")}</button>`}
+      ${PRESENT2_STATE._exporting ? "" : `<button data-act="present2ToggleInclPartial" style="border:1px solid #f59e0b;background:${PRESENT2_STATE.fcInclPartial ? "#f59e0b" : "#fff"};color:${PRESENT2_STATE.fcInclPartial ? "#fff" : "#b45309"};border-radius:6px;padding:2px 8px;font-size:.58rem;font-weight:700;cursor:pointer;white-space:nowrap">${PRESENT2_STATE.fcInclPartial ? (es ? "Excluir" : "Exclude") : (es ? "Incluir último mes" : "Include last month")}</button>`}
     </div>` : "";
   // Leyenda + encuadre en lenguaje simple (qué es la proyección). Swatches inline-block
   // (seguros en el PDF). Incluye la validación (error del backtest) para dar confianza.
@@ -1636,14 +1636,14 @@ export function renderPresent2() {
       <div style="display:flex;align-items:flex-end;gap:12px;margin-bottom:14px;flex-wrap:wrap">
         <div style="position:relative">
           <label style="font-size:.72rem;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Partner</label>
-          <input id="present2Search" type="text" class="sb-inp" style="width:220px" autocomplete="off" placeholder="${es ? "Buscar partner..." : "Search partner..."}" value="${escapeHTML(PRESENT2_STATE.partner)}" oninput="p2FilterPartners(this.value)" onfocus="p2ShowPartnerList()" onblur="setTimeout(p2HidePartnerList,200)" onkeydown="p2SearchKeydown(event)"/>
+          <input id="present2Search" type="text" class="sb-inp" style="width:220px" autocomplete="off" placeholder="${es ? "Buscar partner..." : "Search partner..."}" value="${escapeHTML(PRESENT2_STATE.partner)}" data-act-input="p2FilterPartners" onfocus="p2ShowPartnerList()" onblur="setTimeout(p2HidePartnerList,200)" data-act-keydown="p2SearchKeydown"/>
           <div id="present2PartnerList" style="display:none;position:absolute;top:100%;left:0;width:220px;max-height:280px;overflow-y:auto;background:#fff;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:100;margin-top:2px"></div>
         </div>
         <div>
           <label style="font-size:.72rem;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">${es ? "Idioma" : "Language"}</label>
           <div class="mode-toggle">
-            <button class="mode-btn ${es ? "active" : ""}" onclick="setPresent2Lang('es')">ES</button>
-            <button class="mode-btn ${!es ? "active" : ""}" onclick="setPresent2Lang('en')">EN</button>
+            <button class="mode-btn ${es ? "active" : ""}" data-act="setPresent2Lang" data-lang="es">ES</button>
+            <button class="mode-btn ${!es ? "active" : ""}" data-act="setPresent2Lang" data-lang="en">EN</button>
           </div>
         </div>
         <div>
@@ -1653,9 +1653,9 @@ export function renderPresent2() {
         <div>
           <label style="font-size:.72rem;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">${es ? "Vista" : "View"}</label>
           <div class="mode-toggle" title="${es ? "Auto respeta el flag Fleet de Configuración" : "Auto follows the Fleet flag in Config"}">
-            <button class="mode-btn ${PRESENT2_STATE.fleetMode === "auto"  ? "active" : ""}" onclick="present2SetFleetMode('auto')">Auto</button>
-            <button class="mode-btn ${PRESENT2_STATE.fleetMode === "taxi"  ? "active" : ""}" onclick="present2SetFleetMode('taxi')">${es ? "Taxi" : "Taxi"}</button>
-            <button class="mode-btn ${PRESENT2_STATE.fleetMode === "fleet" ? "active" : ""}" ${canForceFleet ? `onclick="present2SetFleetMode('fleet')"` : `disabled style="opacity:.35;cursor:not-allowed"`} title="${canForceFleet ? "" : (es ? "Este partner no está marcado como Fleet" : "This partner isn't flagged as Fleet")}">Fleet</button>
+            <button class="mode-btn ${PRESENT2_STATE.fleetMode === "auto"  ? "active" : ""}" data-act="present2SetFleetMode" data-mode="auto">Auto</button>
+            <button class="mode-btn ${PRESENT2_STATE.fleetMode === "taxi"  ? "active" : ""}" data-act="present2SetFleetMode" data-mode="taxi">${es ? "Taxi" : "Taxi"}</button>
+            <button class="mode-btn ${PRESENT2_STATE.fleetMode === "fleet" ? "active" : ""}" ${canForceFleet ? `data-act="present2SetFleetMode" data-mode="fleet"` : `disabled style="opacity:.35;cursor:not-allowed"`} title="${canForceFleet ? "" : (es ? "Este partner no está marcado como Fleet" : "This partner isn't flagged as Fleet")}">Fleet</button>
           </div>
         </div>
         ${p2TuktukSectionVisible(PRESENT2_STATE.partner) ? `
@@ -1666,14 +1666,14 @@ export function renderPresent2() {
         ${p2MetaMeses().length ? `
         <div title="${es ? "Mes de la meta en 'Avance vs Meta'. Auto = el mes del 'Hasta'." : "Goal month for 'Goal vs Target'. Auto = the 'To' month."}">
           <label style="font-size:.72rem;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">${es ? "Mes meta" : "Goal month"}</label>
-          <select onchange="present2SetAvanceMes(this.value)" style="border:2px solid #e5e5e5;border-radius:8px;padding:7px 10px;font-size:.82rem;font-weight:600;background:#fff;cursor:pointer;height:38px">
+          <select data-act-change="present2SetAvanceMes" style="border:2px solid #e5e5e5;border-radius:8px;padding:7px 10px;font-size:.82rem;font-weight:600;background:#fff;cursor:pointer;height:38px">
             <option value="">${es ? "Auto (según filtro)" : "Auto (by filter)"}</option>
             ${p2MetaMeses().map(m => `<option value="${escapeHTML(m)}" ${PRESENT2_STATE.avanceMesSel === m ? "selected" : ""}>${escapeHTML(m)}</option>`).join("")}
           </select>
         </div>` : ""}
         <div style="margin-left:auto;display:flex;gap:8px;align-items:flex-end">
-          <button onclick="switchTab('rend')" style="padding:8px 16px;border-radius:8px;font-size:.82rem;font-weight:600;border:2px solid #e5e5e5;background:#fff;color:#555;cursor:pointer">← ${es ? "Volver" : "Back"}</button>
-          <button class="apply-btn" style="width:auto;padding:8px 18px" onclick="downloadPresent2PDF()">⬇ ${es ? "Descargar PDF" : "Download PDF"}</button>
+          <button data-act="switchTab" data-tab="rend" style="padding:8px 16px;border-radius:8px;font-size:.82rem;font-weight:600;border:2px solid #e5e5e5;background:#fff;color:#555;cursor:pointer">← ${es ? "Volver" : "Back"}</button>
+          <button class="apply-btn" style="width:auto;padding:8px 18px" data-act="downloadPresent2PDF">⬇ ${es ? "Descargar PDF" : "Download PDF"}</button>
         </div>
       </div>
       <div id="present2Nav" style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
@@ -1691,10 +1691,10 @@ export function renderPresent2() {
 export function p2CmpBar() {
   const es = PRESENT2_STATE.lang === "es";
   const tog = PRESENT2_STATE.cohort || {};
-  const cityBtn = `<button onclick="present2ToggleCity()" class="preset-btn${PRESENT2_STATE.cmpCity ? " active" : ""}" style="flex:0 0 auto;padding:4px 10px;${PRESENT2_STATE.cmpCity ? "background:#64748b;color:#fff;border-color:#64748b" : ""}">${es ? "Ciudad" : "City"}</button>`;
+  const cityBtn = `<button data-act="present2ToggleCity" class="preset-btn${PRESENT2_STATE.cmpCity ? " active" : ""}" style="flex:0 0 auto;padding:4px 10px;${PRESENT2_STATE.cmpCity ? "background:#64748b;color:#fff;border-color:#64748b" : ""}">${es ? "Ciudad" : "City"}</button>`;
   const bands = P2_BANDS.map(b => {
     const on = tog[b.key];
-    return `<button onclick="present2ToggleCohort('${b.key}')" class="preset-btn${on ? " active" : ""}" style="flex:0 0 auto;padding:4px 10px;${on ? `background:${b.color};color:#fff;border-color:${b.color}` : ""}">${escapeHTML(es ? b.es : b.en)}</button>`;
+    return `<button data-act="present2ToggleCohort" data-key="${escapeHTML(b.key)}" class="preset-btn${on ? " active" : ""}" style="flex:0 0 auto;padding:4px 10px;${on ? `background:${b.color};color:#fff;border-color:${b.color}` : ""}">${escapeHTML(es ? b.es : b.en)}</button>`;
   }).join("");
   return cityBtn + bands;
 }
@@ -1767,8 +1767,8 @@ export function present2SetAvanceMes(mes) { PRESENT2_STATE.avanceMesSel = mes ||
 // "just-active" dispara la animación CSS de pop al repintarse (ver styles.css).
 export function _p2SectionBarHTML(curDs) {
   return `
-    <button class="mode-btn ${curDs === "taxi"   ? "active just-active" : ""}" onclick="present2JumpSection('taxi')">🚕 Taxi</button>
-    <button class="mode-btn ${curDs === "tuktuk" ? "active just-active" : ""}" onclick="present2JumpSection('tuktuk')">🛺 TukTuk</button>`;
+    <button class="mode-btn ${curDs === "taxi"   ? "active just-active" : ""}" data-act="present2JumpSection" data-section="taxi">🚕 Taxi</button>
+    <button class="mode-btn ${curDs === "tuktuk" ? "active just-active" : ""}" data-act="present2JumpSection" data-section="tuktuk">🛺 TukTuk</button>`;
 }
 // Salta a la primera diapositiva de la sección (Taxi/TukTuk) del deck del partner.
 // NO resetea el partner (arregla el bug de perder el partner al alternar). goSlide2
@@ -1812,7 +1812,7 @@ export function _p2PaintPartnerList(q) {
     // string JS del onmousedown: un partner con comilla doble/backslash rompía el click o
     // podía inyectar un atributo HTML (el .replace solo escapaba comilla simple). dataset.*
     // decodifica el atributo HTML sin pasar por un parser de string JS → sin ese riesgo.
-    return `<div class="pv-opt" data-partner="${escapeHTML(p)}" onmousedown="p2SelectPartner(this.dataset.partner)" style="padding:7px 12px;font-size:.78rem;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid #f3f3f3;${sel ? "background:#fff0f0;font-weight:700" : ""}">
+    return `<div class="pv-opt" data-partner="${escapeHTML(p)}" data-act-mousedown="p2SelectPartner" style="padding:7px 12px;font-size:.78rem;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid #f3f3f3;${sel ? "background:#fff0f0;font-weight:700" : ""}">
       <span style="width:7px;height:7px;border-radius:50%;background:#FF0000;flex-shrink:0"></span>
       <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(p)}</span></div>`;
   }).join("");
@@ -1902,3 +1902,20 @@ export async function downloadPresent2PDF() {
   // Restaurar la vista en vivo (los charts se destruyeron al inicio)
   try { renderSlide2(); } catch (e) {}
 }
+
+// ── ACCIONES DELEGADAS (Fase A2) ─────────────────────────────────────────────
+import { registerActions } from "./shared/actions.js";
+
+registerActions({
+  goSlide2:   d => goSlide2(+d.i),
+  prevSlide2, nextSlide2,
+  present2ToggleInclPartial, present2ToggleCity, downloadPresent2PDF,
+  p2FilterPartners:     (d, el) => p2FilterPartners(el.value),
+  p2SearchKeydown:      (d, el, e) => p2SearchKeydown(e),
+  p2SelectPartner:      (d, el) => p2SelectPartner(el.dataset.partner),
+  setPresent2Lang:      d => setPresent2Lang(d.lang),
+  present2SetFleetMode: d => present2SetFleetMode(d.mode),
+  present2SetAvanceMes: (d, el) => present2SetAvanceMes(el.value),
+  present2ToggleCohort: d => present2ToggleCohort(d.key),
+  present2JumpSection:  d => present2JumpSection(d.section)
+});

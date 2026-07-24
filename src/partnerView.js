@@ -427,26 +427,26 @@ export function renderPartnerView() {
           <label style="font-size:.68rem;color:#666;font-weight:700;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px">${_t("partner")}</label>
           <input type="text" id="pvSearch" class="sb-inp" placeholder="${_t("searchPartner")}" style="width:240px" autocomplete="off"
             value="${escapeHTML(partner)}"
-            oninput="pvFilterPartners(this.value)"
+            data-act-input="pvFilterPartners"
             onfocus="pvShowPartnerList()"
             onblur="setTimeout(pvHidePartnerList, 200)"
-            onkeydown="pvSearchKeydown(event)"/>
+            data-act-keydown="pvSearchKeydown"/>
           <div id="pvPartnerList" style="display:none;position:absolute;top:100%;left:0;width:240px;max-height:280px;overflow-y:auto;background:#fff;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:100;margin-top:2px"></div>
         </div>
         <div>
           <label style="font-size:.68rem;color:#666;font-weight:700;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px">${_t("period")}</label>
-          <select id="pvPeriodSel" class="sb-sel" style="width:200px" onchange="pvOnPeriodChange(this.value)">
+          <select id="pvPeriodSel" class="sb-sel" style="width:200px" data-act-change="pvOnPeriodChange">
             ${_pvPeriodOptions(period, periodLabel)}
           </select>
         </div>
         <div>
           <label style="font-size:.68rem;color:#666;font-weight:700;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px">${_t("language")}</label>
           <div style="display:flex;gap:4px">
-            <button onclick="pvSetLang('es')" style="${langBtnStyle(!isEN)}">ES</button>
-            <button onclick="pvSetLang('en')" style="${langBtnStyle(isEN)}">EN</button>
+            <button data-act="pvSetLang" data-lang="es" style="${langBtnStyle(!isEN)}">ES</button>
+            <button data-act="pvSetLang" data-lang="en" style="${langBtnStyle(isEN)}">EN</button>
           </div>
         </div>
-        <button style="padding:8px 16px;margin-left:auto;background:#FF0000;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:.85rem" onclick="pvDownloadPDF()">
+        <button style="padding:8px 16px;margin-left:auto;background:#FF0000;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:.85rem" data-act="pvDownloadPDF">
           ${_t("downloadPDF")}
         </button>
       </div>
@@ -511,7 +511,7 @@ export function renderPartnerView() {
           ? "Para métricas 100% precisas usá <b>Presentación 2.0</b> mientras terminamos de validar Vista Partner."
           : "For 100% accurate metrics use <b>Presentation 2.0</b> while we finish validating Partner View."}</div>
       </div>
-      <button onclick="switchTab('present2')" style="flex:0 0 auto;background:#FF0000;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:.82rem;font-weight:700;cursor:pointer;white-space:nowrap">${_pvEs ? "Ir a Presentación 2.0 →" : "Go to Presentation 2.0 →"}</button>
+      <button data-act="switchTab" data-tab="present2" style="flex:0 0 auto;background:#FF0000;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:.82rem;font-weight:700;cursor:pointer;white-space:nowrap">${_pvEs ? "Ir a Presentación 2.0 →" : "Go to Presentation 2.0 →"}</button>
     </div>`;
 
   // Marca de render unica para evitar race conditions de setTimeout
@@ -1223,7 +1223,7 @@ export function _pvPaintPartnerList(q) {
   list.innerHTML = filtered.slice(0, 100).map(p => {
     const c = STATE.partnerColors[p] || "#888";
     const sel = p === PARTNER_VIEW_STATE.partner;
-    return `<div class="pv-opt" onmousedown="pvSelectPartner('${escapeJSAttr(p)}')"
+    return `<div class="pv-opt" data-act-mousedown="pvSelectPartner" data-partner="${escapeHTML(p)}"
       style="padding:7px 12px;font-size:.78rem;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid #f3f3f3;${sel?'background:#fff0f0;font-weight:700':''}">
       <span style="width:7px;height:7px;border-radius:50%;background:${c};flex-shrink:0"></span>
       <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(p)}</span>
@@ -1404,17 +1404,17 @@ export function _pvConvInner(selectedPartner) {
       <td style="padding:6px 8px;border-bottom:1px solid #f3f3f3;font-weight:${hl ? 800 : 600};color:${color};white-space:nowrap">
         <span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${color};margin-right:6px"></span>${escapeHTML(label)}</td>
       ${d.cols.map(c => `<td style="text-align:right;padding:6px 8px;border-bottom:1px solid #f3f3f3;font-weight:${hl ? 800 : 600}">${fpct(vals[c])}</td>`).join("")}</tr>`;
-  const toggleBtn = (key, label) => `<button onclick="pvConvCohort('${key}')" class="preset-btn${which === key ? " active" : ""}" style="${which === key ? "background:#3b82f6;color:#fff;border-color:#3b82f6" : ""}">${escapeHTML(label)}</button>`;
+  const toggleBtn = (key, label) => `<button data-act="pvConvCohort" data-key="${escapeHTML(key)}" class="preset-btn${which === key ? " active" : ""}" style="${which === key ? "background:#3b82f6;color:#fff;border-color:#3b82f6" : ""}">${escapeHTML(label)}</button>`;
 
   return `
     <div style="display:flex;gap:14px;align-items:end;flex-wrap:wrap;margin-bottom:10px">
       <div><label style="font-size:.66rem;color:#666;font-weight:700;display:block;margin-bottom:3px">${_t("convADRange")}</label>
         <div style="display:flex;gap:4px">
-          <input id="pvConvAdMin" class="crud-input" type="number" value="${F.adMin}" style="width:80px" onchange="pvConvFilter()"/>
-          <input id="pvConvAdMax" class="crud-input" type="number" value="${F.adMax}" style="width:90px" onchange="pvConvFilter()"/>
+          <input id="pvConvAdMin" class="crud-input" type="number" value="${F.adMin}" style="width:80px" data-act-change="pvConvFilter"/>
+          <input id="pvConvAdMax" class="crud-input" type="number" value="${F.adMax}" style="width:90px" data-act-change="pvConvFilter"/>
         </div></div>
       <div><label style="font-size:.66rem;color:#666;font-weight:700;display:block;margin-bottom:3px">${_t("convNDMin")}</label>
-        <input id="pvConvNdMin" class="crud-input" type="number" value="${F.ndMin}" style="width:90px" onchange="pvConvFilter()"/></div>
+        <input id="pvConvNdMin" class="crud-input" type="number" value="${F.ndMin}" style="width:90px" data-act-change="pvConvFilter"/></div>
       <div><label style="font-size:.66rem;color:#666;font-weight:700;display:block;margin-bottom:3px">${_t("convCmpTitle")}</label>
         <div style="display:flex;gap:6px">${toggleBtn("top5", _t("convTop5Btn"))}${toggleBtn("top10", _t("convTop10Btn"))}</div></div>
       <span style="font-size:.72rem;color:#aaa">${_t("convPeers")}: n=${d.nPop}</span>
@@ -1500,7 +1500,7 @@ export function pvCohortToggle(which) {
 export function _pvCohortBtn(band) {
   const on = (PARTNER_VIEW_STATE.cohort || {})[band.key];
   const label = PARTNER_VIEW_STATE.lang === "en" ? band.en : band.es;
-  return `<button onclick="pvCohortToggle('${band.key}')" class="preset-btn${on ? " active" : ""}" style="${on ? `background:${band.color};color:#fff;border-color:${band.color}` : ""}">+ ${escapeHTML(label)}</button>`;
+  return `<button data-act="pvCohortToggle" data-key="${escapeHTML(band.key)}" class="preset-btn${on ? " active" : ""}" style="${on ? `background:${band.color};color:#fff;border-color:${band.color}` : ""}">+ ${escapeHTML(label)}</button>`;
 }
 
 // Botón "Solo tendencias" (modo compartir): oculta los valores en los charts de
@@ -1511,7 +1511,7 @@ export function _pvShareBtnHtml() {
   const on = !!PARTNER_VIEW_STATE.shareMode;
   // flex:0 0 auto — .preset-btn trae flex:1 y, como hijo directo de la barra,
   // estiraba a todo el ancho. Lo dejamos compacto y alineado a la derecha.
-  return `<button id="pvShareBtn" onclick="pvShareToggle()" class="preset-btn${on ? " active" : ""}" title="${escapeHTML(_t("shareHint"))}" style="flex:0 0 auto;margin-left:auto;white-space:nowrap;padding:4px 10px;${on ? "background:#111;color:#fff;border-color:#111" : ""}">${on ? "🔒" : "🔓"} ${escapeHTML(_t("shareBtn"))}</button>`;
+  return `<button id="pvShareBtn" data-act="pvShareToggle" class="preset-btn${on ? " active" : ""}" title="${escapeHTML(_t("shareHint"))}" style="flex:0 0 auto;margin-left:auto;white-space:nowrap;padding:4px 10px;${on ? "background:#111;color:#fff;border-color:#111" : ""}">${on ? "🔒" : "🔓"} ${escapeHTML(_t("shareBtn"))}</button>`;
 }
 
 // Alterna el modo compartir. Al activarlo guarda la selección de cohorte actual y
@@ -1540,7 +1540,7 @@ export function pvShareToggle() {
 // enciende solo para su análisis. Reconstruye los scopes en sitio (sin re-render total).
 export function _pvLegendBtnHtml() {
   const on = !!PARTNER_VIEW_STATE.showLegend;
-  return `<button id="pvLegendBtn" onclick="pvLegendToggle()" class="preset-btn${on ? " active" : ""}" title="${escapeHTML(_t("legendHint"))}" style="flex:0 0 auto;white-space:nowrap;padding:4px 10px;${on ? "background:#0ea5e9;color:#fff;border-color:#0ea5e9" : ""}">📋 ${escapeHTML(_t("legendBtn"))}</button>`;
+  return `<button id="pvLegendBtn" data-act="pvLegendToggle" class="preset-btn${on ? " active" : ""}" title="${escapeHTML(_t("legendHint"))}" style="flex:0 0 auto;white-space:nowrap;padding:4px 10px;${on ? "background:#0ea5e9;color:#fff;border-color:#0ea5e9" : ""}">📋 ${escapeHTML(_t("legendBtn"))}</button>`;
 }
 
 export function pvLegendToggle() {
@@ -2002,3 +2002,17 @@ export function _pvChannelMountChart(selectedPartner) {
     tooltip: { shared: true, intersect: false, y: { formatter: v => fmt(Math.round(v || 0)) } }
   });
 }
+
+// ── ACCIONES DELEGADAS (Fase A2) ─────────────────────────────────────────────
+import { registerActions } from "./shared/actions.js";
+
+registerActions({
+  pvFilterPartners: (d, el) => pvFilterPartners(el.value),
+  pvSearchKeydown:  (d, el, e) => pvSearchKeydown(e),
+  pvOnPeriodChange: (d, el) => pvOnPeriodChange(el.value),
+  pvSetLang:        d => pvSetLang(d.lang),
+  pvDownloadPDF, pvShareToggle, pvLegendToggle, pvConvFilter,
+  pvSelectPartner:  d => pvSelectPartner(d.partner),
+  pvConvCohort:     d => pvConvCohort(d.key),
+  pvCohortToggle:   d => pvCohortToggle(d.key)
+});

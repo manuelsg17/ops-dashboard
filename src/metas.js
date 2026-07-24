@@ -71,7 +71,7 @@ export function metasLineToggleHTML() {
     const dis = diario && d.k !== "agg";
     return `<button class="mode-btn${on ? " active" : ""}" ${dis ? "disabled" : ""}
       title="${dis ? "Sin datos diarios por sub-flota — usa escala semanal o mensual" : escapeHTML(d.tip)}"
-      ${dis ? "" : `onclick="setMetasLine('${d.k}')"`}
+      ${dis ? "" : `data-act="setMetasLine" data-line="${escapeHTML(d.k)}"`}
       style="${dis ? "opacity:.4;cursor:not-allowed" : ""}">${d.emoji} ${d.label}</button>`;
   }).join("");
   const note = diario
@@ -605,7 +605,7 @@ export function _renderMetasImpl() {
   const mesSelectorHTML = mesesDisponibles.length > 1
     ? `<div style="display:flex;align-items:center;gap:8px;background:#fff8f8;border:1px solid #fecaca;border-radius:8px;padding:6px 12px">
          <label style="font-size:.72rem;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Mes:</label>
-         <select onchange="setMetasMes(this.value)" style="border:1px solid #ddd;border-radius:6px;padding:4px 10px;font-size:.82rem;font-weight:600;background:#fff;cursor:pointer">
+         <select data-act-change="setMetasMes" style="border:1px solid #ddd;border-radius:6px;padding:4px 10px;font-size:.82rem;font-weight:600;background:#fff;cursor:pointer">
            ${mesesDisponibles.map(m => `<option value="${m}" ${m===mesName?"selected":""}>${m}</option>`).join("")}
          </select>
        </div>`
@@ -614,9 +614,8 @@ export function _renderMetasImpl() {
   // poder re-subir el Excel. El enforcement real es RLS (is_admin()); este gate
   // solo oculta el botón. data-html2canvas-ignore lo excluye del PDF descargable
   // (el partner no debe verlo). mesAttr va JSON-encodeado por si el mes trae comillas.
-  const mesAttr    = escapeHTML(JSON.stringify(mesName));
   const delBtnHTML = STATE.isAdmin
-    ? `<button class="apply-btn" data-html2canvas-ignore="true" onclick="deleteMetasMes(${mesAttr})"
+    ? `<button class="apply-btn" data-html2canvas-ignore="true" data-act="deleteMetasMes" data-mes="${escapeHTML(mesName)}"
          title="Borra todas las metas de ${escapeHTML(mesName)} para re-subir el Excel"
          style="width:auto;padding:7px 14px;font-size:.8rem;background:#FF0000;color:#fff;font-weight:700">
          🗑️ Eliminar metas de ${escapeHTML(mesName)}
@@ -626,7 +625,7 @@ export function _renderMetasImpl() {
     ${mesSelectorHTML}
     <div style="display:flex;gap:8px;align-items:center;margin-left:auto">
       ${delBtnHTML}
-      <button class="apply-btn" id="metasPdfBtn" onclick="downloadMetasPDF()" style="width:auto;padding:7px 16px;font-size:.8rem">⬇ Descargar PDF</button>
+      <button class="apply-btn" id="metasPdfBtn" data-act="downloadMetasPDF" style="width:auto;padding:7px 16px;font-size:.8rem">⬇ Descargar PDF</button>
     </div>
   </div>`;
 
@@ -1022,3 +1021,13 @@ export async function deleteMetasMes(mes) {
     showLoad(false);
   }
 }
+
+// ── ACCIONES DELEGADAS (Fase A2) ─────────────────────────────────────────────
+import { registerActions } from "./shared/actions.js";
+
+registerActions({
+  setMetasLine:    d => setMetasLine(d.line),
+  setMetasMes:     (d, el) => setMetasMes(el.value),
+  deleteMetasMes:  d => deleteMetasMes(d.mes),
+  downloadMetasPDF
+});

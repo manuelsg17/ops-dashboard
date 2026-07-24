@@ -120,7 +120,7 @@ grant select on all tables in schema public to anon;
         <label style="font-size:.78rem;color:#475569">Anon / publishable key
           <input id="fleetExtKey" class="crud-input" placeholder="eyJhbGciOi…" style="width:100%;margin-top:3px"/>
         </label>
-        <div><button class="crud-btn" onclick="fleetExtSaveConfig()" style="background:#0ea5e9;color:#fff;border-color:#0ea5e9;font-weight:700">Conectar y explorar</button></div>
+        <div><button class="crud-btn" data-act="fleetExtSaveConfig" style="background:#0ea5e9;color:#fff;border-color:#0ea5e9;font-weight:700">Conectar y explorar</button></div>
       </div>
     </div>`;
 }
@@ -137,8 +137,8 @@ export function _fleetExtErrorPanel(msg, isSchema) {
         </ul>
       </div>
       <div style="margin-top:12px;display:flex;gap:8px">
-        <button class="crud-btn" onclick="fleetExtReload()" style="background:#0ea5e9;color:#fff;border-color:#0ea5e9">↻ Reintentar</button>
-        <button class="crud-btn" onclick="fleetExtClearConfig()">Reconfigurar</button>
+        <button class="crud-btn" data-act="fleetExtReload" style="background:#0ea5e9;color:#fff;border-color:#0ea5e9">↻ Reintentar</button>
+        <button class="crud-btn" data-act="fleetExtClearConfig">Reconfigurar</button>
       </div>
     </div>`;
 }
@@ -159,15 +159,15 @@ export function _fleetExtExplorer(loadingData) {
   html += `
     <div class="section" style="margin-bottom:10px">
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <input class="crud-input" id="fleetExtTableFilter" placeholder="Filtrar tablas… (ej. fleet)" value="${(FLEET_EXT_STATE.tableFilter||"").replace(/"/g,"&quot;")}" oninput="fleetExtTableFilterInput(this)" style="min-width:200px;max-width:300px"/>
+        <input class="crud-input" id="fleetExtTableFilter" placeholder="Filtrar tablas… (ej. fleet)" value="${(FLEET_EXT_STATE.tableFilter||"").replace(/"/g,"&quot;")}" data-act-input="fleetExtTableFilterInput" style="min-width:200px;max-width:300px"/>
         <span style="font-size:.72rem;color:#94a3b8">${fmt(shown.length)} de ${fmt(tables.length)}</span>
-        <button class="crud-btn" onclick="fleetExtReload()" style="margin-left:auto;padding:4px 10px">↻ Refrescar esquema</button>
-        <button class="crud-btn" onclick="fleetExtClearConfig()" style="padding:4px 10px">Reconfigurar</button>
+        <button class="crud-btn" data-act="fleetExtReload" style="margin-left:auto;padding:4px 10px">↻ Refrescar esquema</button>
+        <button class="crud-btn" data-act="fleetExtClearConfig" style="padding:4px 10px">Reconfigurar</button>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;max-height:120px;overflow:auto">
         ${shown.map(t => {
           const on = t.name === sel;
-          return `<button onclick="selectFleetExtTable('${escapeJSAttr(t.name)}')" class="crud-btn" title="${fmt(t.cols.length)} columnas"
+          return `<button data-act="selectFleetExtTable" data-table="${escapeHTML(t.name)}" class="crud-btn" title="${fmt(t.cols.length)} columnas"
             style="padding:3px 10px;font-size:.74rem;${on ? "background:#0ea5e9;color:#fff;border-color:#0ea5e9;font-weight:700" : ""}">${escapeHTML(t.name)} <span style="opacity:.7">· ${fmt(t.cols.length)}</span></button>`;
         }).join("") || `<span style="color:#94a3b8;font-size:.78rem">Sin tablas (revisá los grants de SELECT al rol anónimo).</span>`}
       </div>
@@ -203,9 +203,9 @@ export function _fleetExtExplorer(loadingData) {
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <strong style="font-size:.82rem">${escapeHTML(sel)}</strong>
         <span style="font-size:.72rem;color:#94a3b8">${fmt(rows.length)} fila(s) · ${fmt(cols.length)} col.</span>
-        <input class="crud-input" id="fleetExtSearch" placeholder="Buscar en la tabla…" value="${(FLEET_EXT_STATE.search||"").replace(/"/g,"&quot;")}" oninput="fleetExtSearchInput(this)" style="flex:1;min-width:160px;max-width:260px"/>
-        <button class="crud-btn" onclick="loadFleetExterno(true).then(renderFleetExterno)" style="padding:4px 10px">↻ Datos</button>
-        <button class="crud-btn" onclick="exportFleetExtCSV()" style="background:#f0fdf4;border-color:#86efac;color:#166534;padding:4px 10px">⬇ CSV</button>
+        <input class="crud-input" id="fleetExtSearch" placeholder="Buscar en la tabla…" value="${(FLEET_EXT_STATE.search||"").replace(/"/g,"&quot;")}" data-act-input="fleetExtSearchInput" style="flex:1;min-width:160px;max-width:260px"/>
+        <button class="crud-btn" data-act="fleetExtForceReload" style="padding:4px 10px">↻ Datos</button>
+        <button class="crud-btn" data-act="exportFleetExtCSV" style="background:#f0fdf4;border-color:#86efac;color:#166534;padding:4px 10px">⬇ CSV</button>
       </div>
     </div>`;
 
@@ -290,3 +290,14 @@ export function exportFleetExtCSV() {
   a.href = url; a.download = `fleet_externo_${FLEET_EXT_STATE.table || "data"}.csv`;
   a.click(); URL.revokeObjectURL(url);
 }
+
+// ── ACCIONES DELEGADAS (Fase A2) ─────────────────────────────────────────────
+import { registerActions } from "./shared/actions.js";
+
+registerActions({
+  fleetExtSaveConfig, fleetExtReload, fleetExtClearConfig, exportFleetExtCSV,
+  fleetExtTableFilterInput: (d, el) => fleetExtTableFilterInput(el),
+  fleetExtSearchInput:      (d, el) => fleetExtSearchInput(el),
+  selectFleetExtTable:      d => selectFleetExtTable(d.table),
+  fleetExtForceReload:      () => loadFleetExterno(true).then(renderFleetExterno)
+});

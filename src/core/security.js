@@ -12,13 +12,15 @@ export function escapeHTML(s) {
     .replace(/'/g, "&#39;");
 }
 
-// Para interpolar un valor DENTRO de un argumento de string JS de un manejador inline
-// (onclick="fn('...')") que a su vez vive en un atributo HTML entre comillas dobles.
-// Orden importa: escapar PRIMERO para el string JS (\ y '), LUEGO para el atributo HTML.
-// Así el navegador decodifica las entidades de vuelta a \' y \\ ANTES de que el motor JS
-// los lea, sin que ninguno de los dos contextos (atributo / string JS) pueda romperse.
-// NUNCA usar escapeHTML(x).replace(/'/g,"\\'") — para cuando corre el replace, escapeHTML
-// ya convirtió ' en &#39; y el replace es un no-op (la comilla cruda vuelve al decodificar).
-export function escapeJSAttr(s) {
-  return escapeHTML(String(s ?? "").replace(/\\/g, "\\\\").replace(/'/g, "\\'"));
-}
+// NOTA (Fase A2): acá vivía escapeJSAttr(), necesaria mientras la UI usaba
+// handlers inline (onclick="fn('...')"), donde un mismo valor atravesaba DOS
+// contextos anidados — string JS dentro de atributo HTML — y había que escapar
+// en ese orden exacto. Ese patrón ya se rompió una vez en este proyecto (el
+// escapeHTML(x).replace(/'/g,"\\'") que era un no-op, porque escapeHTML ya
+// había convertido la comilla en &#39; antes del replace).
+//
+// Se ELIMINÓ al migrar los ~173 handlers inline a event delegation
+// (shared/actions.js): ahora los valores viajan en data-attributes, un solo
+// contexto, y alcanza escapeHTML. Si en el futuro alguien vuelve a necesitar
+// algo así, es señal de que se está reintroduciendo un handler inline —
+// preferir una acción delegada.

@@ -195,13 +195,13 @@ export function renderSeguimiento() {
   const taskRowHtml = i => {
     const r = SEG_STATE.draft[i];
     return `<tr>
-      <td style="padding:3px 4px 3px 20px"><input class="crud-input" style="width:120px" value="${escapeHTML(r.owner)}" oninput="segSet(${i},'owner',this.value)" placeholder="Owner"/></td>
-      <td style="padding:3px 4px"><input class="crud-input" style="width:220px" value="${escapeHTML(r.task)}" oninput="segSet(${i},'task',this.value)" placeholder="Tarea / next step"/></td>
-      <td style="padding:3px 4px"><input class="crud-input" type="date" style="width:130px" value="${escapeHTML(r.start_date)}" onchange="segSet(${i},'start_date',this.value)"/></td>
-      <td style="padding:3px 4px"><input class="crud-input" type="date" style="width:130px" value="${escapeHTML(r.end_date)}" onchange="segSet(${i},'end_date',this.value)"/></td>
-      <td style="padding:3px 4px"><input class="crud-input" style="width:190px" value="${escapeHTML(r.expected_result)}" oninput="segSet(${i},'expected_result',this.value)" placeholder="Resultado esperado"/></td>
-      <td style="padding:3px 4px"><select class="crud-input" style="width:118px" onchange="segSet(${i},'status',this.value)">${statusOpts(r.status)}</select></td>
-      <td style="padding:3px 4px"><button onclick="segDeleteRow(${i})" title="Eliminar tarea" style="border:1px solid #fca5a5;background:#fff5f5;color:#b91c1c;border-radius:6px;padding:3px 9px;cursor:pointer;font-weight:700">✕</button></td>
+      <td style="padding:3px 4px 3px 20px"><input class="crud-input" style="width:120px" value="${escapeHTML(r.owner)}" data-act-input="segSet" data-i="${i}" data-field="owner" placeholder="Owner"/></td>
+      <td style="padding:3px 4px"><input class="crud-input" style="width:220px" value="${escapeHTML(r.task)}" data-act-input="segSet" data-i="${i}" data-field="task" placeholder="Tarea / next step"/></td>
+      <td style="padding:3px 4px"><input class="crud-input" type="date" style="width:130px" value="${escapeHTML(r.start_date)}" data-act-change="segSet" data-i="${i}" data-field="start_date"/></td>
+      <td style="padding:3px 4px"><input class="crud-input" type="date" style="width:130px" value="${escapeHTML(r.end_date)}" data-act-change="segSet" data-i="${i}" data-field="end_date"/></td>
+      <td style="padding:3px 4px"><input class="crud-input" style="width:190px" value="${escapeHTML(r.expected_result)}" data-act-input="segSet" data-i="${i}" data-field="expected_result" placeholder="Resultado esperado"/></td>
+      <td style="padding:3px 4px"><select class="crud-input" style="width:118px" data-act-change="segSet" data-i="${i}" data-field="status">${statusOpts(r.status)}</select></td>
+      <td style="padding:3px 4px"><button data-act="segDeleteRow" data-i="${i}" title="Eliminar tarea" style="border:1px solid #fca5a5;background:#fff5f5;color:#b91c1c;border-radius:6px;padding:3px 9px;cursor:pointer;font-weight:700">✕</button></td>
     </tr>`;
   };
   const groupsHtml = order.map((proj, pIdx) => {
@@ -210,9 +210,9 @@ export function renderSeguimiento() {
     const headerCells = `
       <td colspan="7" style="padding:9px 6px 5px;border-top:2px solid #eef0f2;background:#fbfcfd">
         <span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${pCol};vertical-align:middle;margin-right:6px"></span>
-        <input class="crud-input" style="width:240px;font-weight:800" value="${escapeHTML(proj)}" onchange="segRenameProject(${pIdx},this.value)" placeholder="Nombre del proyecto (Sin proyecto)"/>
-        <button onclick="segAddTaskTo(${pIdx})" style="margin-left:8px;border:1px solid #ddd;background:#fff;border-radius:6px;padding:3px 10px;cursor:pointer;font-weight:700;font-size:.72rem">+ tarea</button>
-        <button onclick="segDeleteProject(${pIdx})" title="Eliminar proyecto y sus tareas" style="margin-left:6px;border:1px solid #fca5a5;background:#fff5f5;color:#b91c1c;border-radius:6px;padding:3px 10px;cursor:pointer;font-weight:700;font-size:.72rem">🗑 proyecto</button>
+        <input class="crud-input" style="width:240px;font-weight:800" value="${escapeHTML(proj)}" data-act-change="segRenameProject" data-pidx="${pIdx}" placeholder="Nombre del proyecto (Sin proyecto)"/>
+        <button data-act="segAddTaskTo" data-pidx="${pIdx}" style="margin-left:8px;border:1px solid #ddd;background:#fff;border-radius:6px;padding:3px 10px;cursor:pointer;font-weight:700;font-size:.72rem">+ tarea</button>
+        <button data-act="segDeleteProject" data-pidx="${pIdx}" title="Eliminar proyecto y sus tareas" style="margin-left:6px;border:1px solid #fca5a5;background:#fff5f5;color:#b91c1c;border-radius:6px;padding:3px 10px;cursor:pointer;font-weight:700;font-size:.72rem">🗑 proyecto</button>
       </td>`;
     return `<tr>${headerCells}</tr>${idxs.map(taskRowHtml).join("")}`;
   }).join("");
@@ -229,9 +229,9 @@ export function renderSeguimiento() {
       </table>
     </div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
-      <button onclick="segAddProject()" style="border:1px solid #0ea5e9;background:#f0f9ff;color:#0369a1;border-radius:8px;padding:7px 14px;cursor:pointer;font-weight:700;font-size:.8rem">📁 + Proyecto</button>
-      <button onclick="segAddTaskTo(-1)" style="border:1px solid #ddd;background:#fff;border-radius:8px;padding:7px 14px;cursor:pointer;font-weight:700;font-size:.8rem">+ Tarea suelta</button>
-      <button onclick="segSave()" style="border:none;background:#FF0000;color:#fff;border-radius:8px;padding:7px 16px;cursor:pointer;font-weight:700;font-size:.8rem">💾 Guardar</button>
+      <button data-act="segAddProject" style="border:1px solid #0ea5e9;background:#f0f9ff;color:#0369a1;border-radius:8px;padding:7px 14px;cursor:pointer;font-weight:700;font-size:.8rem">📁 + Proyecto</button>
+      <button data-act="segAddTaskTo" data-pidx="-1" style="border:1px solid #ddd;background:#fff;border-radius:8px;padding:7px 14px;cursor:pointer;font-weight:700;font-size:.8rem">+ Tarea suelta</button>
+      <button data-act="segSave" style="border:none;background:#FF0000;color:#fff;border-radius:8px;padding:7px 16px;cursor:pointer;font-weight:700;font-size:.8rem">💾 Guardar</button>
       <span style="font-size:.7rem;color:#999">Los cambios no se guardan hasta presionar <strong>Guardar</strong>.</span>
     </div>`
     : `<div style="font-size:.78rem;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;margin-bottom:12px">🔒 Solo lectura — editar el seguimiento requiere permisos de administrador.</div>`;
@@ -241,7 +241,7 @@ export function renderSeguimiento() {
       <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin:8px 0 14px">
         <div>
           <label style="font-size:.68rem;color:#666;font-weight:700;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px">Partner</label>
-          <select class="sb-sel" style="width:260px" onchange="segOnPartnerChange(this.value)">${partnerOpts}</select>
+          <select class="sb-sel" style="width:260px" data-act-change="segOnPartnerChange">${partnerOpts}</select>
         </div>
         ${kam ? `<span style="background:${(KAM_COLORS && KAM_COLORS[kam]) || "#888"};color:#fff;font-size:.7rem;font-weight:700;padding:5px 10px;border-radius:12px">${escapeHTML(kam)}</span>` : ""}
       </div>
@@ -358,3 +358,16 @@ export function buildSlide2Seguimiento(partner, idx) {
     ${footer}
   </div>`;
 }
+
+// ── ACCIONES DELEGADAS (Fase A2) ─────────────────────────────────────────────
+import { registerActions } from "./shared/actions.js";
+
+registerActions({
+  segSet:            (d, el) => segSet(+d.i, d.field, el.value),
+  segDeleteRow:      d => segDeleteRow(+d.i),
+  segRenameProject:  (d, el) => segRenameProject(+d.pidx, el.value),
+  segAddTaskTo:      d => segAddTaskTo(+d.pidx),
+  segDeleteProject:  d => segDeleteProject(+d.pidx),
+  segAddProject, segSave,
+  segOnPartnerChange: (d, el) => segOnPartnerChange(el.value)
+});

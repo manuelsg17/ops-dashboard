@@ -383,7 +383,7 @@ export function _calcTabDot(key, status) {
 }
 export function _calcTabBtns(tabs, active, status) {
   return tabs.map(t =>
-    `<button class="mode-btn${t.key === active ? " active" : ""}" style="flex:0 0 auto" onclick="calcSetTab('${t.key}')">${_calcTabDot(t.key, status)}${escapeHTML(t.label)}</button>`
+    `<button class="mode-btn${t.key === active ? " active" : ""}" style="flex:0 0 auto" data-act="calcSetTab" data-key="${escapeHTML(t.key)}">${_calcTabDot(t.key, status)}${escapeHTML(t.label)}</button>`
   ).join("");
 }
 export function _calcTabBar(tabs, active, status) {
@@ -398,7 +398,7 @@ export function _calcHeader(m, allKAMs, status) {
       <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:10px">
         <div>
           <label style="font-size:.68rem;color:#666;font-weight:700;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px">KAM</label>
-          <select id="calcKamSel" class="sb-sel" style="width:200px" onchange="calcOnKamChange(this.value)">
+          <select id="calcKamSel" class="sb-sel" style="width:200px" data-act-change="calcOnKamChange">
             <option value="all" ${CALC_STATE.kam === "all" ? "selected" : ""}>Todos los KAMs</option>
             ${allKAMs.map(k => `<option value="${escapeHTML(k)}" ${CALC_STATE.kam === k ? "selected" : ""}>${escapeHTML(k)}</option>`).join("")}
           </select>
@@ -455,7 +455,7 @@ export function _calcRefreshStatus() {
 
 // Botón de recálculo (pestañas con metas → tabla): re-render de la pestaña.
 export function _calcRecalcBtn() {
-  return `<button id="calcRecalcBtn" style="width:100%;margin:14px 0 4px;padding:11px;font-size:.86rem;background:#FF0000;color:#fff;border:none;border-radius:8px;font-weight:800;cursor:pointer" onclick="calcApplyChanges()">↻ Recalcular distribución</button>`;
+  return `<button id="calcRecalcBtn" style="width:100%;margin:14px 0 4px;padding:11px;font-size:.86rem;background:#FF0000;color:#fff;border:none;border-radius:8px;font-weight:800;cursor:pointer" data-act="calcApplyChanges">↻ Recalcular distribución</button>`;
 }
 
 // ── RENDER PRINCIPAL ──────────────────────────────────────────────────────────
@@ -601,7 +601,7 @@ export function _kamGoalInput(metric, label, weight, val) {
     <div>
       <label style="font-size:.66rem;color:#666;font-weight:700;display:block;margin-bottom:3px">${escapeHTML(label)}${wtag}</label>
       <input type="number" step="1" min="0" value="${+val || 0}"
-        onchange="calcOnKamGoalChange('${metric}', this.value)"
+        data-act-change="calcOnKamGoalChange" data-metric="${escapeHTML(metric)}"
         class="sb-inp" style="width:100%;padding:5px 8px;font-size:.78rem"/>
     </div>`;
 }
@@ -733,7 +733,7 @@ export function _calcSec4_distribucion(agg, distTotals, monthLabel) {
     const val = CALC_STATE.edits[k] !== undefined ? +CALC_STATE.edits[k] : Math.round(base);
     return `<input type="number" step="1" min="0" class="calc-inp" value="${val}"
       data-pk="${escapeHTML(partner)}" data-city="${escapeHTML(city)}" data-metric="${metric}"
-      onchange="calcOnGoalEdit(this)"
+      data-act-change="calcOnGoalEdit"
       style="width:90px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;font-size:.74rem;text-align:right"/>`;
   };
   const _pctCell = (val, tot, noAct) => noAct
@@ -828,7 +828,7 @@ export function _calcSec4b_fleet(agg) {
     const val = CALC_STATE.edits[k] !== undefined ? CALC_STATE.edits[k] : "";
     return `<input type="number" step="0.1" min="0" class="calc-inp" value="${val}" placeholder="${ph}"
       data-pk="${escapeHTML(partner)}" data-city="${escapeHTML(city)}" data-metric="${metric}"
-      onchange="calcOnGoalEdit(this)"
+      data-act-change="calcOnGoalEdit"
       style="width:84px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;font-size:.74rem;text-align:right"/>`;
   };
 
@@ -881,7 +881,7 @@ export function _calcSecTk_distribucion(agg, distTotals, monthLabel) {
     const val = CALC_STATE.edits[k] !== undefined ? +CALC_STATE.edits[k] : Math.round(base);
     return `<input type="number" step="1" min="0" class="calc-inp" value="${val}"
       data-pk="${escapeHTML(partner)}" data-city="${escapeHTML(city)}" data-metric="${metric}"
-      onchange="calcOnGoalEdit(this)"
+      data-act-change="calcOnGoalEdit"
       style="width:90px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;font-size:.74rem;text-align:right"/>`;
   };
 
@@ -956,7 +956,7 @@ export function _calcSecActions() {
   const kamAll  = CALC_STATE.kam === "all";
   const saveBtn = !canSave
     ? `<button disabled title="Requiere permisos de administrador" style="padding:8px 16px;font-size:.8rem;background:#ccc;color:#fff;border:none;border-radius:8px;font-weight:800;cursor:not-allowed">💾 Actualizar metas (requiere admin)</button>`
-    : `<button style="padding:8px 16px;font-size:.8rem;background:#10b981;color:#fff;border:none;border-radius:8px;font-weight:800;cursor:pointer" onclick="calcSaveMetas()">💾 Actualizar metas (guardar en BD)</button>`;
+    : `<button style="padding:8px 16px;font-size:.8rem;background:#10b981;color:#fff;border:none;border-radius:8px;font-weight:800;cursor:pointer" data-act="calcSaveMetas">💾 Actualizar metas (guardar en BD)</button>`;
   const kamNote = (canSave && kamAll)
     ? `<div style="font-size:.7rem;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:6px 10px;margin-top:8px">⚠️ Para <strong>guardar</strong>, elige un KAM específico arriba (no "Todos los KAMs").</div>`
     : "";
@@ -966,8 +966,8 @@ export function _calcSecActions() {
       <div class="tbl-wrap">
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
           ${saveBtn}
-          <button style="padding:7px 14px;font-size:.78rem;background:#FF0000;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer" onclick="calcExportExcel()">📄 Descargar plantilla (CSV)</button>
-          <button style="padding:7px 14px;font-size:.78rem;background:#666;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer" onclick="calcResetEdits()">↺ Reset ediciones</button>
+          <button style="padding:7px 14px;font-size:.78rem;background:#FF0000;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer" data-act="calcExportExcel">📄 Descargar plantilla (CSV)</button>
+          <button style="padding:7px 14px;font-size:.78rem;background:#666;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer" data-act="calcResetEdits">↺ Reset ediciones</button>
         </div>
         ${kamNote}
         <div style="font-size:.7rem;color:#888;margin-top:8px;font-style:italic">
@@ -1153,7 +1153,7 @@ export function _calcSec5_exportPartner(agg, totals, aggTk, tkTotals, lastMonth,
   const genDate  = new Date().toLocaleDateString(lang === "en" ? "en-US" : "es-PE");
   const langBtns = [["es","ES"],["en","EN"],["es-en","ES/EN"]].map(([code, txt]) => {
     const on = lang === code;
-    return `<button onclick="calcSetExportLang('${code}')" style="padding:7px 12px;font-size:.74rem;font-weight:700;border:none;cursor:pointer;background:${on?"#10b981":"#fff"};color:${on?"#fff":"#555"}">${txt}</button>`;
+    return `<button data-act="calcSetExportLang" data-code="${escapeHTML(code)}" style="padding:7px 12px;font-size:.74rem;font-weight:700;border:none;cursor:pointer;background:${on?"#10b981":"#fff"};color:${on?"#fff":"#555"}">${txt}</button>`;
   }).join("");
 
   return `
@@ -1164,17 +1164,17 @@ export function _calcSec5_exportPartner(agg, totals, aggTk, tkTotals, lastMonth,
           <label style="font-size:.68rem;color:#666;font-weight:700;display:block;margin-bottom:3px">Partner</label>
           <input type="text" id="calcExportSearch" class="sb-inp" placeholder="Buscar partner..." autocomplete="off"
             value="${escapeHTML(sel)}" style="width:240px"
-            oninput="calcFilterExportPartners(this.value)"
+            data-act-input="calcFilterExportPartners"
             onfocus="calcShowExportList()"
             onblur="setTimeout(calcHideExportList, 200)"
-            onkeydown="calcExportKeydown(event)"/>
+            data-act-keydown="calcExportKeydown"/>
           <div id="calcExportList" style="display:none;position:absolute;top:100%;left:0;width:240px;max-height:280px;overflow-y:auto;background:#fff;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:100;margin-top:2px"></div>
         </div>
         <div>
           <label style="font-size:.68rem;color:#666;font-weight:700;display:block;margin-bottom:3px">Idioma / Language</label>
           <div style="display:inline-flex;border:1px solid #ddd;border-radius:8px;overflow:hidden">${langBtns}</div>
         </div>
-        <button style="padding:7px 14px;font-size:.78rem;background:#10b981;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer" onclick="calcDownloadPartnerImage()">📥 Descargar Imagen</button>
+        <button style="padding:7px 14px;font-size:.78rem;background:#10b981;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer" data-act="calcDownloadPartnerImage">📥 Descargar Imagen</button>
       </div>
 
       <div id="calcExportCard" style="background:linear-gradient(135deg,#fff 0%,#fff8f8 100%);border:2px solid #FF0000;border-radius:12px;padding:20px;max-width:560px">
@@ -1503,7 +1503,7 @@ export function _calcPaintExportList(q) {
   list.innerHTML = filtered.slice(0, 100).map(p => {
     const c = STATE.partnerColors[p] || "#888";
     const sel = p === CALC_STATE.selPartnerExport;
-    return `<div class="pv-opt" onmousedown="calcSelectExportPartner('${escapeJSAttr(p)}')"
+    return `<div class="pv-opt" data-act-mousedown="calcSelectExportPartner" data-partner="${escapeHTML(p)}"
       style="padding:7px 12px;font-size:.78rem;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid #f3f3f3;${sel ? 'background:#fff0f0;font-weight:700' : ''}">
       <span style="width:7px;height:7px;border-radius:50%;background:${c};flex-shrink:0"></span>
       <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(p)}</span>
@@ -1540,3 +1540,18 @@ export function _calcCurrentAgg() {
     : rows.filter(r => (r.kam || getKAMForPartner(r.partner)) === CALC_STATE.kam);
   return _calcAggByPartnerCity(filteredRows, last3Set);
 }
+
+// ── ACCIONES DELEGADAS (Fase A2) ─────────────────────────────────────────────
+import { registerActions } from "./shared/actions.js";
+
+registerActions({
+  calcSetTab:        d => calcSetTab(d.key),
+  calcOnKamChange:   (d, el) => calcOnKamChange(el.value),
+  calcApplyChanges, calcSaveMetas, calcExportExcel, calcResetEdits, calcDownloadPartnerImage,
+  calcOnKamGoalChange: (d, el) => calcOnKamGoalChange(d.metric, el.value),
+  calcOnGoalEdit:      (d, el) => calcOnGoalEdit(el),
+  calcSetExportLang:   d => calcSetExportLang(d.code),
+  calcFilterExportPartners: (d, el) => calcFilterExportPartners(el.value),
+  calcExportKeydown:        (d, el, e) => calcExportKeydown(e),
+  calcSelectExportPartner:  d => calcSelectExportPartner(d.partner)
+});

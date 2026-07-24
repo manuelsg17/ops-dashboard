@@ -6,18 +6,22 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <title>Yango Dashboard</title>
 
-  <!-- CSP: defensa en profundidad, no reemplaza el escapado del lado del cliente.
-       'unsafe-inline' en script/style-src es necesario porque la app usa cientos de
-       onclick="..."/onchange="..." y style="..." inline (sin build step que genere
-       nonces) — esto NO bloquea la ejecucion de un onerror/onclick inyectado si el
-       escapado se rompe de nuevo; lo que SI aporta es: bloquear carga de <script src>
-       apuntando a dominios no listados, bloquear <object>/plugins, restringir a donde
-       puede conectarse fetch (exfiltracion) y de donde puede venir un <base> tag.
-       frame-ancestors no se incluye: el spec de CSP lo ignora cuando se entrega via
-       <meta> (solo funciona como header HTTP) — requeriria configurarlo en el hosting. -->
+  <!-- CSP ESTRICTA para scripts (Fase A2). script-src ya NO lleva 'unsafe-inline':
+       al migrar los ~173 handlers inline (onclick=…) a event delegation
+       (src/shared/actions.js) y bundlear todo con Vite, no queda JS inline ni
+       CDN externo. Ahora sí bloquea de verdad la ejecución de un onerror/onclick
+       inyectado — no es solo defensa en profundidad como antes.
+
+       style-src CONSERVA 'unsafe-inline' a propósito: hay 1200+ atributos
+       style="…" en los templates y ApexCharts inyecta estilos inline; migrarlos
+       a clases sería un refactor enorme con beneficio bajo (un style inyectado
+       puede afear la UI, no ejecutar código). Decisión consciente, no olvido.
+
+       frame-ancestors no se incluye: el spec lo ignora vía <meta> (solo funciona
+       como header HTTP) — hay que configurarlo en el hosting. -->
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
-    script-src 'self' 'unsafe-inline';
+    script-src 'self';
     style-src 'self' 'unsafe-inline';
     img-src 'self' data: blob:;
     font-src 'self' data:;
