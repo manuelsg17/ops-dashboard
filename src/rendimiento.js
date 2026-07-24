@@ -7,13 +7,13 @@
 // = Taxi + TukTuk (conjuntos disjuntos: TukTuk se excluye de rawData al cargar, así
 // que el concat no double-cuenta). El diario no trae db_id (sin sub-flota) →
 // Fleet/TukTuk/Combinado se deshabilitan y cae a Agregador.
-function _rendLine() {
+export function _rendLine() {
   let line = STATE.rendLine || "agg";
   if (STATE.curMode === "diario" && line !== "agg") line = "agg";
   return line;
 }
 // Dataset completo (todas las fechas) de la línea activa para la escala actual.
-function _rendLineDataset() {
+export function _rendLineDataset() {
   const line = _rendLine();
   if (line === "agg") return STATE.rawData;
   const mensual = STATE.curMode === "mensual";
@@ -25,11 +25,11 @@ function _rendLineDataset() {
 // Partners fuera de la lista del sidebar (solo-TukTuk, ej. PIAGGIO): el usuario no
 // puede (des)marcarlos porque la lista se construye del dataset Taxi → en las líneas
 // TukTuk/Combinado se tratan como siempre-incluidos (excluirlos mudo sub-contaba).
-function _lineSelHas(selSet, sidebarSet, partner) {
+export function _lineSelHas(selSet, sidebarSet, partner) {
   return selSet.has(partner) || !sidebarSet.has(partner);
 }
 // Filas de la línea filtradas por ciudad/fecha/partner (espeja getFiltered()).
-function _rendLineFiltered() {
+export function _rendLineFiltered() {
   if (_rendLine() === "agg") return getFiltered();
   const f = getCurrentFilters();
   const selSet = new Set(f.selected);
@@ -42,7 +42,7 @@ function _rendLineFiltered() {
 }
 // Filas de prevDate (fuera del rango) para la línea. Agregador usa el índice _byDate;
 // Fleet/TukTuk filtran su slice (arrays pequeños, sin índice dedicado).
-function _rendLinePrev(prevDate, city) {
+export function _rendLinePrev(prevDate, city) {
   if (!prevDate) return [];
   if (_rendLine() === "agg") {
     const base = (STATE._byDate && STATE._byDate.get(prevDate))
@@ -54,7 +54,7 @@ function _rendLinePrev(prevDate, city) {
 
 // Barra segmentada de línea de negocio (reusa .mode-toggle-row/.mode-btn del selector
 // de escala). En diario, Fleet/TukTuk quedan deshabilitados (sin datos por sub-flota).
-function rendLineToggleHTML() {
+export function rendLineToggleHTML() {
   const line   = _rendLine();
   const diario = STATE.curMode === "diario";
   const defs = [
@@ -76,7 +76,7 @@ function rendLineToggleHTML() {
     : "";
   return `<div class="mode-toggle-row" style="margin:0 4px 12px">${btns}${note}</div>`;
 }
-function setRendLine(line) {
+export function setRendLine(line) {
   if ((STATE.rendLine || "agg") === line) return;
   if (STATE.curMode === "diario" && line !== "agg") return;
   STATE.rendLine = line;
@@ -85,12 +85,12 @@ function setRendLine(line) {
 
 // Guard de reentrancia: evita que dos renderRend() concurrentes se pisen.
 // Si llega un segundo render mientras el primero corre, se descarta.
-let _renderRendBusy  = false;
+export let _renderRendBusy  = false;
 // Token incremental: la cola de charts diferidos verifica este token. Si llega
 // un nuevo renderRend, el pump de charts del render anterior se aborta.
-let _renderRendToken = 0;
+export let _renderRendToken = 0;
 
-function renderRend() {
+export function renderRend() {
   if (_renderRendBusy) return;
   if (!STATE.rawData.length) return;
   _renderRendBusy  = true;
@@ -102,7 +102,7 @@ function renderRend() {
   }
 }
 
-function _renderRendImpl() {
+export function _renderRendImpl() {
   // Garantiza índices secundarios construidos (defensivo contra cache/races)
   ensureIndexes();
 
@@ -382,7 +382,7 @@ function _renderRendImpl() {
 }
 
 // ── METRIC CARD ───────────────────────────────────────────────────────────────
-function mkMetricCard(label, icon, val, prevWk, apd, lastRows, prevRows, metric, color, isCum) {
+export function mkMetricCard(label, icon, val, prevWk, apd, lastRows, prevRows, metric, color, isCum) {
   function gv(rows) {
     if (metric === "nr") return sumR(rows, r => r.newPartner + r.newService + r.reactivated);
     if (metric === "sh") return sumR(rows, r => r.supplyHours);
@@ -422,7 +422,7 @@ function mkMetricCard(label, icon, val, prevWk, apd, lastRows, prevRows, metric,
 }
 
 // ── TABLE ─────────────────────────────────────────────────────────────────────
-function buildTable(apd, lastDate, prevDate, sel) {
+export function buildTable(apd, lastDate, prevDate, sel) {
   const selSet = new Set(sel);
   const lR    = apd.filter(r => r.date === lastDate);
   const _pAll = _rendLinePrev(prevDate, null);
@@ -488,7 +488,7 @@ function buildTable(apd, lastDate, prevDate, sel) {
   renderTable();
 }
 
-function renderTable() {
+export function renderTable() {
   const sorted = STATE.curSummaries.slice().sort((a, b) => {
     const va = a[STATE.tblSort.col], vb = b[STATE.tblSort.col];
     if (typeof va === "string")
@@ -533,7 +533,7 @@ function renderTable() {
   if (el) el.innerHTML = h;
 }
 
-function sortTbl(col) {
+export function sortTbl(col) {
   if (STATE.tblSort.col === col)
     STATE.tblSort.dir = STATE.tblSort.dir === "asc" ? "desc" : "asc";
   else { STATE.tblSort.col = col; STATE.tblSort.dir = "desc"; }
@@ -568,7 +568,7 @@ function sortTbl(col) {
 }
 
 // ── PARTNER CARDS ─────────────────────────────────────────────────────────────
-function buildPartnerCards(apd, lastDate, prevDate, partners, sel) {
+export function buildPartnerCards(apd, lastDate, prevDate, partners, sel) {
   const grid = document.getElementById("partnerCards");
   if (!grid) return;
 
@@ -662,7 +662,7 @@ function buildPartnerCards(apd, lastDate, prevDate, partners, sel) {
 
 // ── KPIs DE LÍNEA (Fleet / TukTuk) — Fase 2 ───────────────────────────────────
 // Tarjeta KPI simple con badge WoW/MoM (reusa .mcard). val/prev ya agregados.
-function _rendKpiCard(label, icon, val, prev, color, fmtFn) {
+export function _rendKpiCard(label, icon, val, prev, color, fmtFn) {
   return `
     <div class="mcard" style="border-top:3px solid ${color}">
       <div class="mcard-label">${icon} ${label}</div>
@@ -683,7 +683,7 @@ function _rendKpiCard(label, icon, val, prev, color, fmtFn) {
 // Calidad/riesgo/dependencia (fraude, mal calificados, completion, subsidio, soporte,
 // % SH externo) SÍ son shares sin numerador/denominador propio en la BD → se ponderan
 // por trips (o por gmv en el caso de subsidio) igual que Aceptación.
-function _rendFleetAgg(rows) {
+export function _rendFleetAgg(rows) {
   let owned = 0, intSh = 0, extSh = 0, trips = 0, accW = 0, branded = 0, actCars = 0,
       gmv = 0, commission = 0,
       fraudW = 0, badRatedW = 0, complW = 0, supportW = 0, subsidyW = 0;
@@ -724,7 +724,7 @@ function _rendFleetAgg(rows) {
 }
 // Agrega KPIs Fleet por fecha (Peru total, todas las ciudades) — mismas fórmulas
 // que _rendFleetAgg, indexadas por fecha. Insumo de los charts de Tendencias.
-function _fleetAggByDate(rows) {
+export function _fleetAggByDate(rows) {
   const m = new Map();
   rows.forEach(r => { let a = m.get(r.date); if (!a) { a = []; m.set(r.date, a); } a.push(r); });
   const out = {};
@@ -733,18 +733,18 @@ function _fleetAggByDate(rows) {
 }
 // Línea de un KPI de flota (Peru total) a lo largo del rango filtrado (no solo el
 // último período — a diferencia de las tarjetas/tabla, que son snapshot).
-const _FLEET_TREND_LABEL = {
+export const _FLEET_TREND_LABEL = {
   owned: "Owned Cars", shCar: "SH / Auto", accept: "Aceptación %", branded: "Branded Cars",
   gmvPerCar: "GMV / Auto", externalShShare: "% SH Externo"
 };
-function buildFleetTrendLine(elId, dates, byDate, key, color) {
+export function buildFleetTrendLine(elId, dates, byDate, key, color) {
   const data = dates.map(d => (byDate[d] ? byDate[d][key] : 0) || 0);
   buildLineChart(elId, dates, [{ name: _FLEET_TREND_LABEL[key] || key, data }], [color]);
 }
 // Donut "Owned Cars por Partner" — snapshot del último período, Top 6 + Otros.
 // Parts-of-whole (dónde se concentra la flota) → donut es la elección correcta,
 // no una línea (no es serie de tiempo).
-function _buildFleetOwnedDonut(lastRows) {
+export function _buildFleetOwnedDonut(lastRows) {
   const byP = new Map();
   lastRows.forEach(r => {
     const v = r.ownedFleetActiveCars || 0;
@@ -762,7 +762,7 @@ function _buildFleetOwnedDonut(lastRows) {
   buildDonutChart("chF_ownedDonut", labels, series, colors);
 }
 // Donut "Brandeados vs No Brandeados" — snapshot del último período, Peru total.
-function _buildFleetBrandedDonut(lastRows) {
+export function _buildFleetBrandedDonut(lastRows) {
   const agg = _rendFleetAgg(lastRows);
   const noBranded = Math.max(agg.owned - agg.branded, 0);
   buildDonutChart("chF_brandedDonut", ["Brandeados", "No brandeados"], [agg.branded, noBranded], ["#f59e0b", "#e2e8f0"]);
@@ -770,7 +770,7 @@ function _buildFleetBrandedDonut(lastRows) {
 // Programa los charts de Fleet (tendencias + composición) diferidos con RAF — mismo
 // patrón anti-freeze que pumpCharts() de Agregador. Aborta si cambia filtro/tab/línea
 // mientras corre (evita pintar charts sobre un render ya obsoleto).
-function _scheduleFleetCharts(filtered, dates, lastRows) {
+export function _scheduleFleetCharts(filtered, dates, lastRows) {
   const tokenAtSchedule = _renderRendToken;
   const tabTokenAtSched = STATE._tabRenderId;
   const byDate = _fleetAggByDate(filtered);
@@ -797,7 +797,7 @@ function _scheduleFleetCharts(filtered, dates, lastRows) {
 // Vista Fleet completa (SOLO KPIs de flota): Perú general + por ciudad + por partner.
 // lastRows/prevRows = filas CRUDAS de sub-flotas Fleet (una por fleetroom-ciudad) del
 // último período y del anterior. NO se usan AD/SH/N+R (mezclados a nivel fleetroom).
-function _renderFleetView(lastRows, prevRows, lastDate, prevDate) {
+export function _renderFleetView(lastRows, prevRows, lastDate, prevDate) {
   const periodLabel = STATE.curMode === "mensual" ? "último mes" : "última semana";
   let html = rendLineToggleHTML();
 
@@ -876,7 +876,7 @@ function _renderFleetView(lastRows, prevRows, lastDate, prevDate) {
   html += `<div class="section"><div class="tbl-wrap">${_rendFleetPartnerTable(lastRows, prevRows)}</div></div>`;
   return html;
 }
-function _rendFleetCardsBody(c, p) {
+export function _rendFleetCardsBody(c, p) {
   const pct = v => fmt(v) + "%";
   // 10 tarjetas: el grid de 3 columnas de .metric-row se sobre-escribe inline con
   // auto-fit (no tocar la clase global — la usa también el Agregador con 3 cards).
@@ -898,7 +898,7 @@ function _rendFleetCardsBody(c, p) {
 // diferencia de _rendKpiCard, que es 1 tarjeta grande por métrica). Métricas de
 // calidad/riesgo/dependencia son secundarias — se leen mejor como checklist que
 // como 6 tiles gigantes.
-function _rendFleetScorecard(items) {
+export function _rendFleetScorecard(items) {
   return `<div class="mcard" style="border-top:3px solid #64748b">
     ${items.map(it => `
       <div class="city-kpi">
@@ -907,13 +907,13 @@ function _rendFleetScorecard(items) {
       </div>`).join("")}
   </div>`;
 }
-function _rendFleetCityKpi(label, val, prev, fmtFn) {
+export function _rendFleetCityKpi(label, val, prev, fmtFn) {
   return `<div class="city-kpi">
     <span class="city-kpi-label">${label}</span>
     <div class="city-kpi-right"><span class="city-kpi-val">${fmtFn(val)}</span>${bdgMode(val, prev, "mb-badge")}</div>
   </div>`;
 }
-function _rendFleetPartnerTable(lastRows, prevRows) {
+export function _rendFleetPartnerTable(lastRows, prevRows) {
   const groupBy = (rows) => {
     const m = new Map();
     rows.forEach(r => { let a = m.get(r.partner); if (!a) { a = []; m.set(r.partner, a); } a.push(r); });
@@ -947,7 +947,7 @@ function _rendFleetPartnerTable(lastRows, prevRows) {
   h += `</tbody></table>`;
   return h;
 }
-function _rendTkKPIs(lastRows, prevRows) {
+export function _rendTkKPIs(lastRows, prevRows) {
   const agg = rows => {
     let branded = 0, actCars = 0;
     rows.forEach(r => { branded += r.brandedActiveCars || 0; actCars += r.activeCars || 0; });
@@ -963,7 +963,7 @@ function _rendTkKPIs(lastRows, prevRows) {
 }
 
 // ── SECTION HEADER ─────────────────────────────────────────────────────────────
-function secH(icon, bg, title, sub, tag) {
+export function secH(icon, bg, title, sub, tag) {
   return `<div class="sh">
     <div class="sh-icon" style="background:${bg}20">${icon}</div>
     <div>
@@ -972,4 +972,19 @@ function secH(icon, bg, title, sub, tag) {
     </div>
     ${tag ? `<span class="sh-tag">${tag}</span>` : ""}
   </div>`;
+}
+
+// Variante compacta de section header (sin fondo de ícono ni tag) — vivía en
+// insights.js (borrado en Fase A0 por no tener ruta de UI propia), pero
+// calculator.js/partnerView.js/seguimiento.js seguían usándola como global.
+// Restaurada acá al detectar el ReferenceError durante la conversión a módulos ES.
+export function _secH(emoji, color, title, subtitle) {
+  return `
+    <div style="display:flex;align-items:center;gap:10px;margin:18px 0 8px;padding:0 4px">
+      <div style="font-size:1.1rem">${emoji}</div>
+      <div style="flex:1">
+        <div style="font-size:.92rem;font-weight:800;color:#111">${escapeHTML(title)}</div>
+        <div style="font-size:.7rem;color:#888">${escapeHTML(subtitle)}</div>
+      </div>
+    </div>`;
 }

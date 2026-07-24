@@ -4,24 +4,24 @@
 // (timeline por día/semana/mes, marca de hoy, agrupado por proyecto) + slide render-only
 // del deck de Presentación 2.0 (entra al PDF). Escrituras admin-gated (RLS 42501).
 
-const SEG_STATE = { partner: null, draft: [], deleted: [] };
+export const SEG_STATE = { partner: null, draft: [], deleted: [] };
 
-const SEG_STATUS = [
+export const SEG_STATUS = [
   { key: "pendiente", es: "Pendiente", en: "Pending",     color: "#9ca3af" },
   { key: "en_curso",  es: "En curso",  en: "In progress", color: "#3b82f6" },
   { key: "hecho",     es: "Hecho",     en: "Done",        color: "#10b981" },
   { key: "bloqueado", es: "Bloqueado", en: "Blocked",     color: "#ef4444" }
 ];
-function _segStatus(k) { return SEG_STATUS.find(s => s.key === k) || SEG_STATUS[0]; }
-function _segStatusColor(k) { return _segStatus(k).color; }
-function _segStatusLabel(k, en) { const s = _segStatus(k); return en ? s.en : s.es; }
-function _segProjColor(name) { return (typeof hashColor === "function") ? hashColor("proj:" + (name || "")) : "#64748b"; }
+export function _segStatus(k) { return SEG_STATUS.find(s => s.key === k) || SEG_STATUS[0]; }
+export function _segStatusColor(k) { return _segStatus(k).color; }
+export function _segStatusLabel(k, en) { const s = _segStatus(k); return en ? s.en : s.es; }
+export function _segProjColor(name) { return (typeof hashColor === "function") ? hashColor("proj:" + (name || "")) : "#64748b"; }
 
-function _segPartners() { return (STATE.allPartners || []).slice().sort(); }
+export function _segPartners() { return (STATE.allPartners || []).slice().sort(); }
 
 // Copia editable de las filas del partner (draft). Se recarga al cambiar de partner o
 // tras guardar; NO se pisa en re-render (para no perder ediciones en curso).
-function _segLoadDraft(partner) {
+export function _segLoadDraft(partner) {
   SEG_STATE.draft = (STATE.seguimientoData || [])
     .filter(r => r.partner === partner)
     .sort((a, b) => String(a.project || "").localeCompare(String(b.project || ""))
@@ -37,28 +37,28 @@ function _segLoadDraft(partner) {
 }
 
 // Orden de proyectos (primera aparición en el draft/rows). "" → grupo "Sin proyecto".
-function _segProjectOrder(rows) {
+export function _segProjectOrder(rows) {
   const seen = new Set(), out = [];
   (rows || []).forEach(r => { const p = r.project || ""; if (!seen.has(p)) { seen.add(p); out.push(p); } });
   return out;
 }
-function _segProjLabel(p, en) { return p || (en ? "No project" : "Sin proyecto"); }
+export function _segProjLabel(p, en) { return p || (en ? "No project" : "Sin proyecto"); }
 
 // ── Fechas / timeline ─────────────────────────────────────────────────────────
-function _segParseDate(s) {
+export function _segParseDate(s) {
   if (!s) return null;
   const p = String(s).slice(0, 10).split("-").map(Number);
   if (p.length < 3 || !p[0]) return null;
   return new Date(p[0], p[1] - 1, p[2]);
 }
-function _segToday() { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
-function _segFmtD(d) { return d ? `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}` : "—"; }
-function _segMonths(en) {
+export function _segToday() { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+export function _segFmtD(d) { return d ? `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}` : "—"; }
+export function _segMonths(en) {
   return en ? ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
             : ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 }
 // Columnas del Gantt: DÍA si el rango es corto (≤24d), SEMANA si medio (≤168d), MES si largo.
-function _segTimeline(rows, en) {
+export function _segTimeline(rows, en) {
   const ds = [];
   rows.forEach(r => { const a = _segParseDate(r.start_date), b = _segParseDate(r.end_date); if (a) ds.push(+a); if (b) ds.push(+b); });
   if (!ds.length) return null;
@@ -80,7 +80,7 @@ function _segTimeline(rows, en) {
   return { cols, bucket: "month" };
 }
 // Índice [inicio,fin] de columnas que ocupa una tarea (o null si no tiene fechas).
-function _segBar(r, tl) {
+export function _segBar(r, tl) {
   const a = _segParseDate(r.start_date), b = _segParseDate(r.end_date), ts = a || b, te = b || a;
   if (!tl || !ts || !te) return null;
   let bs = -1, be = -1;
@@ -90,7 +90,7 @@ function _segBar(r, tl) {
 }
 
 // ── GANTT reutilizable (tab + PDF). rows = filas del partner; opts.en idioma. ────
-function _segBuildGantt(rows, opts) {
+export function _segBuildGantt(rows, opts) {
   opts = opts || {};
   const en = !!opts.en;
   const tasks = (rows || []).filter(r => (r.task || "").trim());
@@ -166,13 +166,13 @@ function _segBuildGantt(rows, opts) {
 }
 
 // Solo el Gantt (repinta #segGantt desde el draft, sin re-render del editor → no pierde foco).
-function _segRenderGantt() {
+export function _segRenderGantt() {
   const g = document.getElementById("segGantt");
   if (g) g.innerHTML = _segBuildGantt(SEG_STATE.draft, { en: false });
 }
 
 // ── RENDER DEL TAB ──────────────────────────────────────────────────────────
-function renderSeguimiento() {
+export function renderSeguimiento() {
   const host = document.getElementById("tab-seguimiento");
   if (!host) return;
   const partners = _segPartners();
@@ -255,28 +255,28 @@ function renderSeguimiento() {
 }
 
 // ── INTERACCIONES ────────────────────────────────────────────────────────────
-function segOnPartnerChange(p) { SEG_STATE.partner = p; _segLoadDraft(p); renderSeguimiento(); }
-function segSet(i, field, val) { if (SEG_STATE.draft[i]) { SEG_STATE.draft[i][field] = val; _segRenderGantt(); } }
-function segAddProject() {
+export function segOnPartnerChange(p) { SEG_STATE.partner = p; _segLoadDraft(p); renderSeguimiento(); }
+export function segSet(i, field, val) { if (SEG_STATE.draft[i]) { SEG_STATE.draft[i][field] = val; _segRenderGantt(); } }
+export function segAddProject() {
   const name = prompt("Nombre del proyecto:", "");
   if (name === null) return;
   SEG_STATE.draft.push({ project: (name || "").trim(), owner: "", task: "", start_date: "", end_date: "", expected_result: "", status: "pendiente" });
   renderSeguimiento();
 }
-function segAddTaskTo(pIdx) {
+export function segAddTaskTo(pIdx) {
   const order = _segProjectOrder(SEG_STATE.draft);
   const project = pIdx >= 0 && pIdx < order.length ? order[pIdx] : "";
   SEG_STATE.draft.push({ project, owner: "", task: "", start_date: "", end_date: "", expected_result: "", status: "pendiente" });
   renderSeguimiento();
 }
-function segRenameProject(pIdx, newName) {
+export function segRenameProject(pIdx, newName) {
   const order = _segProjectOrder(SEG_STATE.draft);
   const oldName = order[pIdx]; if (oldName === undefined) return;
   const nn = (newName || "").trim();
   SEG_STATE.draft.forEach(r => { if ((r.project || "") === oldName) r.project = nn; });
   renderSeguimiento();
 }
-function segDeleteProject(pIdx) {
+export function segDeleteProject(pIdx) {
   const order = _segProjectOrder(SEG_STATE.draft);
   const name = order[pIdx]; if (name === undefined) return;
   const gTasks = SEG_STATE.draft.filter(r => (r.project || "") === name);
@@ -285,7 +285,7 @@ function segDeleteProject(pIdx) {
   SEG_STATE.draft = SEG_STATE.draft.filter(r => (r.project || "") !== name);
   renderSeguimiento();
 }
-function segDeleteRow(i) {
+export function segDeleteRow(i) {
   const r = SEG_STATE.draft[i];
   if (r && r.id) SEG_STATE.deleted.push(r.id);
   SEG_STATE.draft.splice(i, 1);
@@ -293,7 +293,7 @@ function segDeleteRow(i) {
 }
 
 // ── GUARDAR (admin-gated: insert nuevas · upsert existentes · delete removidas) ─
-async function segSave() {
+export async function segSave() {
   if (!STATE.isAdmin) { alert("Guardar el seguimiento requiere permisos de administrador."); return; }
   const partner = SEG_STATE.partner;
   const kam = (typeof getKAMForPartner === "function" && getKAMForPartner(partner)) || "";
@@ -340,10 +340,10 @@ async function segSave() {
 }
 
 // ── SLIDE DEL DECK (Presentación 2.0) — render-only, entra al PDF ──────────────
-function p2PartnerHasSeguimiento(partner) {
+export function p2PartnerHasSeguimiento(partner) {
   return (STATE.seguimientoData || []).some(r => r.partner === partner && (r.task || "").trim());
 }
-function buildSlide2Seguimiento(partner, idx) {
+export function buildSlide2Seguimiento(partner, idx) {
   const es = !(typeof PRESENT2_STATE !== "undefined" && PRESENT2_STATE.lang === "en");
   const en = !es;
   const rows = (STATE.seguimientoData || []).filter(r => r.partner === partner);

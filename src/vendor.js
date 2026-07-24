@@ -30,16 +30,33 @@ window.Chart       = Chart;
 window.html2canvas = html2canvas;
 window.jspdf       = { jsPDF };
 
-// ── Módulos de app ya convertidos a ES (Fase A2) ─────────────────────────────
-// Se importan acá (parte del grafo de módulos, corren antes que los <script
-// defer> clásicos de public/) y se espejan a window para que los archivos aún
-// clásicos los sigan leyendo como globales. A medida que cada consumidor se
-// convierta a módulo, importará directo desde el módulo y saldrá de este espejo.
-import * as config   from "./core/config.js";
-import * as security from "./core/security.js";
-import * as format   from "./core/format.js";
-import * as dates    from "./core/dates.js";
-import * as data     from "./data.js";
-import * as auth     from "./auth.js";
-import * as charts   from "./charts.js";
-Object.assign(window, config, security, format, dates, data, auth, charts);
+// ── Módulos de app (Fase A2 completa: los 16 archivos ya son módulos ES) ─────
+// Todo el código de la app vive en módulos ES ahora — ya no hay <script defer>
+// clásicos en index.html. Igual se espeja todo a window (Object.assign) porque
+// las funciones se siguen invocando desde HANDLERS INLINE del HTML (onclick=
+// "fn(...)", ~183 de ellos) — eso requiere que `fn` exista como global. Matar
+// ese espejo requiere primero migrar los onclick a event delegation (próxima
+// fase de A2), momento en el que este Object.assign deja de hacer falta.
+import * as config       from "./core/config.js";
+import * as security     from "./core/security.js";
+import * as format       from "./core/format.js";
+import * as dates        from "./core/dates.js";
+import * as data         from "./data.js";
+import * as auth         from "./auth.js";
+import * as charts       from "./charts.js";
+import * as rendimiento  from "./rendimiento.js";
+import * as metas        from "./metas.js";
+import * as app          from "./app.js";
+import * as unifview     from "./unifview.js";
+import * as rawdata      from "./rawdata.js";
+import * as partnerView  from "./partnerView.js";
+import * as calculator   from "./calculator.js";
+import * as seguimiento  from "./seguimiento.js";
+import * as fleetexterno from "./fleetexterno.js";
+import * as forecast     from "./forecast.js";
+import * as presentacion2 from "./presentacion2.js";
+Object.assign(window,
+  config, security, format, dates, data, auth, charts,
+  rendimiento, metas, app, unifview, rawdata, partnerView,
+  calculator, seguimiento, fleetexterno, forecast, presentacion2
+);

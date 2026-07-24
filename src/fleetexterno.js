@@ -5,7 +5,7 @@
 // La config (URL + anon key) se pega desde la UI y vive en localStorage (no se
 // commitea). NUNCA usar service_role ni password aquí — el frontend es público.
 
-const FLEET_EXT_STATE = {
+export const FLEET_EXT_STATE = {
   search: "",        // buscador dentro de la tabla seleccionada
   tableFilter: "",   // filtro de la lista de tablas
   table: "",         // tabla actualmente seleccionada
@@ -13,9 +13,9 @@ const FLEET_EXT_STATE = {
   schemaLoaded: false,
   schemaError: null
 };
-let _fleetExtClientCache = null;
+export let _fleetExtClientCache = null;
 
-function _fleetExtClient() {
+export function _fleetExtClient() {
   if (_fleetExtClientCache) return _fleetExtClientCache;
   if (typeof supabase === "undefined" || !supabase.createClient) return null;
   _fleetExtClientCache = supabase.createClient(FLEET_EXT.url, FLEET_EXT.anonKey);
@@ -24,7 +24,7 @@ function _fleetExtClient() {
 
 // Descubre el esquema: GET {url}/rest/v1/ → OpenAPI con todas las tablas/vistas que
 // el rol anónimo puede leer, con sus columnas y tipos.
-async function loadFleetExtSchema(force) {
+export async function loadFleetExtSchema(force) {
   if (!FLEET_EXT.enabled) { FLEET_EXT_STATE.schemaLoaded = true; return; }
   if (FLEET_EXT_STATE.schemaLoaded && !force) return;
   FLEET_EXT_STATE.schemaError = null;
@@ -53,7 +53,7 @@ async function loadFleetExtSchema(force) {
 }
 
 // Lee las filas de la tabla seleccionada.
-async function loadFleetExterno(force) {
+export async function loadFleetExterno(force) {
   const table = FLEET_EXT_STATE.table || FLEET_EXT.table;
   if (!FLEET_EXT.enabled || !table) {
     STATE.fleetExterno = []; STATE.fleetExternoCols = []; STATE.fleetExternoError = null; STATE.fleetExternoLoaded = true;
@@ -77,7 +77,7 @@ async function loadFleetExterno(force) {
 }
 
 // ── RENDER (orquestador) ───────────────────────────────────────────────────────
-function renderFleetExterno() {
+export function renderFleetExterno() {
   const el = document.getElementById("fleetExternoContent");
   if (!el) return;
 
@@ -101,7 +101,7 @@ function renderFleetExterno() {
 }
 
 // ── PANELES ────────────────────────────────────────────────────────────────────
-function _fleetExtSetupPanel() {
+export function _fleetExtSetupPanel() {
   return secH("🛞", "#0ea5e9", "Fleet Externo", "Conectar la base del colega (solo-lectura, en vivo) y explorar toda su data de fleet", "") + `
     <div class="section" style="max-width:720px">
       <div style="font-size:.8rem;color:#334155;background:#f0f9ff;border-left:3px solid #0ea5e9;padding:10px 14px;border-radius:6px;margin-bottom:14px">
@@ -125,7 +125,7 @@ grant select on all tables in schema public to anon;
     </div>`;
 }
 
-function _fleetExtErrorPanel(msg, isSchema) {
+export function _fleetExtErrorPanel(msg, isSchema) {
   return secH("🛞", "#ef4444", "Fleet Externo", isSchema ? "No se pudo descubrir el esquema" : "No se pudo leer la tabla", "") + `
     <div class="section" style="max-width:720px">
       <div style="font-size:.82rem;color:#991b1b;background:#fff5f5;border-left:3px solid #ef4444;padding:10px 14px;border-radius:6px">
@@ -144,7 +144,7 @@ function _fleetExtErrorPanel(msg, isSchema) {
 }
 
 // Explorador: lista de tablas (izq) + datos de la tabla seleccionada (der/abajo).
-function _fleetExtExplorer(loadingData) {
+export function _fleetExtExplorer(loadingData) {
   const tables = FLEET_EXT_STATE.schema || [];
   const host   = (FLEET_EXT.url || "").replace(/^https?:\/\//, "");
   const tf     = (FLEET_EXT_STATE.tableFilter || "").toLowerCase().trim();
@@ -225,7 +225,7 @@ function _fleetExtExplorer(loadingData) {
 }
 
 // ── ACCIONES ───────────────────────────────────────────────────────────────────
-function selectFleetExtTable(name) {
+export function selectFleetExtTable(name) {
   FLEET_EXT_STATE.table = name;
   FLEET_EXT_STATE.search = "";
   STATE.fleetExternoLoaded = false;
@@ -238,13 +238,13 @@ function selectFleetExtTable(name) {
   renderFleetExterno();
 }
 
-function fleetExtReload() {
+export function fleetExtReload() {
   FLEET_EXT_STATE.schemaLoaded = false; FLEET_EXT_STATE.schemaError = null;
   STATE.fleetExternoLoaded = false; STATE.fleetExternoError = null;
   renderFleetExterno();
 }
 
-function fleetExtSaveConfig() {
+export function fleetExtSaveConfig() {
   const url     = (document.getElementById("fleetExtUrl")?.value || "").trim();
   const anonKey = (document.getElementById("fleetExtKey")?.value || "").trim();
   if (!url || !anonKey) { showBanner(false, "Completá URL y anon key."); return; }
@@ -259,7 +259,7 @@ function fleetExtSaveConfig() {
   renderFleetExterno();
 }
 
-function fleetExtClearConfig() {
+export function fleetExtClearConfig() {
   localStorage.removeItem("yangoFleetExtConfig");
   Object.assign(FLEET_EXT, { enabled: false, url: "", anonKey: "", table: "" });
   _fleetExtClientCache = null;
@@ -269,16 +269,16 @@ function fleetExtClearConfig() {
 }
 
 // Inputs sin perder foco (mismo patrón que Data Raw).
-function _fleetExtRefocus(inp) {
+export function _fleetExtRefocus(inp) {
   const id = inp.id, pos = inp.selectionStart;
   renderFleetExterno();
   const el = id && document.getElementById(id);
   if (el) { el.focus(); try { el.setSelectionRange(pos, pos); } catch (e) {} }
 }
-function fleetExtSearchInput(inp)      { FLEET_EXT_STATE.search = inp.value;      _fleetExtRefocus(inp); }
-function fleetExtTableFilterInput(inp) { FLEET_EXT_STATE.tableFilter = inp.value; _fleetExtRefocus(inp); }
+export function fleetExtSearchInput(inp)      { FLEET_EXT_STATE.search = inp.value;      _fleetExtRefocus(inp); }
+export function fleetExtTableFilterInput(inp) { FLEET_EXT_STATE.tableFilter = inp.value; _fleetExtRefocus(inp); }
 
-function exportFleetExtCSV() {
+export function exportFleetExtCSV() {
   const rows = STATE.fleetExterno || [], cols = STATE.fleetExternoCols || [];
   if (!rows.length) { showBanner(false, "No hay data para exportar."); return; }
   const esc = v => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };

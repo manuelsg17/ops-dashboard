@@ -1,18 +1,18 @@
 // app.js — Inicialización principal, sidebar, tabs y helpers de UI
 
 // ── CONFIG PAGINATION STATE ───────────────────────────────────────────────────
-const CONFIG_STATE = { page: 0, search: "", kamFilter: "all", PAGE_SIZE: 20 };
+export const CONFIG_STATE = { page: 0, search: "", kamFilter: "all", PAGE_SIZE: 20 };
 
 // ── LOCALSTORAGE HELPER ───────────────────────────────────────────────────────
-function lsSet(key, val) {
+export function lsSet(key, val) {
   try { localStorage.setItem(key, val); } catch (e) { /* QuotaExceededError o privado */ }
 }
-function lsGet(key) {
+export function lsGet(key) {
   try { return localStorage.getItem(key); } catch (e) { return null; }
 }
 
 // ── DEBOUNCE ──────────────────────────────────────────────────────────────────
-function debounce(fn, ms) {
+export function debounce(fn, ms) {
   let t;
   const wrapped = (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
   wrapped.cancel = () => { clearTimeout(t); t = null; };
@@ -20,16 +20,16 @@ function debounce(fn, ms) {
 }
 
 // Timers a nivel modulo para que switchTab pueda cancelarlos al salir del tab
-let _pSearchTimer = null;
-let _sidebarResizeTimer = null;
+export let _pSearchTimer = null;
+export let _sidebarResizeTimer = null;
 // Debounce de applyFilters expuesto a nivel modulo (se inicializa en initApp).
 // setDatePreset() lo cancela antes de llamar applyFilters() directo para no
 // solapar dos renders.
-let _debouncedApply       = null;
-function _debouncedApplyCancel() { if (_debouncedApply && _debouncedApply.cancel) _debouncedApply.cancel(); }
+export let _debouncedApply       = null;
+export function _debouncedApplyCancel() { if (_debouncedApply && _debouncedApply.cancel) _debouncedApply.cancel(); }
 
 // ── APP INIT ──────────────────────────────────────────────────────────────────
-function initApp() {
+export function initApp() {
   // Restaurar configuración de alerta de declive
   try {
     const d = JSON.parse(lsGet("yangoDecline") || "{}");
@@ -90,13 +90,13 @@ function initApp() {
   loadFromSupabase();
 }
 
-function toggleUploadMenu(e) {
+export function toggleUploadMenu(e) {
   e.stopPropagation();
   document.getElementById("uploadMenu").classList.toggle("open");
 }
 
 // ── NAV ANÁLISIS DROPDOWN ─────────────────────────────────────────────────────
-function toggleAnalisisMenu(e) {
+export function toggleAnalisisMenu(e) {
   e.stopPropagation();
   const menu = document.getElementById("analisisMenu");
   const wrap = document.getElementById("navAnalisisWrap");
@@ -104,17 +104,17 @@ function toggleAnalisisMenu(e) {
   wrap.classList.toggle("menu-open", menu.classList.contains("open"));
 }
 
-function switchTabFromMenu(tab) {
+export function switchTabFromMenu(tab) {
   document.getElementById("analisisMenu").classList.remove("open");
   document.getElementById("navAnalisisWrap").classList.remove("menu-open");
   switchTab(tab);
 }
 
 // ── SIDEBAR TOGGLE ────────────────────────────────────────────────────────────
-const _SVG_COLLAPSE = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>`;
-const _SVG_EXPAND   = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>`;
+export const _SVG_COLLAPSE = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>`;
+export const _SVG_EXPAND   = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>`;
 
-function toggleSidebar() {
+export function toggleSidebar() {
   const sb  = document.getElementById("mainSidebar");
   const btn = document.getElementById("sidebarToggle");
   const collapsed = sb.classList.toggle("collapsed");
@@ -126,7 +126,7 @@ function toggleSidebar() {
 }
 
 // ── FILTROS EN localStorage ───────────────────────────────────────────────────
-function saveFilters() {
+export function saveFilters() {
   const f = {
     dateFrom: document.getElementById("dateFrom")?.value,
     dateTo:   document.getElementById("dateTo")?.value,
@@ -139,7 +139,7 @@ function saveFilters() {
   lsSet("yangoFilters", JSON.stringify(f));
 }
 
-function restoreFilters() {
+export function restoreFilters() {
   const raw = lsGet("yangoFilters");
   if (!raw) return;
   try {
@@ -189,8 +189,8 @@ function restoreFilters() {
 }
 
 // ── MODE SWITCH (Semanal / Mensual) ───────────────────────────────────────────
-let _inSwitchMode = false; // guard: evita que restoreFilters() revierta el cambio de modo
-async function switchMode(mode) {
+export let _inSwitchMode = false; // guard: evita que restoreFilters() revierta el cambio de modo
+export async function switchMode(mode) {
   if (_inSwitchMode) return;
   _inSwitchMode = true;
 
@@ -245,7 +245,7 @@ async function switchMode(mode) {
 }
 
 // ── TAB NAVIGATION ────────────────────────────────────────────────────────────
-function switchTab(tab) {
+export function switchTab(tab) {
   const prevTab = STATE.curTab;
 
   // Guard reentrancia: doble-click rapido o nav simultaneo no debe lanzar
@@ -362,7 +362,7 @@ function switchTab(tab) {
   }
 }
 // ── SIDEBAR: DATES ────────────────────────────────────────────────────────────
-function popDates() {
+export function popDates() {
   const opts = STATE.allDates.map(d => `<option value="${d}">${d2s(d)}</option>`).join("");
   ["dateFrom", "dateTo"].forEach(id => {
     document.getElementById(id).innerHTML = opts;
@@ -376,14 +376,14 @@ function popDates() {
 // Suma N días a un string "YYYY-MM-DD" con aritmética 100% LOCAL (constructor y
 // getters multi-argumento de Date, nunca toISOString()/parseo de string, que son
 // UTC — Peru es UTC-5 fijo y de noche ya corre el día, desalineando el cálculo).
-function _addDaysToDateStr(str, n) {
+export function _addDaysToDateStr(str, n) {
   const [y, m, d] = str.split("-").map(Number);
   const dt = new Date(y, m - 1, d + n);
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
 }
 
 // ── DATE PRESETS ──────────────────────────────────────────────────────────────
-function setDatePreset(type) {
+export function setDatePreset(type) {
   const dates = STATE.allDates;
   if (!dates || !dates.length) return;
   // Todo ancla al ÚLTIMO DATO disponible (lastD), NUNCA al reloj real (new Date()):
@@ -457,7 +457,7 @@ function setDatePreset(type) {
 }
 
 // ── PRESETS DINÁMICOS POR ESCALA ─────────────────────────────────────────────
-function getPresetButtonsHTML() {
+export function getPresetButtonsHTML() {
   const defs = {
     diario:  [["today","Hoy"],["7d","7 días"],["14d","14 días"],["30d","30 días"],["90d","90 días"]],
     semanal: [["week","Esta semana"],["fortnight","Quincena"],["month","Este mes"]],
@@ -468,13 +468,13 @@ function getPresetButtonsHTML() {
     .join("");
 }
 
-function rerenderSidebarPresets() {
+export function rerenderSidebarPresets() {
   const el = document.getElementById("datePresets");
   if (el) el.innerHTML = getPresetButtonsHTML();
 }
 
 // ── SIDEBAR: KAM ─────────────────────────────────────────────────────────────
-function popKAM() {
+export function popKAM() {
   const kams = [...new Set(Object.values(STATE.KAM_MAP))].sort();
   document.getElementById("kamFilter").innerHTML =
     `<option value="all">Todos</option>` +
@@ -482,11 +482,11 @@ function popKAM() {
 }
 
 // ── SIDEBAR: PARTNERS ────────────────────────────────────────────────────────
-const VIRT_THRESHOLD = 100; // partners antes de activar virtualización
-const VIRT_ITEM_H   = 28;   // px por ítem (debe coincidir con CSS .pi height)
-const VIRT_VISIBLE  = 12;   // ítems visibles en la ventana
+export const VIRT_THRESHOLD = 100; // partners antes de activar virtualización
+export const VIRT_ITEM_H   = 28;   // px por ítem (debe coincidir con CSS .pi height)
+export const VIRT_VISIBLE  = 12;   // ítems visibles en la ventana
 
-function popPartners(selected) {
+export function popPartners(selected) {
   const list   = document.getElementById("pList");
   const selSet = new Set(selected);
 
@@ -520,7 +520,7 @@ function popPartners(selected) {
   renderWindow();
 }
 
-function _pItem(p, selSet) {
+export function _pItem(p, selSet) {
   const chk = selSet.has(p) ? "checked" : "";
   const c   = STATE.partnerColors[p] || "#FF0000";
   const id  = "c_" + p.replace(/[^a-z0-9]/gi, "_");
@@ -538,7 +538,7 @@ function _pItem(p, selSet) {
 // La construccion de indices secundarios (_byDate, _byPartner, _byCity,
 // _byCityDate, _partnerKAM) la hace updateIndexes() en data.js — debe llamarse
 // ANTES de popSidebarUI() porque restoreFilters > onKAMChange leen los indices.
-function popSidebarUI() {
+export function popSidebarUI() {
   popDates();
   rerenderSidebarPresets();
   popKAM();
@@ -546,7 +546,7 @@ function popSidebarUI() {
   restoreFilters();
 }
 
-function filterPList() {
+export function filterPList() {
   const q = document.getElementById("partnerSearch").value.toLowerCase();
   if (STATE.allPartners.length > VIRT_THRESHOLD) {
     // En modo virtual, reconstruir con la lista filtrada
@@ -566,17 +566,17 @@ function filterPList() {
 
 // _skipApply: cuando es true (set por onKAMChange y restore), selectAll/deselectAll
 // NO disparan el _debouncedApply para evitar double-render con el caller.
-let _skipApply = false;
-function selectAll()  {
+export let _skipApply = false;
+export function selectAll()  {
   document.querySelectorAll("#pList input").forEach(c => c.checked = true);
   if (!_skipApply && _debouncedApply) _debouncedApply();
 }
-function deselectAll(){
+export function deselectAll(){
   document.querySelectorAll("#pList input").forEach(c => c.checked = false);
   if (!_skipApply && _debouncedApply) _debouncedApply();
 }
 
-function onKAMChange() {
+export function onKAMChange() {
   const k = document.getElementById("kamFilter").value;
   _skipApply = true;
   if (k === "all") {
@@ -603,11 +603,11 @@ function onKAMChange() {
   if (STATE.curTab === "calculator"  && STATE.rawData.length)                           renderCalculator();
 }
 
-function getSel() {
+export function getSel() {
   return [...document.querySelectorAll("#pList input:checked")].map(c => c.value);
 }
 
-function applyFilters() {
+export function applyFilters() {
   // Corregir rango invertido automáticamente
   const elFrom = document.getElementById("dateFrom");
   const elTo   = document.getElementById("dateTo");
@@ -626,7 +626,7 @@ function applyFilters() {
       && PRESENT2_STATE.partner && STATE.rawData.length)                                renderSlide2();
 }
 
-function updateDeclineSettings() {
+export function updateDeclineSettings() {
   const metric = document.getElementById("declineMetricSel")?.value;
   const threshold = parseInt(document.getElementById("declineThresholdSel")?.value);
   if (metric)    STATE.declineMetric    = metric;
@@ -637,12 +637,12 @@ function updateDeclineSettings() {
 }
 
 // ── MODE TOGGLE HTML (compartido por Rendimiento y Metas) ─────────────────────
-function modeToggleHTML() {
+export function modeToggleHTML() {
   return ""; // El selector de escala vive en el sidebar — ver .mode-toggle-row
 }
 
 // ── CONFIG TAB ────────────────────────────────────────────────────────────────
-function renderConfig() {
+export function renderConfig() {
   const content = document.getElementById("configContent");
   if (!Object.keys(STATE.CLID_MAP).length) {
     content.innerHTML = `
@@ -840,7 +840,7 @@ function renderConfig() {
 }
 
 // Repinta SOLO contador + tabla + paginación (sin re-crear el input de búsqueda).
-function renderConfigResults() {
+export function renderConfigResults() {
   const box = document.getElementById("configResults");
   if (!box) return;
   const kams = [...new Set(Object.values(STATE.KAM_MAP))].sort();
@@ -938,7 +938,7 @@ function renderConfigResults() {
 }
 
 // ── KAM CRUD FUNCTIONS ────────────────────────────────────────────────────────
-function kamMakeEditable(clid) {
+export function kamMakeEditable(clid) {
   const row = document.querySelector(`#crudTable tr[data-clid="${clid}"]`);
   if (!row) return;
   const partner = STATE.CLID_MAP[clid] || "";
@@ -970,19 +970,19 @@ function kamMakeEditable(clid) {
     </td>`;
 }
 
-function kamNewKamChange() {
+export function kamNewKamChange() {
   const sel    = document.getElementById("newKam");
   const custom = document.getElementById("newKamCustom");
   if (custom) custom.style.display = sel.value === "__new__" ? "block" : "none";
 }
 
-function kamEditKamChange(clid) {
+export function kamEditKamChange(clid) {
   const sel    = document.getElementById(`edit_kam_${clid}`);
   const custom = document.getElementById(`edit_kam_custom_${clid}`);
   if (custom) custom.style.display = sel.value === "__new__" ? "block" : "none";
 }
 
-async function kamCrudEdit(clid) {
+export async function kamCrudEdit(clid) {
   const partner  = document.getElementById(`edit_partner_${clid}`)?.value.trim();
   const kamSel   = document.getElementById(`edit_kam_${clid}`);
   const kamRaw   = kamSel?.value;
@@ -1002,7 +1002,7 @@ async function kamCrudEdit(clid) {
   showBanner(true, "Guardado correctamente ✓");
 }
 
-async function kamCrudAdd() {
+export async function kamCrudAdd() {
   const clid    = document.getElementById("newClid")?.value.trim();
   const partner = document.getElementById("newPartner")?.value.trim();
   const kamSel  = document.getElementById("newKam");
@@ -1027,7 +1027,7 @@ async function kamCrudAdd() {
   showBanner(true, "CLID agregado correctamente ✓");
 }
 
-async function kamCrudDelete(clid) {
+export async function kamCrudDelete(clid) {
   const partner = STATE.CLID_MAP[clid] || clid;
   if (!confirm(`¿Eliminar "${partner}" (CLID: ${clid})?\nEsta acción no se puede deshacer.`)) return;
   showLoad(true, "Eliminando...");
@@ -1040,7 +1040,7 @@ async function kamCrudDelete(clid) {
 }
 
 // ── BANNED WORDS MANAGEMENT ───────────────────────────────────────────────────
-async function addBannedWord() {
+export async function addBannedWord() {
   const input = document.getElementById("newBannedWord");
   const word  = (input?.value || "").trim().toLowerCase();
   if (!word) return;
@@ -1057,7 +1057,7 @@ async function addBannedWord() {
   showBanner(true, `"${word}" agregado a la lista de exclusión ✓`);
 }
 
-async function removeBannedWord(word) {
+export async function removeBannedWord(word) {
   STATE.bannedWords = STATE.bannedWords.filter(w => w !== word);
   lsSet("yangoBannedWords", JSON.stringify(STATE.bannedWords));
   showLoad(true, "Aplicando filtro...");
@@ -1068,7 +1068,7 @@ async function removeBannedWord(word) {
 }
 
 // ── UI HELPERS ────────────────────────────────────────────────────────────────
-function showBanner(ok, msg) {
+export function showBanner(ok, msg) {
   const el = document.getElementById("dsBanner");
   el.style.display = "flex";
   if (ok) {
@@ -1082,7 +1082,7 @@ function showBanner(ok, msg) {
   }
 }
 
-function showLoad(show, msg = "Procesando...") {
+export function showLoad(show, msg = "Procesando...") {
   let el = document.getElementById("loadingEl");
   if (show) {
     if (!el) {
@@ -1100,7 +1100,7 @@ function showLoad(show, msg = "Procesando...") {
 }
 
 // ── ELIMINAR DATOS DE SUPABASE ────────────────────────────────────────────────
-async function deleteDashboardData() {
+export async function deleteDashboardData() {
   const tableSel = document.getElementById("delTableSel");
   const monthInp = document.getElementById("delMonthInput");
   if (!tableSel || !monthInp) return;

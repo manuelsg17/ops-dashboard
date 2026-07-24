@@ -1,6 +1,6 @@
 // unifview.js — Vista Unificada Rendimiento + Metas
 
-function renderUnifView() {
+export function renderUnifView() {
   const el = document.getElementById("unifviewContent");
   if (!el) return;
 

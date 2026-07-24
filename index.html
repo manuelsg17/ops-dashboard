@@ -26,10 +26,9 @@
     base-uri 'self';
   "/>
 
-  <!-- Librerías de terceros: ahora vía npm (Vite), no CDN. Ver src/vendor.js.
-       Este módulo corre antes que los <script defer> de la app (orden de
-       documento) y expone los globales (supabase/XLSX/ApexCharts/Chart/
-       html2canvas/jspdf) que el código de app aún usa durante la transición. -->
+  <!-- Único <script> del documento: Vite arma acá TODO el grafo de módulos ES
+       de la app (src/vendor.js importa las 7 libs de terceros — antes CDN,
+       ahora npm — y los 17 módulos propios). Ver src/vendor.js. -->
   <script type="module" src="/src/vendor.js"></script>
 
   <!-- App styles -->
@@ -294,21 +293,8 @@
     </div>
   </div><!-- end .layout -->
 </div><!-- end #appContainer -->
-<!-- App scripts (order matters). `defer` → se ejecutan en orden de documento
-     después del parseo y antes de DOMContentLoaded, DESPUÉS del módulo vendor
-     (que setea los globales). Siguen en scope global clásico hasta la Fase A2
-     (conversión a módulos ES + event delegation). -->
-<!-- config.js, data.js, auth.js y charts.js convertidos a módulos ES (src/), los importa vendor.js -->
-<script defer src="/rendimiento.js"></script>
-<script defer src="/metas.js"></script>
-<script defer src="/app.js"></script>
-<script defer src="/unifview.js"></script>
-<script defer src="/rawdata.js"></script>
-<script defer src="/partnerView.js"></script>
-<script defer src="/calculator.js"></script>
-<script defer src="/seguimiento.js"></script>
-<script defer src="/fleetexterno.js"></script>
-<script defer src="/forecast.js"></script>
-<script defer src="/presentacion2.js"></script>
+<!-- Fase A2 completa: los 17 archivos de la app son módulos ES, importados por
+     src/vendor.js (único <script type="module"> del documento, más arriba).
+     Ya no quedan <script defer> clásicos — todo corre en el grafo de módulos. -->
 </body>
 </html>

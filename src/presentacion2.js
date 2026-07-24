@@ -11,9 +11,9 @@
 // Retención), slides de DATA RAW numérica y porcentual (WoW), y export a PDF.
 
 // ── Helpers de presentación (ex-presentacion.js) ──────────────────────────────
-const PRES_CITY_ORDER = ["LIMA", "AREQUIPA", "TRUJILLO"];
+export const PRES_CITY_ORDER = ["LIMA", "AREQUIPA", "TRUJILLO"];
 
-function _presOrderCities(cities) {
+export function _presOrderCities(cities) {
   const rank = c => {
     const i = PRES_CITY_ORDER.indexOf(String(c).toUpperCase());
     return i === -1 ? PRES_CITY_ORDER.length : i;
@@ -21,7 +21,7 @@ function _presOrderCities(cities) {
   return [...cities].sort((a, b) => rank(a) - rank(b) || String(a).localeCompare(String(b)));
 }
 
-function getSelectedDates(from, to, mode) {
+export function getSelectedDates(from, to, mode) {
   const all = STATE.allDates;
   if (mode === "mensual") {
     const idx = all.findIndex(d => d > to);
@@ -35,7 +35,7 @@ function getSelectedDates(from, to, mode) {
   return all.slice(Math.max(0, end - 3), end + 1);
 }
 
-function getWoW(vals) {
+export function getWoW(vals) {
   // Returns array of WoW % for each index (null for first)
   return vals.map((v, i) => {
     if (i === 0) return null;
@@ -45,12 +45,12 @@ function getWoW(vals) {
   });
 }
 
-function wowColor(pct) {
+export function wowColor(pct) {
   if (pct === null) return "#aaa";
   return pct >= 0 ? "#10b981" : "#FF0000";
 }
 
-function getPartnerVals(partner, city, dates, metricFn) {
+export function getPartnerVals(partner, city, dates, metricFn) {
   return dates.map(d => {
     const rows = STATE._byCityDate?.get(`${city}|||${d}`) || [];
     let s = 0;
@@ -61,7 +61,7 @@ function getPartnerVals(partner, city, dates, metricFn) {
   });
 }
 
-function getCityVals(city, dates, metricFn) {
+export function getCityVals(city, dates, metricFn) {
   return dates.map(d => {
     const rows = STATE._byCityDate?.get(`${city}|||${d}`) || [];
     let s = 0;
@@ -70,7 +70,7 @@ function getCityVals(city, dates, metricFn) {
   });
 }
 
-let PRESENT2_STATE = {
+export let PRESENT2_STATE = {
   partner:  null,
   lang:     "es",       // es | en
   slide:    0,          // 0=Matriz, 1=Data Raw #, 2=Data Raw %
@@ -83,7 +83,7 @@ let PRESENT2_STATE = {
   _renderId: 0
 };
 
-const P2_MES_NOMBRES = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
+export const P2_MES_NOMBRES = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
   "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
 
 // Mes de REPORTE al que pertenece una fecha (para "Avance vs Meta"). En SEMANAL, una
@@ -92,7 +92,7 @@ const P2_MES_NOMBRES = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
 // PRIMERA semana de JULIO, no como última de junio: el avance MTD y la meta caen en el mes
 // correcto y cuadran con "KPIs por Nivel" (que muestra la semana tal cual). En MENSUAL/DIARIO
 // el mes es el de la fecha misma. Devuelve { y: año, m: 1-12 }.
-function p2ReportYM(dateStr) {
+export function p2ReportYM(dateStr) {
   if (!dateStr) return { y: 0, m: 0 };
   if (STATE.curMode === "semanal") {
     const dt = parseLocalDate(dateStr);
@@ -104,7 +104,7 @@ function p2ReportYM(dateStr) {
 
 // Resuelve si el partner se muestra con KPIs Fleet (SH/Auto Activo, Acceptance,
 // Carros Fleet) o Taxi (SH, Viajes). "auto" respeta el flag is_fleet de Config.
-function p2IsFleetMode(partner) {
+export function p2IsFleetMode(partner) {
   if (PRESENT2_STATE.dataset === "tuktuk") return false;   // TukTuk usa los 4 KPIs Taxi (Fase 6)
   if (PRESENT2_STATE.fleetMode === "fleet") return true;
   if (PRESENT2_STATE.fleetMode === "taxi") return false;
@@ -114,7 +114,7 @@ function p2IsFleetMode(partner) {
 // Registro ÚNICO de slides: de aquí derivan el nav, el bound de navegación, el
 // render EN VIVO y el PDF (una sola fuente → no divergen). build(partner,dates)
 // → HTML; charts=true + chartFn(partner,dates,root) para slides con Chart.js.
-const P2_SLIDES = [
+export const P2_SLIDES = [
   { es: "Carátula",       en: "Cover",          charts: false, build: (p, d, i) => buildSlide2Cover(p, d) },
   { es: "Avance vs Meta", en: "Goal vs Target", charts: false, build: (p, d, i) => buildSlide2Avance(p, i) },
   { es: "Proyección",     en: "Forecast",       charts: true,  noPdf: true,  build: (p, d, i) => buildSlide2Forecast(p, d, i), chartFn: (p, d, root) => buildSlide2ForecastCharts(p, d, root) },
@@ -131,10 +131,10 @@ const P2_SLIDES = [
 // global) → cada slide dibuja del dataset correcto sin cambiar firmas.
 // Partners tuktuk = unión de ambas escalas (semanal + mensual): así la sección
 // TukTuk del deck y el selector aparecen aunque la escala activa sea la otra.
-function _p2TkPartnersAll() {
+export function _p2TkPartnersAll() {
   return [...new Set([...(STATE._tuktukPartners || []), ...(STATE._tuktukMensualPartners || [])])];
 }
-function p2HasTuktuk(partner) { return _p2TkPartnersAll().includes(partner); }
+export function p2HasTuktuk(partner) { return _p2TkPartnersAll().includes(partner); }
 // Diario NO tiene slice TukTuk propio (el export diario no trae db_id, Fase F pendiente de
 // datos): sin este guard, un partner TukTuk en escala Diaria generaba una sección "TukTuk"
 // que en realidad mostraba datos SEMANALES (p2AllDates cae a _tuktukDates) pero rotulados
@@ -143,25 +143,25 @@ function p2HasTuktuk(partner) { return _p2TkPartnersAll().includes(partner); }
 // si la SECCIÓN se muestra en la escala activa. Un partner tuktuk-only en Diario cae al
 // fallback de p2Deck (body con ds="taxi", vacío pero rotulado honesto) en vez de mostrar
 // data real bajo la escala equivocada.
-function p2TuktukSectionVisible(partner) { return STATE.curMode !== "diario" && p2HasTuktuk(partner); }
-function p2HasTaxi(partner)   { return (STATE.allPartners   || []).includes(partner); }
+export function p2TuktukSectionVisible(partner) { return STATE.curMode !== "diario" && p2HasTuktuk(partner); }
+export function p2HasTaxi(partner)   { return (STATE.allPartners   || []).includes(partner); }
 // Lista del SELECTOR: unión taxi + tuktuk (un partner tuktuk-only debe poder elegirse).
-function p2PartnerList() {
+export function p2PartnerList() {
   return [...new Set([...(STATE.allPartners || []), ..._p2TkPartnersAll()])].sort();
 }
 // Portada divisoria de sección (se inserta antes de la sección TukTuk).
-const P2_DIVIDER = { es: "TukTuk", en: "TukTuk", charts: false, build: (p) => buildSlide2SectionCover(p, "tuktuk") };
+export const P2_DIVIDER = { es: "TukTuk", en: "TukTuk", charts: false, build: (p) => buildSlide2SectionCover(p, "tuktuk") };
 // Slide de Seguimiento (Fase 3, render-only): solo si el partner tiene tareas cargadas.
 // Va al final del deck y entra al PDF automáticamente (no es noPdf). Definida en seguimiento.js.
-const P2_SEG_SLIDE = { es: "Seguimiento", en: "Follow-up", charts: false, build: (p, d, i) => buildSlide2Seguimiento(p, i) };
+export const P2_SEG_SLIDE = { es: "Seguimiento", en: "Follow-up", charts: false, build: (p, d, i) => buildSlide2Seguimiento(p, i) };
 // Avance vs Meta Combinado (Taxi+TukTuk): NO vive en P2_SLIDES a propósito — ese
 // array se re-ejecuta completo para la sección Taxi Y para la TukTuk (ver body.forEach
 // más abajo); si el combinado estuviera ahí, se duplicaría (una vez por sección). Se
 // inserta a mano en p2Deck(), UNA sola vez, justo después de la carátula — es la vista
 // rápida "cómo va TODO mi negocio", va primero, antes del detalle Taxi/TukTuk individual.
-const P2_COMBINADO_SLIDE = { es: "Avance Combinado", en: "Combined Goal", charts: false, build: (p, d, i) => buildSlide2AvanceCombinado(p, i) };
+export const P2_COMBINADO_SLIDE = { es: "Avance Combinado", en: "Combined Goal", charts: false, build: (p, d, i) => buildSlide2AvanceCombinado(p, i) };
 // Deck por partner: carátula + [Combinado si hay TukTuk] + [sección Taxi] + [divisor + sección TukTuk].
-function p2Deck(partner) {
+export function p2Deck(partner) {
   const hasTaxi = p2HasTaxi(partner);
   const showTk  = p2TuktukSectionVisible(partner);   // datos existen Y la escala activa los soporta (no Diario)
   const body = P2_SLIDES.slice(1);   // Avance, KPIs, Data Raw #, Data Raw %, Alertas
@@ -185,7 +185,7 @@ function p2Deck(partner) {
   return deck;
 }
 // HTML del nav (prev/next + un botón por slide del deck; sección TukTuk tintada ámbar).
-function p2NavHTML() {
+export function p2NavHTML() {
   const es = PRESENT2_STATE.lang === "es";
   const deck = p2Deck(PRESENT2_STATE.partner);
   const btns = deck.map((entry, i) => {
@@ -202,14 +202,14 @@ function p2NavHTML() {
 
 // Logo de marca (inline SVG, mismo ícono que la app). P2_LOGO_MARK = versión chica
 // para el header de cada slide.
-const P2_LOGO_SVG  = `<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" width="26" height="26"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`;
-const P2_LOGO_MARK = `<span style="display:inline-flex;align-items:center;gap:5px;vertical-align:middle"><span style="width:15px;height:15px;background:#FF0000;border-radius:4px;display:inline-flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" width="10" height="10"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span><span style="font-weight:900;font-size:.72rem;color:#111;letter-spacing:-.3px">YANGO <span style="color:#FF0000">Partners</span></span></span>`;
+export const P2_LOGO_SVG  = `<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" width="26" height="26"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`;
+export const P2_LOGO_MARK = `<span style="display:inline-flex;align-items:center;gap:5px;vertical-align:middle"><span style="width:15px;height:15px;background:#FF0000;border-radius:4px;display:inline-flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" width="10" height="10"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span><span style="font-weight:900;font-size:.72rem;color:#111;letter-spacing:-.3px">YANGO <span style="color:#FF0000">Partners</span></span></span>`;
 
 // Info del modo/escala activa (mensual/semanal/diario) para rótulos consistentes
 // en TODA la presentación: badge visible, unidad de columna, sufijo de racha y
 // abreviatura período-sobre-período (WoW/MoM/DoD). Así la deck "dice" en qué escala
 // estás y ningún texto queda hablando de "semana" cuando ves meses.
-function p2ModeInfo() {
+export function p2ModeInfo() {
   const es = PRESENT2_STATE.lang === "es";
   const m = STATE.curMode;
   if (m === "mensual") return { label: es ? "Mensual" : "Monthly", unit: es ? "Mes" : "Month", units: es ? "meses" : "months", seg: es ? "seguidos" : "in a row", pop: "MoM", color: "#0891b2" };
@@ -221,7 +221,7 @@ function p2ModeInfo() {
 // Si en la escala activa (mensual/semanal) el último período de Taxi y TukTuk no
 // coinciden, casi siempre significa que faltó subir uno de los dos datasets (el
 // KAM suele actualizar todo junto). Compara solo dentro de la misma granularidad.
-function p2FreshnessWarn() {
+export function p2FreshnessWarn() {
   const es = PRESENT2_STATE.lang === "es";
   const mensual = STATE.curMode === "mensual", semanal = STATE.curMode === "semanal";
   if (!mensual && !semanal) return "";   // diario: no hay slice TukTuk comparable
@@ -246,7 +246,7 @@ function p2FreshnessWarn() {
 // badgeOverride opcional {text, color}: para slides que no son ni Taxi ni TukTuk
 // puros (ej. Avance Combinado) — evita que el badge automático lea
 // PRESENT2_STATE.dataset (que en esos slides no representa una sola línea).
-function p2BrandHeader(partner, title, sub, badgeOverride) {
+export function p2BrandHeader(partner, title, sub, badgeOverride) {
   const mi = p2ModeInfo();
   const modeChip = `<span style="display:inline-block;font-size:.6rem;font-weight:800;padding:2px 9px;border-radius:10px;color:#fff;background:${mi.color};margin-top:4px;letter-spacing:.3px">📅 ${mi.label.toUpperCase()}</span>`;
   // Badge Taxi/TukTuk: solo cuando el partner tiene AMBAS secciones (si no, no hay
@@ -273,7 +273,7 @@ function p2BrandHeader(partner, title, sub, badgeOverride) {
   </div>`;
 }
 // Footer de marca: confidencialidad + número de página (total = tamaño del deck).
-function p2BrandFooter(idx) {
+export function p2BrandFooter(idx) {
   const es = PRESENT2_STATE.lang === "es";
   const total = PRESENT2_STATE._deckLen || P2_SLIDES.length;
   return `<div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #eee;padding-top:6px;margin-top:8px;font-size:.6rem;color:#bbb;flex:0 0 auto">
@@ -283,7 +283,7 @@ function p2BrandFooter(idx) {
 }
 
 // ── SLIDE: CARÁTULA (branded, oscura) ─────────────────────────────────────────
-function buildSlide2Cover(partner, dates) {
+export function buildSlide2Cover(partner, dates) {
   const es = PRESENT2_STATE.lang === "es";
   const col = (STATE.partnerColors && STATE.partnerColors[partner]) || "#FF0000";
   const kam = (typeof getKAMForPartner === "function" ? getKAMForPartner(partner) : "") || "";
@@ -312,12 +312,12 @@ function buildSlide2Cover(partner, dates) {
       ${kam ? `<div style="background:rgba(255,255,255,.08);border-radius:8px;padding:8px 20px;color:#ccc;font-size:.8rem">${es ? "Ejecutivo de Cuenta" : "Account Manager"}: <strong style="color:#fff">${escapeHTML(kam)}</strong></div>` : ""}
     </div>`;
 }
-function p2SlideNames() { const es = PRESENT2_STATE.lang === "es"; return P2_SLIDES.map(s => es ? s.es : s.en); }
+export function p2SlideNames() { const es = PRESENT2_STATE.lang === "es"; return P2_SLIDES.map(s => es ? s.es : s.en); }
 
 // ── SLIDE: PORTADA DIVISORIA DE SECCIÓN (Taxi / TukTuk) ────────────────────────
 // Separador visual antes de la sección TukTuk: deja claro en el PDF que las
 // diapositivas siguientes son de otra flota.
-function buildSlide2SectionCover(partner, ds) {
+export function buildSlide2SectionCover(partner, ds) {
   const es = PRESENT2_STATE.lang === "es";
   const tk = ds === "tuktuk";
   const accent = tk ? "#f59e0b" : "#FF0000";
@@ -336,7 +336,7 @@ function buildSlide2SectionCover(partner, ds) {
 }
 
 // Bandas de cohorte (mismas que Vista Partner). range = [inicio, fin) sobre el ranking.
-const P2_BANDS = [
+export const P2_BANDS = [
   { key: "t1",   range: [0, 1],  color: "#ef4444", es: "Top 1",       en: "Top 1" },
   { key: "t23",  range: [1, 3],  color: "#f59e0b", es: "Top 2-3",     en: "Top 2-3" },
   { key: "t45",  range: [3, 5],  color: "#0ea5e9", es: "Top 4-5",     en: "Top 4-5" },
@@ -345,7 +345,7 @@ const P2_BANDS = [
 ];
 
 // ── HELPERS DE DATOS ──────────────────────────────────────────────────────────
-function destroyPresent2Charts() {
+export function destroyPresent2Charts() {
   PRESENT2_STATE.charts.forEach(c => { try { c.destroy(); } catch (e) {} });
   PRESENT2_STATE.charts = [];
 }
@@ -357,16 +357,16 @@ function destroyPresent2Charts() {
 // en semanal/diario el semanal. Antes siempre leía el semanal → tuktuk salía en
 // BLANCO en modo mensual (buscaba claves de mes "YYYY-MM" en un índice de semanas).
 // (Taxi ya es mode-aware porque _byCityDate/rawData/allDates se reconstruyen en switchMode.)
-function _p2TkMensual() { return STATE.curMode === "mensual"; }
-function p2CityDateIndex()  { return PRESENT2_STATE.dataset === "tuktuk" ? (_p2TkMensual() ? STATE._tuktukMensualByCityDate : STATE._tuktukByCityDate) : STATE._byCityDate; }
-function p2RawDataset()     { return PRESENT2_STATE.dataset === "tuktuk" ? (_p2TkMensual() ? (STATE.rawDataMensualTuktuk || []) : (STATE.rawDataTuktuk || [])) : (STATE.rawData || []); }
-function p2ActivePartners() { return PRESENT2_STATE.dataset === "tuktuk" ? (_p2TkMensual() ? (STATE._tuktukMensualPartners || []) : (STATE._tuktukPartners || [])) : (STATE.allPartners || []); }
-function p2AllDates()       { return PRESENT2_STATE.dataset === "tuktuk" ? (_p2TkMensual() ? (STATE._tuktukMensualDates || []) : (STATE._tuktukDates || [])) : (STATE.allDates || []); }
+export function _p2TkMensual() { return STATE.curMode === "mensual"; }
+export function p2CityDateIndex()  { return PRESENT2_STATE.dataset === "tuktuk" ? (_p2TkMensual() ? STATE._tuktukMensualByCityDate : STATE._tuktukByCityDate) : STATE._byCityDate; }
+export function p2RawDataset()     { return PRESENT2_STATE.dataset === "tuktuk" ? (_p2TkMensual() ? (STATE.rawDataMensualTuktuk || []) : (STATE.rawDataTuktuk || [])) : (STATE.rawData || []); }
+export function p2ActivePartners() { return PRESENT2_STATE.dataset === "tuktuk" ? (_p2TkMensual() ? (STATE._tuktukMensualPartners || []) : (STATE._tuktukPartners || [])) : (STATE.allPartners || []); }
+export function p2AllDates()       { return PRESENT2_STATE.dataset === "tuktuk" ? (_p2TkMensual() ? (STATE._tuktukMensualDates || []) : (STATE._tuktukDates || [])) : (STATE.allDates || []); }
 
 // Espejo local de getPartnerVals/getCityVals (presentacion.js), pero acotado al
 // índice del dataset activo — así taxi se comporta IDÉNTICO a antes (misma
 // STATE._byCityDate) y tuktuk lee su propio índice sin forkear presentacion.js.
-function p2GetPartnerVals(partner, city, dates, fn) {
+export function p2GetPartnerVals(partner, city, dates, fn) {
   const idx = p2CityDateIndex();
   return dates.map(d => {
     const rows = (idx && idx.get(`${city}|||${d}`)) || [];
@@ -375,7 +375,7 @@ function p2GetPartnerVals(partner, city, dates, fn) {
     return s;
   });
 }
-function p2GetCityVals(city, dates, fn) {
+export function p2GetCityVals(city, dates, fn) {
   const idx = p2CityDateIndex();
   return dates.map(d => {
     const rows = (idx && idx.get(`${city}|||${d}`)) || [];
@@ -386,14 +386,14 @@ function p2GetCityVals(city, dates, fn) {
 }
 
 // Ciudades del partner en orden canónico (Lima → Arequipa → Trujillo → resto).
-function p2PartnerCities(partner) {
+export function p2PartnerCities(partner) {
   const rows = p2RawDataset().filter(r => r.partner === partner);
   return _presOrderCities([...new Set(rows.map(r => r.city).filter(Boolean))]);
 }
 
 // Valores por fecha de una métrica para un nivel: scope=null → Perú (suma de las
 // ciudades del partner); scope="LIMA" → esa ciudad.
-function p2Vals(partner, scope, dates, fn) {
+export function p2Vals(partner, scope, dates, fn) {
   if (scope) return p2GetPartnerVals(partner, scope, dates, fn);
   const cities = p2PartnerCities(partner);
   const per = cities.map(c => p2GetPartnerVals(partner, c, dates, fn));
@@ -402,7 +402,7 @@ function p2Vals(partner, scope, dates, fn) {
 
 // Tendencia de ciudad (total de TODOS los partners) para comparar. scope=null →
 // suma de las ciudades del partner.
-function p2CityVals(partner, scope, dates, fn) {
+export function p2CityVals(partner, scope, dates, fn) {
   if (scope) return p2GetCityVals(scope, dates, fn);
   const cities = p2PartnerCities(partner);
   const per = cities.map(c => p2GetCityVals(c, dates, fn));
@@ -410,7 +410,7 @@ function p2CityVals(partner, scope, dates, fn) {
 }
 
 // Getters de métricas base.
-const P2_GET = {
+export const P2_GET = {
   ad:    r => r.activeDrivers,
   newd:  r => r.newPartner + r.newService,
   react: r => r.reactivated,
@@ -421,7 +421,7 @@ const P2_GET = {
 
 // Todas las métricas (base + derivadas: N+R, Retención, Trips/SH, Trips/AD, SH/AD) por nivel.
 // Retención[i] = (AD[i] − Nuevos[i] − Reactivados[i]) / AD[i−1]  (null si i=0 o AD prev=0).
-function p2Metrics(partner, scope, dates) {
+export function p2Metrics(partner, scope, dates) {
   const ad    = p2Vals(partner, scope, dates, P2_GET.ad);
   const newd  = p2Vals(partner, scope, dates, P2_GET.newd);
   const react = p2Vals(partner, scope, dates, P2_GET.react);
@@ -437,7 +437,7 @@ function p2Metrics(partner, scope, dates) {
 }
 
 // Retención a nivel ciudad (todos los partners) para la tendencia de comparación.
-function p2CityRet(partner, scope, dates) {
+export function p2CityRet(partner, scope, dates) {
   const ad    = p2CityVals(partner, scope, dates, P2_GET.ad);
   const newd  = p2CityVals(partner, scope, dates, P2_GET.newd);
   const react = p2CityVals(partner, scope, dates, P2_GET.react);
@@ -457,7 +457,7 @@ function p2CityRet(partner, scope, dates) {
 //     acceptance_rate ya es 0–1, se pondera por trips como mejor proxy)
 // AD/N+R se reusan de p2Metrics (misma función que el path taxi) para que la
 // matriz Fleet SIEMPRE coincida con la matriz Taxi; aquí solo lo fleet-específico.
-function p2FleetSeries(partner, scope, dates) {
+export function p2FleetSeries(partner, scope, dates) {
   const cities = scope ? [scope] : p2PartnerCities(partner);
   const cars = dates.map(() => 0), internalShW = dates.map(() => 0);
   const tripsSum = dates.map(() => 0), acceptW = dates.map(() => 0);
@@ -483,7 +483,7 @@ function p2FleetSeries(partner, scope, dates) {
   };
 }
 // Tendencia de ciudad ponderada (TODOS los partners de la ciudad) para ratios fleet.
-function p2CityFleetSeries(scope, dates) {
+export function p2CityFleetSeries(scope, dates) {
   const cities = scope ? [scope] : [];   // Perú-general: sin trend de ciudad única
   if (!cities.length) return { ownedFleetActiveCars: dates.map(() => null), shCarInt: dates.map(() => null), accept: dates.map(() => null) };
   const cars = dates.map(() => 0), internalShW = dates.map(() => 0);
@@ -508,7 +508,7 @@ function p2CityFleetSeries(scope, dates) {
 }
 
 // Ranking de partners por AD del último período dentro del scope (para cohortes).
-function p2Ranked(scope, dates) {
+export function p2Ranked(scope, dates) {
   const lastDate = dates[dates.length - 1];
   const rows = p2RawDataset().filter(r => r.date === lastDate && (!scope || r.city === scope));
   const byP = {};
@@ -518,7 +518,7 @@ function p2Ranked(scope, dates) {
 
 // Promedio del cohorte para un KPI (kpiKey). Para retención promedia las series
 // de retención de cada miembro; para el resto promedia la métrica directa.
-function p2CohortAvg(members, scope, dates, kpiKey) {
+export function p2CohortAvg(members, scope, dates, kpiKey) {
   if (!members.length) return dates.map(() => 0);
   let arrs;
   if (kpiKey === "ret") {
@@ -540,7 +540,7 @@ function p2CohortAvg(members, scope, dates, kpiKey) {
 }
 
 // Líneas de cohorte activas para un KPI en un scope.
-function p2CohortLines(scope, dates, kpiKey) {
+export function p2CohortLines(scope, dates, kpiKey) {
   const tog = PRESENT2_STATE.cohort || {};
   if (!P2_BANDS.some(b => tog[b.key])) return [];
   const ranked = p2Ranked(scope, dates);
@@ -558,7 +558,7 @@ function p2CohortLines(scope, dates, kpiKey) {
 // ── CHART (Chart.js, registro propio) ─────────────────────────────────────────
 // Línea del partner (con puntos WoW) + tendencia de ciudad (opcional, gris punteada)
 // + líneas de cohorte (opcional, punteadas de color). isPct=true → formatea %.
-function p2Chart(canvasId, dates, partnerVals, cityVals, cohortLines, color, isPct, root) {
+export function p2Chart(canvasId, dates, partnerVals, cityVals, cohortLines, color, isPct, root) {
   const canvas = root ? root.querySelector(`#${canvasId}`) : document.getElementById(canvasId);
   if (!canvas || typeof Chart === "undefined") return;
   const pWoW = getWoW(partnerVals);   // % relativo — solo para colorear el punto por signo (mismo signo que pp)
@@ -626,7 +626,7 @@ function p2Chart(canvasId, dates, partnerVals, cityVals, cohortLines, color, isP
 // ── KPIs de la matriz ─────────────────────────────────────────────────────────
 // Matriz: 4 KPIs (los que el KAM revisa de un vistazo). Comisión y Retención se
 // quitaron de los gráficos por densidad; siguen en el Data Raw.
-function p2KpiDefs(es) {
+export function p2KpiDefs(es) {
   return [
     { key: "ad",    label: es ? "Conductores Activos" : "Active Drivers",   color: "#FF0000", kind: "num" },
     { key: "nr",    label: es ? "Nuevos + Reactivados" : "New + Reactivated", color: "#f97316", kind: "num" },
@@ -638,7 +638,7 @@ function p2KpiDefs(es) {
 // por captura del usuario) — N+R, Acceptance Rate, Owned Fleet Active Cars,
 // Internal Fleet SH/Auto Activo. Se QUITA AD de la matriz en modo Fleet (info
 // de agregador completa sigue disponible en Data Raw y Avance).
-function p2KpiDefsFleet(es) {
+export function p2KpiDefsFleet(es) {
   return [
     { key: "nr",                   label: es ? "Nuevos + Reactivados" : "New + Reactivated", color: "#f97316", kind: "num" },
     { key: "accept",               label: "Acceptance Rate",                                 color: "#10b981", kind: "pct" },
@@ -648,7 +648,7 @@ function p2KpiDefsFleet(es) {
 }
 
 // Niveles a mostrar: Perú + ciudades del partner (si tiene >1 ciudad, se agrega Perú).
-function p2Levels(partner) {
+export function p2Levels(partner) {
   const cities = p2PartnerCities(partner);
   const levels = cities.length > 1
     ? [{ id: "PE", city: null, label: "Perú", color: "#111" }]
@@ -657,7 +657,7 @@ function p2Levels(partner) {
   return levels;
 }
 
-function p2FmtVal(kind, v) {
+export function p2FmtVal(kind, v) {
   if (v == null || isNaN(v)) return (kind === "pct" || kind === "ratio1") ? "—" : "0";
   if (kind === "pct")    return (v * 100).toFixed(1) + "%";
   if (kind === "money")  return "$" + fmtSmart(v);
@@ -666,7 +666,7 @@ function p2FmtVal(kind, v) {
 }
 
 // ── SLIDE 0: MATRIZ (niveles × KPIs) ──────────────────────────────────────────
-function buildSlide2Matrix(partner, dates, idx) {
+export function buildSlide2Matrix(partner, dates, idx) {
   const es = PRESENT2_STATE.lang === "es";
   const fleetMode = p2IsFleetMode(partner);
   const kpis = fleetMode ? p2KpiDefsFleet(es) : p2KpiDefs(es);
@@ -715,7 +715,7 @@ function buildSlide2Matrix(partner, dates, idx) {
     </div>`;
 }
 
-function buildSlide2MatrixCharts(partner, dates, root) {
+export function buildSlide2MatrixCharts(partner, dates, root) {
   const fleetMode = p2IsFleetMode(partner);
   const kpis = fleetMode ? p2KpiDefsFleet(PRESENT2_STATE.lang === "es") : p2KpiDefs(PRESENT2_STATE.lang === "es");
   const FLEET_KEYS = { shCarInt: 1, accept: 1, ownedFleetActiveCars: 1 };   // sin cohorte v1; trend ponderado
@@ -746,7 +746,7 @@ function buildSlide2MatrixCharts(partner, dates, root) {
 // Labels espejados al ES/EN de p2KpiDefs (matriz) y buildSlide2Avance — la MISMA métrica
 // debe llamarse igual en todo el deck. Antes solo "Retención" traducía; el resto quedaba en
 // inglés fijo aun con lang=es (inconsistente con KPIs por Nivel/Avance, que sí traducen).
-function p2RawCols(es) {
+export function p2RawCols(es) {
   return [
     { key: "trips", label: es ? "Viajes" : "Trips",                 kind: "num" },
     { key: "sh",    label: es ? "Horas de Conexión" : "Supply Hours", kind: "num" },
@@ -764,7 +764,7 @@ function p2RawCols(es) {
 // Fleet: TODAS las columnas de agregador (p2RawCols, sin quitar nada — incluye
 // Trips/SH, Trips/AD, SH/AD) + 3 fleet-específicas al final (aditivo, no reemplaza; el
 // partner Fleet quiere ver info de agregador Y de fleet juntas).
-function p2RawColsFleet(es) {
+export function p2RawColsFleet(es) {
   return [
     ...p2RawCols(es),
     { key: "ownedFleetActiveCars", label: "Owned Fleet Active Cars", kind: "num" },
@@ -772,7 +772,7 @@ function p2RawColsFleet(es) {
     { key: "accept",               label: "Acceptance Rate", kind: "pct" }
   ];
 }
-function p2FmtRaw(kind, v) {
+export function p2FmtRaw(kind, v) {
   if (v == null || isNaN(v)) return "—";
   if (kind === "pct")    return (v * 100).toFixed(1) + "%";
   if (kind === "money")  return "$" + fmt(v);
@@ -784,7 +784,7 @@ function p2FmtRaw(kind, v) {
   return fmt(v);
 }
 
-function buildSlide2Raw(partner, dates, pct, idx) {
+export function buildSlide2Raw(partner, dates, pct, idx) {
   const es = PRESENT2_STATE.lang === "es";
   const fleetMode = p2IsFleetMode(partner);
   const cols = fleetMode ? p2RawColsFleet(es) : p2RawCols(es);
@@ -840,7 +840,7 @@ function buildSlide2Raw(partner, dates, pct, idx) {
 // vs meta (STATE.metasData) + proyección a fin de mes (calcProjectionDays/projA).
 // El avance es SIEMPRE del mes seleccionado (no del rango del sidebar).
 // Meses META disponibles (nombres, más reciente primero).
-function p2MetaMeses() {
+export function p2MetaMeses() {
   return [...new Set((STATE.metasData || []).map(m => m.mes))].filter(Boolean)
     .sort((a, b) => _metasMesOrden(b) - _metasMesOrden(a));
 }
@@ -849,7 +849,7 @@ function p2MetaMeses() {
 //   2) AUTO: el mes del "Hasta" (el dato que se está viendo) → si estás en junio,
 //      compara vs la meta de JUNIO, no vs la más reciente (julio).
 //   3) fallback: la meta más reciente.
-function p2AvanceMes() {
+export function p2AvanceMes() {
   const meses = p2MetaMeses();
   if (!meses.length) return "";
   if (PRESENT2_STATE.avanceMesSel && meses.includes(PRESENT2_STATE.avanceMesSel))
@@ -868,7 +868,7 @@ function p2AvanceMes() {
 // y capadas MTD en el "Hasta". SIN fallback a otro mes: si el mes pedido no tiene datos
 // (≤ Hasta), devuelve [] y el slide muestra "sin datos de ese mes" (nunca actuals de un
 // mes/año bajo la etiqueta+meta de otro). Ver auditoría present2 (hallazgos mes-crossyear).
-function p2MonthDates(mesName) {
+export function p2MonthDates(mesName) {
   const ord = mesName ? _metasMesOrden(mesName) : 0;   // 2000+m (nombre) o YYYYMM (iso)
   const allDates = p2AllDates();                       // dataset-scoped (tuktuk usa sus fechas)
   const to = (typeof document !== "undefined") && document.getElementById("dateTo")
@@ -897,7 +897,7 @@ function p2MonthDates(mesName) {
   if (to && out.length) out = out.filter(d => d <= to);
   return out;
 }
-function p2MetaFor(partner, scopeCity, mes) {
+export function p2MetaFor(partner, scopeCity, mes) {
   return (STATE.metasData || []).reduce((o, m) => {
     if (m.partner === partner && m.mes === mes && (!scopeCity || m.city === scopeCity)) {
       // Agregador + TukTuk son aditivos (se suman entre ciudades).
@@ -917,7 +917,7 @@ function p2MetaFor(partner, scopeCity, mes) {
 // sobre-cuenta a los partners multi-ciudad (suma el pico de cada ciudad aunque ocurran
 // en semanas distintas). N+R y SH = suma (invariantes al orden). p2GetPartnerVals es
 // dataset-scoped (taxi usa STATE._byCityDate; tuktuk STATE._tuktukByCityDate).
-function p2ActualsMTD(partner, scopeCity, monthDates) {
+export function p2ActualsMTD(partner, scopeCity, monthDates) {
   const cities = scopeCity ? [scopeCity] : p2PartnerCities(partner);
   const adPer = cities.map(c => p2GetPartnerVals(partner, c, monthDates, P2_GET.ad));
   const ndPer = cities.map(c => p2GetPartnerVals(partner, c, monthDates, P2_GET.newd));
@@ -933,7 +933,7 @@ function p2ActualsMTD(partner, scopeCity, monthDates) {
   const lastAD = adTot.length ? adTot[adTot.length - 1] : 0;   // Σciudades en la última fecha (base de proyección)
   return { ad, nr, sh, nrV, shV, lastAD };
 }
-function p2ProjMTD(act, lastDate) {
+export function p2ProjMTD(act, lastDate) {
   const { daysElapsed, daysRemaining } = calcProjectionDays(lastDate);
   // AD es SNAPSHOT (nivel), no un flujo acumulado: la proyección honesta de cierre de mes
   // es el nivel actual (plano), NO lastAD×1.4 (un +40% fijo que ignora los días restantes e
@@ -944,11 +944,11 @@ function p2ProjMTD(act, lastDate) {
 // Mismos rangos que pColor() (data.js), usado en Metas/Ops/Insights: >100 morado,
 // >=80 verde, >=50 amarillo, <50 rojo. Antes esta función tenía su propio corte en
 // 80/100 (todo <80 salía rojo) — desalineado con el resto del dashboard.
-function p2AvanceColor(pct) { return pColor(pct); }
+export function p2AvanceColor(pct) { return pColor(pct); }
 
 // Tarjeta "Referencia" (sin meta en BD, ej. Fleet): valor actual + badge WoW,
 // estilo visualmente distinto (fondo celeste) de las tarjetas con meta real.
-function p2RefCard(label, arr, kind, es) {
+export function p2RefCard(label, arr, kind, es) {
   const last = arr[arr.length - 1], prev = arr.length > 1 ? arr[arr.length - 2] : null;
   const fmtN = kind === "pct" ? (v => v == null ? "—" : (v * 100).toFixed(1) + "%")
              : kind === "ratio1" ? (v => v == null ? "—" : v.toFixed(1))
@@ -971,7 +971,7 @@ function p2RefCard(label, arr, kind, es) {
 
 // Tarjeta meta-vs-actual reutilizable (Fleet/TukTuk): actual/goal + % + barra.
 // projV null → sin línea de proyección (KPIs de tasa/snapshot no proyectan).
-function _p2MetaCard(label, real, goal, projV, fmtN, es) {
+export function _p2MetaCard(label, real, goal, projV, fmtN, es) {
   const pct = goal > 0 ? (real / goal) * 100 : 0;
   const col = p2AvanceColor(pct);
   const ppct = (projV != null && goal > 0) ? (projV / goal) * 100 : null;
@@ -992,7 +992,7 @@ function _p2MetaCard(label, real, goal, projV, fmtN, es) {
   </div>`;
 }
 // Tarjeta solo-meta (sin actual medible, ej. Utilización Fleet).
-function _p2MetaOnlyCard(label, goal, fmtN, note, es) {
+export function _p2MetaOnlyCard(label, goal, fmtN, note, es) {
   return `<div style="flex:1;min-width:0;background:#ecfeff;border:1px solid #a5f3fc;border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;justify-content:center;gap:2px">
     <span style="font-size:.58rem;color:#0891b2;font-weight:700;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(label)}</span>
     <div style="font-weight:900;font-size:1rem;color:#111">${fmtN(goal)}</div>
@@ -1002,9 +1002,9 @@ function _p2MetaOnlyCard(label, goal, fmtN, note, es) {
 
 // % honesto: NO redondear 99.5-99.99 a "100%" (parecería meta cumplida sin estarlo).
 // <100 → 1 decimal (99.6%); ≥100 → entero (106%). Espeja el criterio de la pestaña Metas.
-function _p2PctTxt(pct) { return (pct >= 100 ? pct.toFixed(0) : Math.min(pct, 99.9).toFixed(1)) + "%"; }
+export function _p2PctTxt(pct) { return (pct >= 100 ? pct.toFixed(0) : Math.min(pct, 99.9).toFixed(1)) + "%"; }
 
-function buildSlide2Avance(partner, idx) {
+export function buildSlide2Avance(partner, idx) {
   const es = PRESENT2_STATE.lang === "es";
   const isTk = PRESENT2_STATE.dataset === "tuktuk";   // TukTuk: metas meta_tk_* (Fase 4)
   const fleetMode = p2IsFleetMode(partner);
@@ -1128,7 +1128,7 @@ function buildSlide2Avance(partner, idx) {
 // vía P2_SLIDES (ese array se re-ejecuta completo para la sección Taxi Y para la
 // TukTuk — agregarla ahí la duplicaría). Solo aparece para partners con TukTuk
 // (p2TuktukSectionVisible) — sin TukTuk, "combinado" sería idéntico a Taxi-only.
-function buildSlide2AvanceCombinado(partner, idx) {
+export function buildSlide2AvanceCombinado(partner, idx) {
   const es = PRESENT2_STATE.lang === "es";
   const savedDs = PRESENT2_STATE.dataset;   // restaurar antes de salir (accessors globales)
 
@@ -1192,7 +1192,7 @@ function buildSlide2AvanceCombinado(partner, idx) {
 
 // ── SLIDE: ALERTAS (NEXT STEPS) ───────────────────────────────────────────────
 // Señales automáticas por nivel. Thresholds tunables (decisión de negocio).
-const P2_ALERT_THRESHOLDS = {
+export const P2_ALERT_THRESHOLDS = {
   wowDropCity: -5,      // % WoW de caída de AD en ciudad → alerta
   retMin: 0.85,         // retención mínima (general)
   retLargeMin: 0.85,    // retención mínima parks grandes
@@ -1200,7 +1200,7 @@ const P2_ALERT_THRESHOLDS = {
   smallShPerAdMin: 15,     // SH/AD (horas/conductor) mínimo park chico
   midTripsPerAdMin: 20     // Trips/AD (viajes/conductor) mínimo park medio
 };
-function p2ComputeAlerts(partner, dates) {
+export function p2ComputeAlerts(partner, dates) {
   const es = PRESENT2_STATE.lang === "es";
   const T = P2_ALERT_THRESHOLDS;
   const mi = p2ModeInfo();
@@ -1259,7 +1259,7 @@ function p2ComputeAlerts(partner, dates) {
 // ciudades afectadas como chips en esa misma fila — antes salía una fila por
 // ciudad y el mismo tipo de alerta se repetía N veces (una por ciudad), ilegible
 // con 4+ ciudades. Mismo orden de severidad que antes (Map preserva inserción).
-function p2GroupAlerts(alerts) {
+export function p2GroupAlerts(alerts) {
   const groups = new Map();
   alerts.forEach(a => {
     const k = `${a.sev}|||${a.kind}`;
@@ -1268,7 +1268,7 @@ function p2GroupAlerts(alerts) {
   });
   return [...groups.values()];
 }
-function buildSlide2Alerts(partner, dates, idx) {
+export function buildSlide2Alerts(partner, dates, idx) {
   const es = PRESENT2_STATE.lang === "es";
   // P2_ALERT_THRESHOLDS (retención 85%, SH/AD, Trips/AD) está calibrado para cadencia
   // SEMANAL. Aplicado tal cual en Mensual/Diario dispara falsas alarmas partner-facing (ej.
@@ -1313,13 +1313,13 @@ function buildSlide2Alerts(partner, dates, idx) {
 // Usa el motor puro forecast.js sobre la serie MENSUAL deduplicada (STATE.rawDataMensual
 // vía p2Vals). Ignora el `dates` tail-4 del deck y toma TODO el historial con p2AllDates().
 // Solo tiene sentido en escala mensual → gate como buildSlide2Alerts.
-const P2_FC_KPIS = [
+export const P2_FC_KPIS = [
   { key: "ad",    es: "Conductores Activos", en: "Active Drivers", color: "#FF0000", kind: "num"  },
   { key: "sh",    es: "Horas de Conexión",   en: "Supply Hours",   color: "#8b5cf6", kind: "numK" },
   { key: "gmv",   es: "GMV",                 en: "GMV",            color: "#0ea5e9", kind: "money" },
   { key: "trips", es: "Viajes",              en: "Trips",          color: "#10b981", kind: "num"  }
 ];
-function _p2FcFmt(kind, v) {
+export function _p2FcFmt(kind, v) {
   if (v == null || isNaN(v)) return "—";
   if (kind === "money") return "$" + fmtSmart(v);
   if (kind === "numK")  return fmtSmart(v);
@@ -1328,7 +1328,7 @@ function _p2FcFmt(kind, v) {
 // Serie mensual por KPI (Perú = Σ ciudades del partner) + inputs de palancas, desde el
 // dataset activo. p2Vals suma ciudades por mes; para AD/autos (snapshot) la suma de niveles
 // por ciudad ES el nivel Perú; para SH/GMV/viajes/N+R (flujos) la suma es el total.
-function p2ForecastBundle(partner) {
+export function p2ForecastBundle(partner) {
   const months = p2AllDates();
   const g = fn => p2Vals(partner, null, months, fn);
   const kpis = {
@@ -1349,9 +1349,9 @@ function p2ForecastBundle(partner) {
   };
   return { months, kpis, leversInput };
 }
-function _p2FcDropLast(inp) { const o = {}; for (const k in inp) o[k] = Array.isArray(inp[k]) ? inp[k].slice(0, -1) : inp[k]; return o; }
+export function _p2FcDropLast(inp) { const o = {}; for (const k in inp) o[k] = Array.isArray(inp[k]) ? inp[k].slice(0, -1) : inp[k]; return o; }
 // Meta de AD del mes más reciente cargado (Σ ciudades) para las "palancas hacia la meta".
-function p2ForecastTargetAD(partner) {
+export function p2ForecastTargetAD(partner) {
   const rows = (STATE.metasData || []).filter(m => m.partner === partner && m.mA);
   if (!rows.length) return null;
   let best = null;
@@ -1360,7 +1360,7 @@ function p2ForecastTargetAD(partner) {
   return sum || null;
 }
 // Cómputo compartido por build y chartFn (mismo patrón que p2Metrics en matriz/charts).
-function p2ForecastCompute(partner) {
+export function p2ForecastCompute(partner) {
   const b = p2ForecastBundle(partner);
   const partial = fcIsPartialLast(b.kpis.ad);
   const drop = partial && !PRESENT2_STATE.fcInclPartial;
@@ -1374,14 +1374,14 @@ function p2ForecastCompute(partner) {
   return { months: b.months, histMonths, futureMonths, drop, partial, fc, levers, target };
 }
 
-function _p2FcMiniCard(label, value, hint, color, tip) {
+export function _p2FcMiniCard(label, value, hint, color, tip) {
   return `<div ${tip ? `title="${escapeHTML(tip)}"` : ""} style="flex:1;min-width:0;background:#fafafa;border:1px solid #f0f0f0;border-radius:8px;padding:7px 9px;display:flex;flex-direction:column;gap:1px${tip ? ";cursor:help" : ""}">
     <div style="font-size:.55rem;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:.2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(label)}${tip ? ` <span style="color:#bbb;font-weight:900">ⓘ</span>` : ""}</div>
     <div style="font-weight:900;font-size:1rem;color:${color || "#111"}">${value}</div>
     <div style="font-size:.56rem;color:#999;line-height:1.15">${hint}</div>
   </div>`;
 }
-function _p2FcPalancasHTML(C, es) {
+export function _p2FcPalancasHTML(C, es) {
   const L = C.levers;
   if (!L) return "";
   const cards = [];
@@ -1452,7 +1452,7 @@ function _p2FcPalancasHTML(C, es) {
   </div>`;
 }
 // Detalle solo-vivo para el KAM (NO va al PDF): método + precisión por KPI.
-function _p2FcDetailHTML(C, es) {
+export function _p2FcDetailHTML(C, es) {
   const chips = P2_FC_KPIS.map(k => {
     const r = C.fc[k.key];
     const acc = r.mape != null ? "±" + r.mape.toFixed(0) + "%" : "—";
@@ -1463,7 +1463,7 @@ function _p2FcDetailHTML(C, es) {
     <div>${chips}</div>
   </div>`;
 }
-function buildSlide2Forecast(partner, dates, idx) {
+export function buildSlide2Forecast(partner, dates, idx) {
   const es = PRESENT2_STATE.lang === "es";
   const shell = inner => `<div style="width:100%;height:100%;background:#fff;padding:12px 14px;display:flex;flex-direction:column;overflow:hidden">
     ${p2BrandHeader(partner, (es ? "Proyección · próximos 3 meses" : "Forecast · next 3 months"),
@@ -1535,7 +1535,7 @@ function buildSlide2Forecast(partner, dates, idx) {
     ${detail}`);
 }
 // Gráfico por KPI: historia (sólida) + proyección (punteada) + banda sombreada.
-function p2ForecastChart(canvasId, labels, hist, fcObj, color, kind, root) {
+export function p2ForecastChart(canvasId, labels, hist, fcObj, color, kind, root) {
   const canvas = root ? root.querySelector(`#${canvasId}`) : document.getElementById(canvasId);
   if (!canvas || typeof Chart === "undefined") return;
   const nH = hist.length, H = fcObj.forecast.length;
@@ -1585,7 +1585,7 @@ function p2ForecastChart(canvasId, labels, hist, fcObj, color, kind, root) {
   });
   PRESENT2_STATE.charts.push(chart);
 }
-function buildSlide2ForecastCharts(partner, dates, root) {
+export function buildSlide2ForecastCharts(partner, dates, root) {
   if (STATE.curMode !== "mensual") return;
   const C = p2ForecastCompute(partner);
   if (!C || C.histMonths.length < 4) return;
@@ -1595,10 +1595,10 @@ function buildSlide2ForecastCharts(partner, dates, root) {
     p2ForecastChart(`p2fc_${k.key}`, labels, r.history, r, k.color, k.kind, root);
   });
 }
-function present2ToggleInclPartial() { PRESENT2_STATE.fcInclPartial = !PRESENT2_STATE.fcInclPartial; renderSlide2(); }
+export function present2ToggleInclPartial() { PRESENT2_STATE.fcInclPartial = !PRESENT2_STATE.fcInclPartial; renderSlide2(); }
 
 // ── RENDER PRINCIPAL (shell + slide activo) ───────────────────────────────────
-function renderPresent2() {
+export function renderPresent2() {
   ensureIndexes();
   destroyPresent2Charts();
   const el = document.getElementById("present2Content");
@@ -1688,7 +1688,7 @@ function renderPresent2() {
   renderSlide2();
 }
 
-function p2CmpBar() {
+export function p2CmpBar() {
   const es = PRESENT2_STATE.lang === "es";
   const tog = PRESENT2_STATE.cohort || {};
   const cityBtn = `<button onclick="present2ToggleCity()" class="preset-btn${PRESENT2_STATE.cmpCity ? " active" : ""}" style="flex:0 0 auto;padding:4px 10px;${PRESENT2_STATE.cmpCity ? "background:#64748b;color:#fff;border-color:#64748b" : ""}">${es ? "Ciudad" : "City"}</button>`;
@@ -1705,7 +1705,7 @@ function p2CmpBar() {
 // más nuevo que TukTuk (la flota tuktuk suele subirse con retraso), la última columna
 // del deck TukTuk salía en 0 en el PDF. (Bug HIGH del review; espeja el window de
 // getSelectedDates: mensual = últimos 4; semanal/diario = rango, con fallback.)
-function p2SelectedDates(from, to, mode) {
+export function p2SelectedDates(from, to, mode) {
   const all = p2AllDates() || [];
   if (!all.length) return [];
   const tail4 = () => {
@@ -1718,7 +1718,7 @@ function p2SelectedDates(from, to, mode) {
   return inRange.length ? inRange : tail4();
 }
 
-function renderSlide2() {
+export function renderSlide2() {
   const inner = document.getElementById("slide2Inner");
   if (!inner) return;
   destroyPresent2Charts();
@@ -1745,27 +1745,27 @@ function renderSlide2() {
 }
 
 // ── NAVEGACIÓN / CONTROLES ────────────────────────────────────────────────────
-function goSlide2(i) {
+export function goSlide2(i) {
   PRESENT2_STATE.slide = i;
   const nav = document.getElementById("present2Nav");
   if (nav) nav.innerHTML = p2NavHTML();   // repinta el nav (tinte por sección Taxi/TukTuk)
   renderSlide2();
 }
-function prevSlide2() { goSlide2(Math.max(0, PRESENT2_STATE.slide - 1)); }
-function nextSlide2() { goSlide2(Math.min((PRESENT2_STATE._deckLen || P2_SLIDES.length) - 1, PRESENT2_STATE.slide + 1)); }
+export function prevSlide2() { goSlide2(Math.max(0, PRESENT2_STATE.slide - 1)); }
+export function nextSlide2() { goSlide2(Math.min((PRESENT2_STATE._deckLen || P2_SLIDES.length) - 1, PRESENT2_STATE.slide + 1)); }
 // Cambio de partner: reset a la carátula y re-render del shell (el deck del nuevo
 // partner puede tener otra longitud/secciones → hay que reconstruir el nav).
-function onPresent2PartnerChange(p) { PRESENT2_STATE.partner = p; PRESENT2_STATE.slide = 0; renderPresent2(); }
-function setPresent2Lang(l) { PRESENT2_STATE.lang = l; renderPresent2(); }
-function present2ToggleCity() { PRESENT2_STATE.cmpCity = !PRESENT2_STATE.cmpCity; refreshPresent2Bar(); renderSlide2(); }
+export function onPresent2PartnerChange(p) { PRESENT2_STATE.partner = p; PRESENT2_STATE.slide = 0; renderPresent2(); }
+export function setPresent2Lang(l) { PRESENT2_STATE.lang = l; renderPresent2(); }
+export function present2ToggleCity() { PRESENT2_STATE.cmpCity = !PRESENT2_STATE.cmpCity; refreshPresent2Bar(); renderSlide2(); }
 // Toggle Auto/Fleet/Taxi: re-renderiza el shell completo (el botón activo cambia
 // de estilo) y el slide actual, para que la matriz recalcule con el set de KPIs correcto.
-function present2SetFleetMode(mode) { PRESENT2_STATE.fleetMode = mode; renderPresent2(); }
+export function present2SetFleetMode(mode) { PRESENT2_STATE.fleetMode = mode; renderPresent2(); }
 // Mes META de "Avance vs Meta": "" → auto (según "Hasta"); nombre → fijo.
-function present2SetAvanceMes(mes) { PRESENT2_STATE.avanceMesSel = mes || null; renderPresent2(); }
+export function present2SetAvanceMes(mes) { PRESENT2_STATE.avanceMesSel = mes || null; renderPresent2(); }
 // Markup de los botones Taxi/TukTuk de la Sección (bar con id present2SectionBar).
 // "just-active" dispara la animación CSS de pop al repintarse (ver styles.css).
-function _p2SectionBarHTML(curDs) {
+export function _p2SectionBarHTML(curDs) {
   return `
     <button class="mode-btn ${curDs === "taxi"   ? "active just-active" : ""}" onclick="present2JumpSection('taxi')">🚕 Taxi</button>
     <button class="mode-btn ${curDs === "tuktuk" ? "active just-active" : ""}" onclick="present2JumpSection('tuktuk')">🛺 TukTuk</button>`;
@@ -1774,7 +1774,7 @@ function _p2SectionBarHTML(curDs) {
 // NO resetea el partner (arregla el bug de perder el partner al alternar). goSlide2
 // no repinta este bar (solo #present2Nav y #slide2Inner) → lo hacemos aquí para que
 // el botón activo se refleje y anime en cada click (antes quedaba visualmente inerte).
-function present2JumpSection(ds) {
+export function present2JumpSection(ds) {
   const deck = p2Deck(PRESENT2_STATE.partner);
   const i = deck.findIndex(e => e.ds === ds);
   goSlide2(i < 0 ? 0 : i);
@@ -1782,24 +1782,24 @@ function present2JumpSection(ds) {
   const bar = document.getElementById("present2SectionBar");
   if (bar) bar.innerHTML = _p2SectionBarHTML(actualDs);
 }
-function present2ToggleCohort(k) {
+export function present2ToggleCohort(k) {
   PRESENT2_STATE.cohort = PRESENT2_STATE.cohort || {};
   PRESENT2_STATE.cohort[k] = !PRESENT2_STATE.cohort[k];
   refreshPresent2Bar(); renderSlide2();
 }
-function refreshPresent2Bar() { const bar = document.getElementById("present2CmpBar"); if (bar) bar.innerHTML = p2CmpBar(); }
+export function refreshPresent2Bar() { const bar = document.getElementById("present2CmpBar"); if (bar) bar.innerHTML = p2CmpBar(); }
 // Buscador autocomplete (patrón de Vista Partner): escribes → lista filtrada →
 // click selecciona. NO cambia de partner al escribir. p2ActivePartners = lista del
 // dataset activo (Fase 3 agregará tuktuk; hoy = STATE.allPartners).
-function p2FilterPartners(q) { p2ShowPartnerList(); _p2PaintPartnerList(q); }
-function p2ShowPartnerList() {
+export function p2FilterPartners(q) { p2ShowPartnerList(); _p2PaintPartnerList(q); }
+export function p2ShowPartnerList() {
   const list = document.getElementById("present2PartnerList");
   if (!list) return;
   list.style.display = "block";
   if (!list.innerHTML) { const inp = document.getElementById("present2Search"); _p2PaintPartnerList(inp ? inp.value : ""); }
 }
-function p2HidePartnerList() { const l = document.getElementById("present2PartnerList"); if (l) l.style.display = "none"; }
-function _p2PaintPartnerList(q) {
+export function p2HidePartnerList() { const l = document.getElementById("present2PartnerList"); if (l) l.style.display = "none"; }
+export function _p2PaintPartnerList(q) {
   const list = document.getElementById("present2PartnerList");
   if (!list) return;
   const lower = (q || "").toLowerCase().trim();
@@ -1817,12 +1817,12 @@ function _p2PaintPartnerList(q) {
       <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(p)}</span></div>`;
   }).join("");
 }
-function p2SelectPartner(p) {
+export function p2SelectPartner(p) {
   // onmousedown corre ANTES del onblur del input (que oculta la lista).
   const inp = document.getElementById("present2Search"); if (inp) inp.value = p;
   p2HidePartnerList(); onPresent2PartnerChange(p);
 }
-function p2SearchKeydown(e) {
+export function p2SearchKeydown(e) {
   if (e.key === "Enter") {
     const l = document.getElementById("present2PartnerList");
     const f = l && l.querySelector(".pv-opt");
@@ -1835,7 +1835,7 @@ function p2SearchKeydown(e) {
 // Mismo patrón que downloadPresentPDF: cada slide se arma en un div temporal
 // 1280×720 y se captura con html2canvas. Los charts se construyen acotados al div
 // (root.querySelector) para no chocar con los canvas de la vista en vivo (ids dup).
-async function downloadPresent2PDF() {
+export async function downloadPresent2PDF() {
   const partner = PRESENT2_STATE.partner;
   if (!partner) { alert("Selecciona un partner primero."); return; }
   if (!window.jspdf || !window.html2canvas) { alert("Librerias PDF no disponibles."); return; }

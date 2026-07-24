@@ -11,31 +11,31 @@
 // error observado en el backtest, por horizonte (crece con la distancia).
 
 // ── utilidades ────────────────────────────────────────────────────────────────
-function _fcClean(arr) { return (arr || []).map(v => (v == null || v === "" || isNaN(v)) ? null : +v); }
-function _fcMape(pred, act) {
+export function _fcClean(arr) { return (arr || []).map(v => (v == null || v === "" || isNaN(v)) ? null : +v); }
+export function _fcMape(pred, act) {
   let s = 0, n = 0;
   for (let i = 0; i < act.length; i++) { if (act[i]) { s += Math.abs((pred[i] - act[i]) / act[i]); n++; } }
   return n ? 100 * s / n : Infinity;
 }
-function _fcMedian(a) { const s = a.slice().sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : 0; }
+export function _fcMedian(a) { const s = a.slice().sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : 0; }
 // "2026-06" → "2026-07" (avanza el mes, maneja cambio de año).
-function fcNextMonth(ym) {
+export function fcNextMonth(ym) {
   const m = String(ym).match(/^(\d{4})-(\d{2})/);
   if (!m) return ym;
   let y = +m[1], mo = +m[2] + 1;
   if (mo > 12) { mo = 1; y++; }
   return y + "-" + String(mo).padStart(2, "0");
 }
-function fcFutureMonths(lastYm, h) {
+export function fcFutureMonths(lastYm, h) {
   const out = []; let cur = lastYm;
   for (let i = 0; i < h; i++) { cur = fcNextMonth(cur); out.push(cur); }
   return out;
 }
 
 // ── métodos base: fit(train[]) → predict(h) con h = 1,2,… pasos adelante ────────
-function _fcNaive(y) { const last = y[y.length - 1]; return () => last; }
-function _fcMA3(y) { const k = Math.min(3, y.length); const m = y.slice(-k).reduce((a, b) => a + b, 0) / k; return () => m; }
-function _fcLinregCoef(y) {
+export function _fcNaive(y) { const last = y[y.length - 1]; return () => last; }
+export function _fcMA3(y) { const k = Math.min(3, y.length); const m = y.slice(-k).reduce((a, b) => a + b, 0) / k; return () => m; }
+export function _fcLinregCoef(y) {
   const n = y.length; let sx = 0, sy = 0, sxx = 0, sxy = 0;
   for (let i = 0; i < n; i++) { sx += i; sy += y[i]; sxx += i * i; sxy += i * y[i]; }
   const den = (n * sxx - sx * sx) || 1;
@@ -43,7 +43,7 @@ function _fcLinregCoef(y) {
   const a = (sy - b * sx) / n;
   return { a, b };
 }
-function _fcLinRecent(k) {
+export function _fcLinRecent(k) {
   return y => {
     const s = y.slice(-Math.min(k, y.length));
     const f = _fcLinregCoef(s);
@@ -51,7 +51,7 @@ function _fcLinRecent(k) {
     return h => f.a + f.b * (base + h);
   };
 }
-function _fcCagrRecent(k) {
+export function _fcCagrRecent(k) {
   return y => {
     const s = y.slice(-Math.min(k + 1, y.length));
     const first = s[0], last = s[s.length - 1], steps = s.length - 1;
@@ -62,7 +62,7 @@ function _fcCagrRecent(k) {
 }
 // Holt lineal (nivel+tendencia), opción amortiguada (phi<1). Params por menor SSE
 // one-step-ahead sobre el TRAIN (no se elige mirando el holdout → sin fuga de datos).
-function _fcHoltRun(y, alpha, beta, phi) {
+export function _fcHoltRun(y, alpha, beta, phi) {
   let l = y[0], t = (y.length > 1 ? y[1] - y[0] : 0), sse = 0;
   for (let i = 1; i < y.length; i++) {
     const f = l + phi * t;
@@ -73,7 +73,7 @@ function _fcHoltRun(y, alpha, beta, phi) {
   }
   return { l, t, sse };
 }
-function _fcHoltFit(y, damped) {
+export function _fcHoltFit(y, damped) {
   const As = [0.1, 0.3, 0.5, 0.7, 0.9], Bs = [0.05, 0.1, 0.2, 0.4], Ps = damped ? [0.80, 0.90, 0.98] : [1];
   let best = null;
   for (const a of As) for (const b of Bs) for (const p of Ps) {
@@ -82,7 +82,7 @@ function _fcHoltFit(y, damped) {
   }
   return best;
 }
-function _fcHolt(damped) {
+export function _fcHolt(damped) {
   return y => {
     if (y.length < 3) { const last = y[y.length - 1]; return () => last; }
     const f = _fcHoltFit(y, damped);
@@ -95,7 +95,7 @@ function _fcHolt(damped) {
   };
 }
 
-const FC_METHODS = [
+export const FC_METHODS = [
   { key: "naive",  es: "Nivel actual",          en: "Current level",       fit: _fcNaive },
   { key: "ma3",    es: "Promedio 3 meses",       en: "3-month average",     fit: _fcMA3 },
   { key: "lin6",   es: "Tendencia 6 meses",      en: "6-month trend",       fit: _fcLinRecent(6) },
@@ -103,12 +103,12 @@ const FC_METHODS = [
   { key: "damped", es: "Suavizado amortiguado",  en: "Damped smoothing",    fit: _fcHolt(true) },
   { key: "cagr6",  es: "Crecimiento compuesto 6m", en: "6-month CAGR",      fit: _fcCagrRecent(6) }
 ];
-function fcMethodName(key, es) { const m = FC_METHODS.find(x => x.key === key); return m ? (es ? m.es : m.en) : key; }
+export function fcMethodName(key, es) { const m = FC_METHODS.find(x => x.key === key); return m ? (es ? m.es : m.en) : key; }
 
 // ── detección de mes parcial (dato aún cargándose) ──────────────────────────────
 // TRUE si el último punto está muy por debajo de la mediana de los 3 previos (típico de
 // un mes que todavía no se subió completo). El slide ofrece un toggle para excluirlo.
-function fcIsPartialLast(series) {
+export function fcIsPartialLast(series) {
   const y = _fcClean(series).filter(v => v != null);
   if (y.length < 4) return false;
   const last = y[y.length - 1];
@@ -119,7 +119,7 @@ function fcIsPartialLast(series) {
 
 // ── pronóstico de UNA serie ─────────────────────────────────────────────────────
 // opts = { horizon=3, dropLast=false }. Devuelve historia + forecast + banda + método + mape.
-function fcForecastSeries(rawSeries, opts) {
+export function fcForecastSeries(rawSeries, opts) {
   opts = opts || {};
   const horizon = opts.horizon || 3;
   let y = _fcClean(rawSeries).filter(v => v != null);
@@ -173,7 +173,7 @@ function fcForecastSeries(rawSeries, opts) {
 // m = objeto de arrays mensuales ALINEADOS: ad, newP, newS, react, sh, trips,
 //     regP1/10/50/100, regS1/10/50/100. Devuelve la descomposición del último mes +
 //     cuello del embudo + productividad. La narrativa/target la arma el slide.
-function fcGrowthLevers(m) {
+export function fcGrowthLevers(m) {
   const n = (m.ad || []).length;
   if (!n) return null;
   const L = n - 1;
@@ -228,7 +228,7 @@ function fcGrowthLevers(m) {
 // Dado el estado actual (levers) y un objetivo de AD para el próximo mes, cuánto mover
 // cada palanca. AD_next ≈ AD·retención + Nuevos.  →  Nuevos_necesarios = T − AD·retención;
 // retención_necesaria = (T − Nuevos_actuales) / AD.
-function fcLeversToTarget(levers, targetAD) {
+export function fcLeversToTarget(levers, targetAD) {
   if (!levers || !targetAD || !levers.adNow) return null;
   const ret = levers.retention != null ? levers.retention : 1;
   const keep = levers.adNow * ret;                       // conductores que se quedan

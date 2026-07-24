@@ -2,7 +2,7 @@
 // Pensado para reuniones semanales/mensuales con el partner.
 // Estructura: header, KPIs globales, sección por ciudad con charts.
 
-const PARTNER_VIEW_STATE = {
+export const PARTNER_VIEW_STATE = {
   partner: null,
   period:  "auto",   // auto | 3m | 6m | 12m | custom
   lang:    "es",     // "es" | "en"  — afecta panel ejecutivo, headers y PDF
@@ -14,7 +14,7 @@ const PARTNER_VIEW_STATE = {
 // ── i18n (español / inglés) ───────────────────────────────────────────────────
 // Diccionario centralizado de todos los textos visibles que se exportan al PDF.
 // Usar _t("key") para resolverlos segun PARTNER_VIEW_STATE.lang.
-const PV_I18N = {
+export const PV_I18N = {
   // Controles
   partner:        { es: "Partner",                 en: "Partner" },
   searchPartner:  { es: "Buscar partner...",       en: "Search partner..." },
@@ -249,7 +249,7 @@ const PV_I18N = {
 
 // Resolver i18n: devuelve string en el lang actual.
 // Soporta interpolacion estilo "{name}" -> opts.name.
-function _t(key, opts) {
+export function _t(key, opts) {
   const lang = PARTNER_VIEW_STATE.lang || "es";
   const entry = PV_I18N[key];
   if (!entry) return key;
@@ -259,7 +259,7 @@ function _t(key, opts) {
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
-function _pvDestroyCharts() {
+export function _pvDestroyCharts() {
   PARTNER_VIEW_STATE.charts.forEach(c => { try { c.destroy(); } catch(e){} });
   PARTNER_VIEW_STATE.charts = [];
   const sc = PARTNER_VIEW_STATE.scopeCharts || {};
@@ -271,7 +271,7 @@ function _pvDestroyCharts() {
 // sigue en el DOM: destruimos la instancia previa y creamos una nueva EN EL MISMO
 // div, sin reconstruir todo renderPartnerView (resumen ejecutivo, conversión,
 // KPIs, innerHTML). Los animations:false ya hacen barato el render.
-function _pvMountChart(elId, el, opts) {
+export function _pvMountChart(elId, el, opts) {
   const reg = PARTNER_VIEW_STATE.scopeCharts || (PARTNER_VIEW_STATE.scopeCharts = {});
   const prev = reg[elId];
   if (prev) { try { prev.destroy(); } catch (e) {} }
@@ -281,21 +281,21 @@ function _pvMountChart(elId, el, opts) {
 }
 
 // Cuántos puntos mostrar según escala
-function _pvDefaultPoints(mode) {
+export function _pvDefaultPoints(mode) {
   if (mode === "mensual") return 12;
   if (mode === "diario")  return 30;
   return 13; // semanal
 }
 
 // Devuelve las últimas N fechas disponibles (subset de STATE.allDates)
-function _pvLastNDates(n) {
+export function _pvLastNDates(n) {
   const all = STATE.allDates || [];
   return all.slice(-n);
 }
 
 // Agrega rawData filtrado por partner + ciudad, devuelve array { date, ad, nr, sh,
 // trips, commission, npPartner (newPartner only), npService (newService only), reactivated }
-function _pvSeriesByPartnerCity(partner, city, dates) {
+export function _pvSeriesByPartnerCity(partner, city, dates) {
   const datesSet = new Set(dates);
   const byDate = {};
   // Solo rows de este partner y esta ciudad y dentro del rango
@@ -339,7 +339,7 @@ function _pvSeriesByPartnerCity(partner, city, dates) {
 }
 
 // ── RENDER PRINCIPAL ──────────────────────────────────────────────────────────
-function renderPartnerView() {
+export function renderPartnerView() {
   const el = document.getElementById("partnerViewContent");
   if (!el) return;
   ensureIndexes();
@@ -539,7 +539,7 @@ function renderPartnerView() {
 // KAM tenga un "primer vistazo" de qué pasa con el partner y qué hacer esta
 // semana. No es IA — son reglas determinísticas basadas en thresholds que un
 // KAM senior aplicaria mentalmente. Severidad: red > yellow > green > info.
-function _pvExecutiveSummary(ctx) {
+export function _pvExecutiveSummary(ctx) {
   const {
     partner, citiesOf, dates, recibeLeads, lastDate, prevDate,
     partnerRows, lastRows, prevRows,
@@ -879,7 +879,7 @@ function _pvExecutiveSummary(ctx) {
     </div>`;
 }
 
-function _pvKpiCard(label, cur, prev, color, opts = {}) {
+export function _pvKpiCard(label, cur, prev, color, opts = {}) {
   // opts: { isMoney, useK }
   // - isMoney: prefijo $ en el valor
   // - useK: usar fmtSmart (X.XK / X.XM con 1 decimal) en vez de fmt
@@ -904,7 +904,7 @@ function _pvKpiCard(label, cur, prev, color, opts = {}) {
 // Usa _pvScopeSeries — la MISMA serie que alimenta los charts de abajo — para que
 // cada tarjeta coincida con el último punto de su gráfico. El período previo solo
 // genera badge si está presente (si no, sin comparación, no "NEW" engañoso).
-function _pvScopeKpiRow(partner, scopeCity, dates) {
+export function _pvScopeKpiRow(partner, scopeCity, dates) {
   const series = _pvScopeSeries(partner, scopeCity, dates);
   if (!series.length) return "";
   const last  = series[series.length - 1];
@@ -921,7 +921,7 @@ function _pvScopeKpiRow(partner, scopeCity, dates) {
   </div>`;
 }
 
-function _pvCitySection(partner, city, dates, recibeLeads, seriesCached) {
+export function _pvCitySection(partner, city, dates, recibeLeads, seriesCached) {
   const cityColor = CITY_COLORS[city] || "#888";
   const series = seriesCached || _pvSeriesByPartnerCity(partner, city, dates);
   // Tendencia: comparar promedio últimos 3 vs anteriores 3 (si hay datos)
@@ -997,7 +997,7 @@ function _pvCitySection(partner, city, dates, recibeLeads, seriesCached) {
     </div>`;
 }
 
-function _pvBuildCityCharts(partner, city, dates, recibeLeads, seriesCached) {
+export function _pvBuildCityCharts(partner, city, dates, recibeLeads, seriesCached) {
   const id = city.toLowerCase().replace(/[^a-z0-9]/g, "");
   const cityColor = CITY_COLORS[city] || "#888";
   const series = seriesCached || _pvSeriesByPartnerCity(partner, city, dates);
@@ -1034,7 +1034,7 @@ function _pvBuildCityCharts(partner, city, dates, recibeLeads, seriesCached) {
     ["#10b981", "#06b6d4"]);
 }
 
-function _pvSimpleLine(elId, labels, series, colors, formatter) {
+export function _pvSimpleLine(elId, labels, series, colors, formatter) {
   const el = document.getElementById(elId);
   if (!el || typeof ApexCharts === "undefined") return;
   // Marcar el contenedor con clase para que las reglas CSS de fondo claro
@@ -1073,7 +1073,7 @@ function _pvSimpleLine(elId, labels, series, colors, formatter) {
   PARTNER_VIEW_STATE.charts.push(ch);
 }
 
-function _pvStackedColumn(elId, labels, series, colors) {
+export function _pvStackedColumn(elId, labels, series, colors) {
   const el = document.getElementById(elId);
   if (!el || typeof ApexCharts === "undefined") return;
   el.classList.add("pv-chart");
@@ -1127,7 +1127,7 @@ function _pvStackedColumn(elId, labels, series, colors) {
   PARTNER_VIEW_STATE.charts.push(ch);
 }
 
-function _pvDualLine(elId, labels, series, colors) {
+export function _pvDualLine(elId, labels, series, colors) {
   const el = document.getElementById(elId);
   if (!el || typeof ApexCharts === "undefined") return;
   el.classList.add("pv-chart");
@@ -1167,18 +1167,18 @@ function _pvDualLine(elId, labels, series, colors) {
 }
 
 // ── INTERACCIONES ─────────────────────────────────────────────────────────────
-function pvOnPartnerChange(p) {
+export function pvOnPartnerChange(p) {
   PARTNER_VIEW_STATE.partner = p;
   renderPartnerView();
 }
 
-function pvOnPeriodChange(p) {
+export function pvOnPeriodChange(p) {
   PARTNER_VIEW_STATE.period = p;
   renderPartnerView();
 }
 
 // Cambia el idioma de la Vista Partner (afecta panel ejecutivo, headers y PDF)
-function pvSetLang(lang) {
+export function pvSetLang(lang) {
   if (lang !== "es" && lang !== "en") return;
   if (PARTNER_VIEW_STATE.lang === lang) return;
   PARTNER_VIEW_STATE.lang = lang;
@@ -1189,12 +1189,12 @@ function pvSetLang(lang) {
 // Reemplaza el <select> nativo que se cerraba en cada keystroke. La lista es
 // un <div> flotante que NO se re-renderiza (solo cambian items visibles),
 // asi que el input nunca pierde focus y se puede hacer click en una opcion.
-function pvFilterPartners(q) {
+export function pvFilterPartners(q) {
   pvShowPartnerList();
   _pvPaintPartnerList(q);
 }
 
-function pvShowPartnerList() {
+export function pvShowPartnerList() {
   const list = document.getElementById("pvPartnerList");
   if (!list) return;
   list.style.display = "block";
@@ -1204,12 +1204,12 @@ function pvShowPartnerList() {
   }
 }
 
-function pvHidePartnerList() {
+export function pvHidePartnerList() {
   const list = document.getElementById("pvPartnerList");
   if (list) list.style.display = "none";
 }
 
-function _pvPaintPartnerList(q) {
+export function _pvPaintPartnerList(q) {
   const list = document.getElementById("pvPartnerList");
   if (!list) return;
   const lower = (q || "").toLowerCase().trim();
@@ -1231,7 +1231,7 @@ function _pvPaintPartnerList(q) {
   }).join("");
 }
 
-function pvSelectPartner(p) {
+export function pvSelectPartner(p) {
   // onmousedown asegura que esto corra ANTES del onblur del input (que oculta la lista)
   const inp = document.getElementById("pvSearch");
   if (inp) inp.value = p;
@@ -1239,7 +1239,7 @@ function pvSelectPartner(p) {
   pvOnPartnerChange(p);
 }
 
-function pvSearchKeydown(e) {
+export function pvSearchKeydown(e) {
   if (e.key === "Enter") {
     const list = document.getElementById("pvPartnerList");
     const first = list && list.querySelector(".pv-opt");
@@ -1256,7 +1256,7 @@ function pvSearchKeydown(e) {
 // ── OPCIONES DINAMICAS DE PERIODO ─────────────────────────────────────────────
 // Etiquetas claras segun el modo actual (semanal/mensual/diario). Antes decian
 // "Ultimos 3 (cortos)", "Ultimos 6" sin unidad — confuso.
-function _pvPeriodOptions(period, periodLabel) {
+export function _pvPeriodOptions(period, periodLabel) {
   const mode = STATE.curMode;
   const unit = mode === "mensual" ? "meses" : mode === "diario" ? "días" : "semanas";
   return `
@@ -1267,7 +1267,7 @@ function _pvPeriodOptions(period, periodLabel) {
 }
 
 // ── EXPORT PDF ────────────────────────────────────────────────────────────────
-async function pvDownloadPDF() {
+export async function pvDownloadPDF() {
   const partner = PARTNER_VIEW_STATE.partner;
   if (!partner) { alert("Selecciona un partner primero."); return; }
   if (!window.jspdf || !window.html2canvas) { alert("Librerias PDF no disponibles."); return; }
@@ -1299,7 +1299,7 @@ async function pvDownloadPDF() {
 
 // ── EMBUDO DE CONVERSIÓN (funnel por CLID, solo top-10 por tamaño) ─────────────
 // Percentil lineal (interpolado) de un array numerico. Ignora null/NaN.
-function _pvPercentile(arr, p) {
+export function _pvPercentile(arr, p) {
   const s = (arr || []).filter(v => v !== null && v !== undefined && !isNaN(v)).sort((a, b) => a - b);
   if (!s.length) return null;
   const idx = (s.length - 1) * p;
@@ -1308,7 +1308,7 @@ function _pvPercentile(arr, p) {
 }
 
 // Heatmap rojo→verde de una celda segun su posicion vs percentiles de la columna.
-function _pvConvColor(v, p25, p50, p75) {
+export function _pvConvColor(v, p25, p50, p75) {
   if (v === null || v === undefined || p50 === null) return "#fff";
   if (v >= p75) return "#bbf7d0";
   if (v >= p50) return "#dcfce7";
@@ -1317,7 +1317,7 @@ function _pvConvColor(v, p25, p50, p75) {
 }
 
 // Relee los filtros de pares elegibles y re-renderiza SOLO la sección de conversión.
-function pvConvFilter() {
+export function pvConvFilter() {
   const adMin = +document.getElementById("pvConvAdMin")?.value;
   const adMax = +document.getElementById("pvConvAdMax")?.value;
   const ndMin = +document.getElementById("pvConvNdMin")?.value;
@@ -1330,14 +1330,14 @@ function pvConvFilter() {
 }
 
 // Alterna el cohorte de comparación (Top 5 / Top 10) sin re-render completo.
-function pvConvCohort(which) {
+export function pvConvCohort(which) {
   PARTNER_VIEW_STATE.convCohort = which === "top5" ? "top5" : "top10";
   _pvConvRefresh();
 }
 
 // Reconstruye conversión Y adquisición por canal (comparten el toggle Top5/Top10
 // y los filtros) + re-monta ambos gráficos. Mantiene los dos charts en sincronía.
-function _pvConvRefresh() {
+export function _pvConvRefresh() {
   const p = PARTNER_VIEW_STATE.partner;
   const box = document.getElementById("pvConvBox");
   const chBox = document.getElementById("pvChannelBox");
@@ -1349,7 +1349,7 @@ function _pvConvRefresh() {
 // Embudo de conversión: SOLO el partner seleccionado vs el PROMEDIO del cohorte
 // (Top 5 / Top 10 por Active Drivers). NO expone la conversión de partners
 // individuales — pensado para presentárselo al propio partner.
-function _pvConvData(selectedPartner) {
+export function _pvConvData(selectedPartner) {
   const data = STATE.conversionData || [];
   const months = [...new Set(data.map(r => r.mes))].sort();
   const latest = months[months.length - 1];
@@ -1379,7 +1379,7 @@ function _pvConvData(selectedPartner) {
   return { latest, F, cols, top5, top10, partnerVals, hasPartner: pRows.length > 0, nPop: pop.length };
 }
 
-function _pvConversionSection(selectedPartner) {
+export function _pvConversionSection(selectedPartner) {
   if (!(STATE.conversionData || []).length) {
     const msg = PARTNER_VIEW_STATE.lang === "en"
       ? "Upload the Conversion (country) Excel to populate this benchmark."
@@ -1393,7 +1393,7 @@ function _pvConversionSection(selectedPartner) {
 
 // Cuerpo de la sección: filtros + toggle Top5/Top10 + gráfico de barras + tabla
 // (solo partner y promedios de cohorte). Re-render aislado vía _pvConvRefresh.
-function _pvConvInner(selectedPartner) {
+export function _pvConvInner(selectedPartner) {
   const d = _pvConvData(selectedPartner);
   const which = PARTNER_VIEW_STATE.convCohort === "top5" ? "top5" : "top10";
   const F = d.F;
@@ -1436,7 +1436,7 @@ function _pvConvInner(selectedPartner) {
 
 // Gráfico de barras agrupadas: partner vs promedio del cohorte seleccionado.
 // Omite "1er viaje" (≈100% para todos). Misma técnica de headroom + padding.
-function _pvConvMountChart(selectedPartner) {
+export function _pvConvMountChart(selectedPartner) {
   const el = document.getElementById("pvConvChart");
   if (!el || typeof ApexCharts === "undefined") return;
   el.classList.add("pv-chart");
@@ -1472,12 +1472,12 @@ function _pvConvMountChart(selectedPartner) {
 }
 
 // ── PERÚ (GENERAL) + COMPARACIÓN POR COHORTES ─────────────────────────────────
-function _pvCityId(city) { return city.toLowerCase().replace(/[^a-z0-9]/g, ""); }
+export function _pvCityId(city) { return city.toLowerCase().replace(/[^a-z0-9]/g, ""); }
 
 // Bandas de cohorte por ranking de Active Drivers. range = [inicio, fin) sobre `ranked`.
 // Permiten comparar al partner contra tiers específicos (líder, peers cercanos, grupo
 // medio) en vez de un único promedio que se diluye al comparar partners grandes.
-const PV_COHORT_BANDS = [
+export const PV_COHORT_BANDS = [
   { key: "t1",   range: [0, 1],  color: "#ef4444", es: "Top 1",       en: "Top 1" },
   { key: "t23",  range: [1, 3],  color: "#f59e0b", es: "Top 2-3",     en: "Top 2-3" },
   { key: "t45",  range: [3, 5],  color: "#0ea5e9", es: "Top 4-5",     en: "Top 4-5" },
@@ -1486,7 +1486,7 @@ const PV_COHORT_BANDS = [
 ];
 
 // Toggle de comparacion (aplica a Perú-General y a todas las provincias).
-function pvCohortToggle(which) {
+export function pvCohortToggle(which) {
   PARTNER_VIEW_STATE.cohort = PARTNER_VIEW_STATE.cohort || {};
   PARTNER_VIEW_STATE.cohort[which] = !PARTNER_VIEW_STATE.cohort[which];
   // Solo actualizar los botones + reconstruir los charts en sitio (los divs siguen
@@ -1497,7 +1497,7 @@ function pvCohortToggle(which) {
   else renderPartnerView();
 }
 
-function _pvCohortBtn(band) {
+export function _pvCohortBtn(band) {
   const on = (PARTNER_VIEW_STATE.cohort || {})[band.key];
   const label = PARTNER_VIEW_STATE.lang === "en" ? band.en : band.es;
   return `<button onclick="pvCohortToggle('${band.key}')" class="preset-btn${on ? " active" : ""}" style="${on ? `background:${band.color};color:#fff;border-color:${band.color}` : ""}">+ ${escapeHTML(label)}</button>`;
@@ -1507,7 +1507,7 @@ function _pvCohortBtn(band) {
 // comparación (etiquetas, eje Y y tabla N+R) y fuerza mostrar Top 5 y Top 6-10,
 // para compartir la forma de la tendencia sin exponer cifras. margin-left:auto lo
 // empuja al extremo derecho de la barra de cohortes.
-function _pvShareBtnHtml() {
+export function _pvShareBtnHtml() {
   const on = !!PARTNER_VIEW_STATE.shareMode;
   // flex:0 0 auto — .preset-btn trae flex:1 y, como hijo directo de la barra,
   // estiraba a todo el ancho. Lo dejamos compacto y alineado a la derecha.
@@ -1517,7 +1517,7 @@ function _pvShareBtnHtml() {
 // Alterna el modo compartir. Al activarlo guarda la selección de cohorte actual y
 // fuerza Top 5 + Top 6-10; al desactivarlo la restaura. Reconstruye los charts en
 // sitio (sin re-render completo) para aplicar/quitar el ocultado de valores.
-function pvShareToggle() {
+export function pvShareToggle() {
   const S = PARTNER_VIEW_STATE;
   S.shareMode = !S.shareMode;
   if (S.shareMode) {
@@ -1538,12 +1538,12 @@ function pvShareToggle() {
 // Botón "Leyenda": muestra/oculta el panel de integrantes + cifras del cohorte.
 // OFF por defecto para que el PDF que se envía al partner no lo incluya; el KAM lo
 // enciende solo para su análisis. Reconstruye los scopes en sitio (sin re-render total).
-function _pvLegendBtnHtml() {
+export function _pvLegendBtnHtml() {
   const on = !!PARTNER_VIEW_STATE.showLegend;
   return `<button id="pvLegendBtn" onclick="pvLegendToggle()" class="preset-btn${on ? " active" : ""}" title="${escapeHTML(_t("legendHint"))}" style="flex:0 0 auto;white-space:nowrap;padding:4px 10px;${on ? "background:#0ea5e9;color:#fff;border-color:#0ea5e9" : ""}">📋 ${escapeHTML(_t("legendBtn"))}</button>`;
 }
 
-function pvLegendToggle() {
+export function pvLegendToggle() {
   PARTNER_VIEW_STATE.showLegend = !PARTNER_VIEW_STATE.showLegend;
   const btn = document.getElementById("pvLegendBtn");
   if (btn) btn.outerHTML = _pvLegendBtnHtml();
@@ -1553,7 +1553,7 @@ function pvLegendToggle() {
 
 // Serie del partner para un scope: scopeCity=null => combinado de TODAS sus
 // ciudades (Perú-General); scopeCity="LIMA" => solo esa ciudad.
-function _pvScopeSeries(partner, scopeCity, dates) {
+export function _pvScopeSeries(partner, scopeCity, dates) {
   // Memo por render (reseteado en renderPartnerView): un cohorte puede pedir la
   // misma serie de un partner varias veces (varias bandas se solapan).
   const cache = PARTNER_VIEW_STATE._scopeCache || (PARTNER_VIEW_STATE._scopeCache = {});
@@ -1586,7 +1586,7 @@ function _pvScopeSeries(partner, scopeCity, dates) {
 }
 
 // Cohortes top-5 / top-6-10 por Active Drivers del último periodo, dentro del scope.
-function _pvScopeCohorts(scopeCity, dates) {
+export function _pvScopeCohorts(scopeCity, dates) {
   const lastDate = dates[dates.length - 1];
   const rows = ((STATE._byDate && STATE._byDate.get(lastDate)) || STATE.rawData.filter(r => r.date === lastDate))
     .filter(r => !scopeCity || r.city === scopeCity);
@@ -1604,7 +1604,7 @@ function _pvScopeCohorts(scopeCity, dates) {
 // y CÓMO se calcula la línea de comparación. El promedio es la media SIMPLE de los
 // integrantes (coincide con el último punto de las líneas de cohorte). Respeta "Solo
 // tendencias": en modo compartir oculta integrantes y cifras (no expone al cohorte).
-function _pvCohortLegend(scopeCity, dates) {
+export function _pvCohortLegend(scopeCity, dates) {
   if (!PARTNER_VIEW_STATE.showLegend) return "";        // OFF por defecto (no va al PDF del partner)
   const tog = PARTNER_VIEW_STATE.cohort || {};
   const activeBands = PV_COHORT_BANDS.filter(b => tog[b.key]);
@@ -1680,7 +1680,7 @@ function _pvCohortLegend(scopeCity, dates) {
 }
 
 // Promedio por fecha de una métrica (getter) sobre un conjunto de partners, en el scope.
-function _pvCohortAvg(cohortPartners, scopeCity, dates, getter) {
+export function _pvCohortAvg(cohortPartners, scopeCity, dates, getter) {
   if (!cohortPartners.length) return dates.map(() => 0);
   const seriesArr = cohortPartners.map(p => _pvScopeSeries(p, scopeCity, dates));
   // Promedio solo sobre los miembros del cohorte que TIENEN dato esa fecha
@@ -1697,7 +1697,7 @@ function _pvCohortAvg(cohortPartners, scopeCity, dates, getter) {
 }
 
 // Línea: serie del partner + (opcional) líneas de promedio de cohortes.
-function _pvCmpLine(elId, labels, partnerSeries, cohortLines, color, fmtFn, money) {
+export function _pvCmpLine(elId, labels, partnerSeries, cohortLines, color, fmtFn, money) {
   const el = document.getElementById(elId);
   if (!el || typeof ApexCharts === "undefined") return;
   el.classList.add("pv-chart");
@@ -1742,7 +1742,7 @@ function _pvCmpLine(elId, labels, partnerSeries, cohortLines, color, fmtFn, mone
 }
 
 // N+R: columnas apiladas (partner/yango/react) + (opcional) líneas de total de cohortes.
-function _pvCmpNR(elId, labels, series, recibeLeads, cohortLines) {
+export function _pvCmpNR(elId, labels, series, recibeLeads, cohortLines) {
   const el = document.getElementById(elId);
   if (!el || typeof ApexCharts === "undefined") return;
   el.classList.add("pv-chart");
@@ -1806,7 +1806,7 @@ function _pvCmpNR(elId, labels, series, recibeLeads, cohortLines) {
 }
 
 // Mini-tabla de desglose N+R por fecha (para que el detalle se vea también en PDF).
-function _pvNRTable(series, dates, recibeLeads) {
+export function _pvNRTable(series, dates, recibeLeads) {
   const isEN = PARTNER_VIEW_STATE.lang === "en";
   const head = [`<th style="text-align:left;padding:4px 6px;border-bottom:1px solid #eee;background:#f9f9f9">${isEN ? "Date" : "Fecha"}</th>`]
     .concat(dates.map(d => `<th style="text-align:right;padding:4px 6px;border-bottom:1px solid #eee;background:#f9f9f9;font-size:.65rem">${d2s(d)}</th>`)).join("");
@@ -1828,7 +1828,7 @@ function _pvNRTable(series, dates, recibeLeads) {
 
 // Bloque de un scope (Perú-General si scopeCity=null, o una provincia): 6 charts
 // (AD, SH, N+R, Trips, Commission, GMV) con comparación top-5/top-6-10.
-function _pvScopeBlock(scopeCity, idPrefix) {
+export function _pvScopeBlock(scopeCity, idPrefix) {
   // 2 columnas fijas: cada línea ocupa media fila (≈ el doble de ancho que con el
   // auto-fit anterior, que dejaba 1-2 celdas vacías a la derecha). N+R y GMV a
   // ancho completo → sin celdas vacías y con espacio para que las etiquetas no
@@ -1850,7 +1850,7 @@ function _pvScopeBlock(scopeCity, idPrefix) {
   </div>`;
 }
 
-function _pvBuildScopeCharts(partner, scopeCity, idPrefix, dates, recibeLeads) {
+export function _pvBuildScopeCharts(partner, scopeCity, idPrefix, dates, recibeLeads) {
   const series = _pvScopeSeries(partner, scopeCity, dates);
   const labels = dates.map(d2s);
   const accent = scopeCity ? (CITY_COLORS[scopeCity] || "#888") : "#FF0000";
@@ -1896,7 +1896,7 @@ function _pvBuildScopeCharts(partner, scopeCity, idPrefix, dates, recibeLeads) {
 // Placeholder de canal de adquisición (formato de datos pendiente).
 // Canales de adquisición (orden de la pestaña del Excel). key = campo camelCase
 // en STATE.conversionData; label = nombre mostrado (igual ES/EN, son internos).
-const PV_CHANNELS = [
+export const PV_CHANNELS = [
   { key: "agencyScouts",    label: "Agency Scouts" },
   { key: "organicPartner",  label: "Organic Partner" },
   { key: "organicScouts",   label: "Organic Scouts" },
@@ -1909,7 +1909,7 @@ const PV_CHANNELS = [
 
 // Conteos por canal: partner (suma de sus CLIDs) + promedio del cohorte Top 5/10
 // por Active Drivers. Mismos filtros y mes que la conversión.
-function _pvChannelData(selectedPartner) {
+export function _pvChannelData(selectedPartner) {
   const data = STATE.conversionData || [];
   const months = [...new Set(data.map(r => r.mes))].sort();
   const latest = months[months.length - 1];
@@ -1931,7 +1931,7 @@ function _pvChannelData(selectedPartner) {
   return { top5, top10, partnerVals, anyData, hasPartner, nPop: pop.length };
 }
 
-function _pvChannelSection(selectedPartner) {
+export function _pvChannelSection(selectedPartner) {
   const d = _pvChannelData(selectedPartner);
   if (!(STATE.conversionData || []).length || !d.anyData) {
     const msg = PARTNER_VIEW_STATE.lang === "en"
@@ -1944,7 +1944,7 @@ function _pvChannelSection(selectedPartner) {
     <div class="section"><div id="pvChannelBox">${_pvChannelInner(selectedPartner)}</div></div>`;
 }
 
-function _pvChannelInner(selectedPartner) {
+export function _pvChannelInner(selectedPartner) {
   const d = _pvChannelData(selectedPartner);
   const fmtN = v => fmt(Math.round(v || 0));
   const th = (s, left) => `<th style="text-align:${left ? "left" : "right"};padding:6px 8px;border-bottom:2px solid #eee;font-size:.66rem;background:#fafafa;white-space:nowrap">${escapeHTML(s)}</th>`;
@@ -1971,7 +1971,7 @@ function _pvChannelInner(selectedPartner) {
 
 // Barras agrupadas por canal: partner vs promedio del cohorte (Top 5/10 según el
 // toggle compartido con la conversión). Conteos (no %). Headroom + padding.
-function _pvChannelMountChart(selectedPartner) {
+export function _pvChannelMountChart(selectedPartner) {
   const el = document.getElementById("pvChannelChart");
   if (!el || typeof ApexCharts === "undefined") return;
   el.classList.add("pv-chart");

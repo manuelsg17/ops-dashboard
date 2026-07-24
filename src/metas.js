@@ -2,7 +2,7 @@
 
 // Ordena meses por valor temporal. Acepta nombres ("MAYO","Mayo","may"),
 // numeros ("5","05"), o fechas ("2026-05","2026-05-11").
-const _METAS_MES_ORDER = {
+export const _METAS_MES_ORDER = {
   enero:1, ene:1, jan:1, january:1,
   febrero:2, feb:2, february:2,
   marzo:3, mar:3, march:3,
@@ -16,7 +16,7 @@ const _METAS_MES_ORDER = {
   noviembre:11, nov:11, november:11,
   diciembre:12, dic:12, dec:12, december:12
 };
-function _metasMesOrden(mes) {
+export function _metasMesOrden(mes) {
   if (!mes) return 0;
   const m = String(mes).trim().toLowerCase();
   // Formato "YYYY-MM" o "YYYY-MM-DD"
@@ -32,7 +32,7 @@ function _metasMesOrden(mes) {
 
 // Handler del selector de mes. Cambia el mes activo y re-renderiza.
 // Valida contra los meses realmente disponibles en STATE.metasData.
-function setMetasMes(mes) {
+export function setMetasMes(mes) {
   const disp = [...new Set(STATE.metasData.map(m => (m.mes || "").trim()))]
     .filter(Boolean);
   if (!disp.includes(mes)) {
@@ -46,18 +46,18 @@ function setMetasMes(mes) {
 // ── LÍNEA DE NEGOCIO EN METAS (Agregador / Fleet / TukTuk) — Fase 3 ────────────
 // Independiente de Rendimiento (STATE.metasLine propio). Diario no trae db_id → cae
 // a Agregador. Actuales de Fleet/TukTuk salen de los slices materializados (Fase 2).
-function _metasLine() {
+export function _metasLine() {
   let line = STATE.metasLine || "agg";
   if (STATE.curMode === "diario" && line !== "agg") line = "agg";
   return line;
 }
-function setMetasLine(line) {
+export function setMetasLine(line) {
   if ((STATE.metasLine || "agg") === line) return;
   if (STATE.curMode === "diario" && line !== "agg") return;
   STATE.metasLine = line;
   if (STATE.curTab === "metas") renderMetas();
 }
-function metasLineToggleHTML() {
+export function metasLineToggleHTML() {
   const line   = _metasLine();
   const diario = STATE.curMode === "diario";
   const defs = [
@@ -82,7 +82,7 @@ function metasLineToggleHTML() {
 
 // Slice de performance de la línea para la escala actual (Fase 2).
 // "comb" = Taxi + TukTuk (disjuntos: TukTuk se excluye de rawData al cargar → sin doble conteo).
-function _metasLineDataset(line) {
+export function _metasLineDataset(line) {
   const mensual = STATE.curMode === "mensual";
   if (line === "fleet") return (mensual ? STATE.rawDataMensualFleet  : STATE.rawDataFleet)  || [];
   if (line === "tk")    return (mensual ? STATE.rawDataMensualTuktuk : STATE.rawDataTuktuk) || [];
@@ -92,7 +92,7 @@ function _metasLineDataset(line) {
 // Actuales Fleet por (partner|||city) en [from,to]: SH/auto interno y aceptación
 // ponderados (Σ internalFleetSh / Σ ownedCars; Σ(rate×trips)/Σtrips) — igual que
 // presentacion2.p2FleetSeries / rendimiento._rendFleetAgg.
-function _metasFleetActuals(from, to, selSet, cityFilter) {
+export function _metasFleetActuals(from, to, selSet, cityFilter) {
   const by = new Map();
   const _sidebar = new Set(STATE.allPartners);
   _metasLineDataset("fleet").forEach(r => {
@@ -116,7 +116,7 @@ function _metasFleetActuals(from, to, selSet, cityFilter) {
 }
 // Actuales TukTuk por (partner|||city): AD = MÁX del snapshot (Σ fleetrooms por fecha),
 // N+R = Σ, Brandeados = MÁX snapshot. Espeja getRPC / la Calculadora.
-function _metasTkActuals(from, to, selSet, cityFilter) {
+export function _metasTkActuals(from, to, selSet, cityFilter) {
   const by = new Map();
   const _sidebar = new Set(STATE.allPartners);
   _metasLineDataset("tk").forEach(r => {
@@ -146,7 +146,7 @@ function _metasTkActuals(from, to, selSet, cityFilter) {
 // período (misma convención que la slide "Avance Combinado" del deck), N+R y SH = Σ
 // del rango. Opera sobre el dataset concat — las filas de ambas líneas de una misma
 // fecha se suman antes de tomar el snapshot.
-function _metasCombActuals(from, to, selSet, cityFilter) {
+export function _metasCombActuals(from, to, selSet, cityFilter) {
   const by = new Map();
   const _sidebar = new Set(STATE.allPartners);
   _metasLineDataset("comb").forEach(r => {
@@ -170,7 +170,7 @@ function _metasCombActuals(from, to, selSet, cityFilter) {
 }
 
 // Fila meta-vs-actual para un KPI de tasa/valor (sin proyección). meta null → oculta.
-function _metaLineRow(label, actual, meta, fmtFn, metaOnlyNote) {
+export function _metaLineRow(label, actual, meta, fmtFn, metaOnlyNote) {
   if (meta == null && actual == null) return "";
   if (meta == null) {  // solo actual (sin meta cargada)
     return `<div style="margin-bottom:9px">
@@ -203,7 +203,7 @@ function _metaLineRow(label, actual, meta, fmtFn, metaOnlyNote) {
 
 // Vista Metas Fleet: una tarjeta por (partner, ciudad) con meta cargada. KPIs de tasa
 // (SH/auto, aceptación) contra su actual; Utilización solo meta (sin actual medible).
-function _renderMetasFleet(mesName, from, to, selSet, cityFilter, kamFilter) {
+export function _renderMetasFleet(mesName, from, to, selSet, cityFilter, kamFilter) {
   const act = _metasFleetActuals(from, to, selSet, cityFilter);
   const rows = STATE.metasData.filter(m =>
     m.mes === mesName &&
@@ -250,7 +250,7 @@ function _renderMetasFleet(mesName, from, to, selSet, cityFilter, kamFilter) {
 }
 
 // Vista Metas TukTuk: KPIs aditivos (AD/N+R/Brandeados) → resumen Perú + por partner.
-function _renderMetasTk(mesName, from, to, selSet, cityFilter, kamFilter) {
+export function _renderMetasTk(mesName, from, to, selSet, cityFilter, kamFilter) {
   const act = _metasTkActuals(from, to, selSet, cityFilter);
   const rows = STATE.metasData.filter(m =>
     m.mes === mesName &&
@@ -318,7 +318,7 @@ function _renderMetasTk(mesName, from, to, selSet, cityFilter, kamFilter) {
 // combinada (meta agregador + meta TukTuk). Misma fórmula que la slide "Avance
 // Combinado" de Presentación 2.0 — si el partner se enfoca en TukTuk, ese avance
 // también cuenta para su meta. AD = snapshot último período; N+R/SH = Σ del rango.
-function _renderMetasComb(mesName, from, to, selSet, cityFilter, kamFilter) {
+export function _renderMetasComb(mesName, from, to, selSet, cityFilter, kamFilter) {
   const act = _metasCombActuals(from, to, selSet, cityFilter);
   const rows = STATE.metasData.filter(m =>
     m.mes === mesName &&
@@ -391,8 +391,8 @@ function _renderMetasComb(mesName, from, to, selSet, cityFilter, kamFilter) {
 
 // Guard de reentrancia: doble-click o filtros solapados no deben lanzar dos
 // renders concurrentes (mismo patron que rendimiento.js).
-let _renderMetasBusy = false;
-function renderMetas() {
+export let _renderMetasBusy = false;
+export function renderMetas() {
   if (_renderMetasBusy) return;
   if (!STATE.metasData.length) return;
   _renderMetasBusy = true;
@@ -403,7 +403,7 @@ function renderMetas() {
   }
 }
 
-function _renderMetasImpl() {
+export function _renderMetasImpl() {
   // Garantiza índices secundarios construidos antes de cualquier lookup
   ensureIndexes();
 
@@ -825,7 +825,7 @@ function _renderMetasImpl() {
   document.getElementById("metasContent").innerHTML = html;
 }
 // ── HELPERS ───────────────────────────────────────────────────────────────────
-function metaResCard(label, sub, real, meta, proj, color) {
+export function metaResCard(label, sub, real, meta, proj, color) {
   const p   = meta > 0 ? (real / meta) * 100 : 0;
   const pp  = meta > 0 ? (proj / meta) * 100 : 0;
   const pV  = Math.min(p,  100); // visual bar width
@@ -855,7 +855,7 @@ function metaResCard(label, sub, real, meta, proj, color) {
     </div>`;
 }
 
-function miniBar(label, real, meta, proj) {
+export function miniBar(label, real, meta, proj) {
   const p   = meta > 0 ? (real / meta) * 100 : 0;
   const pp  = meta > 0 ? (proj / meta) * 100 : 0;
   const pV  = Math.min(p,  100);
@@ -881,7 +881,7 @@ function miniBar(label, real, meta, proj) {
     </div>`;
 }
 
-function miniBarFull(label, real, meta, proj) {
+export function miniBarFull(label, real, meta, proj) {
   const p   = meta > 0 ? (real / meta) * 100 : 0;
   const pp  = meta > 0 ? (proj / meta) * 100 : 0;
   const pV  = Math.min(p,  100);
@@ -909,7 +909,7 @@ function miniBarFull(label, real, meta, proj) {
     </div>`;
 }
 
-function barProj(pR, pP) {
+export function barProj(pR, pP) {
   let h = `<div class="bar-bg">`;
   if (pP > pR)
     h += `<div class="bar-proj" style="width:${Math.min(pP,100)}%;background:${pColor(pP)}"></div>`;
@@ -917,7 +917,7 @@ function barProj(pR, pP) {
   return h + `</div>`;
 }
 
-async function downloadMetasPDF() {
+export async function downloadMetasPDF() {
   const content = document.getElementById("metasContent");
   if (!content) return;
   const { jsPDF } = window.jspdf;
@@ -979,7 +979,7 @@ async function downloadMetasPDF() {
 // Usa `ilike` sin comodines = igualdad case-insensitive, así cubre el casing
 // mixto de uploads viejos ("JUNIO"/"Junio"/"junio") que el loader normaliza a
 // UPPERCASE en cliente. Guard de admin defensivo; el enforcement real es RLS.
-async function deleteMetasMes(mes) {
+export async function deleteMetasMes(mes) {
   if (!STATE.isAdmin) {
     showBanner(false, "Operación bloqueada: requiere rol admin.");
     return;

@@ -1,6 +1,6 @@
 // rawdata.js — Pestaña Data Raw: vista completa sin filtrar para comparar con Excel
 
-const RAW_STATE = {
+export const RAW_STATE = {
   page:       0,
   PAGE_SIZE:  50,
   search:     "",
@@ -16,7 +16,7 @@ const RAW_STATE = {
 };
 
 // ── ENTRY POINT ───────────────────────────────────────────────────────────────
-function renderRawData() {
+export function renderRawData() {
   const content = document.getElementById("rawdataContent");
   if (!content) return;
 
@@ -228,7 +228,7 @@ function renderRawData() {
 }
 
 // ── SORT ──────────────────────────────────────────────────────────────────────
-function rawSortBy(col) {
+export function rawSortBy(col) {
   if (RAW_STATE.sortCol === col) {
     RAW_STATE.sortDir = RAW_STATE.sortDir === "asc" ? "desc" : "asc";
   } else {
@@ -240,7 +240,7 @@ function rawSortBy(col) {
 }
 
 // ── EXPORT CSV ────────────────────────────────────────────────────────────────
-function exportRawCSV() {
+export function exportRawCSV() {
   const src    = STATE.curMode === "mensual" ? STATE.rawDataMensualFull
                : STATE.curMode === "diario"  ? STATE.rawDataDiarioFull
                :                              STATE.rawDataFull;
@@ -290,7 +290,7 @@ function exportRawCSV() {
 }
 
 // \u2500\u2500 TOGGLE ENTRE VISTA REGISTROS Y VISTA FLOTAS \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-function _rawViewToggle() {
+export function _rawViewToggle() {
   const isData   = RAW_STATE.view !== "flotas";
   const btn = (v, label) => `
     <button onclick="rawSwitchView('${v}')"
@@ -305,7 +305,7 @@ function _rawViewToggle() {
     </div>`;
 }
 
-function rawSwitchView(v) {
+export function rawSwitchView(v) {
   RAW_STATE.view = v;
   RAW_STATE.page = 0;
   renderRawData();
@@ -314,7 +314,7 @@ function rawSwitchView(v) {
 // Buscador sin perder foco: renderRawData reconstruye todo el panel (destruye el
 // input al re-render). Guardamos el caret y re-enfocamos el mismo id tras el
 // re-render → se puede escribir corrido (fix Fase 7). Espejo del arreglo de Config.
-function rawSearchInput(inp, resetPage) {
+export function rawSearchInput(inp, resetPage) {
   RAW_STATE.search = inp.value;
   if (resetPage) RAW_STATE.page = 0;
   const id = inp.id, pos = inp.selectionStart;
@@ -338,7 +338,7 @@ function rawSearchInput(inp, resetPage) {
 //   - Ciudad: lo que dice flota (o lo que vino del Excel)
 //   - Estado: activa / inactiva / excluida por palabra prohibida
 //   - Accion: editar (solo afecta tabla `flotas`)
-function _renderFlotasView() {
+export function _renderFlotasView() {
   const flotasMap = STATE.flotasMap || {};
   const clids = Object.keys(flotasMap);
 
@@ -659,12 +659,12 @@ function _renderFlotasView() {
 
 // ── EDICION INLINE DE FLOTAS ──────────────────────────────────────────────────
 // Entrar en modo edicion para una fila (se renderiza con inputs)
-function flotaStartEdit(clid) {
+export function flotaStartEdit(clid) {
   RAW_STATE.editingClid = clid;
   renderRawData();
 }
 
-function flotaCancelEdit() {
+export function flotaCancelEdit() {
   RAW_STATE.editingClid = null;
   renderRawData();
 }
@@ -672,7 +672,7 @@ function flotaCancelEdit() {
 // Guardar la edicion: lee los inputs de la fila y hace UPDATE/INSERT en Supabase.
 // Edita solo la tabla `flotas` (no toca `partners`). El nombre/KAM solo se usa
 // como fallback si el CLID no esta configurado en partners.
-async function flotaSaveEdit(clid) {
+export async function flotaSaveEdit(clid) {
   const elCity   = document.getElementById(`flEdCity_${clid}`);
   const elName   = document.getElementById(`flEdName_${clid}`);
   const elKam    = document.getElementById(`flEdKam_${clid}`);
@@ -708,7 +708,7 @@ async function flotaSaveEdit(clid) {
 // Toggle rapido del flag `activo` sin entrar en modo edicion.
 // Si el CLID no tiene registro en `flotas`, lo crea con activo=false (o lo
 // reactiva eliminando el registro, segun el caso).
-async function flotaToggleActivo(clid, nuevoEstado) {
+export async function flotaToggleActivo(clid, nuevoEstado) {
   showLoad(true, nuevoEstado ? "Reactivando..." : "Marcando inactiva...");
   try {
     const yaExiste = !!(STATE.flotasMap && STATE.flotasMap[clid]);
@@ -734,7 +734,7 @@ async function flotaToggleActivo(clid, nuevoEstado) {
 // Sin modo edicion — se guarda al instante al tildar/destildar. partnerFallback/
 // kamFallback = nombre/KAM EFECTIVOS ya resueltos para esta fila (si el CLID aun
 // no esta en `partners`, evita perder el nombre en el primer upsert).
-async function flotaSetFlag(clid, key, checked, partnerFallback, kamFallback) {
+export async function flotaSetFlag(clid, key, checked, partnerFallback, kamFallback) {
   showLoad(true, "Guardando...");
   try {
     await setPartnerFlag(clid, key, checked, partnerFallback, kamFallback);
@@ -753,7 +753,7 @@ async function flotaSetFlag(clid, key, checked, partnerFallback, kamFallback) {
 // a `fleetrooms`. Guarda al instante. name/kam/city = contexto de la sub-flota
 // (para el primer upsert si el fleetroom aun no tiene fila). Preserva los otros
 // dos flags dentro de setFleetroomFlag.
-async function fleetroomSetFlag(dbId, key, checked, name, clid, kam, city) {
+export async function fleetroomSetFlag(dbId, key, checked, name, clid, kam, city) {
   showLoad(true, "Guardando...");
   try {
     await setFleetroomFlag(dbId, key, checked, { clid, name, kam, city });
@@ -771,14 +771,14 @@ async function fleetroomSetFlag(dbId, key, checked, name, clid, kam, city) {
 // Sugerencia (NO filtro): true si el Nombre Excel de un CLID matchea algún
 // patrón TukTuk. Solo se usa para resaltar visualmente en Vista Flotas — nunca
 // para excluir datos ni auto-marcar is_tuktuk.
-function _tuktukSuggested(nombreExcel) {
+export function _tuktukSuggested(nombreExcel) {
   const patterns = (STATE.tuktukPatterns || []).map(w => w.toLowerCase());
   const name = (nombreExcel || "").toLowerCase();
   return patterns.some(w => name.includes(w));
 }
 // Gestión de la lista de patrones (cliente, sin round-trip a Supabase — es
 // pura sugerencia visual, no afecta ningún dato ya cargado).
-function addTuktukPattern() {
+export function addTuktukPattern() {
   const input = document.getElementById("newTuktukPattern");
   const word  = (input?.value || "").trim().toLowerCase();
   if (!word) return;
@@ -788,14 +788,14 @@ function addTuktukPattern() {
   renderRawData();
   showBanner(true, `"${word}" agregado a patrones TukTuk ✓`);
 }
-function removeTuktukPattern(word) {
+export function removeTuktukPattern(word) {
   STATE.tuktukPatterns = STATE.tuktukPatterns.filter(w => w !== word);
   lsSet("yangoTuktukPatterns", JSON.stringify(STATE.tuktukPatterns));
   renderRawData();
   showBanner(true, `"${word}" eliminado de patrones TukTuk ✓`);
 }
 
-function exportFlotasCSV() {
+export function exportFlotasCSV() {
   const flotasMap = STATE.flotasMap || {};
   const fromRawAll = new Map();
   STATE.rawDataFull.forEach(r => {
@@ -844,7 +844,7 @@ function exportFlotasCSV() {
 
 // Formato K/M con 2 decimales (miles \u2192 "K", millones \u2192 "M"). N\u00FAmeros chicos tal
 // cual. El valor exacto va en el title (hover) para conciliaci\u00F3n fina.
-function _fmtKM2(n) {
+export function _fmtKM2(n) {
   if (n === null || n === undefined || isNaN(n)) return "\u2014";
   const neg = n < 0, abs = Math.abs(n);
   let out;
@@ -853,11 +853,11 @@ function _fmtKM2(n) {
   else                 out = abs.toLocaleString("es-PE", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
   return neg ? "-" + out : out;
 }
-function _num2(n) { return (n == null || isNaN(n)) ? "\u2014" : n.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-function _pct1(n) { return (n == null || isNaN(n)) ? "\u2014" : (n * 100).toLocaleString("es-PE", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%"; }
+export function _num2(n) { return (n == null || isNaN(n)) ? "\u2014" : n.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+export function _pct1(n) { return (n == null || isNaN(n)) ? "\u2014" : (n * 100).toLocaleString("es-PE", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%"; }
 
-function _reconNewAgg() { return { ad:0, sh:0, nuevos:0, react:0, trips:0, gmv:0, comm:0, ifsh:0, ofcars:0, accNum:0, accDen:0 }; }
-function _reconAcc(a, r) {
+export function _reconNewAgg() { return { ad:0, sh:0, nuevos:0, react:0, trips:0, gmv:0, comm:0, ifsh:0, ofcars:0, accNum:0, accDen:0 }; }
+export function _reconAcc(a, r) {
   a.ad     += r.activeDrivers || 0;
   a.sh     += r.supplyHours   || 0;
   a.nuevos += (r.newPartner || 0) + (r.newService || 0);
@@ -872,7 +872,7 @@ function _reconAcc(a, r) {
 // Clasificaci\u00F3n de una sub-flota (usa los predicados globales de data.js sobre una
 // fila muestra; para db_id='' legacy caen al flag por CLID). Devuelve el estado y
 // si se OMITE del dashboard (Taxi).
-function _reconClasif(sample) {
+export function _reconClasif(sample) {
   const tuk  = typeof rowIsTuktuk        === "function" && rowIsTuktuk(sample);
   const excl = typeof rowExcludedFromTaxi === "function" && rowExcludedFromTaxi(sample);
   const fleet= typeof rowIsFleet          === "function" && rowIsFleet(sample);
@@ -882,7 +882,7 @@ function _reconClasif(sample) {
   return                      { omit: false, fleet, label: "Taxi",                 color: "#64748b", bg: "" };
 }
 
-function _renderReconView() {
+export function _renderReconView() {
   const src0 = STATE.curMode === "mensual" ? STATE.rawDataMensualFull
              : STATE.curMode === "diario"  ? STATE.rawDataDiarioFull
              :                              STATE.rawDataFull;
@@ -1056,17 +1056,17 @@ function _renderReconView() {
   return html;
 }
 // Suma un agg dentro de otro (para totales).
-function _reconAcc2(dst, a) {
+export function _reconAcc2(dst, a) {
   dst.ad += a.ad; dst.sh += a.sh; dst.nuevos += a.nuevos; dst.react += a.react;
   dst.trips += a.trips; dst.gmv += a.gmv; dst.comm += a.comm;
   dst.ifsh += a.ifsh; dst.ofcars += a.ofcars; dst.accNum += a.accNum; dst.accDen += a.accDen;
 }
 
-function reconToggleClid(clid) {
+export function reconToggleClid(clid) {
   RAW_STATE.expanded[clid] = !RAW_STATE.expanded[clid];
   renderRawData();
 }
-function reconExpandAll(open) {
+export function reconExpandAll(open) {
   RAW_STATE.expanded = {};
   if (open) {
     const src = STATE.curMode === "mensual" ? STATE.rawDataMensualFull
@@ -1078,7 +1078,7 @@ function reconExpandAll(open) {
 }
 
 // Export CSV: una fila por (clid, db_id) con valores EXACTOS + clasificaci\u00F3n.
-function exportReconCSV() {
+export function exportReconCSV() {
   const src0 = STATE.curMode === "mensual" ? STATE.rawDataMensualFull
              : STATE.curMode === "diario"  ? STATE.rawDataDiarioFull
              :                              STATE.rawDataFull;
