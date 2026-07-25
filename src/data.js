@@ -675,8 +675,8 @@ export async function loadFromSupabase(opts = {}) {
     // excluyen), así que se filtra del agregador ya deduplicado con rowIsFleet. Lo usa
     // el selector de línea de Rendimiento; NUNCA se re-fetchea (sin doble conteo).
     STATE.rawDataFleet = STATE.rawData.filter(r => rowIsFleet(r));
-    STATE.rendLine  = "agg";   // carga fresca → vista base Agregador
-    STATE.metasLine = "agg";
+    STATE.rendLine  = "comb";   // carga fresca → vista base Combinado (Taxi+TukTuk)
+    STATE.metasLine = "comb";
 
     STATE.parseWarnings.clear();
     updateIndexes();          // construye indices secundarios sobre rawData

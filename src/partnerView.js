@@ -4,6 +4,7 @@
 
 export const PARTNER_VIEW_STATE = {
   partner: null,
+  line:    "comb",   // comb | agg | fleet | tk — mismo patrón que STATE.rendLine/metasLine
   period:  "auto",   // auto | 3m | 6m | 12m | custom
   lang:    "es",     // "es" | "en"  — afecta panel ejecutivo, headers y PDF
   shareMode: false,  // "Solo tendencias": oculta valores en los charts de comparación (para compartir)
@@ -338,6 +339,127 @@ export function _pvSeriesByPartnerCity(partner, city, dates) {
   return dates.map(d => byDate[d] || _blank(d, false));
 }
 
+// ── LÍNEA DE NEGOCIO (Agregador / Fleet / TukTuk / Combinado) ─────────────────
+// Mismo patrón que rendimiento.js (_rendLine): NO muta STATE.rawData, filtra
+// los slices ya materializados (rawDataFleet/rawDataTuktuk) por el partner
+// seleccionado. Agregador mantiene el flujo completo (resumen ejecutivo,
+// cohortes, conversión, canal) porque esas secciones son Taxi-específicas; las
+// otras 3 líneas muestran un cuerpo más simple (KPIs de la línea, sin esas
+// secciones — no tienen sentido para sub-flotas de un solo partner).
+export function _pvLine() {
+  let line = PARTNER_VIEW_STATE.line || "comb";
+  if (STATE.curMode === "diario" && line !== "agg") line = "agg";
+  return line;
+}
+export function _pvLineDataset() {
+  const line = _pvLine();
+  if (line === "agg") return STATE.rawData;
+  const mensual = STATE.curMode === "mensual";
+  const tk = (mensual ? STATE.rawDataMensualTuktuk : STATE.rawDataTuktuk) || [];
+  if (line === "fleet") return (mensual ? STATE.rawDataMensualFleet : STATE.rawDataFleet) || [];
+  if (line === "comb")  return STATE.rawData.concat(tk);
+  return tk;
+}
+export function _pvLineToggleHTML() {
+  const line   = _pvLine();
+  const diario = STATE.curMode === "diario";
+  const defs = [
+    { k: "comb",  emoji: "🔀", label: "Combinado", tip: "Taxi + TukTuk sumados — avance total del partner" },
+    { k: "agg",   emoji: "📊", label: "Agregador", tip: "Taxi — incluye la actividad de las flotas" },
+    { k: "fleet", emoji: "🚗", label: "Fleet",     tip: "Solo sub-flotas marcadas Fleet" },
+    { k: "tk",    emoji: "🛺", label: "TukTuk",    tip: "Solo TukTuk" }
+  ];
+  const btns = defs.map(d => {
+    const on  = line === d.k;
+    const dis = diario && d.k !== "agg";
+    return `<button class="mode-btn${on ? " active" : ""}" ${dis ? "disabled" : ""}
+      title="${dis ? "Sin datos diarios por sub-flota — usa escala semanal o mensual" : escapeHTML(d.tip)}"
+      ${dis ? "" : `data-act="pvSetLine" data-line="${escapeHTML(d.k)}"`}
+      style="${dis ? "opacity:.4;cursor:not-allowed" : ""}">${d.emoji} ${d.label}</button>`;
+  }).join("");
+  return `<div class="mode-toggle-row" style="margin:0 0 14px">${btns}</div>`;
+}
+export function setPvLine(line) {
+  if ((PARTNER_VIEW_STATE.line || "comb") === line) return;
+  if (STATE.curMode === "diario" && line !== "agg") return;
+  PARTNER_VIEW_STATE.line = line;
+  renderPartnerView();
+}
+// Cuerpo alternativo para Fleet/TukTuk/Combinado: KPIs de la línea, Perú General
+// + por ciudad. Reusa los helpers de rendimiento.js (mismas fórmulas — nunca
+// duplicar la agregación de Fleet en dos archivos distintos).
+export function _pvLineBody(partner, line, citiesOf, dates) {
+  const rows     = _pvLineDataset().filter(r => r.partner === partner);
+  const lastDate = dates[dates.length - 1];
+  const prevDate = dates.length > 1 ? dates[dates.length - 2] : null;
+  const lastRows = rows.filter(r => r.date === lastDate);
+  const prevRows = prevDate ? rows.filter(r => r.date === prevDate) : [];
+  const lname    = line === "fleet" ? "Fleet" : line === "comb" ? "Combinado (Taxi+TukTuk)" : "TukTuk";
+
+  if (!rows.length) {
+    return `<div class="section"><div style="padding:28px 16px;text-align:center;color:#999;font-size:.85rem">
+      Este partner no tiene datos de <strong>${lname}</strong> en el rango seleccionado.
+    </div></div>`;
+  }
+
+  if (line === "fleet") {
+    let html = secH("🚗", "#0891b2", "Fleet · Perú General",
+      "Presencia, calidad y revenue/productividad de flota de este partner", d2s(lastDate));
+    html += _rendFleetCardsBody(_rendFleetAgg(lastRows), _rendFleetAgg(prevRows));
+    html += secH("🏙️", "#06b6d4", "Fleet por Ciudad", "KPIs de flota por ciudad", "");
+    html += `<div class="section"><div class="city-grid">`;
+    citiesOf.forEach(city => {
+      const cr = lastRows.filter(r => r.city === city);
+      if (!cr.length) return;
+      const c = _rendFleetAgg(cr);
+      const p = _rendFleetAgg(prevRows.filter(r => r.city === city));
+      const col = CITY_COLORS[city] || "#888";
+      html += `<div class="city-card" style="border-top-color:${col}">
+        <div class="city-name"><span style="width:10px;height:10px;border-radius:50%;background:${col};display:inline-block"></span>${cityLabel(city)}</div>
+        ${_rendFleetCityKpi("Owned Fleet Cars", c.owned, p.owned, fmt)}
+        ${_rendFleetCityKpi("SH / Auto", c.shCar, p.shCar, fmt)}
+        ${_rendFleetCityKpi("Aceptación", c.accept, p.accept, v => fmt(v) + "%")}
+        ${_rendFleetCityKpi("Branded Cars", c.branded, p.branded, fmt)}
+      </div>`;
+    });
+    html += `</div></div>`;
+    return html;
+  }
+
+  if (line === "tk") return _rendTkKPIs(lastRows, prevRows);
+
+  // comb: AD/NR/SH combinados (Taxi+TukTuk) — mismas cards que el Agregador.
+  const tAD = sumR(lastRows, r => r.activeDrivers);
+  const pAD = sumR(prevRows, r => r.activeDrivers);
+  const tNR = sumR(rows,     r => r.newPartner + r.newService + r.reactivated);
+  const pNR = sumR(prevRows, r => r.newPartner + r.newService + r.reactivated);
+  const tSH = sumR(rows,     r => r.supplyHours);
+  const pSH = sumR(prevRows, r => r.supplyHours);
+  let html = secH("🔀", "#FF0000", "Combinado · Perú General",
+    "Taxi + TukTuk sumados — avance total del partner", d2s(lastDate));
+  html += `<div class="section"><div class="metric-row">
+    ${_rendKpiCard("Conductores Activos",  "📊", tAD, pAD, "#FF0000", fmt)}
+    ${_rendKpiCard("Nuevos + Reactivados", "🆕", tNR, pNR, "#f97316", fmt)}
+    ${_rendKpiCard("Horas de Conexión",    "⏱️", tSH, pSH, "#8b5cf6", fmtSmart)}
+  </div></div>`;
+  html += secH("🏙️", "#06b6d4", "Combinado por Ciudad", "", "");
+  html += `<div class="section"><div class="city-grid">`;
+  citiesOf.forEach(city => {
+    const cr = lastRows.filter(r => r.city === city);
+    if (!cr.length) return;
+    const pr  = prevRows.filter(r => r.city === city);
+    const col = CITY_COLORS[city] || "#888";
+    html += `<div class="city-card" style="border-top-color:${col}">
+      <div class="city-name"><span style="width:10px;height:10px;border-radius:50%;background:${col};display:inline-block"></span>${cityLabel(city)}</div>
+      ${_rendFleetCityKpi("Conductores Activos",  sumR(cr, r => r.activeDrivers), sumR(pr, r => r.activeDrivers), fmt)}
+      ${_rendFleetCityKpi("Nuevos + Reactivados", sumR(cr, r => r.newPartner + r.newService + r.reactivated), sumR(pr, r => r.newPartner + r.newService + r.reactivated), fmt)}
+      ${_rendFleetCityKpi("Horas de Conexión",    sumR(cr, r => r.supplyHours), sumR(pr, r => r.supplyHours), fmtSmart)}
+    </div>`;
+  });
+  html += `</div></div>`;
+  return html;
+}
+
 // ── RENDER PRINCIPAL ──────────────────────────────────────────────────────────
 export function renderPartnerView() {
   const el = document.getElementById("partnerViewContent");
@@ -465,6 +587,10 @@ export function renderPartnerView() {
         </div>
       </div>
 
+      <!-- Selector de línea de negocio (Agregador/Fleet/TukTuk/Combinado) -->
+      ${_pvLineToggleHTML()}
+
+      ${_pvLine() !== "agg" ? _pvLineBody(partner, _pvLine(), citiesOf, dates) : `
       <!-- Análisis Ejecutivo (KAM Senior) -->
       ${_pvExecutiveSummary({
         partner, citiesOf, dates, recibeLeads, lastDate, prevDate,
@@ -499,6 +625,7 @@ export function renderPartnerView() {
           ${_pvScopeKpiRow(partner, city, dates)}
           ${_pvScopeBlock(city, _pvCityId(city))}
         </div>`).join("")}
+      `}
     </div>`;
 
   // Banner: sección en revisión → recomendar Presentación 2.0 (fuente 100% precisa).
@@ -2013,6 +2140,7 @@ registerActions({
   pvSearchKeydown:  (d, el, e) => pvSearchKeydown(e),
   pvOnPeriodChange: (d, el) => pvOnPeriodChange(el.value),
   pvSetLang:        d => pvSetLang(d.lang),
+  pvSetLine:        d => setPvLine(d.line),
   pvDownloadPDF, pvShareToggle, pvLegendToggle, pvConvFilter,
   pvSelectPartner:  d => pvSelectPartner(d.partner),
   pvConvCohort:     d => pvConvCohort(d.key),

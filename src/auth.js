@@ -154,8 +154,8 @@ export function _clearStateAndLocalStorage() {
   ].forEach(k => { if (Array.isArray(STATE[k])) STATE[k].length = 0; });
   STATE.fleetExternoLoaded = false;
   STATE.fleetExternoError  = null;
-  STATE.rendLine  = "agg";
-  STATE.metasLine = "agg";
+  STATE.rendLine  = "comb";
+  STATE.metasLine = "comb";
   STATE._tuktukMensualByCityDate = null;
   STATE._tuktukMensualPartners   = null;
   STATE._tuktukMensualDates      = null;

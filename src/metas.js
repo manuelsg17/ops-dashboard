@@ -47,12 +47,12 @@ export function setMetasMes(mes) {
 // Independiente de Rendimiento (STATE.metasLine propio). Diario no trae db_id → cae
 // a Agregador. Actuales de Fleet/TukTuk salen de los slices materializados (Fase 2).
 export function _metasLine() {
-  let line = STATE.metasLine || "agg";
+  let line = STATE.metasLine || "comb";
   if (STATE.curMode === "diario" && line !== "agg") line = "agg";
   return line;
 }
 export function setMetasLine(line) {
-  if ((STATE.metasLine || "agg") === line) return;
+  if ((STATE.metasLine || "comb") === line) return;
   if (STATE.curMode === "diario" && line !== "agg") return;
   STATE.metasLine = line;
   if (STATE.curTab === "metas") renderMetas();
@@ -61,10 +61,10 @@ export function metasLineToggleHTML() {
   const line   = _metasLine();
   const diario = STATE.curMode === "diario";
   const defs = [
+    { k: "comb",  emoji: "🔀", label: "Combinado", tip: "Taxi + TukTuk sumados vs meta combinada — avance total del partner" },
     { k: "agg",   emoji: "📊", label: "Agregador", tip: "Metas Taxi (AD, N+R, Horas)" },
     { k: "fleet", emoji: "🚗", label: "Fleet",     tip: "Metas de flota (SH/auto, aceptación, utilización)" },
-    { k: "tk",    emoji: "🛺", label: "TukTuk",    tip: "Metas TukTuk (AD, N+R, Brandeados)" },
-    { k: "comb",  emoji: "🔀", label: "Combinado", tip: "Taxi + TukTuk sumados vs meta combinada — avance total del partner" }
+    { k: "tk",    emoji: "🛺", label: "TukTuk",    tip: "Metas TukTuk (AD, N+R, Brandeados)" }
   ];
   const btns = defs.map(d => {
     const on  = line === d.k;

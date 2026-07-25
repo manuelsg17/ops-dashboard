@@ -8,7 +8,7 @@
 // que el concat no double-cuenta). El diario no trae db_id (sin sub-flota) →
 // Fleet/TukTuk/Combinado se deshabilitan y cae a Agregador.
 export function _rendLine() {
-  let line = STATE.rendLine || "agg";
+  let line = STATE.rendLine || "comb";
   if (STATE.curMode === "diario" && line !== "agg") line = "agg";
   return line;
 }
@@ -58,10 +58,10 @@ export function rendLineToggleHTML() {
   const line   = _rendLine();
   const diario = STATE.curMode === "diario";
   const defs = [
+    { k: "comb",  emoji: "🔀", label: "Combinado", tip: "Taxi + TukTuk sumados — avance total del partner" },
     { k: "agg",   emoji: "📊", label: "Agregador", tip: "Taxi — incluye la actividad de las flotas" },
     { k: "fleet", emoji: "🚗", label: "Fleet",     tip: "Solo sub-flotas marcadas Fleet" },
-    { k: "tk",    emoji: "🛺", label: "TukTuk",    tip: "Solo TukTuk" },
-    { k: "comb",  emoji: "🔀", label: "Combinado", tip: "Taxi + TukTuk sumados — avance total del partner" }
+    { k: "tk",    emoji: "🛺", label: "TukTuk",    tip: "Solo TukTuk" }
   ];
   const btns = defs.map(d => {
     const on  = line === d.k;
@@ -77,7 +77,7 @@ export function rendLineToggleHTML() {
   return `<div class="mode-toggle-row" style="margin:0 4px 12px">${btns}${note}</div>`;
 }
 export function setRendLine(line) {
-  if ((STATE.rendLine || "agg") === line) return;
+  if ((STATE.rendLine || "comb") === line) return;
   if (STATE.curMode === "diario" && line !== "agg") return;
   STATE.rendLine = line;
   renderRend();
