@@ -550,8 +550,8 @@ export function renderPartnerView() {
           <input type="text" id="pvSearch" class="sb-inp" placeholder="${_t("searchPartner")}" style="width:240px" autocomplete="off"
             value="${escapeHTML(partner)}"
             data-act-input="pvFilterPartners"
-            onfocus="pvShowPartnerList()"
-            onblur="setTimeout(pvHidePartnerList, 200)"
+            data-act-focus="pvShowPartnerList"
+            data-act-blur="pvHidePartnerListDelayed"
             data-act-keydown="pvSearchKeydown"/>
           <div id="pvPartnerList" style="display:none;position:absolute;top:100%;left:0;width:240px;max-height:280px;overflow-y:auto;background:#fff;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:100;margin-top:2px"></div>
         </div>
@@ -2141,6 +2141,8 @@ registerActions({
   pvOnPeriodChange: (d, el) => pvOnPeriodChange(el.value),
   pvSetLang:        d => pvSetLang(d.lang),
   pvSetLine:        d => setPvLine(d.line),
+  pvShowPartnerList,
+  pvHidePartnerListDelayed: () => setTimeout(pvHidePartnerList, 200),
   pvDownloadPDF, pvShareToggle, pvLegendToggle, pvConvFilter,
   pvSelectPartner:  d => pvSelectPartner(d.partner),
   pvConvCohort:     d => pvConvCohort(d.key),

@@ -1165,8 +1165,8 @@ export function _calcSec5_exportPartner(agg, totals, aggTk, tkTotals, lastMonth,
           <input type="text" id="calcExportSearch" class="sb-inp" placeholder="Buscar partner..." autocomplete="off"
             value="${escapeHTML(sel)}" style="width:240px"
             data-act-input="calcFilterExportPartners"
-            onfocus="calcShowExportList()"
-            onblur="setTimeout(calcHideExportList, 200)"
+            data-act-focus="calcShowExportList"
+            data-act-blur="calcHideExportListDelayed"
             data-act-keydown="calcExportKeydown"/>
           <div id="calcExportList" style="display:none;position:absolute;top:100%;left:0;width:240px;max-height:280px;overflow-y:auto;background:#fff;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:100;margin-top:2px"></div>
         </div>
@@ -1553,5 +1553,10 @@ registerActions({
   calcSetExportLang:   d => calcSetExportLang(d.code),
   calcFilterExportPartners: (d, el) => calcFilterExportPartners(el.value),
   calcExportKeydown:        (d, el, e) => calcExportKeydown(e),
-  calcSelectExportPartner:  d => calcSelectExportPartner(d.partner)
+  calcSelectExportPartner:  d => calcSelectExportPartner(d.partner),
+  calcShowExportList,
+  // blur (focusout) dispara ANTES que el click en un item de la lista, así que
+  // hay que darle un margen para que el mousedown del click llegue primero —
+  // mismo delay de 200ms que tenía el onblur inline original.
+  calcHideExportListDelayed: () => setTimeout(calcHideExportList, 200)
 });

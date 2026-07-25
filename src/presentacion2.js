@@ -1636,7 +1636,7 @@ export function renderPresent2() {
       <div style="display:flex;align-items:flex-end;gap:12px;margin-bottom:14px;flex-wrap:wrap">
         <div style="position:relative">
           <label style="font-size:.72rem;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Partner</label>
-          <input id="present2Search" type="text" class="sb-inp" style="width:220px" autocomplete="off" placeholder="${es ? "Buscar partner..." : "Search partner..."}" value="${escapeHTML(PRESENT2_STATE.partner)}" data-act-input="p2FilterPartners" onfocus="p2ShowPartnerList()" onblur="setTimeout(p2HidePartnerList,200)" data-act-keydown="p2SearchKeydown"/>
+          <input id="present2Search" type="text" class="sb-inp" style="width:220px" autocomplete="off" placeholder="${es ? "Buscar partner..." : "Search partner..."}" value="${escapeHTML(PRESENT2_STATE.partner)}" data-act-input="p2FilterPartners" data-act-focus="p2ShowPartnerList" data-act-blur="p2HidePartnerListDelayed" data-act-keydown="p2SearchKeydown"/>
           <div id="present2PartnerList" style="display:none;position:absolute;top:100%;left:0;width:220px;max-height:280px;overflow-y:auto;background:#fff;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:100;margin-top:2px"></div>
         </div>
         <div>
@@ -1919,5 +1919,7 @@ registerActions({
   present2SetFleetMode: d => present2SetFleetMode(d.mode),
   present2SetAvanceMes: (d, el) => present2SetAvanceMes(el.value),
   present2ToggleCohort: d => present2ToggleCohort(d.key),
-  present2JumpSection:  d => present2JumpSection(d.section)
+  present2JumpSection:  d => present2JumpSection(d.section),
+  p2ShowPartnerList,
+  p2HidePartnerListDelayed: () => setTimeout(p2HidePartnerList, 200)
 });

@@ -41,12 +41,19 @@ function _makeHandler(attr, datasetKey) {
   };
 }
 
+// focus/blur NO burbujean (a diferencia de click/change/input/keydown) — un
+// listener en `document` nunca los vería. focusin/focusout SÍ burbujean y son
+// funcionalmente equivalentes, así que el dispatcher escucha esos dos eventos
+// pero los expone bajo los atributos data-act-focus/data-act-blur (más
+// intuitivos para quien escribe el HTML que "focusin/focusout").
 const _WIRED = [
   ["click",     "data-act",           "act"],
   ["change",    "data-act-change",    "actChange"],
   ["input",     "data-act-input",     "actInput"],
   ["keydown",   "data-act-keydown",   "actKeydown"],
-  ["mousedown", "data-act-mousedown", "actMousedown"]
+  ["mousedown", "data-act-mousedown", "actMousedown"],
+  ["focusin",   "data-act-focus",     "actFocus"],
+  ["focusout",  "data-act-blur",      "actBlur"]
 ];
 
 for (const [evName, attr, datasetKey] of _WIRED) {
