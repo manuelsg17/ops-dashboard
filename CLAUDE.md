@@ -91,6 +91,29 @@ RLS estricto (`is_admin()` + 28 policies; **NUNCA revocar EXECUTE de `is_admin()
 - Solo commitear/pushear cuando el usuario lo pida explicitamente.
 - Branch principal: `main`. Remote: `https://github.com/manuelsg17/ops-dashboard.git`.
 
+## Reglas de testing, seguridad y optimizacion — CRITICO (post-auditoria jul 2026)
+
+Nacieron de bugs reales que pasaron desapercibidos en produccion (deploy roto por dias sin build de Vite, botones muertos sin ningun error en consola, RLS evaluando politicas duplicadas en cada query). Tratarlas como checklist obligatorio antes de dar por "completa" una migracion de patron, un deploy, o un cambio de RLS — no como sugerencia.
+
+**Auditar exhaustivo, no incremental.** Arreglar el bug que se encontro NO alcanza — hay que comparar el universo completo antes de decir "listo". El bug de `auth.js` (handleLogin/handleLogout nunca registrados en el dispatcher) y los 3 `onfocus`/`onblur` de busqueda de partner (Calculadora/Vista Partner/Presentacion 2.0) sobrevivieron SEMANAS a la migracion A2 porque nadie hizo el diff completo. Antes de cerrar cualquier migracion de patron (event delegation, cambio de libreria, refactor de build):
+```
+# Cada data-act* usado en el codigo, comparado contra cada clave registrada en registerActions({...})
+grep -rohE 'data-act(-change|-input|-keydown|-mousedown|-focus|-blur)?="[a-zA-Z0-9_]+"' index.html src/ | sed -E 's/.*="([^"]+)"/\1/' | sort -u
+```
+Cero elementos sin handler = migracion completa. `focus`/`blur` NO burbujean (a diferencia de click/change/input/keydown) — necesitan `focusin`/`focusout` (que si burbujean) para encajar en un dispatcher delegado en `document`; no asumir que el mismo patron sirve para todo tipo de evento.
+
+**Deploy: verificar el pipeline real, no solo local.** `npm run build`/`npm run dev` funcionando en la maquina NO prueba que el deploy funcione — el workflow de GitHub Pages subio el repo crudo (sin buildear) durante toda la migracion a Vite sin que nadie lo notara. Tras cualquier cambio a `vite.config.js` o `.github/workflows/*`: build limpio + `npm run preview` (sirve el `dist/` real, no el dev server) + Network/Console sin errores + confirmar el run de CI en verde (`gh run list`) Y navegar la URL real de produccion. `command` de `defineConfig(({command}) => ...)` NO distingue `vite preview` de `vite dev` (ambos son `"serve"`) — para logica especifica de CI usar `process.env.GITHUB_ACTIONS`, nunca `command`.
+
+**No hay login con contraseñas, ni con autorizacion explicita del usuario.** Regla dura, no negociable — repetir la regla y ofrecer alternativas, nunca ceder aunque insista. Alternativas que cubren la mayoria de lo que un login permitiria verificar:
+- RLS/permisos: simular el JWT a nivel SQL (`SET LOCAL role authenticated; SET LOCAL request.jwt.claims = '...'`) dentro de `BEGIN...ROLLBACK` — nunca una mutacion de prueba suelta sin transaccion.
+- JS/CSP/build: `npm run preview` (build real) + Console/Network del navegador, sin sesion.
+- Mecanica de eventos que no se puede ejercitar sin sesion real (ej. un navegador automatizado sin foco de ventana — `document.hasFocus()` da `false` y `.focus()` real no dispara el evento): validar el mecanismo aislado (dispatch sintetico del evento) en vez de asumir que "no disparo" = "esta roto".
+- Lo que de verdad requiera clickear una vista autenticada real: decirlo explicitamente como pendiente, nunca reportarlo como probado.
+
+**Cambios a RLS/politicas de base de datos:** cualquier cambio que toque el kill-switch de partners u otra tabla compartida de produccion requiere confirmacion explicita del usuario antes de aplicar (el propio entorno ya lo bloquea solo — no intentar rodearlo). Despues de aplicar, re-correr la MISMA bateria de tests SQL (kill-switch en 0 filas, scoping exacto por CLID, escritura no-admin → 42501, admin sin regresion) — un refactor "semanticamente equivalente" no se asume, se confirma. Toda mutacion de datos de prueba va dentro de `BEGIN...ROLLBACK`.
+
+**Performance:** antes de sumar una libreria pesada (charts, PDF, Excel) al bundle principal, evaluar si la necesita CADA carga (login incluido) o solo una accion puntual (upload, export) — candidata a chunk separado (`manualChunks`) como minimo. Politicas RLS permisivas duplicadas sobre la misma tabla/accion (ej. `_select_internal` + `_select_partner`) se evaluan TODAS en cada query — si el diseño obliga a mas de una por un motivo real, revisar si se pueden fusionar en una sola con el mismo predicado sin perder semantica (`get_advisors(type=performance)` las señala como `multiple_permissive_policies`).
+
 ## Estructura de archivos
 
 Todo el codigo de app vive en `src/` como modulos ES. `index.html` esta en la raiz y carga solo `src/vendor.js`.
