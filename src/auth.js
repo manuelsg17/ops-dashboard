@@ -11,6 +11,7 @@
 // (createClient is not a function). Import directo = no depende del orden.
 import { createClient } from "@supabase/supabase-js";
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./core/config.js";
+import { registerActions } from "./shared/actions.js";
 
 export const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // El resto del código (funciones, no top-level) sigue usando `STATE`, `showApp`,
@@ -225,3 +226,5 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   initAuth();
 });
+
+registerActions({ handleLogin, handleLogout });
