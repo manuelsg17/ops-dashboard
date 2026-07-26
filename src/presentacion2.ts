@@ -1934,7 +1934,13 @@ export async function downloadPresent2PDF() {
       }
       try { if (div.parentNode) document.body.removeChild(div); } catch (e) {}
       if (i > 0) pdf.addPage();
-      pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, 1280, 720);
+      // PNG (sin compresión) tirado atrás: a scale:4 el canvas es 5120×2880 y el
+      // string base64 de un PNG sin comprimir de una slide con gráficos/texto
+      // superaba el límite de longitud de string del motor JS ("Invalid string
+      // length"). JPEG a calidad máxima da un tamaño manejable sin artefactos
+      // visibles — la nitidez real ya la resuelve que devicePixelRatio del chart
+      // y el scale de html2canvas coincidan (P2_EXPORT_SCALE), no el formato.
+      pdf.addImage(canvas.toDataURL("image/jpeg", 1.0), "JPEG", 0, 0, 1280, 720);
     }
     stampPDF(pdf, `Presentación 2.0 — ${partner}`);
     pdf.save(`${partner}_Presentacion2_${to}.pdf`);
