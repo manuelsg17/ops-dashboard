@@ -26,6 +26,22 @@ import ApexCharts from "apexcharts";
 window.supabase    = { createClient };
 window.ApexCharts  = ApexCharts;
 
+// ── Vercel Speed Insights ──────────────────────────────────────────────────
+// Integración "Other framework" (no hay paquete Preact/vanilla dedicado): el
+// script lo sirve Vercel mismo en /_vercel/speed-insights/script.js, así que
+// no hace falta instalar nada por npm. Se inyecta por JS (no <script> inline
+// en index.html) porque la CSP es script-src 'self' sin 'unsafe-inline' — un
+// <script> inline con el snippet de window.si quedaría bloqueado. Gateado a
+// dominios *.vercel.app (o el propio, si algún día hay uno custom): en GitHub
+// Pages ese endpoint no existe, y no tiene sentido pedirlo ahí.
+if (/\.vercel\.app$/.test(location.hostname)) {
+  window.si = window.si || function (...args) { (window.siq = window.siq || []).push(args); };
+  const s = document.createElement("script");
+  s.defer = true;
+  s.src = "/_vercel/speed-insights/script.js";
+  document.head.appendChild(s);
+}
+
 // ── Módulos de app (Fase A2 completa: los 16 archivos ya son módulos ES) ─────
 // Todo el código de la app vive en módulos ES ahora — ya no hay <script defer>
 // clásicos en index.html. Igual se espeja todo a window (Object.assign) porque
