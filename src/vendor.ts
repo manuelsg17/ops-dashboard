@@ -72,15 +72,24 @@ Object.assign(window,
 );
 
 // Loader asíncrono para módulos de pantalla pesados (Lazy Loading)
+//
+// viewName = el NOMBRE DE TAB REAL que usa el resto de la app (STATE.curTab),
+// no un alias inventado — bug encontrado en producción (revisando una sesión
+// real): switchTab() llama loadViewModule(tab) con tab="config", pero acá
+// solo se reconocía el string "adminUsers" (que NADA pasa nunca como tab) →
+// adminUsers.js nunca se importaba, el panel de Usuarios quedaba vacío en
+// silencio (el `typeof renderAdminUsers === "function"` de app.js no tira
+// error, solo no hace nada). Mismo problema con "partnerPortal" vs el tab
+// real "portal" — más grave, es la única pantalla del rol partner.
 const _loadedModules = {};
 export async function loadViewModule(viewName) {
   if (_loadedModules[viewName]) return _loadedModules[viewName];
   let mod = null;
-  if (viewName === "partnerview")  mod = await import("./partnerView.js");
-  if (viewName === "present2")     mod = await import("./presentacion2.js");
-  if (viewName === "calculator")   mod = await import("./calculator.js");
-  if (viewName === "adminUsers")   mod = await import("./adminUsers.js");
-  if (viewName === "partnerPortal")mod = await import("./partnerPortal.js");
+  if (viewName === "partnerview")            mod = await import("./partnerView.js");
+  if (viewName === "present2")               mod = await import("./presentacion2.js");
+  if (viewName === "calculator")              mod = await import("./calculator.js");
+  if (viewName === "config")                  mod = await import("./adminUsers.js");
+  if (viewName === "portal")                  mod = await import("./partnerPortal.js");
   if (mod) {
     _loadedModules[viewName] = mod;
     Object.assign(window, mod);

@@ -100,6 +100,17 @@ export function _applyRoleGate() {
     STATE.curTab = "portal";
     document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
     document.getElementById("tab-portal")?.classList.add("active");
+    // El portal es un chunk lazy (loadViewModule) igual que Vista Partner/
+    // Calculadora/etc — pero a diferencia de esas vistas, a este tab se llega
+    // DIRECTO acá (login de un partner), nunca vía switchTab(), que es el
+    // único lugar que llamaba loadViewModule. Sin esto, partnerPortal.js
+    // nunca se importaba y el portal quedaba en blanco para todo usuario
+    // partner (encontrado revisando una sesión real, no en desarrollo).
+    if (typeof window.loadViewModule === "function") {
+      window.loadViewModule("portal").then(() => {
+        if (STATE.curTab === "portal" && typeof renderPartnerPortal === "function") renderPartnerPortal();
+      });
+    }
   }
 }
 
