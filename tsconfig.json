@@ -8,9 +8,7 @@
     "skipLibCheck": true,
     "strict": false,
     "noImplicitAny": false,
-    "allowJs": true,
-    "jsx": "react-jsx",
-    "jsxImportSource": "preact"
+    "allowJs": true
   },
   "include": ["src/**/*"]
 }

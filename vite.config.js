@@ -1,5 +1,4 @@
 import { defineConfig } from "vite";
-import preact from "@preact/preset-vite";
 
 // Deploy: GitHub Pages sirve el repo bajo /ops-dashboard/ (sin dominio propio,
 // ver .github/workflows/static.yml) — sin ese base, los assets buildeados
@@ -11,7 +10,6 @@ import preact from "@preact/preset-vite";
 // horneadas) sirviendo en "/" → 404 en cada asset. Se detecta el entorno real
 // de CI (GITHUB_ACTIONS, la única corrida que empuja a Pages) en su lugar.
 export default defineConfig(() => ({
-  plugins: [preact()],
   root: ".",
   base: process.env.GITHUB_ACTIONS ? "/ops-dashboard/" : "/",
   server: { port: 8765, host: "127.0.0.1" },
@@ -35,9 +33,9 @@ export default defineConfig(() => ({
     // eager, anulando el beneficio de moverla. Por eso cada lib lazy va en su
     // PROPIO bucket, no todas juntas en un "vendor" compartido: si no, abrir
     // Presentación 2.0 (que solo necesita Chart.js) también pagaría jsPDF +
-    // html2canvas + Preact, que son de otras vistas. xlsx no tiene regla
-    // porque nunca se alcanza por import estático (vive solo dentro de
-    // workers/excelWorker.js, que Vite bundlea aparte).
+    // html2canvas de otras vistas. xlsx no tiene regla porque nunca se
+    // alcanza por import estático (vive solo dentro de workers/excelWorker.js,
+    // que Vite bundlea aparte).
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -46,7 +44,6 @@ export default defineConfig(() => ({
           if (id.includes("apexcharts")) return "vendor-apexcharts";
           if (id.includes("chart.js") || id.includes("chartjs-plugin-datalabels")) return "vendor-chartjs";
           if (id.includes("jspdf") || id.includes("html2canvas")) return "vendor-pdf";
-          if (id.includes("/preact/") || id.endsWith("/preact")) return "vendor-preact";
           return "vendor";
         }
       }
