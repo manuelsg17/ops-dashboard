@@ -1,3 +1,4 @@
+//@ts-nocheck
 // adminUsers.js — Administración de usuarios (Track C1). Solo admin.
 //
 // Reparto de responsabilidades (importante para entender por qué hay dos vías):
@@ -166,124 +167,31 @@ export async function auRemoveClid(mappingId) {
   finally { showLoad(false); }
 }
 
-// ── RENDER ───────────────────────────────────────────────────────────────────
+import { h, render } from 'preact';
+import { AdminUsers } from './components/AdminUsers';
+
 export function renderAdminUsers() {
   const box = document.getElementById("adminUsersBox");
   if (!box) return;
   if (!STATE.isAdmin) { box.innerHTML = ""; return; }
 
-  const S = ADMIN_USERS_STATE;
-
-  if (!S.loaded && !S.loading && !S.error) {
-    box.innerHTML = `
-      <div style="padding:12px 0">
-        <button class="crud-btn crud-btn-add" data-act="auLoad">👥 Cargar usuarios</button>
-        <span style="font-size:.72rem;color:#888;margin-left:8px">Se consulta al servidor solo cuando lo pedís.</span>
-      </div>`;
-    return;
-  }
-  if (S.loading) { box.innerHTML = `<div style="padding:14px;color:#888;font-size:.8rem">Cargando usuarios…</div>`; return; }
-  if (S.error) {
-    box.innerHTML = `
-      <div style="padding:12px;background:#fff5f5;border:1px solid #fecaca;border-radius:6px;color:#991b1b;font-size:.78rem">
-        ${escapeHTML(S.error)}
-        <button class="crud-btn" data-act="auLoad" style="margin-left:10px">Reintentar</button>
-      </div>`;
-    return;
-  }
-
-  const permsByUser = new Map();
-  S.perms.forEach(p => {
-    if (!permsByUser.has(p.user_id)) permsByUser.set(p.user_id, new Set());
-    permsByUser.get(p.user_id).add(p.permission);
-  });
-  const clidsByUser = new Map();
-  S.mappings.forEach(m => {
-    if (!clidsByUser.has(m.user_id)) clidsByUser.set(m.user_id, []);
-    clidsByUser.get(m.user_id).push(m);
-  });
-
-  // ── Invitar ──
-  let html = `
-    <div class="section" style="margin-bottom:14px;background:#f0f9ff;border:1px solid #bae6fd">
-      <div style="font-size:.78rem;font-weight:700;color:#075985;margin-bottom:8px">✉️ Invitar usuario</div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <input class="crud-input" id="auInviteEmail" type="email" placeholder="email@dominio.com" style="flex:1;min-width:200px;max-width:300px"/>
-        <select class="crud-input" id="auInviteRole" style="width:auto">
-          ${AU_ROLES.map(r => `<option value="${r}"${r === "viewer" ? " selected" : ""}>${r}</option>`).join("")}
-        </select>
-        <button class="crud-btn crud-btn-add" data-act="auInvite">Enviar invitación</button>
-      </div>
-      <div style="font-size:.7rem;color:#0369a1;margin-top:6px">
-        Recibe un mail para fijar su contraseña. Para un <strong>partner</strong>, después asignale sus CLIDs abajo —
-        sin CLIDs asignados no ve ningún dato (por diseño).
-      </div>
-    </div>`;
-
-  // ── Tabla de usuarios ──
-  html += `<div class="tbl-wrap"><table class="dtbl"><thead><tr>
-      <th>Email</th><th style="width:110px">Rol</th><th>Permisos extra</th>
-      <th>CLIDs (partner)</th><th style="width:90px">Sesión</th>
-    </tr></thead><tbody>`;
-
-  S.users.forEach(u => {
-    const uid    = escapeHTML(u.id);
-    const misP   = permsByUser.get(u.id) || new Set();
-    const misC   = clidsByUser.get(u.id) || [];
-    const esPartner = u.role === "partner";
-    const esAdmin   = u.role === "admin";
-
-    const permChips = AU_PERMISOS.map(([key, label]) => {
-      const on = misP.has(key);
-      // Un admin ya puede todo (can() devuelve true por is_admin): mostrar los
-      // permisos como implícitos en vez de sugerir que hay que tildarlos.
-      if (esAdmin) return `<span style="font-size:.62rem;color:#bbb;margin-right:5px" title="admin ya tiene todos los permisos">${escapeHTML(label)}</span>`;
-      return `<label style="display:inline-flex;align-items:center;gap:3px;margin:0 7px 3px 0;font-size:.68rem;cursor:pointer">
-          <input type="checkbox" data-act-change="auTogglePerm" data-uid="${uid}" data-perm="${escapeHTML(key)}" ${on ? "checked" : ""}/>
-          <span style="${on ? "font-weight:700;color:#166534" : "color:#666"}">${escapeHTML(label)}</span>
-        </label>`;
-    }).join("");
-
-    const clidChips = misC.map(m => `
-      <span style="display:inline-flex;align-items:center;gap:3px;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:10px;padding:1px 4px 1px 8px;font-size:.68rem;margin:0 4px 3px 0">
-        ${escapeHTML(m.clid)}
-        <span style="color:#8b5cf6;font-size:.6rem">${escapeHTML(STATE.CLID_MAP[m.clid] || "")}</span>
-        <button data-act="auRemoveClid" data-mid="${escapeHTML(m.id)}" title="Quitar" style="border:none;background:none;color:#7c3aed;cursor:pointer;font-weight:700;padding:0 3px">×</button>
-      </span>`).join("");
-
-    const clidCell = esPartner
-      ? `${clidChips || `<span style="font-size:.66rem;color:#b45309">⚠ sin CLIDs: no ve nada</span>`}
-         <div style="display:flex;gap:4px;margin-top:4px">
-           <input class="crud-input" id="auClid_${uid}" placeholder="CLID" style="width:120px;font-size:.68rem"/>
-           <button class="crud-btn" data-act="auAddClid" data-uid="${uid}" style="font-size:.66rem">+ Asignar</button>
-         </div>`
-      : `<span style="color:#ddd;font-size:.7rem">— solo rol partner —</span>`;
-
-    html += `<tr>
-      <td style="font-size:.76rem">${escapeHTML(u.email || "")}
-        <div style="font-size:.62rem;color:#aaa">${u.lastSignInAt ? "último ingreso " + escapeHTML(String(u.lastSignInAt).slice(0,10)) : "nunca ingresó"}</div>
-      </td>
-      <td>
-        <select class="crud-input" data-act-change="auSetRole" data-uid="${uid}" style="width:100%;font-size:.72rem">
-          ${AU_ROLES.map(r => `<option value="${r}"${r === u.role ? " selected" : ""}>${r}</option>`).join("")}
-        </select>
-      </td>
-      <td>${permChips}</td>
-      <td>${clidCell}</td>
-      <td style="text-align:center">
-        <button class="crud-btn" data-act="auForceSignOut" data-uid="${uid}" title="Cierra sus sesiones para que un cambio de rol aplique ya" style="font-size:.66rem">Cerrar</button>
-      </td>
-    </tr>`;
-  });
-
-  html += `</tbody></table></div>
-    <div style="font-size:.7rem;color:#888;margin-top:8px">
-      El rol viaja dentro del token de sesión: un cambio recién aplica cuando la persona vuelve a iniciar sesión
-      (o si le cerrás la sesión con "Cerrar"). Los permisos extra y los CLIDs, en cambio, aplican al instante.
-    </div>
-    <div style="margin-top:8px"><button class="crud-btn" data-act="auLoad">↻ Refrescar</button></div>`;
-
-  box.innerHTML = html;
+  render(
+    h(AdminUsers, {
+      stateObj: ADMIN_USERS_STATE,
+      onLoad: auLoadUsers,
+      onInvite: auInvite,
+      onSetRole: auSetRole,
+      onTogglePerm: auTogglePerm,
+      onAddClid: (uid, clid) => {
+        const inp = document.getElementById(`auClid_${uid}`);
+        if (inp) inp.value = clid;
+        auAddClid(uid);
+      },
+      onRemoveClid: auRemoveClid,
+      onForceSignOut: auForceSignOut
+    }),
+    box
+  );
 }
 
 registerActions({

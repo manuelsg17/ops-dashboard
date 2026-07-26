@@ -1,4 +1,5 @@
 import { defineConfig } from "vite";
+import preact from "@preact/preset-vite";
 
 // Deploy: GitHub Pages sirve el repo bajo /ops-dashboard/ (sin dominio propio,
 // ver .github/workflows/static.yml) — sin ese base, los assets buildeados
@@ -10,6 +11,7 @@ import { defineConfig } from "vite";
 // horneadas) sirviendo en "/" → 404 en cada asset. Se detecta el entorno real
 // de CI (GITHUB_ACTIONS, la única corrida que empuja a Pages) en su lugar.
 export default defineConfig(() => ({
+  plugins: [preact()],
   root: ".",
   base: process.env.GITHUB_ACTIONS ? "/ops-dashboard/" : "/",
   server: { port: 8765, host: "127.0.0.1" },
@@ -25,14 +27,26 @@ export default defineConfig(() => ({
     // no una sola descarga+parse gigante y bloqueante) y cache de largo plazo
     // — un cambio en el código propio ya no invalida el chunk de las libs de
     // terceros (que casi nunca cambian de versión).
+    //
+    // OJO con este mismo mecanismo: agrupar por nombre de paquete IGNORA si
+    // ese paquete se llega por import estático o dynamic import(). ApexCharts
+    // es eager de verdad (lo usa Rendimiento, el tab por defecto) — agruparlo
+    // con cualquier lib lazy forzaría a Rollup a tratar TODO el chunk como
+    // eager, anulando el beneficio de moverla. Por eso cada lib lazy va en su
+    // PROPIO bucket, no todas juntas en un "vendor" compartido: si no, abrir
+    // Presentación 2.0 (que solo necesita Chart.js) también pagaría jsPDF +
+    // html2canvas + Preact, que son de otras vistas. xlsx no tiene regla
+    // porque nunca se alcanza por import estático (vive solo dentro de
+    // workers/excelWorker.js, que Vite bundlea aparte).
     rollupOptions: {
       output: {
         manualChunks(id) {
           if (!id.includes("node_modules")) return;
           if (id.includes("@supabase")) return "vendor-supabase";
-          if (id.includes("apexcharts") || id.includes("chart.js") || id.includes("chartjs-plugin-datalabels")) return "vendor-charts";
-          if (id.includes("xlsx")) return "vendor-xlsx";
+          if (id.includes("apexcharts")) return "vendor-apexcharts";
+          if (id.includes("chart.js") || id.includes("chartjs-plugin-datalabels")) return "vendor-chartjs";
           if (id.includes("jspdf") || id.includes("html2canvas")) return "vendor-pdf";
+          if (id.includes("/preact/") || id.endsWith("/preact")) return "vendor-preact";
           return "vendor";
         }
       }

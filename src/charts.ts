@@ -1,3 +1,4 @@
+//@ts-nocheck
 // charts.js — Toda la lógica de ApexCharts
 
 // ── TOOLTIP FLOTANTE ──────────────────────────────────────────────────────────
@@ -24,7 +25,7 @@ export function showFloatTip(date, rows) {
            <span class="ft-n">${r.name}</span>
            <span class="ft-v">${fmt(r.val)}</span>
          </div>`).join("")
-    : `<div style="font-size:.75rem;color:#aaa">Sin datos</div>`;
+    : `<div class="agy-style-54">Sin datos</div>`;
   if (ft.style.display !== "block") {
     document.addEventListener("mousemove", _onTipMouseMove);
   }
@@ -61,10 +62,11 @@ export function buildSingleLine(elId, dates, cityByDate, metric, color, label) {
   buildLineChart(elId, dates, [{ name: label, data }], [color]);
 }
 
-// Destruye todas las instancias ApexCharts en STATE.charts.
-// Se debe llamar ANTES de innerHTML='...' para evitar instancias huérfanas
-// que retienen DOM listeners y ResizeObservers.
+import { ChartRegistry } from "./core/chartRegistry.js";
+
+// Destruye todas las instancias ApexCharts en STATE.charts y ChartRegistry.
 export function destroyAllCharts() {
+  ChartRegistry.destroyAll();
   if (!STATE.charts) return;
   Object.keys(STATE.charts).forEach(id => {
     try { STATE.charts[id].destroy(); } catch(e) {}
@@ -142,6 +144,7 @@ export function buildLineChart(elId, dates, series, colors) {
   const ch = new ApexCharts(el, opts);
   ch.render();
   STATE.charts[elId] = ch;
+  ChartRegistry.register(elId, ch);
 }
 
 // ── DONUT CHART (composición / parts-of-whole, snapshot — NO serie de tiempo) ─
@@ -203,6 +206,7 @@ export function buildDonutChart(elId, labels, series, colors) {
   const ch = new ApexCharts(el, opts);
   ch.render();
   STATE.charts[elId] = ch;
+  ChartRegistry.register(elId, ch);
 }
 
 // ── DOWNLOAD CHART AS PNG ─────────────────────────────────────────────────────

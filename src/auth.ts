@@ -1,3 +1,4 @@
+//@ts-nocheck
 // auth.js — Autenticación con Supabase Auth
 
 // Import DIRECTO (no via window) — a diferencia de todo el resto del archivo

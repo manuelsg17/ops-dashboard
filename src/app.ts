@@ -1,3 +1,4 @@
+//@ts-nocheck
 // app.js — Inicialización principal, sidebar, tabs y helpers de UI
 
 // ── CONFIG PAGINATION STATE ───────────────────────────────────────────────────
@@ -351,10 +352,16 @@ export function switchTab(tab) {
     // chips, etc) y SOLO DESPUES corre el render pesado. Resultado: el cambio
     // de tab se siente instantaneo aunque el render demore 500ms.
     const tokenAtDispatch = STATE._tabRenderId;
-    requestAnimationFrame(() => requestAnimationFrame(() => {
+    requestAnimationFrame(() => requestAnimationFrame(async () => {
       // Si en los 2 frames intermedios el usuario ya cambio otra vez, abortar.
       if (STATE._tabRenderId !== tokenAtDispatch) return;
       if (STATE.curTab !== tab) return;
+
+      if (typeof window.loadViewModule === "function") {
+        await window.loadViewModule(tab);
+      }
+
+      if (STATE._tabRenderId !== tokenAtDispatch || STATE.curTab !== tab) return;
 
       if (tab === "rend"        && STATE.rawData.length)                           renderRend();
       if (tab === "metas"       && STATE.metasData.length && STATE.rawData.length) renderMetas();
@@ -363,9 +370,9 @@ export function switchTab(tab) {
       if (tab === "seguimiento")                                                    renderSeguimiento();
       if (tab === "fleetext")                                                       renderFleetExterno();
       if (tab === "config")                                                         renderConfig();
-      if (tab === "present2"    && STATE.rawData.length)                            renderPresent2();
-      if (tab === "partnerview" && STATE.rawData.length)                            renderPartnerView();
-      if (tab === "calculator"  && STATE.rawData.length)                            renderCalculator();
+      if (tab === "present2"    && STATE.rawData.length && typeof renderPresent2 === "function")    renderPresent2();
+      if (tab === "partnerview" && STATE.rawData.length && typeof renderPartnerView === "function")  renderPartnerView();
+      if (tab === "calculator"  && STATE.rawData.length && typeof renderCalculator === "function")   renderCalculator();
     }));
   } finally {
     STATE._switchingTab = false;
@@ -686,25 +693,25 @@ export function renderConfig() {
 
   // ── Decline alert settings ──────────────────────────────────────────────
   html += `
-    <div class="section" style="margin-bottom:16px">
-      <div style="font-size:.8rem;font-weight:700;color:#555;margin-bottom:10px">🔔 Alerta de Declive Consecutivo</div>
-      <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+    <div class="section agy-style-30">
+      <div class="agy-style-31">🔔 Alerta de Declive Consecutivo</div>
+      <div class="agy-style-32">
         <div>
-          <label style="font-size:.75rem;color:#aaa;display:block;margin-bottom:4px">Métrica</label>
-          <select class="sb-sel" id="declineMetricSel" data-act-change="updateDeclineSettings" style="width:auto;min-width:180px">
+          <label class="agy-style-33">Métrica</label>
+          <select class="sb-sel" id="declineMetricSel" data-act-change="updateDeclineSettings" class="agy-style-34">
             <option value="activeDrivers"${STATE.declineMetric==="activeDrivers"?" selected":""}>Conductores Activos</option>
             <option value="supplyHours"${STATE.declineMetric==="supplyHours"?" selected":""}>Horas de Conexión</option>
             <option value="nr"${STATE.declineMetric==="nr"?" selected":""}>Nuevos + Reactivados</option>
           </select>
         </div>
         <div>
-          <label style="font-size:.75rem;color:#aaa;display:block;margin-bottom:4px">Semanas consecutivas</label>
-          <select class="sb-sel" id="declineThresholdSel" data-act-change="updateDeclineSettings" style="width:auto">
+          <label class="agy-style-33">Semanas consecutivas</label>
+          <select class="sb-sel" id="declineThresholdSel" data-act-change="updateDeclineSettings" class="agy-style-10">
             ${[2,3,4,5].map(n => `<option value="${n}"${STATE.declineThreshold===n?" selected":""}>${n} semanas</option>`).join("")}
           </select>
         </div>
-        <div style="font-size:.75rem;color:#888;max-width:260px">
-          Se mostrará el badge <span class="decline-badge" style="animation:none">⚠</span> en la tabla cuando un partner tenga
+        <div class="agy-style-35">
+          Se mostrará el badge <span class="decline-badge agy-style-36">⚠</span> en la tabla cuando un partner tenga
           <strong>${STATE.declineThreshold}</strong> períodos seguidos de baja en <strong>${metricLabel[STATE.declineMetric]}</strong>.
         </div>
       </div>
@@ -715,29 +722,29 @@ export function renderConfig() {
   // desde DevTools, la query DELETE falla con 401/PGRST.
   if (STATE.isAdmin) {
     html += `
-    <div class="section" style="margin-bottom:16px;border:1px solid #fecaca;background:#fff8f8;border-radius:8px;padding:14px">
-      <div style="font-size:.8rem;font-weight:700;color:#991b1b;margin-bottom:6px">🗑️ Eliminar Datos</div>
-      <div style="font-size:.72rem;color:#888;margin-bottom:12px">
+    <div class="section agy-style-37">
+      <div class="agy-style-38">🗑️ Eliminar Datos</div>
+      <div class="agy-style-39">
         Borra registros de la base de datos. Útil cuando subiste un Excel con error y quieres re-subir.
-        Si dejas el mes vacío, borra <strong>TODA</strong> la tabla. <strong style="color:#991b1b">Acción irreversible.</strong>
+        Si dejas el mes vacío, borra <strong>TODA</strong> la tabla. <strong class="agy-style-40">Acción irreversible.</strong>
       </div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <div style="display:flex;flex-direction:column">
-          <label style="font-size:.68rem;color:#aaa;margin-bottom:3px;font-weight:600">Tabla</label>
-          <select class="crud-input" id="delTableSel" style="width:auto;min-width:140px">
+      <div class="agy-style-8">
+        <div class="agy-style-41">
+          <label class="agy-style-42">Tabla</label>
+          <select class="crud-input" id="delTableSel" class="agy-style-43">
             <option value="rendimiento">Rendimiento Semanal</option>
             <option value="rendimiento_mensual">Rendimiento Mensual</option>
             <option value="rendimiento_diario">Rendimiento Diario</option>
             <option value="metas">Metas</option>
           </select>
         </div>
-        <div style="display:flex;flex-direction:column">
-          <label style="font-size:.68rem;color:#aaa;margin-bottom:3px;font-weight:600">Mes (opcional)</label>
+        <div class="agy-style-41">
+          <label class="agy-style-42">Mes (opcional)</label>
           <input class="crud-input" id="delMonthInput" placeholder="2026-04 o vacío"
-            style="width:140px" maxlength="7"/>
+            class="agy-style-44" maxlength="7"/>
         </div>
         <button class="crud-btn crud-btn-del" data-act="deleteDashboardData"
-          style="background:#FF0000;color:#fff;font-weight:700;padding:8px 14px;margin-top:18px">
+          class="agy-style-45">
           🗑️ Eliminar
         </button>
       </div>
@@ -750,9 +757,9 @@ export function renderConfig() {
   // la Edge Function, no hace falta hacerlo en cada render de Configuración.
   if (STATE.isAdmin) {
     html += `
-    <div class="section" style="margin-bottom:16px">
-      <div style="font-size:.8rem;font-weight:700;color:#555;margin-bottom:4px">👥 Usuarios y Accesos</div>
-      <div style="font-size:.72rem;color:#888;margin-bottom:8px">
+    <div class="section agy-style-30">
+      <div class="agy-style-46">👥 Usuarios y Accesos</div>
+      <div class="agy-style-47">
         Roles (admin / kam / viewer / partner), permisos extra por usuario y —para partners— qué CLIDs puede ver cada uno.
         Un partner sin CLIDs asignados no ve ningún dato: es el comportamiento seguro por defecto.
       </div>
@@ -774,10 +781,10 @@ export function renderConfig() {
   // y pasamos el valor como JSON HTML-encodeado para no romper el atributo onclick.
   const bannedBadges  = STATE.bannedWords.map(w => {
     const wText = escapeHTML(w);
-    return `<span style="display:inline-flex;align-items:center;gap:4px;background:#fff0f0;border:1px solid #fecaca;border-radius:20px;padding:3px 10px;font-size:.73rem;font-weight:600;color:#991b1b">
+    return `<span class="agy-style-48">
       ${wText}
       <button data-act="removeBannedWord" data-word="${wText}"
-        style="background:none;border:none;cursor:pointer;color:#FF0000;font-size:.85rem;line-height:1;padding:0 2px;margin-left:2px" title="Eliminar">✕</button>
+        class="agy-style-49" title="Eliminar">✕</button>
     </span>`;
   }).join("");
 
@@ -796,44 +803,44 @@ export function renderConfig() {
   const excludedList = [...excludedPartners.entries()].sort((a,b) => b[1].rows - a[1].rows);
 
   html += `
-    <div class="section" style="margin-bottom:16px">
-      <div style="font-size:.8rem;font-weight:700;color:#555;margin-bottom:10px">🚫 Filtros de Flota — Palabras Prohibidas</div>
-      <div style="font-size:.75rem;color:#888;margin-bottom:10px">
+    <div class="section agy-style-30">
+      <div class="agy-style-31">🚫 Filtros de Flota — Palabras Prohibidas</div>
+      <div class="agy-style-50">
         Los partners cuyo nombre contenga alguna de estas palabras (sin importar mayúsculas) quedan excluidos del dashboard.
-        Por palabra prohibida: <strong style="color:#FF0000">${bannedRowCount}</strong> registro(s) · <strong>${excludedPartners.size}</strong> partner(s).
-        ${taxiExclCount ? `Aparte hay <strong style="color:#b45309">${taxiExclCount}</strong> registro(s) fuera de Taxi por marcado <strong>🛺 TukTuk / ⛔ Excluir</strong> (se gestionan en <strong>Data Raw → Vista Flotas</strong>, no aquí).` : ""}
+        Por palabra prohibida: <strong class="agy-style-51">${bannedRowCount}</strong> registro(s) · <strong>${excludedPartners.size}</strong> partner(s).
+        ${taxiExclCount ? `Aparte hay <strong class="agy-style-52">${taxiExclCount}</strong> registro(s) fuera de Taxi por marcado <strong>🛺 TukTuk / ⛔ Excluir</strong> (se gestionan en <strong>Data Raw → Vista Flotas</strong>, no aquí).` : ""}
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
-        ${bannedBadges || `<span style="font-size:.75rem;color:#aaa">Sin palabras prohibidas configuradas.</span>`}
+      <div class="agy-style-53">
+        ${bannedBadges || `<span class="agy-style-54">Sin palabras prohibidas configuradas.</span>`}
       </div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <div class="agy-style-55">
         <input class="crud-input" id="newBannedWord" placeholder="Nueva palabra (ej: mototaxi)"
-          style="flex:1;min-width:180px;max-width:280px"
+          class="agy-style-56"
           data-act-keydown="addBannedWordEnter"/>
         <button class="crud-btn crud-btn-add" data-act="addBannedWord">+ Agregar</button>
       </div>
       ${excludedList.length ? `
-        <details style="border:1px solid #fecaca;border-radius:6px;background:#fffafa;margin-top:8px">
-          <summary style="cursor:pointer;padding:8px 12px;font-size:.78rem;font-weight:700;color:#991b1b">
+        <details class="agy-style-57">
+          <summary class="agy-style-58">
             Ver partners actualmente excluidos (${excludedPartners.size})
           </summary>
-          <div style="max-height:280px;overflow-y:auto;border-top:1px solid #fecaca">
-            <table style="width:100%;border-collapse:collapse;font-size:.75rem">
-              <thead style="background:#fff5f5;position:sticky;top:0">
+          <div class="agy-style-59">
+            <table class="agy-style-60">
+              <thead class="agy-style-61">
                 <tr>
-                  <th style="text-align:left;padding:6px 10px;border-bottom:1px solid #fecaca">Partner</th>
-                  <th style="text-align:left;padding:6px 10px;border-bottom:1px solid #fecaca">KAM</th>
-                  <th style="text-align:left;padding:6px 10px;border-bottom:1px solid #fecaca">Palabra que aplicó</th>
-                  <th style="text-align:right;padding:6px 10px;border-bottom:1px solid #fecaca">Filas</th>
+                  <th class="agy-style-62">Partner</th>
+                  <th class="agy-style-62">KAM</th>
+                  <th class="agy-style-62">Palabra que aplicó</th>
+                  <th class="agy-style-63">Filas</th>
                 </tr>
               </thead>
               <tbody>
                 ${excludedList.map(([p, info]) => `
                   <tr>
-                    <td style="padding:5px 10px;border-bottom:1px solid #fee">${escapeHTML(p)}</td>
-                    <td style="padding:5px 10px;border-bottom:1px solid #fee;color:#666">${escapeHTML(info.kam)}</td>
-                    <td style="padding:5px 10px;border-bottom:1px solid #fee"><code style="background:#fff0f0;padding:1px 5px;border-radius:3px;color:#991b1b">${escapeHTML(info.matchedWord)}</code></td>
-                    <td style="padding:5px 10px;border-bottom:1px solid #fee;text-align:right;color:#888">${info.rows}</td>
+                    <td class="agy-style-64">${escapeHTML(p)}</td>
+                    <td class="agy-style-65">${escapeHTML(info.kam)}</td>
+                    <td class="agy-style-64"><code class="agy-style-66">${escapeHTML(info.matchedWord)}</code></td>
+                    <td class="agy-style-67">${info.rows}</td>
                   </tr>`).join("")}
               </tbody>
             </table>
@@ -842,7 +849,7 @@ export function renderConfig() {
     </div>`;
 
   // Stats per KAM
-  html += `<div class="section"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:20px">`;
+  html += `<div class="section"><div class="agy-style-68">`;
   kams.forEach(kam => {
     const count = Object.values(STATE.KAM_MAP).filter(k => k === kam).length;
     const color = KAM_COLORS[kam] || "#888";
@@ -853,7 +860,7 @@ export function renderConfig() {
           ${escapeHTML(kam)}
         </div>
         <div class="mcard-val">${count}</div>
-        <div style="font-size:.75rem;color:#aaa">CLIDs asignados</div>
+        <div class="agy-style-54">CLIDs asignados</div>
       </div>`;
   });
   html += `</div>`;
@@ -864,15 +871,15 @@ export function renderConfig() {
   const cfgKamF   = CONFIG_STATE.kamFilter;
   const kamFilterOpts = kams.map(k => `<option value="${escapeHTML(k)}"${cfgKamF===k?" selected":""}>${escapeHTML(k)}</option>`).join("");
   html += `
-    <div style="margin-bottom:10px;font-size:.8rem;font-weight:700;color:#555">👥 Partners &amp; CLIDs</div>
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+    <div class="agy-style-69">👥 Partners &amp; CLIDs</div>
+    <div class="agy-style-70">
       <input class="crud-input" id="configSearch" placeholder="Buscar CLID, partner o KAM..." value="${CONFIG_STATE.search.replace(/"/g,'&quot;')}"
-        data-act-input="cfgSearch" style="flex:1;min-width:160px;max-width:300px"/>
-      <select class="crud-input" id="configKamFilter" data-act-change="cfgKamFilter" style="width:auto">
+        data-act-input="cfgSearch" class="agy-style-71"/>
+      <select class="crud-input" id="configKamFilter" data-act-change="cfgKamFilter" class="agy-style-10">
         <option value="all"${cfgKamF==="all"?" selected":""}>Todos los KAMs</option>
         ${kamFilterOpts}
       </select>
-      <span id="configCount" style="font-size:.75rem;color:#aaa"></span>
+      <span id="configCount" class="agy-style-54"></span>
     </div>
     <div id="configResults"></div>
     </div>`;   // cierra la .section abierta arriba (stats KAM + Partners & CLIDs)
@@ -909,9 +916,9 @@ export function renderConfigResults() {
         <thead>
           <tr>
             <th>CLID</th><th>Partner</th><th>KAM</th>
-            <th style="text-align:center;width:60px">Fleet</th>
-            <th style="text-align:center;width:70px">TukTuk</th>
-            <th style="text-align:center;width:130px">Acciones</th>
+            <th class="agy-style-72">Fleet</th>
+            <th class="agy-style-73">TukTuk</th>
+            <th class="agy-style-74">Acciones</th>
           </tr>
         </thead>
         <tbody>`;
@@ -929,7 +936,7 @@ export function renderConfigResults() {
       const isTuktuk = !!(STATE.CLID_IS_TUKTUK || {})[clid];
       html += `
         <tr data-clid="${clidH}">
-          <td style="font-size:.75rem;color:#aaa;font-family:monospace">${clidH}</td>
+          <td class="agy-style-75">${clidH}</td>
           <td>
             <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${pdot};margin-right:5px"></span>
             ${partnerH}
@@ -938,9 +945,9 @@ export function renderConfigResults() {
             <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${color};margin-right:4px"></span>
             ${kamH}
           </td>
-          <td style="text-align:center">${isFleet ? `<span style="font-size:.68rem;background:#ecfdf5;color:#059669;padding:2px 7px;border-radius:10px;font-weight:700">🚗 Fleet</span>` : `<span style="color:#ddd">—</span>`}</td>
-          <td style="text-align:center">${isTuktuk ? `<span style="font-size:.68rem;background:#fff7ed;color:#c2410c;padding:2px 7px;border-radius:10px;font-weight:700">🛺 TukTuk</span>` : `<span style="color:#ddd">—</span>`}</td>
-          <td style="text-align:center">
+          <td class="agy-style-27">${isFleet ? `<span class="agy-style-76">🚗 Fleet</span>` : `<span class="agy-style-77">—</span>`}</td>
+          <td class="agy-style-27">${isTuktuk ? `<span class="agy-style-78">🛺 TukTuk</span>` : `<span class="agy-style-77">—</span>`}</td>
+          <td class="agy-style-27">
             <button class="crud-btn crud-btn-edit" data-act="kamMakeEditable" data-clid="${clidH}">Editar</button>
             <button class="crud-btn crud-btn-del"  data-act="kamCrudDelete" data-clid="${clidH}">Eliminar</button>
           </td>
@@ -950,31 +957,31 @@ export function renderConfigResults() {
   // Fila para agregar nuevo
   const kamOpts = kams.map(k => `<option value="${escapeHTML(k)}">${escapeHTML(k)}</option>`).join("");
   html += `
-        <tr id="newClidRow" style="background:#f9fffe">
+        <tr id="newClidRow" class="agy-style-79">
           <td><input class="crud-input" id="newClid"    placeholder="CLID"/></td>
           <td><input class="crud-input" id="newPartner" placeholder="Nombre del partner"/></td>
           <td>
-            <select class="crud-input" id="newKam" data-act-change="kamNewKamChange" style="width:100%">
+            <select class="crud-input" id="newKam" data-act-change="kamNewKamChange" class="agy-style-80">
               ${kamOpts}
               <option value="__new__">+ Añadir nuevo KAM...</option>
             </select>
-            <input class="crud-input" id="newKamCustom" placeholder="Nuevo nombre de KAM" style="display:none;margin-top:4px"/>
+            <input class="crud-input" id="newKamCustom" placeholder="Nuevo nombre de KAM" class="agy-style-81"/>
           </td>
-          <td style="text-align:center"><input type="checkbox" id="newFleet" title="Fleet"/></td>
-          <td style="text-align:center"><input type="checkbox" id="newTuktuk" title="TukTuk"/></td>
-          <td style="text-align:center">
+          <td class="agy-style-27"><input type="checkbox" id="newFleet" title="Fleet"/></td>
+          <td class="agy-style-27"><input type="checkbox" id="newTuktuk" title="TukTuk"/></td>
+          <td class="agy-style-27">
             <button class="crud-btn crud-btn-add" data-act="kamCrudAdd">+ Agregar</button>
           </td>
         </tr>
       </tbody></table>
     </div>
     ${totalPages > 1 ? `
-    <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.78rem;color:#555">
+    <div class="agy-style-82">
       <button class="crud-btn" data-act="cfgPagePrev"
-        ${CONFIG_STATE.page===0?"disabled":""} style="padding:4px 10px">← Anterior</button>
+        ${CONFIG_STATE.page===0?"disabled":""} class="agy-style-83">← Anterior</button>
       <span>Página <strong>${CONFIG_STATE.page+1}</strong> de <strong>${totalPages}</strong></span>
       <button class="crud-btn" data-act="cfgPageNext" data-total="${totalPages}"
-        ${CONFIG_STATE.page===totalPages-1?"disabled":""} style="padding:4px 10px">Siguiente →</button>
+        ${CONFIG_STATE.page===totalPages-1?"disabled":""} class="agy-style-83">Siguiente →</button>
     </div>` : ""}`;
   box.innerHTML = html;
 }
@@ -994,18 +1001,18 @@ export function kamMakeEditable(clid) {
   const isFleet  = !!(STATE.CLID_IS_FLEET  || {})[clid];
   const isTuktuk = !!(STATE.CLID_IS_TUKTUK || {})[clid];
   row.innerHTML = `
-    <td style="font-size:.75rem;color:#aaa;font-family:monospace">${clidH}</td>
+    <td class="agy-style-75">${clidH}</td>
     <td><input class="crud-input" id="edit_partner_${clidH}" value="${partnerH}"/></td>
     <td>
-      <select class="crud-input" id="edit_kam_${clidH}" data-act-change="kamEditKamChange" data-clid="${clidH}" style="width:100%">
+      <select class="crud-input" id="edit_kam_${clidH}" data-act-change="kamEditKamChange" data-clid="${clidH}" class="agy-style-80">
         ${editKamOpts}
         <option value="__new__">+ Añadir nuevo KAM...</option>
       </select>
-      <input class="crud-input" id="edit_kam_custom_${clidH}" placeholder="Nuevo nombre de KAM" style="display:none;margin-top:4px"/>
+      <input class="crud-input" id="edit_kam_custom_${clidH}" placeholder="Nuevo nombre de KAM" class="agy-style-81"/>
     </td>
-    <td style="text-align:center"><input type="checkbox" id="edit_fleet_${clidH}" ${isFleet ? "checked" : ""} title="Fleet"/></td>
-    <td style="text-align:center"><input type="checkbox" id="edit_tuktuk_${clidH}" ${isTuktuk ? "checked" : ""} title="TukTuk"/></td>
-    <td style="text-align:center">
+    <td class="agy-style-27"><input type="checkbox" id="edit_fleet_${clidH}" ${isFleet ? "checked" : ""} title="Fleet"/></td>
+    <td class="agy-style-27"><input type="checkbox" id="edit_tuktuk_${clidH}" ${isTuktuk ? "checked" : ""} title="TukTuk"/></td>
+    <td class="agy-style-27">
       <button class="crud-btn crud-btn-save"   data-act="kamCrudEdit" data-clid="${clidH}">Guardar</button>
       <button class="crud-btn crud-btn-cancel" data-act="renderConfig">Cancelar</button>
     </td>`;
@@ -1115,11 +1122,11 @@ export function showBanner(ok, msg) {
   if (ok) {
     el.className = "ds-banner";
     el.innerHTML = `<span class="ds-dot"></span>
-                    <span style="font-size:.75rem;color:#065f46;flex:1">${msg}</span>`;
+                    <span class="agy-style-84">${msg}</span>`;
   } else {
     el.className = "ds-banner err";
     el.innerHTML = `<span class="ds-dot err"></span>
-                    <span style="font-size:.75rem;color:#FF0000;flex:1">${msg}</span>`;
+                    <span class="agy-style-85">${msg}</span>`;
   }
 }
 
@@ -1134,7 +1141,7 @@ export function showLoad(show, msg = "Procesando...") {
     }
     el.innerHTML = `
       <div class="spinner"></div>
-      <div style="font-weight:600;color:#555">${msg}</div>`;
+      <div class="agy-style-86">${msg}</div>`;
   } else {
     el?.remove();
   }

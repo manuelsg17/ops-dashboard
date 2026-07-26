@@ -1,3 +1,4 @@
+//@ts-nocheck
 // vendor.js — Bootstrap de librerías de terceros (Fase A1, migración a Vite).
 //
 // Reemplaza los <script src="cdn..."> con SRI del index.html: las 7 librerías
@@ -10,25 +11,20 @@
 // UMD del CDN, para que el código de la app (aún en scope global clásico durante
 // la transición A1→A2) las siga encontrando sin cambios:
 //   supabase.createClient · XLSX · ApexCharts · Chart · html2canvas · jspdf.jsPDF
+import "./styles.css";
 import { createClient } from "@supabase/supabase-js";
-import * as XLSX from "xlsx";
 import ApexCharts from "apexcharts";
-import Chart from "chart.js/auto";
-import ChartDataLabels from "chartjs-plugin-datalabels";
-import html2canvas from "html2canvas";
-import { jsPDF } from "jspdf";
 
-// El plugin datalabels se auto-registraba globalmente en la versión UMD del CDN
-// (por eso el código pone `datalabels:{display:false}` en los charts que NO lo
-// quieren). Registrarlo acá replica ese comportamiento por defecto.
-Chart.register(ChartDataLabels);
+// XLSX (solo uploads de Excel), Chart.js (solo Presentación 2.0) y jsPDF/
+// html2canvas (solo exportar PDF) NO se importan acá — cada uno pesa cientos
+// de KB y hasta la pantalla de login pagaba el costo completo aunque nadie
+// suba un Excel ni exporte nada en esa sesión. Se cargan bajo demanda desde
+// shared/lazyLibs.js (XLSX/PDF) o directo en presentacion2.js (Chart.js, que
+// ya es un chunk lazy vía loadViewModule — no hace falta indirección extra).
+// ApexCharts SÍ queda eager: lo usa Rendimiento, el tab por defecto al loguear.
 
 window.supabase    = { createClient };
-window.XLSX        = XLSX;
 window.ApexCharts  = ApexCharts;
-window.Chart       = Chart;
-window.html2canvas = html2canvas;
-window.jspdf       = { jsPDF };
 
 // ── Módulos de app (Fase A2 completa: los 16 archivos ya son módulos ES) ─────
 // Todo el código de la app vive en módulos ES ahora — ya no hay <script defer>
@@ -49,16 +45,30 @@ import * as metas        from "./metas.js";
 import * as app          from "./app.js";
 import * as unifview     from "./unifview.js";
 import * as rawdata      from "./rawdata.js";
-import * as partnerView  from "./partnerView.js";
-import * as calculator   from "./calculator.js";
 import * as seguimiento  from "./seguimiento.js";
 import * as fleetexterno from "./fleetexterno.js";
 import * as forecast     from "./forecast.js";
-import * as adminUsers   from "./adminUsers.js";
-import * as partnerPortal from "./partnerPortal.js";
-import * as presentacion2 from "./presentacion2.js";
+
+// Espejar el núcleo esencial
 Object.assign(window,
   config, security, format, dates, data, auth, charts,
-  rendimiento, metas, app, unifview, rawdata, partnerView,
-  calculator, seguimiento, fleetexterno, forecast, presentacion2, adminUsers, partnerPortal
+  rendimiento, metas, app, unifview, rawdata, seguimiento, fleetexterno, forecast
 );
+
+// Loader asíncrono para módulos de pantalla pesados (Lazy Loading)
+const _loadedModules = {};
+export async function loadViewModule(viewName) {
+  if (_loadedModules[viewName]) return _loadedModules[viewName];
+  let mod = null;
+  if (viewName === "partnerview")  mod = await import("./partnerView.js");
+  if (viewName === "present2")     mod = await import("./presentacion2.js");
+  if (viewName === "calculator")   mod = await import("./calculator.js");
+  if (viewName === "adminUsers")   mod = await import("./adminUsers.js");
+  if (viewName === "partnerPortal")mod = await import("./partnerPortal.js");
+  if (mod) {
+    _loadedModules[viewName] = mod;
+    Object.assign(window, mod);
+  }
+  return mod;
+}
+window.loadViewModule = loadViewModule;

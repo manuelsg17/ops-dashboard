@@ -1,3 +1,4 @@
+//@ts-nocheck
 // fleetexterno.js — Tab "Fleet Externo": EXPLORADOR de la Supabase de un colega.
 // Con un SEGUNDO cliente de solo-lectura (anon key), descubre TODAS las tablas y
 // columnas expuestas (vía el OpenAPI de PostgREST) y deja navegar cualquiera. Es
@@ -85,7 +86,7 @@ export function renderFleetExterno() {
 
   if (!FLEET_EXT_STATE.schemaLoaded) {
     el.innerHTML = secH("🛞", "#0ea5e9", "Fleet Externo", "Descubriendo el esquema de la base del colega…", "") +
-      `<div class="section" style="color:#64748b;font-size:.85rem;padding:14px">⏳ Leyendo tablas y columnas disponibles…</div>`;
+      `<div class="section agy-style-182">⏳ Leyendo tablas y columnas disponibles…</div>`;
     loadFleetExtSchema().then(() => renderFleetExterno());
     return;
   }
@@ -103,41 +104,41 @@ export function renderFleetExterno() {
 // ── PANELES ────────────────────────────────────────────────────────────────────
 export function _fleetExtSetupPanel() {
   return secH("🛞", "#0ea5e9", "Fleet Externo", "Conectar la base del colega (solo-lectura, en vivo) y explorar toda su data de fleet", "") + `
-    <div class="section" style="max-width:720px">
-      <div style="font-size:.8rem;color:#334155;background:#f0f9ff;border-left:3px solid #0ea5e9;padding:10px 14px;border-radius:6px;margin-bottom:14px">
+    <div class="section agy-style-183">
+      <div class="agy-style-184">
         Tu dashboard leerá <strong>en vivo</strong> la base del colega con un segundo cliente de <strong>solo-lectura</strong> y te mostrará <strong>todas las tablas y columnas</strong> que expongas. La <strong>anon key es pública</strong> (la protege el RLS/grants del colega) y se guarda solo en <strong>tu navegador</strong>.
-        <div style="margin-top:8px;color:#991b1b"><strong>Nunca</strong> pegues aquí la <code>service_role</code> ni la contraseña de la BD — el frontend es público.</div>
-        <div style="margin-top:8px">Como tenés acceso total, en la Supabase del colega: <strong>Settings → API</strong> te da la URL y la <strong>anon key</strong>; y en el <strong>SQL editor</strong> habilitá lectura de las tablas de fleet al rol anónimo, p. ej.:
-          <pre style="white-space:pre-wrap;background:#0f172a;color:#e2e8f0;padding:8px 10px;border-radius:6px;margin-top:6px;font-size:.72rem">grant usage on schema public to anon;
+        <div class="agy-style-185"><strong>Nunca</strong> pegues aquí la <code>service_role</code> ni la contraseña de la BD — el frontend es público.</div>
+        <div class="agy-style-29">Como tenés acceso total, en la Supabase del colega: <strong>Settings → API</strong> te da la URL y la <strong>anon key</strong>; y en el <strong>SQL editor</strong> habilitá lectura de las tablas de fleet al rol anónimo, p. ej.:
+          <pre class="agy-style-186">grant usage on schema public to anon;
 grant select on all tables in schema public to anon;
 -- (o table por table: grant select on public.fleet_x to anon;)</pre>
         </div>
       </div>
-      <div style="display:flex;flex-direction:column;gap:10px;max-width:560px">
-        <label style="font-size:.78rem;color:#475569">URL del proyecto
-          <input id="fleetExtUrl" class="crud-input" placeholder="https://xxxx.supabase.co" style="width:100%;margin-top:3px"/>
+      <div class="agy-style-187">
+        <label class="agy-style-188">URL del proyecto
+          <input id="fleetExtUrl" class="crud-input" placeholder="https://xxxx.supabase.co" class="agy-style-189"/>
         </label>
-        <label style="font-size:.78rem;color:#475569">Anon / publishable key
-          <input id="fleetExtKey" class="crud-input" placeholder="eyJhbGciOi…" style="width:100%;margin-top:3px"/>
+        <label class="agy-style-188">Anon / publishable key
+          <input id="fleetExtKey" class="crud-input" placeholder="eyJhbGciOi…" class="agy-style-189"/>
         </label>
-        <div><button class="crud-btn" data-act="fleetExtSaveConfig" style="background:#0ea5e9;color:#fff;border-color:#0ea5e9;font-weight:700">Conectar y explorar</button></div>
+        <div><button class="crud-btn" data-act="fleetExtSaveConfig" class="agy-style-190">Conectar y explorar</button></div>
       </div>
     </div>`;
 }
 
 export function _fleetExtErrorPanel(msg, isSchema) {
   return secH("🛞", "#ef4444", "Fleet Externo", isSchema ? "No se pudo descubrir el esquema" : "No se pudo leer la tabla", "") + `
-    <div class="section" style="max-width:720px">
-      <div style="font-size:.82rem;color:#991b1b;background:#fff5f5;border-left:3px solid #ef4444;padding:10px 14px;border-radius:6px">
+    <div class="section agy-style-183">
+      <div class="agy-style-191">
         <strong>Error:</strong> ${escapeHTML(msg)}
-        <ul style="margin:8px 0 0 18px;color:#7f1d1d">
+        <ul class="agy-style-192">
           <li><em>permission denied</em> / vacío: faltan los <strong>grants de SELECT</strong> al rol anónimo (o RLS sin policy).</li>
           <li><em>401 / Invalid API key</em>: la anon key no corresponde a esa URL.</li>
           <li>Error de red/CORS: revisá la URL del proyecto.</li>
         </ul>
       </div>
-      <div style="margin-top:12px;display:flex;gap:8px">
-        <button class="crud-btn" data-act="fleetExtReload" style="background:#0ea5e9;color:#fff;border-color:#0ea5e9">↻ Reintentar</button>
+      <div class="agy-style-193">
+        <button class="crud-btn" data-act="fleetExtReload" class="agy-style-194">↻ Reintentar</button>
         <button class="crud-btn" data-act="fleetExtClearConfig">Reconfigurar</button>
       </div>
     </div>`;
@@ -153,44 +154,44 @@ export function _fleetExtExplorer(loadingData) {
   const selCols = (tables.find(t => t.name === sel) || {}).cols || [];
 
   let html = secH("🛞", "#0ea5e9", "Fleet Externo",
-    `${fmt(tables.length)} tabla(s) descubierta(s) · <span style="font-family:monospace">${escapeHTML(host)}</span> · solo-lectura, en vivo`, "");
+    `${fmt(tables.length)} tabla(s) descubierta(s) · <span class="agy-style-195">${escapeHTML(host)}</span> · solo-lectura, en vivo`, "");
 
   // Barra: filtro de tablas + reconfigurar + refrescar esquema
   html += `
-    <div class="section" style="margin-bottom:10px">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <input class="crud-input" id="fleetExtTableFilter" placeholder="Filtrar tablas… (ej. fleet)" value="${(FLEET_EXT_STATE.tableFilter||"").replace(/"/g,"&quot;")}" data-act-input="fleetExtTableFilterInput" style="min-width:200px;max-width:300px"/>
-        <span style="font-size:.72rem;color:#94a3b8">${fmt(shown.length)} de ${fmt(tables.length)}</span>
-        <button class="crud-btn" data-act="fleetExtReload" style="margin-left:auto;padding:4px 10px">↻ Refrescar esquema</button>
-        <button class="crud-btn" data-act="fleetExtClearConfig" style="padding:4px 10px">Reconfigurar</button>
+    <div class="section agy-style-196">
+      <div class="agy-style-197">
+        <input class="crud-input" id="fleetExtTableFilter" placeholder="Filtrar tablas… (ej. fleet)" value="${(FLEET_EXT_STATE.tableFilter||"").replace(/"/g,"&quot;")}" data-act-input="fleetExtTableFilterInput" class="agy-style-198"/>
+        <span class="agy-style-199">${fmt(shown.length)} de ${fmt(tables.length)}</span>
+        <button class="crud-btn" data-act="fleetExtReload" class="agy-style-200">↻ Refrescar esquema</button>
+        <button class="crud-btn" data-act="fleetExtClearConfig" class="agy-style-83">Reconfigurar</button>
       </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;max-height:120px;overflow:auto">
+      <div class="agy-style-201">
         ${shown.map(t => {
           const on = t.name === sel;
           return `<button data-act="selectFleetExtTable" data-table="${escapeHTML(t.name)}" class="crud-btn" title="${fmt(t.cols.length)} columnas"
-            style="padding:3px 10px;font-size:.74rem;${on ? "background:#0ea5e9;color:#fff;border-color:#0ea5e9;font-weight:700" : ""}">${escapeHTML(t.name)} <span style="opacity:.7">· ${fmt(t.cols.length)}</span></button>`;
-        }).join("") || `<span style="color:#94a3b8;font-size:.78rem">Sin tablas (revisá los grants de SELECT al rol anónimo).</span>`}
+            style="padding:3px 10px;font-size:.74rem;${on ? "background:#0ea5e9;color:#fff;border-color:#0ea5e9;font-weight:700" : ""}">${escapeHTML(t.name)} <span class="agy-style-202">· ${fmt(t.cols.length)}</span></button>`;
+        }).join("") || `<span class="agy-style-203">Sin tablas (revisá los grants de SELECT al rol anónimo).</span>`}
       </div>
     </div>`;
 
-  if (!sel) return html + `<div class="section" style="color:#64748b;font-size:.85rem;padding:14px">Elegí una tabla para ver su data.</div>`;
+  if (!sel) return html + `<div class="section agy-style-182">Elegí una tabla para ver su data.</div>`;
 
   // Columnas de la tabla seleccionada (del esquema)
   html += `
-    <details class="section" style="margin-bottom:10px">
-      <summary style="cursor:pointer;font-size:.8rem;font-weight:700;color:#334155">📋 Columnas de <code>${escapeHTML(sel)}</code> (${fmt(selCols.length)})</summary>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
-        ${selCols.map(c => `<span style="font-size:.7rem;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:10px;padding:2px 8px"><strong>${escapeHTML(c.name)}</strong><span style="color:#94a3b8"> ${escapeHTML(c.type)}</span></span>`).join("")}
+    <details class="section agy-style-196">
+      <summary class="agy-style-204">📋 Columnas de <code>${escapeHTML(sel)}</code> (${fmt(selCols.length)})</summary>
+      <div class="agy-style-205">
+        ${selCols.map(c => `<span class="agy-style-206"><strong>${escapeHTML(c.name)}</strong><span class="agy-style-207"> ${escapeHTML(c.type)}</span></span>`).join("")}
       </div>
     </details>`;
 
   // Panel de datos de la tabla seleccionada
   if (loadingData) {
-    html += `<div class="section" style="color:#64748b;font-size:.85rem;padding:14px">⏳ Cargando <code>${escapeHTML(sel)}</code>…</div>`;
+    html += `<div class="section agy-style-182">⏳ Cargando <code>${escapeHTML(sel)}</code>…</div>`;
     return html;
   }
   if (STATE.fleetExternoError) {
-    html += `<div class="section"><div style="font-size:.82rem;color:#991b1b;background:#fff5f5;border-left:3px solid #ef4444;padding:10px 14px;border-radius:6px"><strong>Error al leer <code>${escapeHTML(sel)}</code>:</strong> ${escapeHTML(STATE.fleetExternoError)}</div></div>`;
+    html += `<div class="section"><div class="agy-style-191"><strong>Error al leer <code>${escapeHTML(sel)}</code>:</strong> ${escapeHTML(STATE.fleetExternoError)}</div></div>`;
     return html;
   }
 
@@ -199,28 +200,28 @@ export function _fleetExtExplorer(loadingData) {
   const filtered = q ? rows.filter(r => cols.some(c => String(r[c] ?? "").toLowerCase().includes(q))) : rows;
 
   html += `
-    <div class="section" style="margin-bottom:10px">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <strong style="font-size:.82rem">${escapeHTML(sel)}</strong>
-        <span style="font-size:.72rem;color:#94a3b8">${fmt(rows.length)} fila(s) · ${fmt(cols.length)} col.</span>
-        <input class="crud-input" id="fleetExtSearch" placeholder="Buscar en la tabla…" value="${(FLEET_EXT_STATE.search||"").replace(/"/g,"&quot;")}" data-act-input="fleetExtSearchInput" style="flex:1;min-width:160px;max-width:260px"/>
-        <button class="crud-btn" data-act="fleetExtForceReload" style="padding:4px 10px">↻ Datos</button>
-        <button class="crud-btn" data-act="exportFleetExtCSV" style="background:#f0fdf4;border-color:#86efac;color:#166534;padding:4px 10px">⬇ CSV</button>
+    <div class="section agy-style-196">
+      <div class="agy-style-197">
+        <strong class="agy-style-208">${escapeHTML(sel)}</strong>
+        <span class="agy-style-199">${fmt(rows.length)} fila(s) · ${fmt(cols.length)} col.</span>
+        <input class="crud-input" id="fleetExtSearch" placeholder="Buscar en la tabla…" value="${(FLEET_EXT_STATE.search||"").replace(/"/g,"&quot;")}" data-act-input="fleetExtSearchInput" class="agy-style-209"/>
+        <button class="crud-btn" data-act="fleetExtForceReload" class="agy-style-83">↻ Datos</button>
+        <button class="crud-btn" data-act="exportFleetExtCSV" class="agy-style-210">⬇ CSV</button>
       </div>
     </div>`;
 
   if (!rows.length) {
-    html += `<div class="section" style="color:#64748b;font-size:.85rem;padding:14px"><code>${escapeHTML(sel)}</code> no devolvió filas.</div>`;
+    html += `<div class="section agy-style-182"><code>${escapeHTML(sel)}</code> no devolvió filas.</div>`;
     return html;
   }
 
   const cell = v => (v === null || v === undefined) ? "—" : (typeof v === "number" ? fmt(v) : escapeHTML(String(v)));
-  html += `<div class="tbl-wrap"><table class="dtbl"><thead><tr>${cols.map(c => `<th style="white-space:nowrap">${escapeHTML(c)}</th>`).join("")}</tr></thead><tbody>`;
+  html += `<div class="tbl-wrap"><table class="dtbl"><thead><tr>${cols.map(c => `<th class="agy-style-211">${escapeHTML(c)}</th>`).join("")}</tr></thead><tbody>`;
   filtered.slice(0, 300).forEach(r => {
     html += `<tr>${cols.map(c => `<td class="${typeof r[c] === "number" ? "tn" : ""}">${cell(r[c])}</td>`).join("")}</tr>`;
   });
   html += `</tbody></table></div>`;
-  if (filtered.length > 300) html += `<div style="text-align:center;color:#aaa;padding:10px;font-size:.75rem;font-style:italic">Mostrando 300 de ${fmt(filtered.length)}. Usá el buscador.</div>`;
+  if (filtered.length > 300) html += `<div class="agy-style-212">Mostrando 300 de ${fmt(filtered.length)}. Usá el buscador.</div>`;
   return html;
 }
 

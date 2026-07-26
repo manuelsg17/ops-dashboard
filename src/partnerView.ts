@@ -1,3 +1,4 @@
+//@ts-nocheck
 // partnerView.js — Vista detallada de un partner individual
 // Pensado para reuniones semanales/mensuales con el partner.
 // Estructura: header, KPIs globales, sección por ciudad con charts.
@@ -377,7 +378,7 @@ export function _pvLineToggleHTML() {
       ${dis ? "" : `data-act="pvSetLine" data-line="${escapeHTML(d.k)}"`}
       style="${dis ? "opacity:.4;cursor:not-allowed" : ""}">${d.emoji} ${d.label}</button>`;
   }).join("");
-  return `<div class="mode-toggle-row" style="margin:0 0 14px">${btns}</div>`;
+  return `<div class="mode-toggle-row agy-style-265">${btns}</div>`;
 }
 export function setPvLine(line) {
   if ((PARTNER_VIEW_STATE.line || "comb") === line) return;
@@ -397,7 +398,7 @@ export function _pvLineBody(partner, line, citiesOf, dates) {
   const lname    = line === "fleet" ? "Fleet" : line === "comb" ? "Combinado (Taxi+TukTuk)" : "TukTuk";
 
   if (!rows.length) {
-    return `<div class="section"><div style="padding:28px 16px;text-align:center;color:#999;font-size:.85rem">
+    return `<div class="section"><div class="agy-style-266">
       Este partner no tiene datos de <strong>${lname}</strong> en el rango seleccionado.
     </div></div>`;
   }
@@ -542,47 +543,47 @@ export function renderPartnerView() {
   const langBtnStyle = on => `padding:6px 11px;font-size:.74rem;font-weight:700;border:1px solid #ddd;cursor:pointer;background:${on?'#0ea5e9':'#fff'};color:${on?'#fff':'#555'};border-radius:6px`;
 
   let html = `
-    <div style="padding:0 8px 16px">
+    <div class="agy-style-102">
       <!-- Controles -->
-      <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin:8px 0 16px">
-        <div style="position:relative">
-          <label style="font-size:.68rem;color:#666;font-weight:700;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px">${_t("partner")}</label>
-          <input type="text" id="pvSearch" class="sb-inp" placeholder="${_t("searchPartner")}" style="width:240px" autocomplete="off"
+      <div class="agy-style-267">
+        <div class="agy-style-168">
+          <label class="agy-style-95">${_t("partner")}</label>
+          <input type="text" id="pvSearch" class="sb-inp" placeholder="${_t("searchPartner")}" class="agy-style-170" autocomplete="off"
             value="${escapeHTML(partner)}"
             data-act-input="pvFilterPartners"
             data-act-focus="pvShowPartnerList"
             data-act-blur="pvHidePartnerListDelayed"
             data-act-keydown="pvSearchKeydown"/>
-          <div id="pvPartnerList" style="display:none;position:absolute;top:100%;left:0;width:240px;max-height:280px;overflow-y:auto;background:#fff;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:100;margin-top:2px"></div>
+          <div id="pvPartnerList" class="agy-style-171"></div>
         </div>
         <div>
-          <label style="font-size:.68rem;color:#666;font-weight:700;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px">${_t("period")}</label>
-          <select id="pvPeriodSel" class="sb-sel" style="width:200px" data-act-change="pvOnPeriodChange">
+          <label class="agy-style-95">${_t("period")}</label>
+          <select id="pvPeriodSel" class="sb-sel agy-style-96" data-act-change="pvOnPeriodChange">
             ${_pvPeriodOptions(period, periodLabel)}
           </select>
         </div>
         <div>
-          <label style="font-size:.68rem;color:#666;font-weight:700;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px">${_t("language")}</label>
-          <div style="display:flex;gap:4px">
+          <label class="agy-style-95">${_t("language")}</label>
+          <div class="agy-style-268">
             <button data-act="pvSetLang" data-lang="es" style="${langBtnStyle(!isEN)}">ES</button>
             <button data-act="pvSetLang" data-lang="en" style="${langBtnStyle(isEN)}">EN</button>
           </div>
         </div>
-        <button style="padding:8px 16px;margin-left:auto;background:#FF0000;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:.85rem" data-act="pvDownloadPDF">
+        <button class="agy-style-269" data-act="pvDownloadPDF">
           ${_t("downloadPDF")}
         </button>
       </div>
 
       <!-- Header partner -->
       <div style="background:linear-gradient(135deg,${partnerColor}10 0%,#fff 100%);border-left:4px solid ${partnerColor};border-radius:10px;padding:14px 18px;margin-bottom:12px">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+        <div class="agy-style-270">
           <span style="width:12px;height:12px;border-radius:50%;background:${partnerColor}"></span>
-          <span style="font-size:1.25rem;font-weight:900;color:#111">${escapeHTML(partner)}</span>
+          <span class="agy-style-271">${escapeHTML(partner)}</span>
           <span style="background:${KAM_COLORS[kam]||"#888"};color:#fff;font-size:.7rem;font-weight:700;padding:3px 8px;border-radius:12px;margin-left:8px">${escapeHTML(kam)}</span>
         </div>
-        <div style="font-size:.78rem;color:#666">
+        <div class="agy-style-272">
           ${_t("cities")}: <strong>${citiesOf.map(escapeHTML).join(" · ")}</strong>
-          ${recibeLeads ? ` <span style="margin-left:10px;font-size:.7rem;background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:8px">${_t("receivesLeads")}</span>` : ""}
+          ${recibeLeads ? ` <span class="agy-style-273">${_t("receivesLeads")}</span>` : ""}
           <br>${_t("periodPrefix")} ${d2s(dates[0])} → ${d2s(lastDate)} · ${_t("scalePrefix")} <strong>${scaleLabel}</strong>
         </div>
       </div>
@@ -604,9 +605,9 @@ export function renderPartnerView() {
 
       <!-- Perú (General): el partner combinando sus 3 ciudades -->
       ${_secH("🇵🇪", "#FF0000", _t("peruGeneral"), _t("peruGeneralSub"))}
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 10px">
-        <span style="font-size:.72rem;color:#666;font-weight:700">${_t("compareWith")}:</span>
-        <span id="pvCohortBar" style="display:flex;gap:8px;flex-wrap:wrap">${PV_COHORT_BANDS.map(b => _pvCohortBtn(b)).join("")}</span>
+      <div class="agy-style-274">
+        <span class="agy-style-275">${_t("compareWith")}:</span>
+        <span id="pvCohortBar" class="agy-style-276">${PV_COHORT_BANDS.map(b => _pvCohortBtn(b)).join("")}</span>
         ${_pvLegendBtnHtml()}
         ${_pvShareBtnHtml()}
       </div>
@@ -617,10 +618,10 @@ export function renderPartnerView() {
       <!-- Detalle por provincia (mismos KPIs + misma comparación) -->
       ${_secH("🏙️", "#06b6d4", _t("cityDetail"), `${citiesOf.length} ${citiesOf.length>1?_t("cityCountPlural"):_t("cityCount")} · ${periodLabel}`)}
       ${citiesOf.map(city => `
-        <div class="section" style="margin-bottom:14px">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <div class="section agy-style-277">
+          <div class="agy-style-278">
             <span style="width:12px;height:12px;border-radius:50%;background:${CITY_COLORS[city] || "#888"}"></span>
-            <span style="font-size:1rem;font-weight:800;color:#111">${escapeHTML(cityLabel(city))}</span>
+            <span class="agy-style-279">${escapeHTML(cityLabel(city))}</span>
           </div>
           ${_pvScopeKpiRow(partner, city, dates)}
           ${_pvScopeBlock(city, _pvCityId(city))}
@@ -630,15 +631,15 @@ export function renderPartnerView() {
 
   // Banner: sección en revisión → recomendar Presentación 2.0 (fuente 100% precisa).
   const _pvEs = (PARTNER_VIEW_STATE.lang || "es") === "es";
-  const pvBanner = `<div style="background:#fef2f2;border:1px solid #fca5a5;border-left:5px solid #FF0000;border-radius:10px;padding:11px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
-      <span style="font-size:1.3rem;line-height:1">🚧</span>
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:800;color:#b91c1c;font-size:.9rem">${_pvEs ? "Estamos afinando esta sección" : "We're refining this section"}</div>
-        <div style="font-size:.8rem;color:#7f1d1d;line-height:1.35">${_pvEs
+  const pvBanner = `<div class="agy-style-280">
+      <span class="agy-style-281">🚧</span>
+      <div class="agy-style-282">
+        <div class="agy-style-283">${_pvEs ? "Estamos afinando esta sección" : "We're refining this section"}</div>
+        <div class="agy-style-284">${_pvEs
           ? "Para métricas 100% precisas usá <b>Presentación 2.0</b> mientras terminamos de validar Vista Partner."
           : "For 100% accurate metrics use <b>Presentation 2.0</b> while we finish validating Partner View."}</div>
       </div>
-      <button data-act="switchTab" data-tab="present2" style="flex:0 0 auto;background:#FF0000;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:.82rem;font-weight:700;cursor:pointer;white-space:nowrap">${_pvEs ? "Ir a Presentación 2.0 →" : "Go to Presentation 2.0 →"}</button>
+      <button data-act="switchTab" data-tab="present2" class="agy-style-285">${_pvEs ? "Ir a Presentación 2.0 →" : "Go to Presentation 2.0 →"}</button>
     </div>`;
 
   // Marca de render unica para evitar race conditions de setTimeout
@@ -986,12 +987,12 @@ export function _pvExecutiveSummary(ctx) {
     const s = sevStyle[f.sev] || sevStyle.info;
     return `
       <div style="background:${s.bg};border:1px solid ${s.bd};border-left:4px solid ${s.tc};border-radius:8px;padding:12px 14px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-          <span style="font-size:1rem">${f.icon}</span>
+        <div class="agy-style-286">
+          <span class="agy-style-287">${f.icon}</span>
           <span style="font-weight:800;color:${s.tc};font-size:.88rem">${escapeHTML(f.title)}</span>
         </div>
-        <div style="font-size:.78rem;color:#333;margin-bottom:6px;line-height:1.4">${escapeHTML(f.body)}</div>
-        <div style="font-size:.76rem;color:#555;line-height:1.45">
+        <div class="agy-style-288">${escapeHTML(f.body)}</div>
+        <div class="agy-style-289">
           <strong style="color:${s.tc}">${_t("actionLabel")}</strong> ${escapeHTML(f.action)}
         </div>
       </div>`;
@@ -1001,7 +1002,7 @@ export function _pvExecutiveSummary(ctx) {
   const headerSub = `${top.length} ${findingsWord} · ${_t("execSummarySub")}`;
   return `
     ${_secH("💼", "#0ea5e9", _t("execSummary"), headerSub)}
-    <div class="section" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px">
+    <div class="section agy-style-290">
       ${items}
     </div>`;
 }
@@ -1017,9 +1018,9 @@ export function _pvKpiCard(label, cur, prev, color, opts = {}) {
   const bdgHtml = prev !== null ? bdgMode(cur, prev, "mb-badge") : "";
   return `
     <div style="background:#fff;border:1px solid #eee;border-top:3px solid ${color};border-radius:10px;padding:10px 12px">
-      <div style="font-size:.66rem;color:#666;font-weight:700;text-transform:uppercase;letter-spacing:.4px">${escapeHTML(label)}</div>
-      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:2px">
-        <span style="font-size:1.15rem;font-weight:900;color:#111">${value}</span>
+      <div class="agy-style-291">${escapeHTML(label)}</div>
+      <div class="agy-style-292">
+        <span class="agy-style-293">${value}</span>
         ${bdgHtml}
       </div>
     </div>`;
@@ -1038,7 +1039,7 @@ export function _pvScopeKpiRow(partner, scopeCity, dates) {
   const prevE = series.length > 1 ? series[series.length - 2] : null;
   const prev  = (prevE && prevE._present) ? prevE : null;
   const pv = k => prev ? (prev[k] || 0) : null;
-  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px">
+  return `<div class="agy-style-294">
     ${_pvKpiCard(_t("activeDrivers"), last.ad,         pv("ad"),         METRICS.ad.color)}
     ${_pvKpiCard(_t("newReact"),      last.nr,         pv("nr"),         METRICS.nr.color)}
     ${_pvKpiCard(_t("supplyHours"),   last.sh,         pv("sh"),         METRICS.sh.color, { useK: true })}
@@ -1080,11 +1081,11 @@ export function _pvCitySection(partner, city, dates, recibeLeads, seriesCached) 
   // Mini-tabla de desglose N+R por fecha. Garantiza que el detalle completo
   // (incluidos los segmentos chicos que no muestran numero en la barra) este
   // visible al exportar a PDF.
-  const headerCells = [`<th style="text-align:left;padding:4px 6px;border-bottom:1px solid #eee;background:#f9f9f9">${isEN?"Date":"Fecha"}</th>`]
-    .concat(dates.map(d => `<th style="text-align:right;padding:4px 6px;border-bottom:1px solid #eee;background:#f9f9f9;font-size:.65rem">${d2s(d)}</th>`))
+  const headerCells = [`<th class="agy-style-295">${isEN?"Date":"Fecha"}</th>`]
+    .concat(dates.map(d => `<th class="agy-style-296">${d2s(d)}</th>`))
     .join("");
   const _row = (label, getter, color) => {
-    const cells = series.map(s => `<td style="text-align:right;padding:3px 6px;border-bottom:1px solid #f5f5f5">${fmt(getter(s))}</td>`).join("");
+    const cells = series.map(s => `<td class="agy-style-297">${fmt(getter(s))}</td>`).join("");
     return `<tr>
       <td style="padding:3px 6px;border-bottom:1px solid #f5f5f5;font-weight:600;color:${color}">
         <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${color};margin-right:4px"></span>${label}
@@ -1099,8 +1100,8 @@ export function _pvCitySection(partner, city, dates, recibeLeads, seriesCached) 
   ].filter(Boolean).join("");
 
   const nrTable = `
-    <div style="margin-top:8px;overflow-x:auto">
-      <table style="width:100%;border-collapse:collapse;font-size:.68rem;background:#fff;border:1px solid #f0f0f0;border-radius:6px">
+    <div class="agy-style-298">
+      <table class="agy-style-299">
         <thead><tr>${headerCells}</tr></thead>
         <tbody>${nrTableRows}</tbody>
       </table>
@@ -1108,18 +1109,18 @@ export function _pvCitySection(partner, city, dates, recibeLeads, seriesCached) 
 
   return `
     <div style="border:1px solid #eee;border-top:3px solid ${cityColor};border-radius:10px;padding:14px;margin-bottom:14px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div style="display:flex;align-items:center;gap:8px">
+      <div class="agy-style-300">
+        <div class="agy-style-301">
           <span style="width:12px;height:12px;border-radius:50%;background:${cityColor}"></span>
-          <span style="font-size:1rem;font-weight:800;color:#111">${escapeHTML(cityLabel(city))}</span>
+          <span class="agy-style-279">${escapeHTML(cityLabel(city))}</span>
         </div>
         <span style="font-size:.72rem;color:${trendCol};font-weight:700">${trendTxt}</span>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px">
+      <div class="agy-style-302">
         <div class="chart-card"><div class="chart-head"><span class="chart-title">${escapeHTML(_t("activeDrivers"))}</span></div><div id="pv_${id}_ad"></div></div>
         <div class="chart-card"><div class="chart-head"><span class="chart-title">${escapeHTML(_t("supplyHours"))}</span></div><div id="pv_${id}_sh"></div></div>
-        <div class="chart-card" style="grid-column:span 2"><div class="chart-head"><span class="chart-title">${escapeHTML(_t("newReact"))} ${recibeLeads ? breakdownLabel : ""}</span></div><div id="pv_${id}_nr"></div>${nrTable}</div>
-        <div class="chart-card" style="grid-column:span 2"><div class="chart-head"><span class="chart-title">${escapeHTML(tripsCommLabel)}</span></div><div id="pv_${id}_tc"></div></div>
+        <div class="chart-card agy-style-303"><div class="chart-head"><span class="chart-title">${escapeHTML(_t("newReact"))} ${recibeLeads ? breakdownLabel : ""}</span></div><div id="pv_${id}_nr"></div>${nrTable}</div>
+        <div class="chart-card agy-style-303"><div class="chart-head"><span class="chart-title">${escapeHTML(tripsCommLabel)}</span></div><div id="pv_${id}_tc"></div></div>
       </div>
     </div>`;
 }
@@ -1344,7 +1345,7 @@ export function _pvPaintPartnerList(q) {
     ? STATE.allPartners.filter(p => p.toLowerCase().includes(lower))
     : STATE.allPartners;
   if (!filtered.length) {
-    list.innerHTML = `<div style="padding:8px 12px;font-size:.78rem;color:#aaa">Sin coincidencias</div>`;
+    list.innerHTML = `<div class="agy-style-180">Sin coincidencias</div>`;
     return;
   }
   list.innerHTML = filtered.slice(0, 100).map(p => {
@@ -1353,7 +1354,7 @@ export function _pvPaintPartnerList(q) {
     return `<div class="pv-opt" data-act-mousedown="pvSelectPartner" data-partner="${escapeHTML(p)}"
       style="padding:7px 12px;font-size:.78rem;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid #f3f3f3;${sel?'background:#fff0f0;font-weight:700':''}">
       <span style="width:7px;height:7px;border-radius:50%;background:${c};flex-shrink:0"></span>
-      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(p)}</span>
+      <span class="agy-style-181">${escapeHTML(p)}</span>
     </div>`;
   }).join("");
 }
@@ -1397,11 +1398,11 @@ export function _pvPeriodOptions(period, periodLabel) {
 export async function pvDownloadPDF() {
   const partner = PARTNER_VIEW_STATE.partner;
   if (!partner) { alert("Selecciona un partner primero."); return; }
-  if (!window.jspdf || !window.html2canvas) { alert("Librerias PDF no disponibles."); return; }
 
   showLoad(true, "Generando PDF...");
   await new Promise(r => setTimeout(r, 200));
   try {
+    await ensurePdfLibs();
     const content = document.getElementById("partnerViewContent");
     // Fondo del PDF = fondo del dashboard (no blanco), para que las tarjetas y
     // gráficas blancas contrasten igual que en pantalla. Se lee del body en vivo
@@ -1513,7 +1514,7 @@ export function _pvConversionSection(selectedPartner) {
       ? "Upload the Conversion (country) Excel to populate this benchmark."
       : "Sube el Excel de Conversión (país) para poblar este benchmark.";
     return `${_secH("🎯", "#8b5cf6", _t("convTitle"), _t("convSub"))}
-      <div class="section"><div style="font-size:.8rem;color:#aaa;padding:6px">${msg}</div></div>`;
+      <div class="section"><div class="agy-style-304">${msg}</div></div>`;
   }
   return `${_secH("🎯", "#8b5cf6", _t("convTitle"), _t("convSub"))}
     <div class="section"><div id="pvConvBox">${_pvConvInner(selectedPartner)}</div></div>`;
@@ -1535,22 +1536,22 @@ export function _pvConvInner(selectedPartner) {
   const toggleBtn = (key, label) => `<button data-act="pvConvCohort" data-key="${escapeHTML(key)}" class="preset-btn${which === key ? " active" : ""}" style="${which === key ? "background:#3b82f6;color:#fff;border-color:#3b82f6" : ""}">${escapeHTML(label)}</button>`;
 
   return `
-    <div style="display:flex;gap:14px;align-items:end;flex-wrap:wrap;margin-bottom:10px">
-      <div><label style="font-size:.66rem;color:#666;font-weight:700;display:block;margin-bottom:3px">${_t("convADRange")}</label>
-        <div style="display:flex;gap:4px">
-          <input id="pvConvAdMin" class="crud-input" type="number" value="${F.adMin}" style="width:80px" data-act-change="pvConvFilter"/>
-          <input id="pvConvAdMax" class="crud-input" type="number" value="${F.adMax}" style="width:90px" data-act-change="pvConvFilter"/>
+    <div class="agy-style-305">
+      <div><label class="agy-style-114">${_t("convADRange")}</label>
+        <div class="agy-style-268">
+          <input id="pvConvAdMin" class="crud-input" type="number" value="${F.adMin}" class="agy-style-306" data-act-change="pvConvFilter"/>
+          <input id="pvConvAdMax" class="crud-input" type="number" value="${F.adMax}" class="agy-style-13" data-act-change="pvConvFilter"/>
         </div></div>
-      <div><label style="font-size:.66rem;color:#666;font-weight:700;display:block;margin-bottom:3px">${_t("convNDMin")}</label>
-        <input id="pvConvNdMin" class="crud-input" type="number" value="${F.ndMin}" style="width:90px" data-act-change="pvConvFilter"/></div>
-      <div><label style="font-size:.66rem;color:#666;font-weight:700;display:block;margin-bottom:3px">${_t("convCmpTitle")}</label>
-        <div style="display:flex;gap:6px">${toggleBtn("top5", _t("convTop5Btn"))}${toggleBtn("top10", _t("convTop10Btn"))}</div></div>
-      <span style="font-size:.72rem;color:#aaa">${_t("convPeers")}: n=${d.nPop}</span>
+      <div><label class="agy-style-114">${_t("convNDMin")}</label>
+        <input id="pvConvNdMin" class="crud-input" type="number" value="${F.ndMin}" class="agy-style-13" data-act-change="pvConvFilter"/></div>
+      <div><label class="agy-style-114">${_t("convCmpTitle")}</label>
+        <div class="agy-style-307">${toggleBtn("top5", _t("convTop5Btn"))}${toggleBtn("top10", _t("convTop10Btn"))}</div></div>
+      <span class="agy-style-251">${_t("convPeers")}: n=${d.nPop}</span>
     </div>
-    ${d.hasPartner ? "" : `<div style="font-size:.76rem;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:6px 10px;margin-bottom:8px">${_t("convNoPartner")}</div>`}
-    <div id="pvConvChart" style="min-height:280px"></div>
-    <div style="overflow-x:auto;margin-top:6px">
-      <table style="width:100%;border-collapse:collapse;font-size:.78rem">
+    ${d.hasPartner ? "" : `<div class="agy-style-308">${_t("convNoPartner")}</div>`}
+    <div id="pvConvChart" class="agy-style-309"></div>
+    <div class="agy-style-310">
+      <table class="agy-style-311">
         <thead><tr>${th("", true)}${d.cols.map(c => th(_t(tkey[c]))).join("")}</tr></thead>
         <tbody>
           ${rowHtml(selectedPartner, d.partnerVals, "#ef4444", true)}
@@ -1559,7 +1560,7 @@ export function _pvConvInner(selectedPartner) {
         </tbody>
       </table>
     </div>
-    <div style="font-size:.7rem;color:#999;font-style:italic;margin-top:8px">${_t("convPrivacyNote")}</div>`;
+    <div class="agy-style-312">${_t("convPrivacyNote")}</div>`;
 }
 
 // Gráfico de barras agrupadas: partner vs promedio del cohorte seleccionado.
@@ -1767,14 +1768,14 @@ export function _pvCohortLegend(scopeCity, dates) {
     const members = cohorts.ranked.slice(b.range[0], b.range[1]);
     if (!members.length) return "";
     const label = isEN ? b.en : b.es;
-    const head = `<div style="display:flex;align-items:center;gap:7px;margin:10px 0 5px">
+    const head = `<div class="agy-style-313">
       <span style="width:11px;height:11px;border-radius:2px;background:${b.color};flex:0 0 auto"></span>
-      <span style="font-weight:800;font-size:.8rem;color:#222">${escapeHTML(label)}</span>
-      <span style="font-size:.68rem;color:#999">· ${members.length} ${pWord}${scopeCity ? " · " + escapeHTML(cityLabel(scopeCity)) : ""}</span>
+      <span class="agy-style-314">${escapeHTML(label)}</span>
+      <span class="agy-style-315">· ${members.length} ${pWord}${scopeCity ? " · " + escapeHTML(cityLabel(scopeCity)) : ""}</span>
     </div>`;
     // En modo compartir: NO exponer integrantes ni cifras del cohorte.
     if (share) {
-      return head + `<div style="font-size:.7rem;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:5px 9px">🔒 ${hidden}</div>`;
+      return head + `<div class="agy-style-316">🔒 ${hidden}</div>`;
     }
     const vals = members.map(lastVals);
     const avg = {};
@@ -1784,15 +1785,15 @@ export function _pvCohortLegend(scopeCity, dates) {
       const isSel = p === sel, v = vals[i];
       const cells = cols.map(c => `<td style="text-align:right;padding:3px 7px;border-bottom:1px solid #f5f5f5;font-weight:${isSel ? 800 : 500}">${c.fn(v[c.key])}</td>`).join("");
       return `<tr style="${isSel ? "background:#fff5f5" : ""}">
-        <td style="padding:3px 7px;border-bottom:1px solid #f5f5f5;color:#999;font-size:.66rem">${b.range[0] + i + 1}</td>
-        <td style="padding:3px 7px;border-bottom:1px solid #f5f5f5;font-weight:${isSel ? 800 : 600};color:${isSel ? "#b91c1c" : "#333"};white-space:nowrap">${escapeHTML(p)}${isSel ? ` <span style="font-size:.58rem;background:#ef4444;color:#fff;padding:1px 5px;border-radius:6px;margin-left:3px">${youTag}</span>` : ""}</td>
+        <td class="agy-style-317">${b.range[0] + i + 1}</td>
+        <td style="padding:3px 7px;border-bottom:1px solid #f5f5f5;font-weight:${isSel ? 800 : 600};color:${isSel ? "#b91c1c" : "#333"};white-space:nowrap">${escapeHTML(p)}${isSel ? ` <span class="agy-style-318">${youTag}</span>` : ""}</td>
         ${cells}</tr>`;
     }).join("");
-    const avgRow = `<tr style="border-top:2px solid #e5e5e5">
-      <td style="padding:4px 7px"></td>
+    const avgRow = `<tr class="agy-style-319">
+      <td class="agy-style-320"></td>
       <td style="padding:4px 7px;font-weight:800;color:${b.color};white-space:nowrap">${escapeHTML(avgWord)}</td>
       ${cols.map(c => `<td style="text-align:right;padding:4px 7px;font-weight:800;color:${b.color}">${c.fn(avg[c.key])}</td>`).join("")}</tr>`;
-    return head + `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.72rem;background:#fff;border:1px solid #f0f0f0;border-radius:6px">
+    return head + `<div class="agy-style-321"><table class="agy-style-322">
       <thead>${headerRow}</thead><tbody>${memberRows}${avgRow}</tbody></table></div>`;
   }).join("");
 
@@ -1800,9 +1801,9 @@ export function _pvCohortLegend(scopeCity, dates) {
   const sub = isEN
     ? `Latest-period values (${d2s(lastDate)}); ranked by Active Drivers. The <b>Average</b> is the simple mean of the members — the value plotted in the comparison lines.`
     : `Valores del último período (${d2s(lastDate)}); ranking por Conductores Activos. El <b>Promedio</b> es la media simple de los integrantes — el valor que grafican las líneas de comparación.`;
-  return `<div style="border:1px dashed #d4d4d4;border-radius:8px;padding:10px 12px;margin:0 0 12px;background:#fcfcfc">
-    <div style="font-weight:800;font-size:.78rem;color:#333;margin-bottom:2px">📋 ${title}</div>
-    <div style="font-size:.68rem;color:#888;margin-bottom:2px">${sub}</div>
+  return `<div class="agy-style-323">
+    <div class="agy-style-324">📋 ${title}</div>
+    <div class="agy-style-325">${sub}</div>
     ${blocks}
   </div>`;
 }
@@ -1836,7 +1837,7 @@ export function _pvCmpLine(elId, labels, partnerSeries, cohortLines, color, fmtF
   if (!_has) {
     const reg = PARTNER_VIEW_STATE.scopeCharts;
     if (reg && reg[elId]) { try { reg[elId].destroy(); } catch (e) {} delete reg[elId]; }
-    el.innerHTML = `<div style="font-size:.75rem;color:#bbb;padding:34px 8px;text-align:center">Sin datos para este KPI</div>`;
+    el.innerHTML = `<div class="agy-style-326">Sin datos para este KPI</div>`;
     return;
   }
   const fn = fmtFn || (v => fmt(v));
@@ -1936,12 +1937,12 @@ export function _pvCmpNR(elId, labels, series, recibeLeads, cohortLines) {
 // Mini-tabla de desglose N+R por fecha (para que el detalle se vea también en PDF).
 export function _pvNRTable(series, dates, recibeLeads) {
   const isEN = PARTNER_VIEW_STATE.lang === "en";
-  const head = [`<th style="text-align:left;padding:4px 6px;border-bottom:1px solid #eee;background:#f9f9f9">${isEN ? "Date" : "Fecha"}</th>`]
-    .concat(dates.map(d => `<th style="text-align:right;padding:4px 6px;border-bottom:1px solid #eee;background:#f9f9f9;font-size:.65rem">${d2s(d)}</th>`)).join("");
+  const head = [`<th class="agy-style-295">${isEN ? "Date" : "Fecha"}</th>`]
+    .concat(dates.map(d => `<th class="agy-style-296">${d2s(d)}</th>`)).join("");
   const row = (label, getter, color) => `<tr>
     <td style="padding:3px 6px;border-bottom:1px solid #f5f5f5;font-weight:600;color:${color}">
       <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${color};margin-right:4px"></span>${label}</td>
-    ${series.map(s => `<td style="text-align:right;padding:3px 6px;border-bottom:1px solid #f5f5f5">${fmt(getter(s))}</td>`).join("")}
+    ${series.map(s => `<td class="agy-style-297">${fmt(getter(s))}</td>`).join("")}
   </tr>`;
   const rows = [
     row(isEN ? "New (Partner)" : "Nuevos (Partner)", s => s.npPartner, "#3b82f6"),
@@ -1949,8 +1950,8 @@ export function _pvNRTable(series, dates, recibeLeads) {
     row(isEN ? "Reactivated" : "Reactivados", s => s.reactivated, "#10b981"),
     row("Total", s => s.nr, "#111")
   ].filter(Boolean).join("");
-  return `<div style="margin-top:8px;overflow-x:auto">
-    <table style="width:100%;border-collapse:collapse;font-size:.68rem;background:#fff;border:1px solid #f0f0f0;border-radius:6px">
+  return `<div class="agy-style-298">
+    <table class="agy-style-299">
       <thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
@@ -2066,7 +2067,7 @@ export function _pvChannelSection(selectedPartner) {
       ? "Upload the 'Adquisition by channel' tab in the Conversion Excel to populate this."
       : "Sube la pestaña 'Adquisition by channel' del Excel de Conversión para poblar esto.";
     return `${_secH("🔌", "#64748b", _t("chanTitle"), _t("chanSub"))}
-      <div class="section"><div style="font-size:.8rem;color:#aaa;padding:6px">${msg}</div></div>`;
+      <div class="section"><div class="agy-style-304">${msg}</div></div>`;
   }
   return `${_secH("🔌", "#64748b", _t("chanTitle"), _t("chanSub"))}
     <div class="section"><div id="pvChannelBox">${_pvChannelInner(selectedPartner)}</div></div>`;
@@ -2081,11 +2082,11 @@ export function _pvChannelInner(selectedPartner) {
         <span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${color};margin-right:6px"></span>${escapeHTML(label)}</td>
       ${PV_CHANNELS.map(c => `<td style="text-align:right;padding:6px 8px;border-bottom:1px solid #f3f3f3;font-weight:${hl ? 800 : 600}">${fmtN(vals[c.key])}</td>`).join("")}</tr>`;
   return `
-    <div style="font-size:.72rem;color:#888;margin-bottom:8px">${_t("chanToggleHint")}</div>
-    ${d.hasPartner ? "" : `<div style="font-size:.76rem;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:6px 10px;margin-bottom:8px">${_t("convNoPartner")}</div>`}
-    <div id="pvChannelChart" style="min-height:300px"></div>
-    <div style="overflow-x:auto;margin-top:6px">
-      <table style="width:100%;border-collapse:collapse;font-size:.74rem">
+    <div class="agy-style-47">${_t("chanToggleHint")}</div>
+    ${d.hasPartner ? "" : `<div class="agy-style-308">${_t("convNoPartner")}</div>`}
+    <div id="pvChannelChart" class="agy-style-327"></div>
+    <div class="agy-style-310">
+      <table class="agy-style-328">
         <thead><tr>${th("", true)}${PV_CHANNELS.map(c => th(c.label)).join("")}</tr></thead>
         <tbody>
           ${rowHtml(selectedPartner, d.partnerVals, "#ef4444", true)}
@@ -2094,7 +2095,7 @@ export function _pvChannelInner(selectedPartner) {
         </tbody>
       </table>
     </div>
-    <div style="font-size:.7rem;color:#999;font-style:italic;margin-top:8px">${_t("convPrivacyNote")}</div>`;
+    <div class="agy-style-312">${_t("convPrivacyNote")}</div>`;
 }
 
 // Barras agrupadas por canal: partner vs promedio del cohorte (Top 5/10 según el
@@ -2134,6 +2135,7 @@ export function _pvChannelMountChart(selectedPartner) {
 // ── ACCIONES DELEGADAS (Fase A2) ─────────────────────────────────────────────
 import { registerActions } from "./shared/actions.js";
 import { stampPDF } from "./shared/pdfmeta.js";
+import { ensurePdfLibs } from "./shared/lazyLibs.js";
 
 registerActions({
   pvFilterPartners: (d, el) => pvFilterPartners(el.value),

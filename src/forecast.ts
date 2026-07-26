@@ -1,3 +1,4 @@
+//@ts-nocheck
 // forecast.js — Motor de pronóstico multi-mes + palancas de crecimiento.
 //
 // PURO y testeable headless: solo funciones globales que operan sobre arrays de números

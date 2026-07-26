@@ -1,3 +1,4 @@
+//@ts-nocheck
 // rendimiento.js — Pestaña Rendimiento
 
 // ── LÍNEA DE NEGOCIO (Agregador / Fleet / TukTuk / Combinado) ─────────────────
@@ -72,9 +73,9 @@ export function rendLineToggleHTML() {
       style="${dis ? "opacity:.4;cursor:not-allowed" : ""}">${d.emoji} ${d.label}</button>`;
   }).join("");
   const note = diario
-    ? `<span style="font-size:.7rem;color:#b45309;margin-left:10px;align-self:center">Fleet/TukTuk/Combinado requieren escala semanal o mensual (el diario no trae sub-flota)</span>`
+    ? `<span class="agy-style-213">Fleet/TukTuk/Combinado requieren escala semanal o mensual (el diario no trae sub-flota)</span>`
     : "";
-  return `<div class="mode-toggle-row" style="margin:0 4px 12px">${btns}${note}</div>`;
+  return `<div class="mode-toggle-row agy-style-214">${btns}${note}</div>`;
 }
 export function setRendLine(line) {
   if ((STATE.rendLine || "comb") === line) return;
@@ -137,7 +138,7 @@ export function _renderRendImpl() {
     const kamLbl  = f.kam  !== "all" ? ` de <strong>${escapeHTML(f.kam)}</strong>` : "";
     const cityLbl = f.city !== "all" ? ` en <strong>${cityLabel(f.city)}</strong>` : "";
     content.innerHTML = rendLineToggleHTML() +
-      `<div class="section"><div style="padding:28px 16px;text-align:center;color:#999;font-size:.85rem">
+      `<div class="section"><div class="agy-style-266">
         No hay partners${kamLbl} con datos${cityLbl} en el rango de fechas seleccionado.<br>
         La data SÍ está cargada — esta combinación de filtros no tiene overlap. Ajusta ciudad, KAM, fechas o partners.
       </div></div>`;
@@ -150,7 +151,7 @@ export function _renderRendImpl() {
     content.style.display = "";
     const lname = line === "fleet" ? "Fleet" : line === "comb" ? "Combinado (Taxi+TukTuk)" : "TukTuk";
     content.innerHTML = rendLineToggleHTML() +
-      `<div class="section"><div style="padding:28px 16px;text-align:center;color:#999;font-size:.85rem">
+      `<div class="section"><div class="agy-style-266">
         No hay datos de <strong>${lname}</strong> para el filtro actual.<br>
         Cambia a <strong>📊 Agregador</strong> o ajusta ciudad / fechas / partners.
       </div></div>`;
@@ -275,7 +276,7 @@ export function _renderRendImpl() {
 
   // ── 3. Por KAM ────────────────────────────────────────────────────────────
   html += secH("👤", "#f59e0b", "Por KAM", "Rendimiento por responsable", "");
-  html += `<div class="section"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px">`;
+  html += `<div class="section"><div class="agy-style-524">`;
   // Respetar kamFilter: si el usuario filtra por un KAM, solo mostrar ese
   const kamFilterVal = document.getElementById("kamFilter")?.value || "all";
   const kamsToShow = [...new Set(Object.values(STATE.KAM_MAP))]
@@ -296,7 +297,7 @@ export function _renderRendImpl() {
       <div class="mcard" style="border-left:3px solid ${col}">
         <div class="mcard-label"><span style="width:8px;height:8px;border-radius:50%;background:${col};display:inline-block"></span> ${escapeHTML(kam)}</div>
         <div class="mcard-val">${fmt(kAD)}</div>
-        <div>${bdgMode(kAD,kpAD)} <span style="font-size:.72rem;color:#aaa;margin-left:5px">Activos</span></div>
+        <div>${bdgMode(kAD,kpAD)} <span class="agy-style-525">Activos</span></div>
         <div class="mcard-breakdown">
           <div class="mb-row"><span class="mb-name">N+R</span><span class="mb-val">${fmt(kNR)}</span>${bdgMode(kNR,kpNR,"mb-badge")}</div>
           <div class="mb-row"><span class="mb-name">Hs. Conexión</span><span class="mb-val">${fmt(kSH)}</span></div>
@@ -308,8 +309,8 @@ export function _renderRendImpl() {
   // ── 4. Tendencias ─────────────────────────────────────────────────────────
   html += secH("📈", "#10b981", "Tendencias", "Peru y ciudades · 3 KPIs principales", "");
   html += `<div class="section">`;
-  html += `<div style="font-weight:700;font-size:.78rem;color:#666;margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px">Peru Total</div>`;
-  html += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px">
+  html += `<div class="agy-style-526">Peru Total</div>`;
+  html += `<div class="agy-style-527">
     <div class="chart-card"><div class="chart-head"><span class="chart-title">Conductores Activos</span><button class="png-btn" data-act="dlChart" data-chart="chP_ad" data-name="AD_Peru">PNG</button></div><div id="chP_ad"></div></div>
     <div class="chart-card"><div class="chart-head"><span class="chart-title">Nuevos + Reactivados</span><button class="png-btn" data-act="dlChart" data-chart="chP_nr" data-name="NR_Peru">PNG</button></div><div id="chP_nr"></div></div>
     <div class="chart-card"><div class="chart-head"><span class="chart-title">Horas de Conexión</span><button class="png-btn" data-act="dlChart" data-chart="chP_sh" data-name="SH_Peru">PNG</button></div><div id="chP_sh"></div></div>
@@ -320,7 +321,7 @@ export function _renderRendImpl() {
     const cid = city.toLowerCase();
     const col = CITY_COLORS[city] || "#888";
     html += `<div style="font-weight:700;font-size:.78rem;color:${col};margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px">${city}</div>`;
-    html += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px">
+    html += `<div class="agy-style-527">
       <div class="chart-card"><div class="chart-head"><span class="chart-title">Conductores Activos</span><button class="png-btn" data-act="dlChart" data-chart="ch_${cid}_ad" data-name="AD_${city}">PNG</button></div><div id="ch_${cid}_ad"></div></div>
       <div class="chart-card"><div class="chart-head"><span class="chart-title">Nuevos + Reactivados</span><button class="png-btn" data-act="dlChart" data-chart="ch_${cid}_nr" data-name="NR_${city}">PNG</button></div><div id="ch_${cid}_nr"></div></div>
       <div class="chart-card"><div class="chart-head"><span class="chart-title">Horas de Conexión</span><button class="png-btn" data-act="dlChart" data-chart="ch_${cid}_sh" data-name="SH_${city}">PNG</button></div><div id="ch_${cid}_sh"></div></div>
@@ -396,8 +397,8 @@ export function mkMetricCard(label, icon, val, prevWk, apd, lastRows, prevRows, 
       <div class="mcard-label">${icon} ${label}</div>
       <div class="mcard-sub-label">${isCum ? "acumulado rango" : "última semana"}</div>
       <div class="mcard-val">${fmt(val)}</div>
-      <div style="margin-top:4px">${bdgMode(lwVal, pwVal)}
-        <span style="font-size:.7rem;color:#bbb;margin-left:5px">vs ${STATE.curMode === 'mensual' ? 'mes' : 'sem.'} anterior</span>
+      <div class="agy-style-257">${bdgMode(lwVal, pwVal)}
+        <span class="agy-style-258">vs ${STATE.curMode === 'mensual' ? 'mes' : 'sem.'} anterior</span>
       </div>
       <div class="mcard-breakdown">`;
 
@@ -518,14 +519,14 @@ export function renderTable() {
       : "";
     const nsCell  = r.ns > 0
       ? `<span class="leads-badge" title="Recibe leads de Yango">★ ${fmt(r.ns)}</span>`
-      : `<span style="color:#ccc">${fmt(r.ns)}</span>`;
+      : `<span class="agy-style-90">${fmt(r.ns)}</span>`;
     h += `<tr data-partner="${escapeHTML(r.partner)}"${r.ns > 0 ? ' class="leads-row"' : ""}>
       <td>${pd}${alertBd}${escapeHTML(r.partner)}</td><td>${kd}${escapeHTML(r.kam)}</td>
       <td class="tn">${fmt(r.ad)}</td><td class="tn">${fmt(r.nr)}</td>
       <td class="tn">${fmt(r.sh)}</td><td class="tn">${fmtK(r.co)}</td>
       <td class="tn">${nsCell}</td>
       <td class="tn">${bdgMode(r.ad, r.pad, "tbadge")}</td>
-      <td style="text-align:center;font-size:.85rem"><span style="${r.tAD.c}">${r.tAD.i}</span></td>
+      <td class="agy-style-528"><span style="${r.tAD.c}">${r.tAD.i}</span></td>
     </tr>`;
   });
   h += `</tbody></table>`;
@@ -668,8 +669,8 @@ export function _rendKpiCard(label, icon, val, prev, color, fmtFn) {
       <div class="mcard-label">${icon} ${label}</div>
       <div class="mcard-sub-label">snapshot último período</div>
       <div class="mcard-val">${fmtFn(val)}</div>
-      <div style="margin-top:4px">${bdgMode(val, prev)}
-        <span style="font-size:.7rem;color:#bbb;margin-left:5px">vs ${STATE.curMode === 'mensual' ? 'mes' : 'sem.'} anterior</span>
+      <div class="agy-style-257">${bdgMode(val, prev)}
+        <span class="agy-style-258">vs ${STATE.curMode === 'mensual' ? 'mes' : 'sem.'} anterior</span>
       </div>
     </div>`;
 }
@@ -811,7 +812,7 @@ export function _renderFleetView(lastRows, prevRows, lastDate, prevDate) {
   // último período). Series continuas → línea es la lectura correcta (mismo
   // patrón que la sección "Tendencias" del Agregador).
   html += secH("📈", "#10b981", "Fleet · Tendencias", "Evolución Peru total en el rango filtrado", "");
-  html += `<div class="section"><div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px">
+  html += `<div class="section"><div class="agy-style-529">
     <div class="chart-card"><div class="chart-head"><span class="chart-title">Owned Fleet Cars</span><button class="png-btn" data-act="dlChart" data-chart="chF_owned" data-name="Fleet_OwnedCars">PNG</button></div><div id="chF_owned"></div></div>
     <div class="chart-card"><div class="chart-head"><span class="chart-title">SH / Auto (interno)</span><button class="png-btn" data-act="dlChart" data-chart="chF_shcar" data-name="Fleet_SHAuto">PNG</button></div><div id="chF_shcar"></div></div>
     <div class="chart-card"><div class="chart-head"><span class="chart-title">Aceptación %</span><button class="png-btn" data-act="dlChart" data-chart="chF_accept" data-name="Fleet_Aceptacion">PNG</button></div><div id="chF_accept"></div></div>
@@ -824,7 +825,7 @@ export function _renderFleetView(lastRows, prevRows, lastDate, prevDate) {
   // flota y qué tan brandeada está. Parts-of-whole (pocas categorías, una foto
   // en el tiempo) → donut, no línea.
   html += secH("🥯", "#7e22ce", "Fleet · Composición", `Snapshot ${d2s(lastDate)} · distribución, no tendencia`, "");
-  html += `<div class="section"><div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px">
+  html += `<div class="section"><div class="agy-style-529">
     <div class="chart-card"><div class="chart-head"><span class="chart-title">Owned Cars por Partner</span><button class="png-btn" data-act="dlChart" data-chart="chF_ownedDonut" data-name="Fleet_OwnedPorPartner">PNG</button></div><div id="chF_ownedDonut"></div></div>
     <div class="chart-card"><div class="chart-head"><span class="chart-title">Brandeados vs No Brandeados</span><button class="png-btn" data-act="dlChart" data-chart="chF_brandedDonut" data-name="Fleet_Brandeados">PNG</button></div><div id="chF_brandedDonut"></div></div>
   </div></div>`;
@@ -881,7 +882,7 @@ export function _rendFleetCardsBody(c, p) {
   // 10 tarjetas: el grid de 3 columnas de .metric-row se sobre-escribe inline con
   // auto-fit (no tocar la clase global — la usa también el Agregador con 3 cards).
   // auto-fit/minmax evita que se aplasten en pantallas angostas (envuelve a 2 filas).
-  return `<div class="section"><div class="metric-row" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+  return `<div class="section"><div class="metric-row agy-style-226">
       ${_rendKpiCard("Owned Fleet Cars",   "🚗", c.owned,      p.owned,      "#0891b2", fmt)}
       ${_rendKpiCard("SH / Auto (interno)", "⏱️", c.shCar,      p.shCar,      "#8b5cf6", fmt)}
       ${_rendKpiCard("Aceptación",          "✅", c.accept,     p.accept,     "#10b981", pct)}
@@ -899,7 +900,7 @@ export function _rendFleetCardsBody(c, p) {
 // calidad/riesgo/dependencia son secundarias — se leen mejor como checklist que
 // como 6 tiles gigantes.
 export function _rendFleetScorecard(items) {
-  return `<div class="mcard" style="border-top:3px solid #64748b">
+  return `<div class="mcard agy-style-530">
     ${items.map(it => `
       <div class="city-kpi">
         <span class="city-kpi-label">${it.label}</span>
@@ -925,7 +926,7 @@ export function _rendFleetPartnerTable(lastRows, prevRows) {
     const pr = _rendFleetAgg(prevByP.get(p) || []);
     return { partner: p, kam: (rs[0] || {}).kam || "", ...c, prev: pr };
   }).sort((a, b) => b.owned - a.owned);
-  if (!rows.length) return `<div style="padding:12px;color:#aaa;font-size:.8rem">Sin partners Fleet en el filtro actual.</div>`;
+  if (!rows.length) return `<div class="agy-style-531">Sin partners Fleet en el filtro actual.</div>`;
   // Delta inline junto al valor (mismo patrón que _rendFleetCityKpi) en vez de una
   // sola columna "WoW Cars" — así cada métrica trae su propio WoW/MoM.
   let h = `<table class="dtbl"><thead><tr>
@@ -980,11 +981,11 @@ export function secH(icon, bg, title, sub, tag) {
 // Restaurada acá al detectar el ReferenceError durante la conversión a módulos ES.
 export function _secH(emoji, color, title, subtitle) {
   return `
-    <div style="display:flex;align-items:center;gap:10px;margin:18px 0 8px;padding:0 4px">
-      <div style="font-size:1.1rem">${emoji}</div>
-      <div style="flex:1">
-        <div style="font-size:.92rem;font-weight:800;color:#111">${escapeHTML(title)}</div>
-        <div style="font-size:.7rem;color:#888">${escapeHTML(subtitle)}</div>
+    <div class="agy-style-532">
+      <div class="agy-style-533">${emoji}</div>
+      <div class="agy-style-534">
+        <div class="agy-style-535">${escapeHTML(title)}</div>
+        <div class="agy-style-536">${escapeHTML(subtitle)}</div>
       </div>
     </div>`;
 }

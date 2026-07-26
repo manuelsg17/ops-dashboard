@@ -87,10 +87,15 @@ export const STATE = {
   metasData:           [],
   allDates:            [],
   allPartners:         [],
-  partnerColors:       {},
-  CLID_MAP:            {},
-  KAM_MAP:             {},
-  KAM_PARTNERS:        {},
+  partnerColors:       {} as Record<string, string>,
+  CLID_MAP:            {} as Record<string, string>,
+  KAM_MAP:             {} as Record<string, string>,
+  KAM_PARTNERS:        {} as Record<string, Set<string>>,
+  // Mapa clid -> fila de `flotas` (kam, nombre_asignado, activo, ciudad).
+  // null hasta que se carga el Excel de Flotas (data.ts); auth.ts lo resetea
+  // a null en logout. Sin este tipo explícito, el literal `{}` infiere sin
+  // index signature y Object.entries(...) devuelve `unknown` (12 errores TS).
+  flotasMap:           null as Record<string, any> | null,
   charts:              {},
   tblSort:          { col: "ad", dir: "desc" },
   curSummaries:     [],

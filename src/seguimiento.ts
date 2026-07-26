@@ -1,3 +1,4 @@
+//@ts-nocheck
 // seguimiento.js — Tracker de seguimiento de reuniones (Fase 3).
 // Jerarquía: PROYECTO → tareas. Cada tarea: Owner · Task · inicio · fin · resultado
 // esperado · status. Tab "Seguimiento" (editor CRUD admin-gated) + Gantt visual
@@ -95,7 +96,7 @@ export function _segBuildGantt(rows, opts) {
   const en = !!opts.en;
   const tasks = (rows || []).filter(r => (r.task || "").trim());
   if (!tasks.length) {
-    return `<div style="font-size:.8rem;color:#aaa;padding:16px;text-align:center">${en ? "No follow-up tasks yet." : "Aún no hay tareas de seguimiento."}</div>`;
+    return `<div class="agy-style-537">${en ? "No follow-up tasks yet." : "Aún no hay tareas de seguimiento."}</div>`;
   }
   const tl = _segTimeline(tasks, en);
   const nCol = tl ? tl.cols.length : 0;
@@ -120,10 +121,10 @@ export function _segBuildGantt(rows, opts) {
       return `<td style="padding:1px 2px;${brdToday(i)}"><div style="height:8px;border-radius:4px;background:${on ? pCol + "55" : "transparent"}"></div></td>`;
     }).join("") : "";
     const projHead = `<tr>
-      <td colspan="2" style="padding:8px 8px 5px;border-top:2px solid #eef0f2">
+      <td colspan="2" class="agy-style-538">
         <span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${pCol};vertical-align:middle;margin-right:6px"></span>
-        <span style="font-weight:800;font-size:.74rem;color:#1f2937">${escapeHTML(_segProjLabel(proj, en))}</span>
-        <span style="font-size:.6rem;color:#9ca3af;margin-left:6px">${nDone}/${gTasks.length} ${en ? "done" : "hechas"}</span>
+        <span class="agy-style-539">${escapeHTML(_segProjLabel(proj, en))}</span>
+        <span class="agy-style-540">${nDone}/${gTasks.length} ${en ? "done" : "hechas"}</span>
       </td>${projTimeline}</tr>`;
 
     const taskRows = gTasks.map(r => {
@@ -138,12 +139,12 @@ export function _segBuildGantt(rows, opts) {
         return `<td style="padding:2px 2px;vertical-align:middle;${brdToday(i)}"><div style="height:13px;border-radius:${radius};background:${on ? stC : "transparent"}"></div></td>`;
       }).join("") : "";
       return `<tr>
-        <td style="padding:5px 8px 5px 22px;border-bottom:1px solid #f4f4f4;vertical-align:top;text-align:center">
-          <div style="font-weight:700;font-size:.74rem;color:#111">${escapeHTML(r.task)}</div>
-          <div style="font-size:.62rem;color:#777;margin-top:1px">${r.owner ? "👤 " + escapeHTML(r.owner) : ""}${r.owner && dateTxt ? " · " : ""}${dateTxt}</div>
-          ${r.expected_result ? `<div style="font-size:.62rem;color:#059669;margin-top:1px">🎯 ${escapeHTML(r.expected_result)}</div>` : ""}
+        <td class="agy-style-541">
+          <div class="agy-style-542">${escapeHTML(r.task)}</div>
+          <div class="agy-style-543">${r.owner ? "👤 " + escapeHTML(r.owner) : ""}${r.owner && dateTxt ? " · " : ""}${dateTxt}</div>
+          ${r.expected_result ? `<div class="agy-style-544">🎯 ${escapeHTML(r.expected_result)}</div>` : ""}
         </td>
-        <td style="padding:5px 8px;border-bottom:1px solid #f4f4f4;vertical-align:top;text-align:center">
+        <td class="agy-style-545">
           <span style="display:inline-block;font-size:.58rem;font-weight:700;color:#fff;background:${stC};padding:2px 8px;border-radius:10px;white-space:nowrap">${escapeHTML(stL)}</span></td>
         ${cells}</tr>`;
     }).join("");
@@ -151,15 +152,15 @@ export function _segBuildGantt(rows, opts) {
   }).join("");
 
   // Leyenda (inline-block → segura en el PDF).
-  const chip = (color, label) => `<span style="display:inline-block;margin-right:12px;font-size:.62rem;color:#666"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${color};vertical-align:middle;margin-right:4px"></span>${escapeHTML(label)}</span>`;
-  const legend = `<div style="margin-bottom:8px">
+  const chip = (color, label) => `<span class="agy-style-546"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${color};vertical-align:middle;margin-right:4px"></span>${escapeHTML(label)}</span>`;
+  const legend = `<div class="agy-style-122">
     ${SEG_STATUS.map(s => chip(s.color, en ? s.en : s.es)).join("")}
-    ${todayIdx >= 0 ? `<span style="display:inline-block;font-size:.62rem;color:#FF0000"><span style="display:inline-block;width:2px;height:11px;background:#FF0000;vertical-align:middle;margin-right:4px"></span>${en ? "Today" : "Hoy"}</span>` : ""}
+    ${todayIdx >= 0 ? `<span class="agy-style-547"><span class="agy-style-548"></span>${en ? "Today" : "Hoy"}</span>` : ""}
   </div>`;
 
-  return `${legend}<div style="overflow-x:auto">
-    <table style="width:100%;border-collapse:collapse;background:#fff">
-      <colgroup><col style="width:${tl ? "minmax(200px,1fr)" : "60%"}"/><col style="width:1%"/></colgroup>
+  return `${legend}<div class="agy-style-321">
+    <table class="agy-style-373">
+      <colgroup><col style="width:${tl ? "minmax(200px,1fr)" : "60%"}"/><col class="agy-style-549"/></colgroup>
       <thead><tr>${th(en ? "Task" : "Tarea")}${th(en ? "Status" : "Estado")}${headTimeline}</tr></thead>
       <tbody>${body}</tbody>
     </table></div>`;
@@ -195,53 +196,53 @@ export function renderSeguimiento() {
   const taskRowHtml = i => {
     const r = SEG_STATE.draft[i];
     return `<tr>
-      <td style="padding:3px 4px 3px 20px"><input class="crud-input" style="width:120px" value="${escapeHTML(r.owner)}" data-act-input="segSet" data-i="${i}" data-field="owner" placeholder="Owner"/></td>
-      <td style="padding:3px 4px"><input class="crud-input" style="width:220px" value="${escapeHTML(r.task)}" data-act-input="segSet" data-i="${i}" data-field="task" placeholder="Tarea / next step"/></td>
-      <td style="padding:3px 4px"><input class="crud-input" type="date" style="width:130px" value="${escapeHTML(r.start_date)}" data-act-change="segSet" data-i="${i}" data-field="start_date"/></td>
-      <td style="padding:3px 4px"><input class="crud-input" type="date" style="width:130px" value="${escapeHTML(r.end_date)}" data-act-change="segSet" data-i="${i}" data-field="end_date"/></td>
-      <td style="padding:3px 4px"><input class="crud-input" style="width:190px" value="${escapeHTML(r.expected_result)}" data-act-input="segSet" data-i="${i}" data-field="expected_result" placeholder="Resultado esperado"/></td>
-      <td style="padding:3px 4px"><select class="crud-input" style="width:118px" data-act-change="segSet" data-i="${i}" data-field="status">${statusOpts(r.status)}</select></td>
-      <td style="padding:3px 4px"><button data-act="segDeleteRow" data-i="${i}" title="Eliminar tarea" style="border:1px solid #fca5a5;background:#fff5f5;color:#b91c1c;border-radius:6px;padding:3px 9px;cursor:pointer;font-weight:700">✕</button></td>
+      <td class="agy-style-550"><input class="crud-input agy-style-551" value="${escapeHTML(r.owner)}" data-act-input="segSet" data-i="${i}" data-field="owner" placeholder="Owner"/></td>
+      <td class="agy-style-552"><input class="crud-input agy-style-434" value="${escapeHTML(r.task)}" data-act-input="segSet" data-i="${i}" data-field="task" placeholder="Tarea / next step"/></td>
+      <td class="agy-style-552"><input class="crud-input" type="date" class="agy-style-553" value="${escapeHTML(r.start_date)}" data-act-change="segSet" data-i="${i}" data-field="start_date"/></td>
+      <td class="agy-style-552"><input class="crud-input" type="date" class="agy-style-553" value="${escapeHTML(r.end_date)}" data-act-change="segSet" data-i="${i}" data-field="end_date"/></td>
+      <td class="agy-style-552"><input class="crud-input agy-style-554" value="${escapeHTML(r.expected_result)}" data-act-input="segSet" data-i="${i}" data-field="expected_result" placeholder="Resultado esperado"/></td>
+      <td class="agy-style-552"><select class="crud-input agy-style-555" data-act-change="segSet" data-i="${i}" data-field="status">${statusOpts(r.status)}</select></td>
+      <td class="agy-style-552"><button data-act="segDeleteRow" data-i="${i}" title="Eliminar tarea" class="agy-style-556">✕</button></td>
     </tr>`;
   };
   const groupsHtml = order.map((proj, pIdx) => {
     const idxs = SEG_STATE.draft.map((r, i) => i).filter(i => (SEG_STATE.draft[i].project || "") === proj);
     const pCol = _segProjColor(proj);
     const headerCells = `
-      <td colspan="7" style="padding:9px 6px 5px;border-top:2px solid #eef0f2;background:#fbfcfd">
+      <td colspan="7" class="agy-style-557">
         <span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${pCol};vertical-align:middle;margin-right:6px"></span>
-        <input class="crud-input" style="width:240px;font-weight:800" value="${escapeHTML(proj)}" data-act-change="segRenameProject" data-pidx="${pIdx}" placeholder="Nombre del proyecto (Sin proyecto)"/>
-        <button data-act="segAddTaskTo" data-pidx="${pIdx}" style="margin-left:8px;border:1px solid #ddd;background:#fff;border-radius:6px;padding:3px 10px;cursor:pointer;font-weight:700;font-size:.72rem">+ tarea</button>
-        <button data-act="segDeleteProject" data-pidx="${pIdx}" title="Eliminar proyecto y sus tareas" style="margin-left:6px;border:1px solid #fca5a5;background:#fff5f5;color:#b91c1c;border-radius:6px;padding:3px 10px;cursor:pointer;font-weight:700;font-size:.72rem">🗑 proyecto</button>
+        <input class="crud-input agy-style-558" value="${escapeHTML(proj)}" data-act-change="segRenameProject" data-pidx="${pIdx}" placeholder="Nombre del proyecto (Sin proyecto)"/>
+        <button data-act="segAddTaskTo" data-pidx="${pIdx}" class="agy-style-559">+ tarea</button>
+        <button data-act="segDeleteProject" data-pidx="${pIdx}" title="Eliminar proyecto y sus tareas" class="agy-style-560">🗑 proyecto</button>
       </td>`;
     return `<tr>${headerCells}</tr>${idxs.map(taskRowHtml).join("")}`;
   }).join("");
 
   const editor = isAdmin ? `
-    <div style="overflow-x:auto;margin-bottom:10px">
-      <table style="width:100%;border-collapse:collapse;font-size:.72rem">
-        <thead><tr style="color:#666;font-weight:700;font-size:.6rem;text-transform:uppercase">
-          <th style="text-align:left;padding:4px 4px 4px 20px">Owner</th><th style="text-align:left;padding:4px">Tarea</th>
-          <th style="text-align:left;padding:4px">Inicio</th><th style="text-align:left;padding:4px">Fin</th>
-          <th style="text-align:left;padding:4px">Resultado esperado</th><th style="text-align:left;padding:4px">Estado</th><th></th>
+    <div class="agy-style-561">
+      <table class="agy-style-562">
+        <thead><tr class="agy-style-563">
+          <th class="agy-style-564">Owner</th><th class="agy-style-565">Tarea</th>
+          <th class="agy-style-565">Inicio</th><th class="agy-style-565">Fin</th>
+          <th class="agy-style-565">Resultado esperado</th><th class="agy-style-565">Estado</th><th></th>
         </tr></thead>
-        <tbody>${groupsHtml || `<tr><td colspan="7" style="padding:10px;color:#aaa;font-size:.78rem">Sin proyectos ni tareas. Creá el primer proyecto ↓</td></tr>`}</tbody>
+        <tbody>${groupsHtml || `<tr><td colspan="7" class="agy-style-566">Sin proyectos ni tareas. Creá el primer proyecto ↓</td></tr>`}</tbody>
       </table>
     </div>
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
-      <button data-act="segAddProject" style="border:1px solid #0ea5e9;background:#f0f9ff;color:#0369a1;border-radius:8px;padding:7px 14px;cursor:pointer;font-weight:700;font-size:.8rem">📁 + Proyecto</button>
-      <button data-act="segAddTaskTo" data-pidx="-1" style="border:1px solid #ddd;background:#fff;border-radius:8px;padding:7px 14px;cursor:pointer;font-weight:700;font-size:.8rem">+ Tarea suelta</button>
-      <button data-act="segSave" style="border:none;background:#FF0000;color:#fff;border-radius:8px;padding:7px 16px;cursor:pointer;font-weight:700;font-size:.8rem">💾 Guardar</button>
-      <span style="font-size:.7rem;color:#999">Los cambios no se guardan hasta presionar <strong>Guardar</strong>.</span>
+    <div class="agy-style-567">
+      <button data-act="segAddProject" class="agy-style-568">📁 + Proyecto</button>
+      <button data-act="segAddTaskTo" data-pidx="-1" class="agy-style-569">+ Tarea suelta</button>
+      <button data-act="segSave" class="agy-style-570">💾 Guardar</button>
+      <span class="agy-style-571">Los cambios no se guardan hasta presionar <strong>Guardar</strong>.</span>
     </div>`
-    : `<div style="font-size:.78rem;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;margin-bottom:12px">🔒 Solo lectura — editar el seguimiento requiere permisos de administrador.</div>`;
+    : `<div class="agy-style-572">🔒 Solo lectura — editar el seguimiento requiere permisos de administrador.</div>`;
 
   host.innerHTML = `
-    <div style="padding:4px 8px 20px">
-      <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin:8px 0 14px">
+    <div class="agy-style-573">
+      <div class="agy-style-574">
         <div>
-          <label style="font-size:.68rem;color:#666;font-weight:700;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px">Partner</label>
-          <select class="sb-sel" style="width:260px" data-act-change="segOnPartnerChange">${partnerOpts}</select>
+          <label class="agy-style-95">Partner</label>
+          <select class="sb-sel agy-style-575" data-act-change="segOnPartnerChange">${partnerOpts}</select>
         </div>
         ${kam ? `<span style="background:${(KAM_COLORS && KAM_COLORS[kam]) || "#888"};color:#fff;font-size:.7rem;font-weight:700;padding:5px 10px;border-radius:12px">${escapeHTML(kam)}</span>` : ""}
       </div>
@@ -352,9 +353,9 @@ export function buildSlide2Seguimiento(partner, idx) {
         en ? "Project → tasks · owner · dates · expected result" : "Proyecto → tareas · owner · fechas · resultado esperado")
     : `<h2>${escapeHTML(partner)} — ${en ? "Follow-up" : "Seguimiento"}</h2>`;
   const footer = (typeof p2BrandFooter === "function") ? p2BrandFooter(idx) : "";
-  return `<div style="width:100%;height:100%;background:#fff;padding:12px 14px;display:flex;flex-direction:column;overflow:hidden">
+  return `<div class="agy-style-365">
     ${header}
-    <div style="flex:1;min-height:0;overflow:hidden">${_segBuildGantt(rows, { en })}</div>
+    <div class="agy-style-576">${_segBuildGantt(rows, { en })}</div>
     ${footer}
   </div>`;
 }

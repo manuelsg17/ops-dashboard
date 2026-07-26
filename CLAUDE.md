@@ -1,20 +1,34 @@
 # Dashboard KAMS V1 — Yango Peru
 
-Dashboard para KAMs (partner performance) en JS moderno **sin framework**: modulos ES bundleados con **Vite**, Supabase como backend (auth + REST + RLS + 1 Edge Function).
+Dashboard para KAMs (partner performance): modulos **TypeScript** bundleados con **Vite**, Supabase como backend (auth + REST + RLS + 2 Edge Functions).
 
 ## Stack
-- Modulos ES (`src/`), bundleados por Vite. Sin framework, sin JSX. `index.html` carga UN solo `<script type="module">`
-- Charts: ApexCharts (Vista Partner) + Chart.js (Presentacion 2.0)
-- XLSX para subir Excels; html2canvas + jspdf para PDFs
-- Las 7 librerias vienen de **npm** (pineadas en `package-lock`), NO de CDN. Ya no se usa SRI
+- Modulos TS (`src/`), bundleados por Vite. `index.html` carga UN solo `<script type="module">`
+- **Preact** — SOLO en `src/components/AdminUsers.tsx` (panel de Usuarios). El resto de la app sigue en el patron original (funciones que devuelven strings de HTML + event delegation via `data-act`) — NO se generalizo Preact al resto de las vistas. `tsconfig.json`: `jsx: "react-jsx"`, `jsxImportSource: "preact"`.
+- **`strict: false` / `noImplicitAny: false` / la mayoria de los archivos tienen `//@ts-nocheck`** — la migracion de JS a TS (jul 2026, ver abajo) fue mecanica (renombrar + ajustar lo que rompia el build), NO agrego chequeo de tipos real en la mayoria del codigo. Los unicos archivos SIN `@ts-nocheck` (chequeados de verdad): `core/config.ts`, `core/dates.ts`, `core/format.ts`, `core/security.ts`, `domain/types.ts`, `shared/actions.ts`, `shared/pdfmeta.ts`. Correr `npx tsc --noEmit` de vez en cuando — no esta en ningun script de `package.json` ni en CI, hay que acordarse de correrlo a mano.
+- Charts: ApexCharts (Vista Partner + Rendimiento, **eager** — es el tab por defecto) + Chart.js (Presentacion 2.0, **lazy**, importado dentro de `presentacion2.ts` a proposito — ver `vite.config.js`)
+- XLSX para subir Excels — vive SOLO en `src/workers/excelWorker.ts` (Web Worker, parsea sin bloquear el hilo principal); html2canvas + jspdf para PDFs/imagenes — carga diferida via `src/shared/lazyLibs.ts` (`ensurePdfLibs()`/`ensureHtml2Canvas()`), nunca en el bundle eager
+- Las librerias vienen de **npm** (pineadas en `package-lock`), NO de CDN. Ya no se usa SRI
 - CSP estricta: `script-src 'self'` (sin `'unsafe-inline'`, sin dominios externos). Ver A2 abajo
+- **Deploy dual**: GitHub Pages (`manuelsg17.github.io/ops-dashboard`, workflow en `.github/workflows/static.yml`) + Vercel (`vercel.json`, headers HTTP que Pages no soporta — HSTS/X-Frame-Options/frame-ancestors/etc). Los dos conviven; `vite.config.js` detecta `GITHUB_ACTIONS` para el `base` de Pages, Vercel sirve en la raiz de su propio dominio sin config adicional.
 
 ## Estado actual
 
 Ultimo commit relevante: **`868f648`** (watermark en PDFs).
 Historia reciente: `a237ff0` (fix colores Presentacion 2.0) → **plan de arquitectura jul 2026, 20 commits** (`0d0a...`→`868f648`).
 
-### Sesion julio 2026 (cont.) — Plan de arquitectura completo (Vite + seguridad + portal de partners)
+### Sesión Julio 2026 — Migración a TypeScript + Preact (parcial) + optimización exhaustiva
+
+Manuel corrió una sesión en paralelo con **Gemini** que reescribió todo `src/` de `.js` a `.ts`, sumó Preact (1 componente), un Web Worker para XLSX, y extrajo ~1200 estilos inline a CSS. Quedó sin commitear, sin revisar, con `npm run build` pasando en verde — que NO es lo mismo que "andaba": antes de adoptarlo se auditó a fondo y aparecieron varios defectos reales, todos corregidos antes de este commit:
+
+- **`ROLES_VALIDOS` sin declarar** en `supabase/functions/admin-users/index.ts` — se borró por accidente junto con el bloque de CORS viejo. Sin el fix, `invite`/`setRole` tiraban `ReferenceError` en cada llamada.
+- **CSS huérfano — el más grave**: el script de extracción (`scripts/extract_css.mjs`) generó `src/styles.css` (591 clases `agy-style-N`) pero nadie lo importaba. Toda la UI tocada por la extracción se habría renderizado sin ningún estilo. Fix: `import "./styles.css"` en `vendor.ts`.
+- **12 errores reales de `tsc`** en `core/config.ts` (`STATE.flotasMap` no existía en el tipo inferido) — nadie había corrido `npx tsc --noEmit` ni una vez (no hay script para eso, ni está en CI). Ahora da 0.
+- **Bundle eager de ~2.29MB** (ApexCharts + Chart.js + XLSX + jsPDF + html2canvas, todo junto, cargado hasta en la pantalla de login). Se separó por consumidor real (`vite.config.js` `manualChunks` + `src/shared/lazyLibs.ts` para jsPDF/html2canvas + Chart.js movido dentro de `presentacion2.ts`, el único que lo usa) → **carga inicial real bajó a ~840KB (~227KB gzip), verificado con traza de red real, no estimado**. XLSX resultó que Gemini ya lo había aislado bien en `workers/excelWorker.ts` (Web Worker, solo se instancia al subir un Excel).
+- **`select("*")` en `rendimiento`/`_mensual`/`_diario`** (pendiente desde la Fase A3 original, nunca se hizo): se armó la proyección explícita de columnas (`REND_COLS_SEMANAL/MENSUAL/DIARIO` en `data.ts`, `core = 9 campos + TX_NEW_COLS` de 41) verificada 1 por 1 contra `information_schema.columns` real antes de aplicar — `rendimiento_diario` NO tiene columnas `partner`/`kam` (a diferencia de semanal/mensual), un desajuste que se detectó ahí y no en producción.
+- **Deploy dual GitHub Pages + Vercel**: `vercel.json` nuevo con los headers HTTP que Pages nunca soportó (Sprint 1 backlog #5, ver abajo) + fusión de políticas RLS SELECT duplicadas (`multiple_permissive_policies` del advisor de performance) en 8 tablas, re-testeado con la misma batería SQL de siempre (kill-switch, scoping, 42501).
+
+**Decisión de arquitectura, explícita y consciente** (no silenciosa): se adoptó Preact, pero SOLO en `AdminUsers.tsx` — no se generalizó al resto de la app, que sigue en el patrón original. La migración a TS es real en 7 archivos (`core/*`, `shared/actions.ts`, `shared/pdfmeta.ts`) y cosmética (`@ts-nocheck`) en el resto — no se completó el tipado estricto de las ~39 vistas/lógica de negocio grandes, queda como trabajo futuro si se decide invertir en eso.
 
 Plan de 3 tracks ejecutado entero. **Track A** (frontend), **Track B** (SQL, corrio en paralelo), **Track C** (pantallas nuevas).
 

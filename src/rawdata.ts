@@ -1,3 +1,4 @@
+//@ts-nocheck
 // rawdata.js — Pestaña Data Raw: vista completa sin filtrar para comparar con Excel
 
 export const RAW_STATE = {
@@ -101,7 +102,7 @@ export function renderRawData() {
     const active = RAW_STATE.sortCol === colKey;
     const arrow  = active ? (RAW_STATE.sortDir === "asc" ? " ↑" : " ↓") : "";
     const cls    = active ? (RAW_STATE.sortDir === "asc" ? "sa" : "sd") : "";
-    return `<th class="${cls}" data-act="rawSort" data-col="${escapeHTML(colKey)}" style="cursor:pointer;white-space:nowrap">${label}${arrow}</th>`;
+    return `<th class="${cls}" data-act="rawSort" data-col="${escapeHTML(colKey)}" class="agy-style-447">${label}${arrow}</th>`;
   }
 
   // ── Date selects ─────────────────────────────────────────────────────────
@@ -124,12 +125,12 @@ export function renderRawData() {
 
   // Controles de filtro
   html += `
-    <div class="section" style="margin-bottom:16px">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <div class="section agy-style-30">
+      <div class="agy-style-197">
         <input class="crud-input" id="rawSearchReg" placeholder="Buscar partner o KAM..."
           value="${RAW_STATE.search.replace(/"/g, "&quot;")}"
           data-act-input="rawSearch" data-reset="1"
-          style="flex:1;min-width:160px;max-width:260px"/>
+          class="agy-style-209"/>
         <select class="sb-sel" data-act-change="rawSetCity" data-reset="1">
           <option value="all"${RAW_STATE.city === "all" ? " selected" : ""}>Todas las ciudades</option>
           ${cityOpts}
@@ -137,21 +138,21 @@ export function renderRawData() {
         <select class="sb-sel" data-act-change="rawSetDateFrom" data-reset="1">
           ${dateFromOpts}
         </select>
-        <span style="font-size:.75rem;color:#aaa">→</span>
+        <span class="agy-style-54">→</span>
         <select class="sb-sel" data-act-change="rawSetDateTo" data-reset="1">
           ${dateToOpts}
         </select>
-        <label style="display:flex;align-items:center;gap:5px;font-size:.75rem;color:#555;cursor:pointer;white-space:nowrap">
+        <label class="agy-style-448">
           <input type="checkbox" ${RAW_STATE.showBanned ? "checked" : ""}
             data-act-change="rawToggleBanned"/>
           Mostrar excluidos 🚫
         </label>
         <button class="crud-btn" data-act="exportRawCSV"
-          style="margin-left:auto;background:#f0fdf4;border-color:#86efac;color:#166534">
+          class="agy-style-449">
           ⬇ Exportar CSV
         </button>
       </div>
-      <div style="margin-top:6px;font-size:.73rem;color:#aaa">${fmt(total)} registro(s) · ${fmt(totalPages)} página(s)</div>
+      <div class="agy-style-450">${fmt(total)} registro(s) · ${fmt(totalPages)} página(s)</div>
     </div>`;
 
   // Tabla
@@ -169,7 +170,7 @@ export function renderRawData() {
             ${thSort("Horas", "supplyHours")}
             ${thSort("Comisión", "commission")}
             ${thSort("Viajes", "trips")}
-            <th style="width:36px"></th>
+            <th class="agy-style-451"></th>
           </tr>
         </thead>
         <tbody>`;
@@ -181,31 +182,31 @@ export function renderRawData() {
     const statusIco = banned_r ? `<span title="Excluido del dashboard">🚫</span>` : "";
     html += `
           <tr style="${rowStyle}">
-            <td style="color:#888;font-size:.72rem">${d2s(r.date)}</td>
+            <td class="agy-style-452">${d2s(r.date)}</td>
             <td>
               <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${STATE.partnerColors[r.partner] || "#ccc"};margin-right:5px"></span>
               ${escapeHTML(r.partner)}
             </td>
-            <td style="font-size:.73rem;color:#555">${escapeHTML(r.kam) || "–"}</td>
-            <td style="font-size:.73rem;color:#555">${escapeHTML(r.city) || "–"}</td>
+            <td class="agy-style-453">${escapeHTML(r.kam) || "–"}</td>
+            <td class="agy-style-453">${escapeHTML(r.city) || "–"}</td>
             <td class="tn">${fmt5(r.activeDrivers)}</td>
             <td class="tn">${fmt5(nr)}</td>
             <td class="tn">${fmt5(r.supplyHours)}</td>
             <td class="tn" title="$${fmt5(r.commission)}">${fmtK(r.commission)}</td>
             <td class="tn">${fmt5(r.trips)}</td>
-            <td style="text-align:center">${statusIco}</td>
+            <td class="agy-style-27">${statusIco}</td>
           </tr>`;
   });
 
   // Fila de totales (siempre visible, basada en el set filtrado completo)
   html += `
-          <tr style="background:#f9fffe;font-weight:700;border-top:2px solid #e5e7eb">
-            <td colspan="4" style="font-size:.75rem;color:#555">TOTAL (${fmt(total)} filas)</td>
-            <td class="tn" style="color:#111">${fmt5(totAD)}</td>
-            <td class="tn" style="color:#111">${fmt5(totNR)}</td>
-            <td class="tn" style="color:#111">${fmt5(totSH)}</td>
-            <td class="tn" style="color:#111" title="$${fmt5(totCom)}">${fmtK(totCom)}</td>
-            <td class="tn" style="color:#111">${fmt5(totTrip)}</td>
+          <tr class="agy-style-454">
+            <td colspan="4" class="agy-style-455">TOTAL (${fmt(total)} filas)</td>
+            <td class="tn agy-style-456">${fmt5(totAD)}</td>
+            <td class="tn agy-style-456">${fmt5(totNR)}</td>
+            <td class="tn agy-style-456">${fmt5(totSH)}</td>
+            <td class="tn agy-style-456" title="$${fmt5(totCom)}">${fmtK(totCom)}</td>
+            <td class="tn agy-style-456">${fmt5(totTrip)}</td>
             <td></td>
           </tr>
         </tbody>
@@ -215,12 +216,12 @@ export function renderRawData() {
   // Paginación
   if (totalPages > 1) {
     html += `
-    <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.78rem;color:#555">
+    <div class="agy-style-82">
       <button class="crud-btn" data-act="rawPagePrev"
-        ${RAW_STATE.page === 0 ? "disabled" : ""} style="padding:4px 10px">← Anterior</button>
+        ${RAW_STATE.page === 0 ? "disabled" : ""} class="agy-style-83">← Anterior</button>
       <span>Página <strong>${RAW_STATE.page + 1}</strong> de <strong>${totalPages}</strong></span>
       <button class="crud-btn" data-act="rawPageNext" data-total="${totalPages}"
-        ${RAW_STATE.page === totalPages - 1 ? "disabled" : ""} style="padding:4px 10px">Siguiente →</button>
+        ${RAW_STATE.page === totalPages - 1 ? "disabled" : ""} class="agy-style-83">Siguiente →</button>
     </div>`;
   }
 
@@ -298,7 +299,7 @@ export function _rawViewToggle() {
         background:${RAW_STATE.view===v?'#FF0000':'#fff'};color:${RAW_STATE.view===v?'#fff':'#555'};
         border-radius:6px">${label}</button>`;
   return `
-    <div style="display:flex;gap:6px;margin-bottom:12px">
+    <div class="agy-style-457">
       ${btn("data",   "\uD83D\uDCCA Registros")}
       ${btn("flotas", "\uD83D\uDE9A Flotas (CLID \u2192 Nombre)")}
       ${btn("recon",  "\uD83E\uDDFE Conciliaci\u00F3n (CLID \u2192 db_id)")}
@@ -428,34 +429,34 @@ export function _renderFlotasView() {
   html += _rawViewToggle();
 
   html += `
-    <div class="section" style="margin-bottom:12px">
-      <div style="font-size:.75rem;color:#555;margin-bottom:6px;background:#f0f9ff;border-left:3px solid #0ea5e9;padding:8px 12px;border-radius:4px">
+    <div class="section agy-style-371">
+      <div class="agy-style-458">
         <strong>Fuente de verdad:</strong> Configuraci\u00F3n (tabla <code>partners</code>). El nombre y KAM que ves en el dashboard vienen de all\u00ED.
         Esta vista permite <strong>marcar CLIDs como inactivos</strong> (para excluir flotas de otras unidades de negocio) y anotar la ciudad.
         El "Nombre Excel" es informativo: sirve para detectar tuktuk/cargo/delivery/flotas antiguas. Si necesit\u00E1s cambiar nombre o KAM, hacelo en <strong>Configuraci\u00F3n</strong>.
-        <div style="margin-top:6px">\uD83D\uDEFA Si un CLID trae <strong>fleetrooms</strong> (sub-flotas con <code>db_id</code>), se listan debajo y se marcan <strong>por fleetroom</strong>: <strong>Fleet</strong>, <strong>TukTuk</strong> o <strong>Excluir de Taxi</strong> (ej. delivery). As\u00ED solo esa sub-flota entra a TukTuk / sale de Taxi, sin afectar a las dem\u00E1s del mismo CLID.</div>
+        <div class="agy-style-459">\uD83D\uDEFA Si un CLID trae <strong>fleetrooms</strong> (sub-flotas con <code>db_id</code>), se listan debajo y se marcan <strong>por fleetroom</strong>: <strong>Fleet</strong>, <strong>TukTuk</strong> o <strong>Excluir de Taxi</strong> (ej. delivery). As\u00ED solo esa sub-flota entra a TukTuk / sale de Taxi, sin afectar a las dem\u00E1s del mismo CLID.</div>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+      <div class="agy-style-460">
         <input class="crud-input" id="rawSearchFlotas" placeholder="Buscar CLID, partner, KAM, ciudad..."
           value="${(RAW_STATE.search || "").replace(/"/g, "&quot;")}"
           data-act-input="rawSearch"
-          style="flex:1;min-width:200px;max-width:340px"/>
+          class="agy-style-461"/>
         <select class="sb-sel" data-act-change="rawSetCity">
           <option value="all"${RAW_STATE.city==="all"?" selected":""}>Todas las ciudades</option>
           ${cityOpts}
         </select>
         <button class="crud-btn" data-act="exportFlotasCSV"
-          style="margin-left:auto;background:#f0fdf4;border-color:#86efac;color:#166534">\u2B07 Exportar CSV</button>
+          class="agy-style-449">\u2B07 Exportar CSV</button>
       </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:8px 10px">
-        <span style="font-size:.72rem;font-weight:700;color:#92400e;white-space:nowrap">\uD83D\uDEFA Patrones TukTuk (sugerencia):</span>
+      <div class="agy-style-462">
+        <span class="agy-style-463">\uD83D\uDEFA Patrones TukTuk (sugerencia):</span>
         ${(STATE.tuktukPatterns || []).map(w => `
-          <span style="display:inline-flex;align-items:center;gap:4px;background:#fff;border:1px solid #fde68a;border-radius:12px;padding:2px 4px 2px 9px;font-size:.7rem;color:#92400e">
+          <span class="agy-style-464">
             ${escapeHTML(w)}
-            <button data-act="removeTuktukPattern" data-word="${escapeHTML(w)}" title="Quitar" style="border:none;background:none;color:#b45309;cursor:pointer;font-weight:700;padding:0 4px">\u00D7</button>
+            <button data-act="removeTuktukPattern" data-word="${escapeHTML(w)}" title="Quitar" class="agy-style-465">\u00D7</button>
           </span>`).join("")}
-        <input id="newTuktukPattern" class="crud-input" placeholder="ej. mototaxi" style="width:130px;font-size:.72rem" data-act-keydown="addTuktukPatternEnter"/>
-        <button class="crud-btn" data-act="addTuktukPattern" style="font-size:.7rem">+ Agregar</button>
+        <input id="newTuktukPattern" class="crud-input" placeholder="ej. mototaxi" class="agy-style-466" data-act-keydown="addTuktukPatternEnter"/>
+        <button class="crud-btn" data-act="addTuktukPattern" class="agy-style-467">+ Agregar</button>
       </div>
     </div>
     <div class="tbl-wrap">
@@ -465,13 +466,13 @@ export function _renderFlotasView() {
             <th>CLID</th>
             <th>Ciudad</th>
             <th>Nombre Excel</th>
-            <th>Nombre <span style="color:#0ea5e9;font-weight:700">EFECTIVO</span></th>
-            <th>KAM <span style="color:#0ea5e9;font-weight:700">EFECTIVO</span></th>
-            <th style="text-align:center;width:55px">Fleet</th>
-            <th style="text-align:center;width:65px">TukTuk</th>
-            <th style="text-align:center;width:75px">Excluir<br>Taxi</th>
-            <th style="text-align:center">Estado</th>
-            <th style="text-align:center;width:90px">Acci\u00F3n</th>
+            <th>Nombre <span class="agy-style-468">EFECTIVO</span></th>
+            <th>KAM <span class="agy-style-468">EFECTIVO</span></th>
+            <th class="agy-style-469">Fleet</th>
+            <th class="agy-style-470">TukTuk</th>
+            <th class="agy-style-471">Excluir<br>Taxi</th>
+            <th class="agy-style-27">Estado</th>
+            <th class="agy-style-472">Acci\u00F3n</th>
           </tr>
         </thead>
         <tbody>`;
@@ -491,11 +492,11 @@ export function _renderFlotasView() {
   // (badge + resalte) nunca auto-marca ni auto-guarda.
   function _flotaFlagCells(r, clidH, hasFleetrooms) {
     if (hasFleetrooms) {
-      const note = `<span style="font-size:.6rem;color:#0284c7;font-style:italic">↓ fleetroom</span>`;
+      const note = `<span class="agy-style-473">↓ fleetroom</span>`;
       return `
-          <td style="text-align:center">${note}</td>
-          <td style="text-align:center">${note}</td>
-          <td style="text-align:center">${note}</td>`;
+          <td class="agy-style-27">${note}</td>
+          <td class="agy-style-27">${note}</td>
+          <td class="agy-style-27">${note}</td>`;
     }
     const isFleet   = !!(STATE.CLID_IS_FLEET  || {})[r.clid];
     const isTuktuk  = !!(STATE.CLID_IS_TUKTUK || {})[r.clid];
@@ -505,14 +506,14 @@ export function _renderFlotasView() {
     const pFall = escapeHTML(r.nombre_efectivo === "—" ? "" : r.nombre_efectivo);
     const kFall = escapeHTML(r.kam_efectivo === "—" ? "" : r.kam_efectivo);
     return `
-          <td style="text-align:center">
+          <td class="agy-style-27">
             <input type="checkbox" title="Fleet" data-act-change="flotaSetFlag" data-clid="${clidH}" data-key="is_fleet" data-pfall="${pFall}" data-kfall="${kFall}" ${isFleet ? "checked" : ""}/>
           </td>
-          <td style="text-align:center">
-            ${suggested ? `<div title="El Nombre Excel sugiere TukTuk" style="font-size:.62rem;color:#b45309;font-weight:700;margin-bottom:2px">\u{1F6FA}?</div>` : ""}
+          <td class="agy-style-27">
+            ${suggested ? `<div title="El Nombre Excel sugiere TukTuk" class="agy-style-474">\u{1F6FA}?</div>` : ""}
             <input type="checkbox" title="TukTuk" data-act-change="flotaSetFlag" data-clid="${clidH}" data-key="is_tuktuk" data-pfall="${pFall}" data-kfall="${kFall}" ${isTuktuk ? "checked" : ""} style="${suggested ? "outline:2px solid #f59e0b" : ""}"/>
           </td>
-          <td style="text-align:center"><span style="color:#ccc" title="Excluir de Taxi solo aplica por fleetroom">—</span></td>`;
+          <td class="agy-style-27"><span class="agy-style-90" title="Excluir de Taxi solo aplica por fleetroom">—</span></td>`;
   }
 
   // Sub-filas por fleetroom (una por db_id) debajo de la fila del CLID. Cada una
@@ -533,16 +534,16 @@ export function _renderFlotasView() {
           `<input type="checkbox" data-act-change="fleetroomSetFlag" data-dbid="${dbIdH}" data-key="${escapeHTML(key)}" data-name="${nameH}" data-clid="${clidH}" data-kam="${kamCtx}" data-city="${cityCtx}" ${checked ? "checked" : ""} style="${extraStyle}"/>`;
         const dbShort = escapeHTML(String(dbId).slice(0, 10));
         return `
-        <tr style="background:#f8fbff">
-          <td style="text-align:right;color:#cbd5e1;font-size:.7rem;padding-right:6px">↳</td>
-          <td colspan="4" style="padding-left:14px">
-            <span style="font-weight:600;color:#0f172a">${escapeHTML(name || "(sin nombre)")}</span>
-            ${sugg ? `<span title="El nombre sugiere TukTuk" style="margin-left:6px;font-size:.6rem;color:#b45309;font-weight:700">🛺?</span>` : ""}
-            <span style="margin-left:6px;font-family:monospace;font-size:.62rem;color:#94a3b8" title="${escapeHTML(String(dbId))}">${dbShort}…</span>
+        <tr class="agy-style-475">
+          <td class="agy-style-476">↳</td>
+          <td colspan="4" class="agy-style-477">
+            <span class="agy-style-478">${escapeHTML(name || "(sin nombre)")}</span>
+            ${sugg ? `<span title="El nombre sugiere TukTuk" class="agy-style-479">🛺?</span>` : ""}
+            <span class="agy-style-480" title="${escapeHTML(String(dbId))}">${dbShort}…</span>
           </td>
-          <td style="text-align:center" title="Fleet">${cb("is_fleet", isFleet)}</td>
-          <td style="text-align:center" title="TukTuk">${cb("is_tuktuk", isTuktuk, sugg ? "outline:2px solid #f59e0b" : "")}</td>
-          <td style="text-align:center" title="Excluir de Taxi">${cb("exclude_from_taxi", isExcl)}</td>
+          <td class="agy-style-27" title="Fleet">${cb("is_fleet", isFleet)}</td>
+          <td class="agy-style-27" title="TukTuk">${cb("is_tuktuk", isTuktuk, sugg ? "outline:2px solid #f59e0b" : "")}</td>
+          <td class="agy-style-27" title="Excluir de Taxi">${cb("exclude_from_taxi", isExcl)}</td>
           <td colspan="2"></td>
         </tr>`;
       }).join("");
@@ -562,79 +563,79 @@ export function _renderFlotasView() {
       const kamOpts  = `<option value="">\u2014 sin KAM \u2014</option>` +
         kamOptList.map(k => `<option value="${escapeHTML(k)}"${currentKamFlota===k?" selected":""}>${escapeHTML(k)}</option>`).join("");
       const nombreWarning = r.enPartners
-        ? `<div style="font-size:.66rem;color:#0ea5e9;margin-top:3px">\u26A0 Este CLID est\u00E1 configurado en partners como <strong>${escapeHTML(r.nombre_partners)}</strong>. El valor de aqu\u00ED solo se usar\u00EDa si lo borr\u00E1s de Configuraci\u00F3n.</div>`
-        : `<div style="font-size:.66rem;color:#10b981;margin-top:3px">\u2713 Este CLID NO est\u00E1 en partners \u2014 este nombre ser\u00E1 el que use el dashboard.</div>`;
+        ? `<div class="agy-style-481">\u26A0 Este CLID est\u00E1 configurado en partners como <strong>${escapeHTML(r.nombre_partners)}</strong>. El valor de aqu\u00ED solo se usar\u00EDa si lo borr\u00E1s de Configuraci\u00F3n.</div>`
+        : `<div class="agy-style-482">\u2713 Este CLID NO est\u00E1 en partners \u2014 este nombre ser\u00E1 el que use el dashboard.</div>`;
       const kamWarning = r.kam_partners
-        ? `<div style="font-size:.66rem;color:#0ea5e9;margin-top:3px">\u26A0 KAM <strong>${escapeHTML(r.kam_partners)}</strong> configurado en partners. Este KAM solo se usar\u00EDa como fallback.</div>`
+        ? `<div class="agy-style-481">\u26A0 KAM <strong>${escapeHTML(r.kam_partners)}</strong> configurado en partners. Este KAM solo se usar\u00EDa como fallback.</div>`
         : "";
       html += `
-        <tr data-flota-clid="${clidH}" style="background:#fff8f8">
-          <td style="font-family:monospace;font-size:.75rem;color:#666;vertical-align:top">${clidH}</td>
-          <td style="vertical-align:top">
-            <select id="flEdCity_${clidH}" class="crud-input" style="min-width:110px"><option value=""${r.ciudad?"":" selected"}>\u2014 sin ciudad \u2014</option>${cityOpts}</select>
+        <tr data-flota-clid="${clidH}" class="agy-style-483">
+          <td class="agy-style-484">${clidH}</td>
+          <td class="agy-style-485">
+            <select id="flEdCity_${clidH}" class="crud-input agy-style-486"><option value=""${r.ciudad?"":" selected"}>\u2014 sin ciudad \u2014</option>${cityOpts}</select>
           </td>
-          <td style="color:#999;font-size:.75rem;vertical-align:top">${escapeHTML(r.nombre_excel || "\u2014")}</td>
-          <td style="vertical-align:top">
-            <input id="flEdName_${clidH}" class="crud-input" style="min-width:160px" value="${escapeHTML(r.nombre_flota || "")}" placeholder="opcional \u2014 fallback"/>
+          <td class="agy-style-487">${escapeHTML(r.nombre_excel || "\u2014")}</td>
+          <td class="agy-style-485">
+            <input id="flEdName_${clidH}" class="crud-input agy-style-488" value="${escapeHTML(r.nombre_flota || "")}" placeholder="opcional \u2014 fallback"/>
             ${nombreWarning}
           </td>
-          <td style="vertical-align:top">
-            <select id="flEdKam_${clidH}" class="crud-input" style="min-width:110px">${kamOpts}</select>
+          <td class="agy-style-485">
+            <select id="flEdKam_${clidH}" class="crud-input agy-style-486">${kamOpts}</select>
             ${kamWarning}
           </td>
           ${_flotaFlagCells(r, clidH, hasFleetrooms)}
-          <td style="text-align:center;vertical-align:top">
-            <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:.72rem">
+          <td class="agy-style-489">
+            <label class="agy-style-490">
               <input id="flEdActivo_${clidH}" type="checkbox"${r.activo?" checked":""}/>
               <span>${r.activo?"Activa":"Inactiva"}</span>
             </label>
           </td>
-          <td style="text-align:center;white-space:nowrap;vertical-align:top">
-            <button data-act="flotaSaveEdit" data-clid="${clidH}" style="padding:3px 8px;font-size:.7rem;background:#10b981;color:#fff;border:none;border-radius:5px;font-weight:700;cursor:pointer;margin-right:3px">\u2713 Guardar</button>
-            <button data-act="flotaCancelEdit"          style="padding:3px 8px;font-size:.7rem;background:#888;color:#fff;border:none;border-radius:5px;font-weight:700;cursor:pointer">\u2715</button>
+          <td class="agy-style-491">
+            <button data-act="flotaSaveEdit" data-clid="${clidH}" class="agy-style-492">\u2713 Guardar</button>
+            <button data-act="flotaCancelEdit"          class="agy-style-493">\u2715</button>
           </td>
         </tr>`;
     } else {
       // \u2500\u2500\u2500 FILA EN MODO LECTURA \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
       const badge = !r.activo
-        ? `<span style="background:#fee;color:#991b1b;padding:2px 7px;border-radius:8px;font-size:.7rem;font-weight:700">\uD83D\uDEAB Inactiva</span>`
+        ? `<span class="agy-style-494">\uD83D\uDEAB Inactiva</span>`
         : r.banned
-          ? `<span style="background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:8px;font-size:.7rem;font-weight:700">\uD83D\uDEAB Palabra prohibida</span>`
+          ? `<span class="agy-style-495">\uD83D\uDEAB Palabra prohibida</span>`
           : !r.enPartners
-            ? `<span style="background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:8px;font-size:.7rem;font-weight:700">Sin config</span>`
-            : `<span style="background:#dcfce7;color:#166534;padding:2px 7px;border-radius:8px;font-size:.7rem;font-weight:700">\u2713 Activa</span>`;
+            ? `<span class="agy-style-495">Sin config</span>`
+            : `<span class="agy-style-496">\u2713 Activa</span>`;
       const cityCell = r.ciudad
         ? cityLabel(r.ciudad)
-        : `<span style="color:#aaa;font-style:italic">\u2014 sin ciudad \u2014</span>`;
+        : `<span class="agy-style-497">\u2014 sin ciudad \u2014</span>`;
       const nombreCell = r.enPartners
-        ? `<span style="font-weight:700;color:#0ea5e9">${escapeHTML(r.nombre_partners)}</span>
-           <div style="font-size:.62rem;color:#aaa">desde Configuraci\u00F3n</div>`
+        ? `<span class="agy-style-498">${escapeHTML(r.nombre_partners)}</span>
+           <div class="agy-style-25">desde Configuraci\u00F3n</div>`
         : r.nombre_flota
-          ? `<span style="font-weight:600">${escapeHTML(r.nombre_flota)}</span>
-             <div style="font-size:.62rem;color:#f59e0b">fallback flotas</div>`
-          : `<span style="color:#aaa;font-style:italic">${escapeHTML(r.nombre_excel || "\u2014")}</span>
-             <div style="font-size:.62rem;color:#f59e0b">solo Excel</div>`;
+          ? `<span class="agy-style-499">${escapeHTML(r.nombre_flota)}</span>
+             <div class="agy-style-500">fallback flotas</div>`
+          : `<span class="agy-style-497">${escapeHTML(r.nombre_excel || "\u2014")}</span>
+             <div class="agy-style-500">solo Excel</div>`;
       const kamCell = r.kam_partners
-        ? `<span style="font-weight:700;color:#0ea5e9">${escapeHTML(r.kam_partners)}</span>
-           <div style="font-size:.62rem;color:#aaa">desde Configuraci\u00F3n</div>`
+        ? `<span class="agy-style-498">${escapeHTML(r.kam_partners)}</span>
+           <div class="agy-style-25">desde Configuraci\u00F3n</div>`
         : r.kam_flota
-          ? `<span style="font-weight:600">${escapeHTML(r.kam_flota)}</span>
-             <div style="font-size:.62rem;color:#f59e0b">fallback flotas</div>`
-          : `<span style="color:#aaa">\u2014</span>`;
+          ? `<span class="agy-style-499">${escapeHTML(r.kam_flota)}</span>
+             <div class="agy-style-500">fallback flotas</div>`
+          : `<span class="agy-style-89">\u2014</span>`;
       html += `
         <tr>
-          <td style="font-family:monospace;font-size:.75rem;color:#666">${clidH}</td>
+          <td class="agy-style-501">${clidH}</td>
           <td>${cityCell}</td>
-          <td style="color:#666;font-size:.78rem">${escapeHTML(r.nombre_excel || "\u2014")}</td>
+          <td class="agy-style-502">${escapeHTML(r.nombre_excel || "\u2014")}</td>
           <td>${nombreCell}</td>
           <td>${kamCell}</td>
           ${_flotaFlagCells(r, clidH, hasFleetrooms)}
-          <td style="text-align:center">${badge}</td>
-          <td style="text-align:center;white-space:nowrap">
-            <button data-act="flotaStartEdit" data-clid="${clidH}" title="Editar ciudad/activo/fallback" style="padding:3px 8px;font-size:.7rem;background:#fff;border:1px solid #ddd;border-radius:5px;cursor:pointer;margin-right:3px">\u270F\uFE0F</button>
+          <td class="agy-style-27">${badge}</td>
+          <td class="agy-style-503">
+            <button data-act="flotaStartEdit" data-clid="${clidH}" title="Editar ciudad/activo/fallback" class="agy-style-504">\u270F\uFE0F</button>
             ${r.tieneFlota
               ? `<button data-act="flotaToggleActivo" data-clid="${clidH}" data-activo="${!r.activo ? 1 : 0}" title="${r.activo?'Marcar inactiva':'Reactivar'}" style="padding:3px 8px;font-size:.7rem;background:${r.activo?'#fff5f5':'#f0fdf4'};border:1px solid ${r.activo?'#fecaca':'#86efac'};color:${r.activo?'#991b1b':'#166534'};border-radius:5px;cursor:pointer">${r.activo?'\uD83D\uDEAB':'\u2713'}</button>`
-              : `<button data-act="flotaToggleActivo" data-clid="${clidH}" data-activo="0" title="Marcar inactiva (crear flota)" style="padding:3px 8px;font-size:.7rem;background:#fff5f5;border:1px solid #fecaca;color:#991b1b;border-radius:5px;cursor:pointer">\uD83D\uDEAB</button>`}
+              : `<button data-act="flotaToggleActivo" data-clid="${clidH}" data-activo="0" title="Marcar inactiva (crear flota)" class="agy-style-505">\uD83D\uDEAB</button>`}
           </td>
         </tr>`;
       // Sub-filas por fleetroom (solo lectura; el tagging es por db_id).
@@ -643,14 +644,14 @@ export function _renderFlotasView() {
   });
 
   if (rows.length > 500) {
-    html += `<tr><td colspan="10" style="text-align:center;color:#aaa;padding:10px;font-size:.75rem;font-style:italic">Mostrando primeros 500 de ${fmt(rows.length)}. Us\u00E1 el buscador para filtrar.</td></tr>`;
+    html += `<tr><td colspan="10" class="agy-style-212">Mostrando primeros 500 de ${fmt(rows.length)}. Us\u00E1 el buscador para filtrar.</td></tr>`;
   }
 
   html += `</tbody></table></div>`;
 
   if (!Object.keys(flotasMap).length) {
     html += `
-      <div style="margin-top:14px;padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:.78rem;color:#92400e">
+      <div class="agy-style-506">
         \uD83D\uDCA1 A\u00FAn no subiste ninguna flota. Sub\u00ED un Excel con columnas <code>CLID | CIUDAD | NOMBRE_ASIGNADO | KAM | ACTIVO</code> desde <strong>Actualizar informaci\u00F3n \u2192 Flotas</strong>.
       </div>`;
   }
@@ -949,24 +950,24 @@ export function _renderReconView() {
   html += _rawViewToggle();
 
   html += `
-    <div class="section" style="margin-bottom:12px">
-      <div style="font-size:.75rem;color:#555;margin-bottom:8px;background:#f0f9ff;border-left:3px solid #0ea5e9;padding:8px 12px;border-radius:4px">
+    <div class="section agy-style-371">
+      <div class="agy-style-507">
         Resumen por <strong>CLID</strong> con desglose por <strong>db_id</strong> (fleetroom). N\u00FAmeros con <strong>K/M y 2 decimales</strong> \u2014 el valor exacto est\u00E1 en el <em>hover</em> y en el CSV. Las sub-flotas <strong>\uD83D\uDEFA TukTuk</strong> y <strong>\u26D4 Excluidas</strong> NO entran al dashboard (Taxi) y van resaltadas; <strong>\uD83D\uDE97 Fleet</strong> s\u00ED entra (es subconjunto de Taxi).
-        ${singlePeriod ? "" : `<div style="margin-top:6px;color:#b45309"><strong>Ojo:</strong> ten\u00E9s un rango de varios per\u00EDodos \u2014 AD y autos se <strong>suman</strong> entre ellos. Para cuadrar contra un Excel de un per\u00EDodo, pon\u00E9 el mismo per\u00EDodo en "Desde" y "Hasta".</div>`}
+        ${singlePeriod ? "" : `<div class="agy-style-508"><strong>Ojo:</strong> ten\u00E9s un rango de varios per\u00EDodos \u2014 AD y autos se <strong>suman</strong> entre ellos. Para cuadrar contra un Excel de un per\u00EDodo, pon\u00E9 el mismo per\u00EDodo en "Desde" y "Hasta".</div>`}
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <div class="agy-style-197">
         <input class="crud-input" id="rawSearchRecon" placeholder="Buscar CLID, partner o KAM..."
           value="${(RAW_STATE.search || "").replace(/"/g, "&quot;")}" data-act-input="rawSearch"
-          style="flex:1;min-width:180px;max-width:280px"/>
+          class="agy-style-56"/>
         <select class="sb-sel" data-act-change="rawSetCity">
           <option value="all"${RAW_STATE.city === "all" ? " selected" : ""}>Todas las ciudades</option>${cityOpts}
         </select>
         <select class="sb-sel" data-act-change="rawSetDateFrom">${dateFromOpts}</select>
-        <span style="font-size:.75rem;color:#aaa">\u2192</span>
+        <span class="agy-style-54">\u2192</span>
         <select class="sb-sel" data-act-change="rawSetDateTo">${dateToOpts}</select>
-        <button class="crud-btn" data-act="reconExpandAll" data-open="1" style="padding:4px 10px">Expandir todo</button>
-        <button class="crud-btn" data-act="reconExpandAll" data-open="0" style="padding:4px 10px">Colapsar</button>
-        <button class="crud-btn" data-act="exportReconCSV" style="margin-left:auto;background:#f0fdf4;border-color:#86efac;color:#166534">\u2B07 Exportar CSV</button>
+        <button class="crud-btn" data-act="reconExpandAll" data-open="1" class="agy-style-83">Expandir todo</button>
+        <button class="crud-btn" data-act="reconExpandAll" data-open="0" class="agy-style-83">Colapsar</button>
+        <button class="crud-btn" data-act="exportReconCSV" class="agy-style-449">\u2B07 Exportar CSV</button>
       </div>
     </div>`;
 
@@ -977,7 +978,7 @@ export function _renderReconView() {
     <td class="tn" title="${fmt5(a.sh)}">${_fmtKM2(a.sh)}</td>
     <td class="tn" title="${fmt5(a.nuevos)}">${_fmtKM2(a.nuevos)}</td>
     <td class="tn" title="${fmt5(a.react)}">${_fmtKM2(a.react)}</td>
-    <td class="tn" title="${fmt5(a.nuevos + a.react)}" style="font-weight:600">${_fmtKM2(a.nuevos + a.react)}</td>
+    <td class="tn" title="${fmt5(a.nuevos + a.react)}" class="agy-style-499">${_fmtKM2(a.nuevos + a.react)}</td>
     <td class="tn" title="${fmt5(a.trips)}">${_fmtKM2(a.trips)}</td>
     <td class="tn" title="${fmt5(a.gmv)}">${_fmtKM2(a.gmv)}</td>
     <td class="tn" title="${fmt5(a.comm)}">${_fmtKM2(a.comm)}</td>
@@ -989,7 +990,7 @@ export function _renderReconView() {
     <div class="tbl-wrap">
       <table class="dtbl">
         <thead><tr>
-          <th style="width:26px"></th>
+          <th class="agy-style-509"></th>
           ${th("CLID / Flota")}
           ${th("AD")}${th("Horas")}${th("Nuevos")}${th("React")}${th("N+R")}${th("Viajes")}${th("GMV")}${th("Comisi\u00F3n")}
           ${th("SH/auto<br>fleet")}${th("Acept.")}${th("Autos<br>fleet")}${th("Estado")}
@@ -1005,19 +1006,19 @@ export function _renderReconView() {
     froomArr.forEach(f => { const cl = _reconClasif(f.sample); if (cl.omit) { omitAd += f.agg.ad; omitN++; } });
     const cityStr = [...c.cities].map(cityLabel).join(", ");
     const omitBadge = omitN
-      ? `<span title="${omitN} sub-flota(s) fuera del dashboard \u00B7 AD omitido: ${fmt5(omitAd)}" style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:8px;font-size:.66rem;font-weight:700">omite ${omitN} \u00B7 ${_fmtKM2(omitAd)} AD</span>`
-      : `<span style="color:#cbd5e1;font-size:.66rem">\u2014</span>`;
+      ? `<span title="${omitN} sub-flota(s) fuera del dashboard \u00B7 AD omitido: ${fmt5(omitAd)}" class="agy-style-510">omite ${omitN} \u00B7 ${_fmtKM2(omitAd)} AD</span>`
+      : `<span class="agy-style-511">\u2014</span>`;
 
     html += `
-      <tr data-act="reconToggleClid" data-clid="${clidH}" style="cursor:pointer;background:#f9fafb;border-top:2px solid #eef2f7">
-        <td style="text-align:center;color:#0ea5e9;font-weight:700">${froomArr.length > 1 || (froomArr[0] && froomArr[0].db_id) ? (open ? "\u25BE" : "\u25B8") : ""}</td>
+      <tr data-act="reconToggleClid" data-clid="${clidH}" class="agy-style-512">
+        <td class="agy-style-513">${froomArr.length > 1 || (froomArr[0] && froomArr[0].db_id) ? (open ? "\u25BE" : "\u25B8") : ""}</td>
         <td>
-          <span style="font-family:monospace;font-size:.72rem;color:#64748b">${escapeHTML(c.clid)}</span>
-          <span style="font-weight:700;margin-left:6px">${escapeHTML(c.partner || "(sin nombre)")}</span>
-          <div style="font-size:.66rem;color:#94a3b8">${escapeHTML(c.kam || "sin KAM")}${cityStr ? " \u00B7 " + escapeHTML(cityStr) : ""} \u00B7 ${froomArr.length} fleetroom(s)</div>
+          <span class="agy-style-514">${escapeHTML(c.clid)}</span>
+          <span class="agy-style-515">${escapeHTML(c.partner || "(sin nombre)")}</span>
+          <div class="agy-style-516">${escapeHTML(c.kam || "sin KAM")}${cityStr ? " \u00B7 " + escapeHTML(cityStr) : ""} \u00B7 ${froomArr.length} fleetroom(s)</div>
         </td>
         ${numCells(c.agg)}
-        <td style="text-align:center">${omitBadge}</td>
+        <td class="agy-style-27">${omitBadge}</td>
       </tr>`;
 
     if (open) {
@@ -1027,13 +1028,13 @@ export function _renderReconView() {
         html += `
       <tr style="background:${cl.bg || "#fff"};${cl.omit ? "opacity:.92" : ""}">
         <td></td>
-        <td style="padding-left:16px">
-          <span style="color:#cbd5e1">\u21B3</span>
-          <span style="font-weight:600">${escapeHTML(f.name || "(sin nombre)")}</span>
-          <span style="font-family:monospace;font-size:.62rem;color:#94a3b8;margin-left:6px" title="${escapeHTML(f.db_id)}">${dbShort}</span>
+        <td class="agy-style-517">
+          <span class="agy-style-518">\u21B3</span>
+          <span class="agy-style-499">${escapeHTML(f.name || "(sin nombre)")}</span>
+          <span class="agy-style-519" title="${escapeHTML(f.db_id)}">${dbShort}</span>
         </td>
         ${numCells(f.agg)}
-        <td style="text-align:center"><span style="color:${cl.color};font-size:.66rem;font-weight:700;white-space:nowrap">${cl.label}</span></td>
+        <td class="agy-style-27"><span style="color:${cl.color};font-size:.66rem;font-weight:700;white-space:nowrap">${cl.label}</span></td>
       </tr>`;
       });
     }
@@ -1041,18 +1042,18 @@ export function _renderReconView() {
 
   // Totales
   html += `
-        <tr style="background:#eef6ff;font-weight:700;border-top:2px solid #bfdbfe">
-          <td></td><td style="color:#1e40af">TOTAL (todo)</td>${numCells(totFull)}<td></td>
+        <tr class="agy-style-520">
+          <td></td><td class="agy-style-521">TOTAL (todo)</td>${numCells(totFull)}<td></td>
         </tr>
-        <tr style="background:#f0fdf4;font-weight:700">
-          <td></td><td style="color:#166534" title="Excluye TukTuk y sub-flotas excluidas">TOTAL en dashboard (Taxi)</td>${numCells(totTaxi)}<td></td>
+        <tr class="agy-style-522">
+          <td></td><td class="agy-style-523" title="Excluye TukTuk y sub-flotas excluidas">TOTAL en dashboard (Taxi)</td>${numCells(totTaxi)}<td></td>
         </tr>
         </tbody>
       </table>
     </div>`;
 
   if (clids.length > 400) {
-    html += `<div style="text-align:center;color:#aaa;padding:10px;font-size:.75rem;font-style:italic">Mostrando primeros 400 de ${fmt(clids.length)} CLIDs. Us\u00E1 el buscador para filtrar.</div>`;
+    html += `<div class="agy-style-212">Mostrando primeros 400 de ${fmt(clids.length)} CLIDs. Us\u00E1 el buscador para filtrar.</div>`;
   }
   return html;
 }

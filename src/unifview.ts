@@ -1,3 +1,4 @@
+//@ts-nocheck
 // unifview.js — Vista Unificada Rendimiento + Metas
 
 export function renderUnifView() {
@@ -104,12 +105,12 @@ export function renderUnifView() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   function pCell(real, meta) {
-    if (!meta) return `<td style="color:#aaa;font-size:.72rem;text-align:center">—</td>`;
+    if (!meta) return `<td class="agy-style-577">—</td>`;
     const p = (real / meta) * 100;
     const label = p > 100
-      ? `<span style="color:#8b5cf6;font-weight:700">${p.toFixed(1)}% 🏆</span>`
+      ? `<span class="agy-style-578">${p.toFixed(1)}% 🏆</span>`
       : `<span style="color:${pColor(p)};font-weight:700">${p.toFixed(1)}%</span>`;
-    return `<td style="text-align:center;font-size:.78rem">${label}</td>`;
+    return `<td class="agy-style-579">${label}</td>`;
   }
 
   // KAM subtotal rows
@@ -128,7 +129,7 @@ export function renderUnifView() {
       <tr style="background:${col}18;border-top:2px solid ${col}20">
         <td colspan="10" style="font-size:.78rem;font-weight:700;color:${col};padding:6px 8px">
           <span style="width:8px;height:8px;border-radius:50%;background:${col};display:inline-block;margin-right:5px"></span>${escapeHTML(kam)}
-          <span style="font-size:.7rem;color:#aaa;font-weight:400">(${group.length} partners)</span>
+          <span class="agy-style-580">(${group.length} partners)</span>
         </td>
       </tr>`;
     group.forEach(r => {
@@ -138,18 +139,18 @@ export function renderUnifView() {
       const projSH = projA(r.shV, daysElapsed, daysRemaining);
       tbody += `
         <tr class="dtbl-row">
-          <td style="font-size:.78rem">
+          <td class="agy-style-581">
             <span style="width:7px;height:7px;border-radius:50%;background:${col};display:inline-block;margin-right:5px"></span>
             ${escapeHTML(r.partner)}
           </td>
-          <td style="font-size:.78rem;text-align:right">${fmt(r.ad)}</td>
-          <td style="font-size:.72rem;color:#aaa;text-align:right">${m ? fmt(m.mA) : "—"}</td>
+          <td class="agy-style-582">${fmt(r.ad)}</td>
+          <td class="agy-style-583">${m ? fmt(m.mA) : "—"}</td>
           ${pCell(r.ad, m?.mA)}
-          <td style="font-size:.78rem;text-align:right">${fmt(r.nr)}</td>
-          <td style="font-size:.72rem;color:#aaa;text-align:right">${m ? fmt(m.mNR) : "—"}</td>
+          <td class="agy-style-582">${fmt(r.nr)}</td>
+          <td class="agy-style-583">${m ? fmt(m.mNR) : "—"}</td>
           ${pCell(r.nr, m?.mNR)}
-          <td style="font-size:.78rem;text-align:right">${fmt(r.sh)}</td>
-          <td style="font-size:.72rem;color:#aaa;text-align:right">${m ? fmt(m.mH) : "—"}</td>
+          <td class="agy-style-582">${fmt(r.sh)}</td>
+          <td class="agy-style-583">${m ? fmt(m.mH) : "—"}</td>
           ${pCell(r.sh, m?.mH)}
         </tr>`;
     });
@@ -161,33 +162,33 @@ export function renderUnifView() {
     const kmNR = group.reduce((s, r) => s + (metaByPartner[r.partner]?.mNR || 0), 0);
     const kmH  = group.reduce((s, r) => s + (metaByPartner[r.partner]?.mH  || 0), 0);
     tbody += `
-      <tr style="background:#f5f5f5;font-weight:700;font-size:.78rem">
+      <tr class="agy-style-584">
         <td style="padding-left:16px;color:${col}">Total ${escapeHTML(kam)}</td>
-        <td style="text-align:right">${fmt(kAD)}</td><td style="text-align:right;color:#aaa">${fmt(kmA)}</td>${pCell(kAD, kmA)}
-        <td style="text-align:right">${fmt(kNR)}</td><td style="text-align:right;color:#aaa">${fmt(kmNR)}</td>${pCell(kNR, kmNR)}
-        <td style="text-align:right">${fmt(kSH)}</td><td style="text-align:right;color:#aaa">${fmt(kmH)}</td>${pCell(kSH, kmH)}
+        <td class="agy-style-585">${fmt(kAD)}</td><td class="agy-style-586">${fmt(kmA)}</td>${pCell(kAD, kmA)}
+        <td class="agy-style-585">${fmt(kNR)}</td><td class="agy-style-586">${fmt(kmNR)}</td>${pCell(kNR, kmNR)}
+        <td class="agy-style-585">${fmt(kSH)}</td><td class="agy-style-586">${fmt(kmH)}</td>${pCell(kSH, kmH)}
       </tr>`;
   });
 
   el.innerHTML = `
-    <div style="padding:16px">
-      <div style="font-size:.85rem;font-weight:700;color:#555;margin-bottom:12px">
+    <div class="agy-style-587">
+      <div class="agy-style-588">
         📊 Rendimiento + Metas unificados
-        <span style="font-size:.72rem;font-weight:400;color:#aaa;margin-left:8px">${from} → ${to}</span>
+        <span class="agy-style-589">${from} → ${to}</span>
       </div>
       <div class="tbl-wrap">
-        <table class="dtbl" style="min-width:700px">
+        <table class="dtbl agy-style-590">
           <thead>
             <tr>
               <th rowspan="2">Partner</th>
-              <th colspan="3" style="text-align:center;border-bottom:1px solid #eee">Cond. Activos</th>
-              <th colspan="3" style="text-align:center;border-bottom:1px solid #eee">Nuevos + React.</th>
-              <th colspan="3" style="text-align:center;border-bottom:1px solid #eee">Hs. Conexión</th>
+              <th colspan="3" class="agy-style-591">Cond. Activos</th>
+              <th colspan="3" class="agy-style-591">Nuevos + React.</th>
+              <th colspan="3" class="agy-style-591">Hs. Conexión</th>
             </tr>
             <tr>
-              <th style="text-align:right">Fact</th><th style="text-align:right">Plan</th><th style="text-align:center">%</th>
-              <th style="text-align:right">Fact</th><th style="text-align:right">Plan</th><th style="text-align:center">%</th>
-              <th style="text-align:right">Fact</th><th style="text-align:right">Plan</th><th style="text-align:center">%</th>
+              <th class="agy-style-585">Fact</th><th class="agy-style-585">Plan</th><th class="agy-style-27">%</th>
+              <th class="agy-style-585">Fact</th><th class="agy-style-585">Plan</th><th class="agy-style-27">%</th>
+              <th class="agy-style-585">Fact</th><th class="agy-style-585">Plan</th><th class="agy-style-27">%</th>
             </tr>
           </thead>
           <tbody>${tbody}</tbody>

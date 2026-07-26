@@ -1,3 +1,4 @@
+//@ts-nocheck
 // partnerPortal.js — Vista para PARTNERS externos (Track C2).
 //
 // Superficie deliberadamente reducida: un partner ve SU desempeño y SUS metas,
@@ -16,6 +17,7 @@
 
 import { registerActions } from "./shared/actions.js";
 import { stampPDF } from "./shared/pdfmeta.js";
+import { ensurePdfLibs } from "./shared/lazyLibs.js";
 
 export const PORTAL_STATE = { city: "all" };
 
@@ -62,8 +64,8 @@ function _kpiCard(label, sub, valor, actual, previo, color, fmtFn = fmt) {
       <div class="mcard-label">${label}</div>
       <div class="mcard-sub-label">${sub}</div>
       <div class="mcard-val">${fmtFn(valor)}</div>
-      <div style="margin-top:4px">${bdgMode(actual, previo)}
-        <span style="font-size:.7rem;color:#bbb;margin-left:5px">vs período anterior</span>
+      <div class="agy-style-257">${bdgMode(actual, previo)}
+        <span class="agy-style-258">vs período anterior</span>
       </div>
     </div>`;
 }
@@ -94,13 +96,13 @@ function _portalMetas() {
     if (!meta) return "";
     const p = (act / meta) * 100;
     return `
-      <div style="margin-bottom:10px">
-        <div style="display:flex;justify-content:space-between;font-size:.78rem;margin-bottom:3px">
+      <div class="agy-style-196">
+        <div class="agy-style-259">
           <span>${label}</span>
-          <span><strong>${fmtFn(act)}</strong> <span style="color:#aaa">/ ${fmtFn(meta)}</span>
+          <span><strong>${fmtFn(act)}</strong> <span class="agy-style-89">/ ${fmtFn(meta)}</span>
             <strong style="color:${pColor(p)};margin-left:6px">${p.toFixed(1)}%</strong></span>
         </div>
-        <div style="height:8px;background:#eee;border-radius:5px;overflow:hidden">
+        <div class="agy-style-260">
           <div style="height:100%;width:${Math.min(p, 100).toFixed(1)}%;background:${pColor(p)};border-radius:5px"></div>
         </div>
       </div>`;
@@ -138,7 +140,7 @@ export function renderPartnerPortal() {
   // acota igual por robustez — un partner con muchos CLIDs bajo razones
   // sociales distintas no debe romper el encabezado.
   const titulo = misPartners.length > 3
-    ? misPartners.slice(0, 3).map(escapeHTML).join(" · ") + ` <span style="font-weight:400;color:#888">y ${misPartners.length - 3} más</span>`
+    ? misPartners.slice(0, 3).map(escapeHTML).join(" · ") + ` <span class="agy-style-261">y ${misPartners.length - 3} más</span>`
     : (misPartners.map(escapeHTML).join(" · ") || "Tu operación");
 
   let html = secH("📊", "#FF0000", titulo,
@@ -147,16 +149,16 @@ export function renderPartnerPortal() {
 
   // Barra de herramientas: filtro de ciudad (solo si opera en más de una) + PDF.
   // El botón lleva data-html2canvas-ignore para no salir dentro del propio PDF.
-  html += `<div class="section" style="margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">`;
+  html += `<div class="section agy-style-262">`;
   if (ciudades.length > 1) {
-    html += `<label style="font-size:.75rem;color:#888">Ciudad</label>
-      <select class="sb-sel" data-act-change="portalSetCity" style="width:auto">
+    html += `<label class="agy-style-263">Ciudad</label>
+      <select class="sb-sel" data-act-change="portalSetCity" class="agy-style-10">
         <option value="all">Todas</option>
         ${ciudades.map(c => `<option value="${escapeHTML(c)}"${PORTAL_STATE.city === c ? " selected" : ""}>${cityLabel(c)}</option>`).join("")}
       </select>`;
   }
   html += `<button class="apply-btn" id="portalPdfBtn" data-html2canvas-ignore="true"
-      data-act="portalDownloadPDF" style="margin-left:auto">📄 Descargar PDF</button>
+      data-act="portalDownloadPDF" class="agy-style-264">📄 Descargar PDF</button>
     </div>`;
 
   html += `<div class="section"><div class="metric-row">
@@ -208,12 +210,12 @@ export function portalSetCity(city) {
 // (shared/pdfmeta.js): si un partner reenvía el PDF, queda claro de qué cuenta
 // salió y que es material de uso restringido.
 export async function portalDownloadPDF() {
-  if (!window.jspdf || !window.html2canvas) { alert("Librerías PDF no disponibles. Recargá la página."); return; }
   const content = document.getElementById("portalContent");
   if (!content) return;
   const btn = document.getElementById("portalPdfBtn");
   if (btn) { btn.textContent = "⏳ Generando..."; btn.disabled = true; }
   try {
+    await ensurePdfLibs();
     let bg = getComputedStyle(document.body).backgroundColor;
     if (!bg || bg === "transparent" || bg === "rgba(0, 0, 0, 0)") bg = "#F2F2F2";
     const canvas = await html2canvas(content, { scale: 2, useCORS: true, logging: false, backgroundColor: bg });

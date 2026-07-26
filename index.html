@@ -12,13 +12,21 @@
        CDN externo. Ahora sí bloquea de verdad la ejecución de un onerror/onclick
        inyectado — no es solo defensa en profundidad como antes.
 
-       style-src CONSERVA 'unsafe-inline' a propósito: hay 1200+ atributos
-       style="…" en los templates y ApexCharts inyecta estilos inline; migrarlos
-       a clases sería un refactor enorme con beneficio bajo (un style inyectado
-       puede afear la UI, no ejecutar código). Decisión consciente, no olvido.
+       style-src CONSERVA 'unsafe-inline' a propósito: la extracción de estilos
+       inline a clases (scripts/extract_css.mjs, jul 2026) migró ~591 pero
+       quedaron 188 atributos style="..." SIN migrar en 12 archivos (Metas,
+       Presentación 2.0, Vista Partner, Rendimiento, Calculadora, Data Raw,
+       Seguimiento, etc. — correr
+       `grep -c 'style="' src/*.ts` para el conteo real). Sacar 'unsafe-inline'
+       con esos 188 todavía inline rompe visualmente esas vistas (CSP los
+       bloquea, quedan sin estilo) — encontrado y revertido antes de commitear
+       el rewrite a TS/Preact que lo había sacado por error. Terminar la
+       migración de los 188 restantes es un prerequisito real para poder
+       sacarlo, no una decisión de costo/beneficio como antes.
 
        frame-ancestors no se incluye: el spec lo ignora vía <meta> (solo funciona
-       como header HTTP) — hay que configurarlo en el hosting. -->
+       como header HTTP) — se agrega como header real en Vercel (ver vercel.json),
+       GitHub Pages no lo soporta. -->
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src 'self';
@@ -33,7 +41,7 @@
   <!-- Único <script> del documento: Vite arma acá TODO el grafo de módulos ES
        de la app (src/vendor.js importa las 7 libs de terceros — antes CDN,
        ahora npm — y los 17 módulos propios). Ver src/vendor.js. -->
-  <script type="module" src="/src/vendor.js"></script>
+  <script type="module" src="/src/vendor.ts"></script>
 
   <!-- App styles -->
   <link rel="stylesheet" href="styles.css"/>
@@ -93,7 +101,7 @@
       <button class="nav-dd-item"        data-tab="calculator" data-act="switchTabFromMenu">🎯 Calculadora</button>
       <button class="nav-dd-item"        data-tab="partnerview" data-act="switchTabFromMenu">📊 Vista Partner</button>
       <button class="nav-dd-item"        data-tab="unifview" data-act="switchTabFromMenu">Rend + Metas</button>
-      <div style="height:1px;background:#eee;margin:4px 8px"></div>
+      <div class="agy-style-601"></div>
       <button class="nav-dd-item"        data-tab="seguimiento" data-act="switchTabFromMenu">📋 Seguimiento</button>
       <button class="nav-dd-item"        data-tab="rawdata" data-act="switchTabFromMenu">Data Raw</button>
       <!-- Fleet Externo fuera del menú hasta tener datos reales (scaffold pausado; tab-panel y script se conservan). -->
@@ -169,7 +177,7 @@
     <!-- SIDEBAR -->
     <div class="sidebar-wrap">
     <div class="sidebar" id="mainSidebar">
-      <div id="dsBanner" style="display:none"></div>
+      <div id="dsBanner" class="agy-style-602"></div>
 
       <div class="sb-label">Escala</div>
       <div class="mode-toggle-row">
@@ -183,7 +191,7 @@
         <div><label>Desde</label><select class="sb-sel" id="dateFrom"></select></div>
         <div><label>Hasta</label><select class="sb-sel"  id="dateTo"></select></div>
       </div>
-      <div id="datePresets" style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">
+      <div id="datePresets" class="agy-style-603">
         <button class="preset-btn" data-act="setDatePreset" data-preset="week">Esta semana</button>
         <button class="preset-btn" data-act="setDatePreset" data-preset="fortnight">Quincena</button>
         <button class="preset-btn" data-act="setDatePreset" data-preset="month">Este mes</button>
@@ -230,7 +238,7 @@
           <p>Carga datos para comenzar</p>
           <p class="empty-sub">Sube el Excel de Rendimiento o espera la carga desde Supabase</p>
         </div>
-        <div id="rendContent" style="display:none"></div>
+        <div id="rendContent" class="agy-style-604"></div>
       </div>
 
       <!-- Metas -->
@@ -244,7 +252,7 @@
           <p>Carga el archivo de <strong>Metas</strong></p>
           <p class="empty-sub">Formato: CLID | MES | CIUDAD | SUPPLY HOURS | ACTIVE DRIVERS | N+R</p>
         </div>
-        <div id="metasContent" style="display:none"></div>
+        <div id="metasContent" class="agy-style-605"></div>
       </div>
 
       <!-- Vista Partner Individual (incluye Perú-General del partner + provincias) -->

@@ -1,3 +1,5 @@
+//@ts-nocheck
+import { ensurePdfLibs } from "./shared/lazyLibs.js";
 // metas.js — Pestaña Metas
 
 // Ordena meses por valor temporal. Acepta nombres ("MAYO","Mayo","may"),
@@ -75,9 +77,9 @@ export function metasLineToggleHTML() {
       style="${dis ? "opacity:.4;cursor:not-allowed" : ""}">${d.emoji} ${d.label}</button>`;
   }).join("");
   const note = diario
-    ? `<span style="font-size:.7rem;color:#b45309;margin-left:10px;align-self:center">Fleet/TukTuk/Combinado requieren escala semanal o mensual</span>`
+    ? `<span class="agy-style-213">Fleet/TukTuk/Combinado requieren escala semanal o mensual</span>`
     : "";
-  return `<div class="mode-toggle-row" style="margin:0 4px 12px">${btns}${note}</div>`;
+  return `<div class="mode-toggle-row agy-style-214">${btns}${note}</div>`;
 }
 
 // Slice de performance de la línea para la escala actual (Fase 2).
@@ -173,28 +175,28 @@ export function _metasCombActuals(from, to, selSet, cityFilter) {
 export function _metaLineRow(label, actual, meta, fmtFn, metaOnlyNote) {
   if (meta == null && actual == null) return "";
   if (meta == null) {  // solo actual (sin meta cargada)
-    return `<div style="margin-bottom:9px">
-      <div style="display:flex;justify-content:space-between;font-size:.74rem"><span>${label}</span>
-        <span style="color:#999">${fmtFn(actual)} · <em style="font-size:.66rem">sin meta</em></span></div></div>`;
+    return `<div class="agy-style-215">
+      <div class="agy-style-216"><span>${label}</span>
+        <span class="agy-style-217">${fmtFn(actual)} · <em class="agy-style-22">sin meta</em></span></div></div>`;
   }
   if (actual == null) {  // solo meta (ej. Utilización, sin actual medible)
-    return `<div style="margin-bottom:9px">
-      <div style="display:flex;justify-content:space-between;font-size:.74rem"><span>${label}</span>
-        <span><strong style="color:#0891b2">${fmtFn(meta)}</strong> <span style="font-size:.64rem;color:#aaa">meta${metaOnlyNote ? " · " + metaOnlyNote : ""}</span></span></div></div>`;
+    return `<div class="agy-style-215">
+      <div class="agy-style-216"><span>${label}</span>
+        <span><strong class="agy-style-218">${fmtFn(meta)}</strong> <span class="agy-style-219">meta${metaOnlyNote ? " · " + metaOnlyNote : ""}</span></span></div></div>`;
   }
   const p  = meta > 0 ? (actual / meta) * 100 : 0;
   const pV = Math.min(p, 100);
-  const over = p > 100 ? `<span style="font-size:.63rem;color:#8b5cf6;font-weight:700;margin-left:3px">🏆</span>` : "";
+  const over = p > 100 ? `<span class="agy-style-220">🏆</span>` : "";
   return `
-    <div style="margin-bottom:10px">
-      <div style="display:flex;justify-content:space-between;font-size:.74rem;margin-bottom:3px">
+    <div class="agy-style-196">
+      <div class="agy-style-221">
         <span>${label}</span>
-        <span style="display:flex;align-items:center;gap:4px">
+        <span class="agy-style-222">
           <strong style="color:${pColor(p)}">${p.toFixed(1)}%</strong>
           <span class="sem ${semCls(p)}"></span>${over}
         </span>
       </div>
-      <div style="font-size:.7rem;color:#777;margin-bottom:3px">
+      <div class="agy-style-223">
         Fact: <strong>${fmtFn(actual)}</strong> / Meta: <strong>${fmtFn(meta)}</strong>
       </div>
       ${barProj(pV, pV)}
@@ -218,7 +220,7 @@ export function _renderMetasFleet(mesName, from, to, selSet, cityFilter, kamFilt
     "Meta de flota vs actual del rango · SH/auto (interno), aceptación, utilización", "Peru");
 
   if (!rows.length) {
-    html += `<div class="section"><div style="padding:26px 16px;text-align:center;color:#999;font-size:.85rem">
+    html += `<div class="section"><div class="agy-style-224">
       No hay metas <strong>Fleet</strong> cargadas para ${escapeHTML(mesName)}.<br>
       Genéralas desde la <strong>Calculadora → Fleet</strong> y guárdalas, o ajusta el filtro.
     </div></div>`;
@@ -234,7 +236,7 @@ export function _renderMetasFleet(mesName, from, to, selSet, cityFilter, kamFilt
         <div class="pcard-name">
           <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${col};margin-right:5px"></span>
           ${escapeHTML(m.partner)}
-          <span style="font-size:.6rem;font-weight:700;background:#ecfeff;color:#0891b2;border:1px solid #a5f3fc;padding:1px 5px;border-radius:8px;margin-left:5px">🚗 Fleet</span>
+          <span class="agy-style-225">🚗 Fleet</span>
         </div>
         <div class="pcard-sub">
           <span style="width:7px;height:7px;border-radius:50%;background:${kcolor};display:inline-block;margin-right:3px"></span>
@@ -265,7 +267,7 @@ export function _renderMetasTk(mesName, from, to, selSet, cityFilter, kamFilter)
     "Meta TukTuk vs actual del rango · Active Drivers, N+R, Brandeados, Horas de Conexión", "Peru");
 
   if (!rows.length) {
-    html += `<div class="section"><div style="padding:26px 16px;text-align:center;color:#999;font-size:.85rem">
+    html += `<div class="section"><div class="agy-style-224">
       No hay metas <strong>TukTuk</strong> cargadas para ${escapeHTML(mesName)}.<br>
       Genéralas desde la <strong>Calculadora → TukTuk</strong> y guárdalas, o ajusta el filtro.
     </div></div>`;
@@ -279,7 +281,7 @@ export function _renderMetasTk(mesName, from, to, selSet, cityFilter, kamFilter)
     tA += a.ad; tNR += a.nr; tCars += a.cars; tSH += a.sh || 0;
     mA += m.mtkAD || 0; mNR += m.mtkNR || 0; mCars += m.mtkCars || 0; mSH += m.mtkSH || 0;
   });
-  html += `<div class="section"><div class="metric-row" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+  html += `<div class="section"><div class="metric-row agy-style-226">
     ${metaResCard("Active Drivers", "último período", tA,   mA,   tA,   "#7e22ce")}
     ${metaResCard("Nuevos + React", "acumulado",   tNR,  mNR,  tNR,  "#f97316")}
     ${metaResCard("Brandeados",     "último período", tCars,mCars,tCars,"#0891b2")}
@@ -298,7 +300,7 @@ export function _renderMetasTk(mesName, from, to, selSet, cityFilter, kamFilter)
         <div class="pcard-name">
           <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${col};margin-right:5px"></span>
           ${escapeHTML(m.partner)}
-          <span style="font-size:.6rem;font-weight:700;background:#faf5ff;color:#7e22ce;border:1px solid #e9d5ff;padding:1px 5px;border-radius:8px;margin-left:5px">🛺 TukTuk</span>
+          <span class="agy-style-227">🛺 TukTuk</span>
         </div>
         <div class="pcard-sub">
           <span style="width:7px;height:7px;border-radius:50%;background:${kcolor};display:inline-block;margin-right:3px"></span>
@@ -334,7 +336,7 @@ export function _renderMetasComb(mesName, from, to, selSet, cityFilter, kamFilte
     "Actual del RANGO seleccionado (ambas líneas sumadas) vs meta combinada · si el partner empuja TukTuk también avanza su meta · para % reales usa el preset del mes de la meta", "Peru");
 
   if (!rows.length) {
-    html += `<div class="section"><div style="padding:26px 16px;text-align:center;color:#999;font-size:.85rem">
+    html += `<div class="section"><div class="agy-style-224">
       No hay metas cargadas para ${escapeHTML(mesName)} con el filtro actual.<br>
       Genéralas desde la <strong>Calculadora</strong> y guárdalas, o ajusta el filtro.
     </div></div>`;
@@ -350,7 +352,7 @@ export function _renderMetasComb(mesName, from, to, selSet, cityFilter, kamFilte
     mNR += (m.mNR || 0) + (m.mtkNR || 0);
     mSH += (m.mH  || 0) + (m.mtkSH || 0);
   });
-  html += `<div class="section"><div class="metric-row" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+  html += `<div class="section"><div class="metric-row agy-style-226">
     ${metaResCard("Active Drivers", "último período", tA,  mA,  tA,  "#8b5cf6")}
     ${metaResCard("Nuevos + React", "acumulado",      tNR, mNR, tNR, "#f97316")}
     ${metaResCard("Horas Conexión", "acumulado",      tSH, mSH, tSH, "#0891b2")}
@@ -372,8 +374,8 @@ export function _renderMetasComb(mesName, from, to, selSet, cityFilter, kamFilte
         <div class="pcard-name">
           <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${col};margin-right:5px"></span>
           ${escapeHTML(m.partner)}
-          <span style="font-size:.6rem;font-weight:700;background:#f5f3ff;color:#8b5cf6;border:1px solid #ddd6fe;padding:1px 5px;border-radius:8px;margin-left:5px">🔀 Combinado</span>
-          ${hasTk ? "" : `<span style="font-size:.6rem;color:#aaa;margin-left:4px" title="Este partner no tiene metas TukTuk — su combinado equivale al agregador">solo Taxi</span>`}
+          <span class="agy-style-228">🔀 Combinado</span>
+          ${hasTk ? "" : `<span class="agy-style-229" title="Este partner no tiene metas TukTuk — su combinado equivale al agregador">solo Taxi</span>`}
         </div>
         <div class="pcard-sub">
           <span style="width:7px;height:7px;border-radius:50%;background:${kcolor};display:inline-block;margin-right:3px"></span>
@@ -382,7 +384,7 @@ export function _renderMetasComb(mesName, from, to, selSet, cityFilter, kamFilte
         ${_metaLineRow("Active Drivers", gAD > 0 ? a.ad : null, gAD > 0 ? gAD : null, v => fmt(v))}
         ${_metaLineRow("Nuevos + React", gNR > 0 ? a.nr : null, gNR > 0 ? gNR : null, v => fmt(v))}
         ${_metaLineRow("Horas Conexión", gSH > 0 ? a.sh : null, gSH > 0 ? gSH : null, v => fmt(v))}
-        ${hasTk ? `<div style="font-size:.62rem;color:#999;margin-top:2px">Meta = Taxi ${fmt(m.mA || 0)} + TukTuk ${fmt(m.mtkAD || 0)} AD · N+R ${fmt(m.mNR || 0)}+${fmt(m.mtkNR || 0)} · SH ${fmtSmart(m.mH || 0)}+${fmtSmart(m.mtkSH || 0)}</div>` : ""}
+        ${hasTk ? `<div class="agy-style-230">Meta = Taxi ${fmt(m.mA || 0)} + TukTuk ${fmt(m.mtkAD || 0)} AD · N+R ${fmt(m.mNR || 0)}+${fmt(m.mtkNR || 0)} · SH ${fmtSmart(m.mH || 0)}+${fmtSmart(m.mtkSH || 0)}</div>` : ""}
       </div>`;
   });
   html += `</div></div>`;
@@ -603,9 +605,9 @@ export function _renderMetasImpl() {
   let html = metasLineToggleHTML();
   // Selector de mes (solo se muestra si hay 2+ meses cargados)
   const mesSelectorHTML = mesesDisponibles.length > 1
-    ? `<div style="display:flex;align-items:center;gap:8px;background:#fff8f8;border:1px solid #fecaca;border-radius:8px;padding:6px 12px">
-         <label style="font-size:.72rem;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Mes:</label>
-         <select data-act-change="setMetasMes" style="border:1px solid #ddd;border-radius:6px;padding:4px 10px;font-size:.82rem;font-weight:600;background:#fff;cursor:pointer">
+    ? `<div class="agy-style-231">
+         <label class="agy-style-232">Mes:</label>
+         <select data-act-change="setMetasMes" class="agy-style-233">
            ${mesesDisponibles.map(m => `<option value="${m}" ${m===mesName?"selected":""}>${m}</option>`).join("")}
          </select>
        </div>`
@@ -617,15 +619,15 @@ export function _renderMetasImpl() {
   const delBtnHTML = STATE.isAdmin
     ? `<button class="apply-btn" data-html2canvas-ignore="true" data-act="deleteMetasMes" data-mes="${escapeHTML(mesName)}"
          title="Borra todas las metas de ${escapeHTML(mesName)} para re-subir el Excel"
-         style="width:auto;padding:7px 14px;font-size:.8rem;background:#FF0000;color:#fff;font-weight:700">
+         class="agy-style-234">
          🗑️ Eliminar metas de ${escapeHTML(mesName)}
        </button>`
     : "";
-  html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:12px;flex-wrap:wrap">
+  html += `<div class="agy-style-235">
     ${mesSelectorHTML}
-    <div style="display:flex;gap:8px;align-items:center;margin-left:auto">
+    <div class="agy-style-236">
       ${delBtnHTML}
-      <button class="apply-btn" id="metasPdfBtn" data-act="downloadMetasPDF" style="width:auto;padding:7px 16px;font-size:.8rem">⬇ Descargar PDF</button>
+      <button class="apply-btn" id="metasPdfBtn" data-act="downloadMetasPDF" class="agy-style-237">⬇ Descargar PDF</button>
     </div>
   </div>`;
 
@@ -634,7 +636,7 @@ export function _renderMetasImpl() {
   // pero no tienen plan -> %% pueden verse altos sin contexto).
   const noMetaCount = combos.filter(c => c.noMeta).length;
   const noMetaBanner = noMetaCount > 0
-    ? `<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:6px 10px;margin:0 0 8px;font-size:.72rem;color:#9a3412">
+    ? `<div class="agy-style-238">
          ⚠️ <strong>${noMetaCount}</strong> partner${noMetaCount>1?"s":""} con performance pero <strong>sin meta asignada</strong> en ${escapeHTML(mesName)}.
          Su FACT suma al total pero el % de cumplimiento puede verse alto.
        </div>`
@@ -716,7 +718,7 @@ export function _renderMetasImpl() {
   // Partners sin meta ya estan dentro de combos con noMeta=true,
   // suman al FACT del KAM pero no al plan.
   html += secH("👤","#f59e0b","Metas por KAM","Progreso total por responsable","");
-  html += `<div class="section"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px">`;
+  html += `<div class="section"><div class="agy-style-239">`;
   const allKAMs = [...new Set([
     ...combos.map(c => c.kam),
     ...Object.values(STATE.KAM_MAP).filter(k => kamFilter === "all" || k === kamFilter)
@@ -742,12 +744,12 @@ export function _renderMetasImpl() {
     const col  = KAM_COLORS[kam] || "#888";
     const totalAccounts = kc.length;
     const alertHtml = noGoalPartners.length ? `
-      <details style="margin:6px 0">
-        <summary style="font-size:.68rem;background:#fff7ed;border:1px solid #fed7aa;border-radius:5px;padding:4px 7px;color:#c2410c;cursor:pointer;list-style:none;display:flex;align-items:center;gap:4px;user-select:none">
+      <details class="agy-style-240">
+        <summary class="agy-style-241">
           ⚠️ ${noGoalPartners.length} sin meta asignada
-          <span style="margin-left:auto;font-size:.6rem;opacity:.7">click para ver</span>
+          <span class="agy-style-242">click para ver</span>
         </summary>
-        <div style="font-size:.66rem;background:#fffaf0;border:1px solid #fed7aa;border-top:none;border-radius:0 0 5px 5px;padding:5px 7px;color:#9a3412">
+        <div class="agy-style-243">
           ${noGoalPartners.map(escapeHTML).join(", ")}
         </div>
       </details>` : "";
@@ -756,7 +758,7 @@ export function _renderMetasImpl() {
         <div class="city-name">
           <span style="width:10px;height:10px;border-radius:50%;background:${col};display:inline-block"></span>
           ${escapeHTML(kam)}
-          <span style="font-size:.7rem;font-weight:500;color:#aaa">(${totalAccounts} cuentas)</span>
+          <span class="agy-style-244">(${totalAccounts} cuentas)</span>
         </div>
         ${alertHtml}
         ${miniBar("Cond. Activos", krAD, kmA,  kpAD)}
@@ -783,22 +785,22 @@ export function _renderMetasImpl() {
           <div class="pcard-name">
             <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${col};margin-right:5px"></span>
             ${escapeHTML(c.partner)}
-            <span style="font-size:.6rem;font-weight:600;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;padding:1px 5px;border-radius:8px;margin-left:5px">Sin Plan</span>
+            <span class="agy-style-245">Sin Plan</span>
           </div>
           <div class="pcard-sub">
             <span style="width:7px;height:7px;border-radius:50%;background:${kcolor};display:inline-block;margin-right:3px"></span>
             ${escapeHTML(c.kam)} &nbsp;·&nbsp; ${escapeHTML(c.city)}
           </div>
-          <div style="margin:8px 0 4px;font-size:.74rem;color:#555;display:flex;justify-content:space-between">
+          <div class="agy-style-246">
             <span>Cond. Activos</span><strong>${fmt(c.ad)}</strong>
           </div>
-          <div style="margin:4px 0;font-size:.74rem;color:#555;display:flex;justify-content:space-between">
+          <div class="agy-style-247">
             <span>Nuevos+React</span><strong>${fmt(c.nr)}</strong>
           </div>
-          <div style="margin:4px 0;font-size:.74rem;color:#555;display:flex;justify-content:space-between">
+          <div class="agy-style-247">
             <span>Hs. Conexión</span><strong>${fmt(c.sh)}</strong>
           </div>
-          <div style="font-size:.66rem;color:#9a3412;margin-top:6px;font-style:italic">
+          <div class="agy-style-248">
             * Suma al total del KAM y país aunque no tenga meta.
           </div>
         </div>`;
@@ -830,7 +832,7 @@ export function metaResCard(label, sub, real, meta, proj, color) {
   const pV  = Math.min(p,  100); // visual bar width
   const ppV = Math.min(pp, 100);
   const overBadge = p > 100
-    ? `<span style="font-size:.68rem;font-weight:700;color:#fff;background:#8b5cf6;border-radius:4px;padding:1px 5px;margin-left:4px" title="Superas el plan (>100%)">🏆 Overachievement</span>`
+    ? `<span class="agy-style-249" title="Superas el plan (>100%)">🏆 Overachievement</span>`
     : "";
   const cumplTip = `Cumplimiento = Fact / Plan × 100. Fact: ${fmt(real)} de Plan: ${fmt(meta)}`;
   const projTip = STATE.curMode === "mensual"
@@ -841,13 +843,13 @@ export function metaResCard(label, sub, real, meta, proj, color) {
       <div class="mcard-label">${label}</div>
       <div class="mcard-sub-label">${sub}</div>
       <div class="mcard-val">${fmt(real)}</div>
-      <div style="margin:4px 0" title="${cumplTip}">
+      <div class="agy-style-250" title="${cumplTip}">
         <span style="font-size:.85rem;font-weight:700;color:${pColor(p)}">${p.toFixed(1)}% </span>
         <span class="sem ${semCls(p)}"></span>
         ${overBadge}
-        <span style="font-size:.72rem;color:#aaa"> de plan ${fmt(meta)}</span>
+        <span class="agy-style-251"> de plan ${fmt(meta)}</span>
       </div>
-      <div style="margin:8px 0 4px">${barProj(pV, ppV)}</div>
+      <div class="agy-style-252">${barProj(pV, ppV)}</div>
       <div style="font-size:.72rem;color:${pColor(pp)};margin-top:4px" title="${projTip}">
         Proyección: <strong>${fmt(proj)}</strong> (${pp.toFixed(1)}%)
       </div>
@@ -860,20 +862,20 @@ export function miniBar(label, real, meta, proj) {
   const pV  = Math.min(p,  100);
   const ppV = Math.min(pp, 100);
   const overBadge = p > 100
-    ? `<span style="font-size:.63rem;color:#8b5cf6;font-weight:700;margin-left:3px">🏆</span>`
+    ? `<span class="agy-style-220">🏆</span>`
     : "";
   return `
-    <div style="padding:6px 0;border-bottom:1px solid #f5f5f5">
-      <div style="display:flex;justify-content:space-between;font-size:.74rem;margin-bottom:4px">
-        <span style="color:#777">${label}</span>
-        <span style="display:flex;align-items:center;gap:4px">
+    <div class="agy-style-253">
+      <div class="agy-style-254">
+        <span class="agy-style-255">${label}</span>
+        <span class="agy-style-222">
           <strong style="color:${pColor(p)}">${p.toFixed(1)}%</strong>
           <span class="sem ${semCls(p)}"></span>
           ${overBadge}
         </span>
       </div>
       ${barProj(pV, ppV)}
-      <div style="font-size:.67rem;color:#aaa;margin-top:2px">
+      <div class="agy-style-256">
         Fact: ${fmt(real)} / Plan: ${fmt(meta)} /
         Proy: <span style="color:${pColor(pp)};font-weight:700">${fmt(proj)}</span>
       </div>
@@ -886,19 +888,19 @@ export function miniBarFull(label, real, meta, proj) {
   const pV  = Math.min(p,  100);
   const ppV = Math.min(pp, 100);
   const overBadge = p > 100
-    ? `<span style="font-size:.63rem;color:#8b5cf6;font-weight:700;margin-left:3px">🏆</span>`
+    ? `<span class="agy-style-220">🏆</span>`
     : "";
   return `
-    <div style="margin-bottom:10px">
-      <div style="display:flex;justify-content:space-between;font-size:.74rem;margin-bottom:3px">
+    <div class="agy-style-196">
+      <div class="agy-style-221">
         <span>${label}</span>
-        <span style="display:flex;align-items:center;gap:4px">
+        <span class="agy-style-222">
           <strong style="color:${pColor(p)}">${p.toFixed(1)}%</strong>
           <span class="sem ${semCls(p)}"></span>
           ${overBadge}
         </span>
       </div>
-      <div style="font-size:.7rem;color:#777;margin-bottom:3px">
+      <div class="agy-style-223">
         Fact: <strong>${fmt(real)}</strong> / Plan: <strong>${fmt(meta)}</strong>
       </div>
       ${barProj(pV, ppV)}
@@ -919,15 +921,12 @@ export function barProj(pR, pP) {
 export async function downloadMetasPDF() {
   const content = document.getElementById("metasContent");
   if (!content) return;
-  const { jsPDF } = window.jspdf;
-  if (!jsPDF || !window.html2canvas) {
-    alert("Librerías PDF no disponibles. Recarga la página.");
-    return;
-  }
   const btn = document.getElementById("metasPdfBtn");
   if (btn) { btn.textContent = "⏳ Generando..."; btn.disabled = true; }
 
   try {
+    await ensurePdfLibs();
+    const { jsPDF } = window.jspdf;
     const totalH  = content.scrollHeight;
     const pageW   = 1280;
     const pageH   = 720;

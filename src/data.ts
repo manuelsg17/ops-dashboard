@@ -1,3 +1,4 @@
+//@ts-nocheck
 // data.js — Toda la lógica de datos (Fase A2: módulo ES).
 // Cada export se espeja a window por vendor.js para que los archivos aún
 // clásicos de public/ lo sigan leyendo como global. Depende de STATE/KAM_COLORS
@@ -397,12 +398,38 @@ export function computeWindowStart(allPeriods, scale, wantFrom) {
   return si > 0 ? allPeriods[si - 1] : allPeriods[0];
 }
 
+// Columnas realmente usadas por el parser de rendimiento (core + TX_NEW_COLS,
+// ver txRowExtra) — de las ~55 que tiene la tabla, evita traer el resto por
+// `select("*")`. Verificado 1x1 contra information_schema.columns real de las
+// 3 tablas antes de aplicar (no por lectura de código): dateCol/newPartnerCol/
+// newServiceCol varían por tabla (diario usa new_partner/new_service; semanal
+// y mensual usan new_from_partner/new_from_service), Y `rendimiento_diario`
+// **no tiene columnas `partner`/`kam`** (a diferencia de semanal/mensual) —
+// pedirlas ahí tira 400 de PostgREST ("column does not exist"), por eso NO
+// están en REND_CORE_COLS sino agregadas aparte solo donde existen.
+const REND_CORE_COLS = [
+  "clid", "city", "db_id", "fleetroom",
+  "active_drivers", "reactivated", "supply_hours", "commission", "trips"
+];
+function _rendCols(dateCol, newPartnerCol, newServiceCol, extra = []) {
+  return [...REND_CORE_COLS, dateCol, newPartnerCol, newServiceCol, ...extra, ...TX_NEW_COLS].join(",");
+}
+export const REND_COLS_SEMANAL  = _rendCols("fecha", "new_from_partner", "new_from_service", ["partner", "kam"]);
+export const REND_COLS_MENSUAL  = _rendCols("mes",   "new_from_partner", "new_from_service", ["partner", "kam"]);
+export const REND_COLS_DIARIO   = _rendCols("date",  "new_partner",      "new_service");
+
 // ── PAGINACIÓN PARALELA ───────────────────────────────────────────────────────
 // Descarga todas las páginas de una tabla en paralelo (sin esperar página a
 // página). `opts.gte` = { col, value } aplica un filtro de rango EN EL SERVIDOR
 // (Fase A3) — antes siempre traía la tabla entera y se filtraba en el navegador.
+// `opts.columns` (Fase A3, pendiente hasta ahora): proyección explícita en vez
+// de `select("*")` — sin esto, rendimiento/mensual/diario traían las ~55
+// columnas completas aunque el parser solo lee ~35-38 (REND_CORE_COLS +
+// TX_NEW_COLS). Tablas chicas (partners, metas, flotas, conversion_pais) no
+// pasan `columns` y siguen en `select("*")` — no vale la pena auditarlas 1x1.
 export async function fetchAllPages(table, orderCol, opts = {}) {
   const gte = opts.gte;
+  const cols = opts.columns || "*";
   const withFilter = q => (gte && gte.value) ? q.gte(gte.col, gte.value) : q;
 
   // 1. Contar filas (del rango, no de la tabla entera)
@@ -414,7 +441,7 @@ export async function fetchAllPages(table, orderCol, opts = {}) {
   const PAGE   = 1000;
   const pages  = Math.ceil(count / PAGE);
   const reqs   = Array.from({ length: pages }, (_, i) =>
-    withFilter(sb.from(table).select("*"))
+    withFilter(sb.from(table).select(cols))
       .order(orderCol, { ascending: true })
       .range(i * PAGE, (i + 1) * PAGE - 1)
   );
@@ -502,7 +529,7 @@ export async function loadFromSupabase(opts = {}) {
     // 1. Partners + Rendimiento semanal (ventaneado) en paralelo
     const [partners, rend] = await Promise.all([
       sb.from("partners").select("*").then(r => { if (r.error) throw r.error; return r.data; }),
-      fetchAllPages("rendimiento", "fecha", { gte: { col: "fecha", value: winStart } })
+      fetchAllPages("rendimiento", "fecha", { gte: { col: "fecha", value: winStart }, columns: REND_COLS_SEMANAL })
     ]);
 
     if (partners && partners.length) {
@@ -728,7 +755,7 @@ export async function loadMensualIfNeeded() {
   if (STATE._mensualLoaded) return; // ya cargado
   showLoad(true, "Cargando datos mensuales...");
   try {
-    const rendM = await fetchAllPages("rendimiento_mensual", "mes");
+    const rendM = await fetchAllPages("rendimiento_mensual", "mes", { columns: REND_COLS_MENSUAL });
     STATE.rawDataMensual = rendM.map(r => ({
       clid:          (r.clid || "").trim(),
       partner:       STATE.CLID_MAP[r.clid] || r.partner,
@@ -788,7 +815,7 @@ export async function loadDiarioIfNeeded() {
   if (STATE._diarioLoaded) return;
   showLoad(true, "Cargando datos diarios...");
   try {
-    const rendD = await fetchAllPages("rendimiento_diario", "date");
+    const rendD = await fetchAllPages("rendimiento_diario", "date", { columns: REND_COLS_DIARIO });
     STATE.rawDataDiario = rendD.map(r => ({
       clid:          (r.clid || "").trim(),
       partner:       STATE.CLID_MAP[r.clid] || r.partner || r.clid,
@@ -1152,65 +1179,52 @@ export async function handleFile(file, type) {
     return;
   }
 
-  showLoad(true, `Procesando ${type}...`);
+  showLoad(true, `Procesando ${type}... (Web Worker)`);
   const reader = new FileReader();
   reader.onload = async ev => {
     try {
-      const wb = XLSX.read(ev.target.result, { type: "binary", raw: false, defval: "" });
+      // Offload XLSX parsing to a Web Worker so UI thread doesn't freeze
+      const worker = new Worker(new URL("./workers/excelWorker.ts", import.meta.url), { type: "module" });
+      
+      worker.onmessage = async (e) => {
+        const { success, rawRows, error } = e.data;
+        worker.terminate();
+        if (!success) {
+          showBanner(false, error || "Error procesando el archivo.");
+          showLoad(false);
+          return;
+        }
 
-      // Smart sheet detection
-      const sheetNames = wb.SheetNames.map(s => s.toUpperCase());
-      let sheetName;
-      if (type === "data") {
-        sheetName = wb.SheetNames[sheetNames.indexOf("DATOS") >= 0 ? sheetNames.indexOf("DATOS")
-          : sheetNames.indexOf("DATA") >= 0 ? sheetNames.indexOf("DATA") : 0];
-      } else if (type === "rendimiento" || type === "rendimientoDiario") {
-        sheetName = wb.SheetNames[sheetNames.indexOf("RENDIMIENTO") >= 0
-          ? sheetNames.indexOf("RENDIMIENTO") : 0];
-      } else if (type === "conversion") {
-        // La pestaña principal es la de Conversión (funnel); la de canal se lee aparte.
-        const ci = sheetNames.findIndex(s => /CONVERSI/.test(s));
-        sheetName = wb.SheetNames[ci >= 0 ? ci : 0];
-      } else {
-        sheetName = wb.SheetNames[sheetNames.indexOf("METAS") >= 0
-          ? sheetNames.indexOf("METAS") : 0];
-      }
+        try {
+          // Convert array-of-arrays to array-of-objects with header
+          const headers = rawRows[0] || [];
+          const json = rawRows.slice(1).map(row => {
+            const obj = {};
+            headers.forEach((h, i) => { if (h) obj[h] = row[i] !== undefined ? row[i] : ""; });
+            return obj;
+          });
 
-      // raw:true en (casi) todos los uploads: XLSX devuelve el NÚMERO subyacente
-      // con precisión completa en vez del texto formateado de display ("1.6M",
-      // "51.7K", "1,234,567"). Esto da sumas exactas y conserva CLIDs de 12 dígitos
-      // (raw:false los degradaba a notación científica "4.00005E+11").
-      // Seguro para rendimiento: los periodos salen de los HEADERS (regex
-      // MM.YYYY / DD.MM.YYYY - Métrica), NO de celdas-fecha, así que raw:true no
-      // afecta el parseo de fechas. El display sigue redondeando con fmtSmart (K/M).
-      // flotas se queda en raw:false (sin números sensibles; evita tocar lo no probado).
-      const useRaw = type !== "flotas";
-      const json = XLSX.utils.sheet_to_json(wb.Sheets[sheetName],
-        { raw: useRaw, defval: "" });
+          if      (type === "data")               await uploadPartners(json);
+          else if (type === "rendimiento")       await uploadRendimiento(json);
+          else if (type === "rendimientoMensual") await uploadRendimientoMensual(json);
+          else if (type === "rendimientoDiario") await uploadRendimientoDiario(json);
+          else if (type === "metas")              await uploadMetas(json);
+          else if (type === "flotas")             await uploadFlotas(json);
+          else if (type === "conversion")         await uploadConversion(json);
+          await loadFromSupabase();
+          if ((STATE.curMode === "mensual" || STATE.curMode === "diario") && typeof switchMode === "function") {
+            await switchMode(STATE.curMode);
+          }
+        } catch(err) {
+          showBanner(false, "Error: " + (err.message || err));
+        } finally {
+          showLoad(false);
+        }
+      };
 
-      if      (type === "data")               await uploadPartners(json);
-      else if (type === "rendimiento")       await uploadRendimiento(json);
-      else if (type === "rendimientoMensual") await uploadRendimientoMensual(json);
-      else if (type === "rendimientoDiario") await uploadRendimientoDiario(json);
-      else if (type === "flotas")            await uploadFlotas(json);
-      else if (type === "conversion") {
-        await uploadConversion(json);
-        // 2da pestaña opcional del mismo Excel: adquisición por canal.
-        const chIdx = sheetNames.findIndex(s => /ADQUIS|CHANNEL|CANAL/.test(s));
-        if (chIdx >= 0) await uploadChannels(
-          XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[chIdx]], { raw: useRaw, defval: "" }));
-      }
-      else                                   await uploadMetas(json);
-
-      await loadFromSupabase();
-      // loadFromSupabase NO recarga los datasets lazy (mensual/diario). Si el modo
-      // activo es uno de esos, recargarlo y refrescar para reflejar lo recien subido.
-      if ((STATE.curMode === "mensual" || STATE.curMode === "diario") && typeof switchMode === "function") {
-        await switchMode(STATE.curMode);
-      }
-    } catch (err) {
-      showBanner(false, describeUploadError(type, err));
-      console.error(err);
+      worker.postMessage({ fileData: ev.target.result, type });
+    } catch(e) {
+      showBanner(false, "Error al leer el archivo: " + e.message);
       showLoad(false);
     }
   };

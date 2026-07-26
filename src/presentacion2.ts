@@ -1,3 +1,4 @@
+//@ts-nocheck
 // presentacion2.js — "Presentación 2.0" (Fase 1a)
 // Presentación semanal estandarizada para enviar al partner. Sección NUEVA e
 // independiente: no toca "Vista Partner" (partnerView.js). Reusa helpers
@@ -9,6 +10,16 @@
 // Fase 1a incluye: selector de partner + idioma + comparativas (vs Top-N / vs
 // ciudad), slide de MATRIZ (Perú + ciudades × AD, N+R, SH, Comisión, Viajes,
 // Retención), slides de DATA RAW numérica y porcentual (WoW), y export a PDF.
+
+// Chart.js vive ACÁ (no en vendor.js) a propósito: es la única vista que lo usa,
+// y este módulo entero ya es un chunk lazy (loadViewModule) — al importarlo acá,
+// Vite lo empaqueta en ESE chunk en vez de en el bundle eager que paga todo el
+// mundo, incluida la pantalla de login.
+import Chart from "chart.js/auto";
+import ChartDataLabels from "chartjs-plugin-datalabels";
+import { ensurePdfLibs } from "./shared/lazyLibs.js";
+Chart.register(ChartDataLabels);
+window.Chart = Chart;
 
 // ── Helpers de presentación (ex-presentacion.js) ──────────────────────────────
 export const PRES_CITY_ORDER = ["LIMA", "AREQUIPA", "TRUJILLO"];
@@ -197,13 +208,13 @@ export function p2NavHTML() {
     const co = on ? "#fff" : (tk ? "#b45309" : "#555");
     return `<button data-slide2="${i}" data-act="goSlide2" data-i="${i}" style="padding:6px 14px;border-radius:6px;font-size:.78rem;font-weight:600;border:2px solid ${bd};background:${bg};color:${co};cursor:pointer">${tk ? "🛺 " : ""}${escapeHTML(label)}</button>`;
   }).join("");
-  return `<button class="png-btn" data-act="prevSlide2" style="padding:6px 12px">◀</button>${btns}<button class="png-btn" data-act="nextSlide2" style="padding:6px 12px">▶</button>`;
+  return `<button class="png-btn" data-act="prevSlide2" class="agy-style-329">◀</button>${btns}<button class="png-btn" data-act="nextSlide2" class="agy-style-329">▶</button>`;
 }
 
 // Logo de marca (inline SVG, mismo ícono que la app). P2_LOGO_MARK = versión chica
 // para el header de cada slide.
 export const P2_LOGO_SVG  = `<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" width="26" height="26"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`;
-export const P2_LOGO_MARK = `<span style="display:inline-flex;align-items:center;gap:5px;vertical-align:middle"><span style="width:15px;height:15px;background:#FF0000;border-radius:4px;display:inline-flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" width="10" height="10"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span><span style="font-weight:900;font-size:.72rem;color:#111;letter-spacing:-.3px">YANGO <span style="color:#FF0000">Partners</span></span></span>`;
+export const P2_LOGO_MARK = `<span class="agy-style-330"><span class="agy-style-331"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" width="10" height="10"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span><span class="agy-style-332">YANGO <span class="agy-style-51">Partners</span></span></span>`;
 
 // Info del modo/escala activa (mensual/semanal/diario) para rótulos consistentes
 // en TODA la presentación: badge visible, unidad de columna, sufijo de racha y
@@ -237,8 +248,8 @@ export function p2FreshnessWarn() {
   const msg = es
     ? `Posible dato faltante (${mi.label}): <b>${escapeHTML(ahead)}</b> llega a <b>${d2s(aheadMax)}</b> pero <b>${escapeHTML(behind)}</b> solo a <b>${d2s(behindMax)}</b>. Si actualizas todo junto, revisa si falta subir el <b>${escapeHTML(behind)}</b> de <b>${d2s(aheadMax)}</b>.`
     : `Possible missing data (${mi.label}): <b>${escapeHTML(ahead)}</b> reaches <b>${d2s(aheadMax)}</b> but <b>${escapeHTML(behind)}</b> only <b>${d2s(behindMax)}</b>. If you upload everything together, check whether <b>${escapeHTML(behind)}</b> for <b>${d2s(aheadMax)}</b> is missing.`;
-  return `<div style="background:#fffbeb;border:1px solid #fcd34d;border-left:4px solid #f59e0b;border-radius:8px;padding:9px 12px;margin-bottom:12px;font-size:.8rem;color:#92400e;display:flex;gap:8px;align-items:flex-start">
-    <span style="font-size:1rem;line-height:1.1">⚠️</span><span style="line-height:1.35">${msg}</span></div>`;
+  return `<div class="agy-style-333">
+    <span class="agy-style-334">⚠️</span><span class="agy-style-335">${msg}</span></div>`;
 }
 
 // Header de marca compartido: partner + contexto (izq) · logo + título de slide (der)
@@ -260,14 +271,14 @@ export function p2BrandHeader(partner, title, sub, badgeOverride) {
       ? `<span style="display:inline-block;font-size:.58rem;font-weight:800;padding:2px 8px;border-radius:10px;margin-bottom:3px;color:#fff;background:${tk ? "#f59e0b" : "#FF0000"}">${tk ? "🛺 TUKTUK" : "🚕 TAXI"}</span><br>`
       : "");
   return `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;border-bottom:2px solid ${accent};padding-bottom:7px;margin-bottom:10px;flex:0 0 auto">
-    <div style="min-width:0">
+    <div class="agy-style-336">
       ${badge}
-      <div style="font-weight:900;font-size:1rem;color:#111;letter-spacing:-.3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(partner)}</div>
-      ${sub ? `<div style="font-size:.62rem;color:#999;margin-top:1px">${escapeHTML(sub)}</div>` : ""}
+      <div class="agy-style-337">${escapeHTML(partner)}</div>
+      ${sub ? `<div class="agy-style-338">${escapeHTML(sub)}</div>` : ""}
     </div>
-    <div style="text-align:right;flex:0 0 auto">
+    <div class="agy-style-339">
       ${P2_LOGO_MARK}
-      <div style="font-size:.64rem;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-top:2px">${escapeHTML(title)}</div>
+      <div class="agy-style-340">${escapeHTML(title)}</div>
       <div>${modeChip}</div>
     </div>
   </div>`;
@@ -276,7 +287,7 @@ export function p2BrandHeader(partner, title, sub, badgeOverride) {
 export function p2BrandFooter(idx) {
   const es = PRESENT2_STATE.lang === "es";
   const total = PRESENT2_STATE._deckLen || P2_SLIDES.length;
-  return `<div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #eee;padding-top:6px;margin-top:8px;font-size:.6rem;color:#bbb;flex:0 0 auto">
+  return `<div class="agy-style-341">
     <span>YANGO Partners · ${es ? "Confidencial" : "Confidential"}</span>
     <span>${es ? "pág" : "page"} ${(idx || 0) + 1}/${total}</span>
   </div>`;
@@ -296,20 +307,20 @@ export function buildSlide2Cover(partner, dates) {
   const modeLabel = es ? `Avance ${p2ModeInfo().label}` : `${p2ModeInfo().label} Update`;
   const period = `${d2s(from)} → ${d2s(to)}`;
   return `
-    <div style="width:100%;height:100%;background:linear-gradient(135deg,#1a1a1a 0%,#2d2d2d 100%);display:flex;flex-direction:column;justify-content:center;align-items:center;position:relative;overflow:hidden">
+    <div class="agy-style-342">
       <div style="position:absolute;top:-80px;right:-80px;width:320px;height:320px;border-radius:50%;background:${col};opacity:.08"></div>
-      <div style="position:absolute;bottom:-60px;left:-60px;width:240px;height:240px;border-radius:50%;background:#FF0000;opacity:.06"></div>
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:32px">
-        <div style="width:48px;height:48px;background:#FF0000;border-radius:12px;display:flex;align-items:center;justify-content:center">${P2_LOGO_SVG}</div>
-        <div style="color:#fff;font-weight:900;font-size:1.4rem;letter-spacing:-1px">YANGO <span style="color:#FF0000">Partners</span></div>
+      <div class="agy-style-343"></div>
+      <div class="agy-style-344">
+        <div class="agy-style-345">${P2_LOGO_SVG}</div>
+        <div class="agy-style-346">YANGO <span class="agy-style-51">Partners</span></div>
       </div>
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <div class="agy-style-175">
         <div style="width:14px;height:14px;border-radius:50%;background:${col}"></div>
-        <div style="color:#fff;font-weight:900;font-size:2.4rem;letter-spacing:-1px;text-align:center">${escapeHTML(partner)}</div>
+        <div class="agy-style-347">${escapeHTML(partner)}</div>
       </div>
-      <div style="color:#FF0000;font-weight:700;font-size:1.1rem;margin-bottom:8px">${modeLabel} · ${period}</div>
-      ${cities ? `<div style="color:#aaa;font-size:.85rem;margin-bottom:24px">${escapeHTML(cities)}</div>` : `<div style="margin-bottom:24px"></div>`}
-      ${kam ? `<div style="background:rgba(255,255,255,.08);border-radius:8px;padding:8px 20px;color:#ccc;font-size:.8rem">${es ? "Ejecutivo de Cuenta" : "Account Manager"}: <strong style="color:#fff">${escapeHTML(kam)}</strong></div>` : ""}
+      <div class="agy-style-348">${modeLabel} · ${period}</div>
+      ${cities ? `<div class="agy-style-349">${escapeHTML(cities)}</div>` : `<div class="agy-style-350"></div>`}
+      ${kam ? `<div class="agy-style-351">${es ? "Ejecutivo de Cuenta" : "Account Manager"}: <strong class="agy-style-352">${escapeHTML(kam)}</strong></div>` : ""}
     </div>`;
 }
 export function p2SlideNames() { const es = PRESENT2_STATE.lang === "es"; return P2_SLIDES.map(s => es ? s.es : s.en); }
@@ -325,13 +336,13 @@ export function buildSlide2SectionCover(partner, ds) {
   const title  = tk ? (es ? "Sección TukTuk" : "TukTuk Section") : (es ? "Sección Taxi" : "Taxi Section");
   const sub    = es ? "Las métricas a continuación corresponden a" : "The metrics below correspond to";
   return `
-    <div style="width:100%;height:100%;background:linear-gradient(135deg,#1a1a1a 0%,#2d2d2d 100%);display:flex;flex-direction:column;justify-content:center;align-items:center;position:relative;overflow:hidden">
+    <div class="agy-style-342">
       <div style="position:absolute;top:-80px;right:-80px;width:320px;height:320px;border-radius:50%;background:${accent};opacity:.12"></div>
       <div style="position:absolute;bottom:-60px;left:-60px;width:240px;height:240px;border-radius:50%;background:${accent};opacity:.07"></div>
-      <div style="font-size:4rem;margin-bottom:6px;filter:drop-shadow(0 4px 12px rgba(0,0,0,.4))">${emoji}</div>
-      <div style="color:#fff;font-weight:900;font-size:2.3rem;letter-spacing:-1px">${title}</div>
+      <div class="agy-style-353">${emoji}</div>
+      <div class="agy-style-354">${title}</div>
       <div style="color:${accent};font-weight:800;font-size:1.1rem;margin-top:6px">${escapeHTML(partner)}</div>
-      <div style="background:rgba(255,255,255,.08);border-radius:8px;padding:8px 20px;margin-top:18px;color:#ccc;font-size:.8rem">${sub} <strong style="color:#fff">${tk ? "TukTuk" : "Taxi"}</strong></div>
+      <div class="agy-style-355">${sub} <strong class="agy-style-352">${tk ? "TukTuk" : "Taxi"}</strong></div>
     </div>`;
 }
 
@@ -691,26 +702,26 @@ export function buildSlide2Matrix(partner, dates, idx) {
         const w = (last - prev) / prev * 100; bColor = w >= 0 ? "#10b981" : "#FF0000"; badge = (w >= 0 ? "+" : "") + w.toFixed(1) + "%";
       }
       return `
-        <div style="flex:1;min-width:0;min-height:0;background:#fafafa;border:1px solid #f0f0f0;border-radius:8px;padding:5px 7px;display:flex;flex-direction:column">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;gap:3px">
-            <span style="display:flex;align-items:center;gap:4px;min-width:0"><span style="width:6px;height:6px;border-radius:50%;background:${k.color};flex-shrink:0"></span><span style="font-size:.55rem;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:.2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(k.label)}</span></span>
+        <div class="agy-style-356">
+          <div class="agy-style-357">
+            <span class="agy-style-358"><span style="width:6px;height:6px;border-radius:50%;background:${k.color};flex-shrink:0"></span><span class="agy-style-359">${escapeHTML(k.label)}</span></span>
             <span style="font-size:.64rem;font-weight:700;color:${bColor};background:${bColor}18;padding:1px 5px;border-radius:6px">${badge || "—"}</span>
           </div>
-          <div style="font-weight:900;font-size:.9rem;color:#111;margin-bottom:3px">${p2FmtVal(k.kind, last)}</div>
-          <div style="flex:1;min-height:60px;position:relative;width:100%"><canvas id="p2_${lv.id}_${k.key}" style="width:100%;height:100%"></canvas></div>
+          <div class="agy-style-360">${p2FmtVal(k.kind, last)}</div>
+          <div class="agy-style-361"><canvas id="p2_${lv.id}_${k.key}" class="agy-style-362"></canvas></div>
         </div>`;
     }).join("");
     return `
       <div style="display:flex;gap:6px;flex:1 1 0;min-height:0;max-height:220px;border-left:3px solid ${lv.color};padding-left:6px">
-        <div style="flex:0 0 60px;display:flex;align-items:center"><span style="font-weight:800;font-size:.78rem;color:${lv.color};line-height:1.1">${escapeHTML(lv.label)}</span></div>
-        <div style="flex:1;min-width:0;display:flex;gap:6px;min-height:0">${cards}</div>
+        <div class="agy-style-363"><span style="font-weight:800;font-size:.78rem;color:${lv.color};line-height:1.1">${escapeHTML(lv.label)}</span></div>
+        <div class="agy-style-364">${cards}</div>
       </div>`;
   }).join("");
   const sub = es ? "Línea = partner (rojo) · gris = tendencia ciudad · punteadas = cohortes" : "Line = partner (red) · grey = city trend · dashed = cohorts";
   return `
-    <div style="width:100%;height:100%;background:#fff;padding:12px 14px;display:flex;flex-direction:column;overflow:hidden">
+    <div class="agy-style-365">
       ${p2BrandHeader(partner, (es ? "KPIs por Nivel" : "KPIs by Level") + " · " + d2s(from) + " → " + d2s(to), sub)}
-      <div style="display:flex;flex-direction:column;gap:8px;flex:1;min-height:0">${rows}</div>
+      <div class="agy-style-366">${rows}</div>
       ${p2BrandFooter(idx)}
     </div>`;
 }
@@ -796,13 +807,13 @@ export function buildSlide2Raw(partner, dates, pct, idx) {
       : p2Metrics(partner, lv.city, dates);
     // Filas = semanas. En % arrancan desde la 2da semana (WoW).
     const idxs = pct ? dates.map((_, i) => i).slice(1) : dates.map((_, i) => i);
-    const head = `<th style="text-align:left;padding:4px 6px;position:sticky;left:0;background:#f4f4f4;font-size:.64rem">${p2ModeInfo().unit}</th>` +
-      cols.map(c => `<th style="text-align:right;padding:4px 6px;font-size:.62rem;white-space:nowrap">${escapeHTML(c.label)}</th>`).join("");
+    const head = `<th class="agy-style-367">${p2ModeInfo().unit}</th>` +
+      cols.map(c => `<th class="agy-style-368">${escapeHTML(c.label)}</th>`).join("");
     const body = idxs.map(i => {
       const cells = cols.map(c => {
         const cur = m[c.key][i];
         if (!pct) {
-          return `<td style="text-align:right;padding:3px 6px;font-size:.64rem;border-bottom:1px solid #f2f2f2">${p2FmtRaw(c.kind, cur)}</td>`;
+          return `<td class="agy-style-369">${p2FmtRaw(c.kind, cur)}</td>`;
         }
         // Variación WoW: para % (retención) diferencia en puntos; para el resto % relativo.
         const prev = m[c.key][i - 1];
@@ -813,24 +824,24 @@ export function buildSlide2Raw(partner, dates, pct, idx) {
         }
         return `<td style="text-align:right;padding:3px 6px;font-size:.64rem;background:${bg};color:${col};font-weight:600;border-bottom:1px solid #fff">${txt}</td>`;
       }).join("");
-      return `<tr><td style="text-align:left;padding:3px 6px;font-size:.64rem;font-weight:700;position:sticky;left:0;background:#fff;border-bottom:1px solid #f2f2f2">${d2s(dates[i])}</td>${cells}</tr>`;
+      return `<tr><td class="agy-style-370">${d2s(dates[i])}</td>${cells}</tr>`;
     }).join("");
     return `
-      <div style="margin-bottom:12px">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+      <div class="agy-style-371">
+        <div class="agy-style-372">
           <span style="width:10px;height:10px;border-radius:2px;background:${lv.color};display:inline-block"></span>
           <span style="font-weight:800;font-size:.82rem;color:${lv.color}">${escapeHTML(lv.label)}</span>
         </div>
-        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;background:#fff">
-          <thead><tr style="background:#f4f4f4">${head}</tr></thead><tbody>${body}</tbody></table></div>
+        <div class="agy-style-321"><table class="agy-style-373">
+          <thead><tr class="agy-style-374">${head}</tr></thead><tbody>${body}</tbody></table></div>
       </div>`;
   }).join("");
   const _mi = p2ModeInfo();
   const title = pct ? (es ? `Data Raw · Variación % (${_mi.pop})` : `Data Raw · % change (${_mi.pop})`) : (es ? "Data Raw · Valores" : "Data Raw · Values");
   return `
-    <div style="width:100%;height:100%;background:#fff;padding:12px 14px;display:flex;flex-direction:column;overflow:hidden">
+    <div class="agy-style-365">
       ${p2BrandHeader(partner, title + " · " + d2s(from) + " → " + d2s(to), "")}
-      <div style="flex:1;min-height:0;overflow:auto">${tables}</div>
+      <div class="agy-style-375">${tables}</div>
       ${p2BrandFooter(idx)}
     </div>`;
 }
@@ -959,13 +970,13 @@ export function p2RefCard(label, arr, kind, es) {
   } else if (last != null && prev != null && prev !== 0) {
     const w = (last - prev) / prev * 100; bColor = w >= 0 ? "#10b981" : "#FF0000"; badge = (w >= 0 ? "+" : "") + w.toFixed(1) + "%";
   }
-  return `<div style="flex:1;min-width:0;background:#f0f9ff;border:1px dashed #bae6fd;border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:2px">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:4px">
-      <span style="font-size:.58rem;color:#0284c7;font-weight:700;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(label)}</span>
+  return `<div class="agy-style-376">
+    <div class="agy-style-377">
+      <span class="agy-style-378">${escapeHTML(label)}</span>
       <span style="font-size:.62rem;font-weight:700;color:${bColor}">${badge}</span>
     </div>
-    <div style="font-weight:900;font-size:1rem;color:#111">${fmtN(last)}</div>
-    <div style="font-size:.58rem;color:#0284c7;font-style:italic">${es ? "Referencia (sin meta)" : "Reference (no target)"}</div>
+    <div class="agy-style-379">${fmtN(last)}</div>
+    <div class="agy-style-380">${es ? "Referencia (sin meta)" : "Reference (no target)"}</div>
   </div>`;
 }
 
@@ -975,28 +986,28 @@ export function _p2MetaCard(label, real, goal, projV, fmtN, es) {
   const pct = goal > 0 ? (real / goal) * 100 : 0;
   const col = p2AvanceColor(pct);
   const ppct = (projV != null && goal > 0) ? (projV / goal) * 100 : null;
-  return `<div style="flex:1;min-width:0;background:#fafafa;border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:4px">
-    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px">
-      <span style="font-size:.58rem;color:#aaa;font-weight:700;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(label)}</span>
+  return `<div class="agy-style-381">
+    <div class="agy-style-382">
+      <span class="agy-style-383">${escapeHTML(label)}</span>
       <span style="font-size:.74rem;font-weight:800;color:${col}">${pct.toFixed(0)}%</span>
     </div>
-    <div style="display:flex;align-items:baseline;gap:5px">
-      <span style="font-weight:900;font-size:1.05rem;color:#111">${fmtN(real)}</span>
-      <span style="font-size:.62rem;color:#999">/ ${fmtN(goal)}</span>
+    <div class="agy-style-384">
+      <span class="agy-style-385">${fmtN(real)}</span>
+      <span class="agy-style-386">/ ${fmtN(goal)}</span>
     </div>
-    <div style="height:7px;background:#eee;border-radius:5px;overflow:hidden;position:relative">
+    <div class="agy-style-387">
       ${ppct != null && ppct > pct ? `<div style="position:absolute;top:0;left:0;height:100%;width:${Math.min(Math.max(ppct, 0), 100).toFixed(1)}%;background:${p2AvanceColor(ppct)};opacity:.35;border-radius:5px"></div>` : ""}
       <div style="position:absolute;top:0;left:0;height:100%;width:${Math.min(pct, 100).toFixed(1)}%;background:${col};border-radius:5px"></div>
     </div>
-    ${ppct != null ? `<div style="font-size:.6rem;color:#999">${es ? "proy" : "proj"} ${fmtN(projV)} (${ppct.toFixed(0)}%)</div>` : ""}
+    ${ppct != null ? `<div class="agy-style-388">${es ? "proy" : "proj"} ${fmtN(projV)} (${ppct.toFixed(0)}%)</div>` : ""}
   </div>`;
 }
 // Tarjeta solo-meta (sin actual medible, ej. Utilización Fleet).
 export function _p2MetaOnlyCard(label, goal, fmtN, note, es) {
-  return `<div style="flex:1;min-width:0;background:#ecfeff;border:1px solid #a5f3fc;border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;justify-content:center;gap:2px">
-    <span style="font-size:.58rem;color:#0891b2;font-weight:700;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(label)}</span>
-    <div style="font-weight:900;font-size:1rem;color:#111">${fmtN(goal)}</div>
-    <div style="font-size:.58rem;color:#0891b2">${es ? "meta" : "target"}${note ? " · " + note : ""}</div>
+  return `<div class="agy-style-389">
+    <span class="agy-style-390">${escapeHTML(label)}</span>
+    <div class="agy-style-379">${fmtN(goal)}</div>
+    <div class="agy-style-391">${es ? "meta" : "target"}${note ? " · " + note : ""}</div>
   </div>`;
 }
 
@@ -1050,26 +1061,26 @@ export function buildSlide2Avance(partner, idx) {
       const fmtN = m.kind === "numK" ? fmtSmart : fmt;
       if (!goal) {
         const subTxt = es ? "Sin meta" : "No target";
-        return `<div style="flex:1;min-width:0;background:#fafafa;border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;justify-content:center;gap:2px">
-          <div style="font-size:.58rem;color:#aaa;font-weight:700;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(m.label)}</div>
-          <div style="font-weight:900;font-size:1rem;color:#111">${fmtN(real)}</div>
-          <div style="font-size:.6rem;color:#bbb">${subTxt}</div></div>`;
+        return `<div class="agy-style-392">
+          <div class="agy-style-383">${escapeHTML(m.label)}</div>
+          <div class="agy-style-379">${fmtN(real)}</div>
+          <div class="agy-style-393">${subTxt}</div></div>`;
       }
       const pct = (real / goal) * 100, ppct = (projV / goal) * 100, col = p2AvanceColor(pct);
-      return `<div style="flex:1;min-width:0;background:#fafafa;border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:4px">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px">
-          <span style="font-size:.58rem;color:#aaa;font-weight:700;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(m.label)}</span>
+      return `<div class="agy-style-381">
+        <div class="agy-style-382">
+          <span class="agy-style-383">${escapeHTML(m.label)}</span>
           <span style="font-size:.74rem;font-weight:800;color:${col}">${_p2PctTxt(pct)}</span>
         </div>
-        <div style="display:flex;align-items:baseline;gap:5px">
-          <span style="font-weight:900;font-size:1.05rem;color:#111">${fmtN(real)}</span>
-          <span style="font-size:.62rem;color:#999">/ ${fmtN(goal)}</span>
+        <div class="agy-style-384">
+          <span class="agy-style-385">${fmtN(real)}</span>
+          <span class="agy-style-386">/ ${fmtN(goal)}</span>
         </div>
-        <div style="height:7px;background:#eee;border-radius:5px;overflow:hidden;position:relative">
+        <div class="agy-style-387">
           ${ppct > pct ? `<div style="position:absolute;top:0;left:0;height:100%;width:${Math.min(Math.max(ppct, 0), 100).toFixed(1)}%;background:${p2AvanceColor(ppct)};opacity:.35;border-radius:5px"></div>` : ""}
           <div style="position:absolute;top:0;left:0;height:100%;width:${Math.min(pct, 100).toFixed(1)}%;background:${col};border-radius:5px"></div>
         </div>
-        <div style="font-size:.6rem;color:#999">${es ? "proy" : "proj"} ${fmtN(projV)} (${_p2PctTxt(ppct)})</div>
+        <div class="agy-style-388">${es ? "proy" : "proj"} ${fmtN(projV)} (${_p2PctTxt(ppct)})</div>
       </div>`;
     }).join("");
     if (fleetMode) {
@@ -1096,8 +1107,8 @@ export function buildSlide2Avance(partner, idx) {
       cards += p2RefCard(es ? "Owned Fleet Active Cars" : "Owned Fleet Active Cars", fs.ownedFleetActiveCars, "num", es);
     }
     return `<div style="display:flex;gap:8px;flex:1 1 0;min-height:0;max-height:200px;border-left:3px solid ${lv.color};padding-left:8px;align-items:stretch">
-      <div style="flex:0 0 62px;display:flex;align-items:center"><span style="font-weight:800;font-size:.82rem;color:${lv.color}">${escapeHTML(lv.label)}</span></div>
-      <div style="flex:1;min-width:0;display:flex;gap:8px">${cards}</div>
+      <div class="agy-style-394"><span style="font-weight:800;font-size:.82rem;color:${lv.color}">${escapeHTML(lv.label)}</span></div>
+      <div class="agy-style-395">${cards}</div>
     </div>`;
   }).join("");
   const avTitle = isTk
@@ -1111,11 +1122,11 @@ export function buildSlide2Avance(partner, idx) {
     : isTk
       ? (es ? "Sin metas TukTuk para este mes." : "No TukTuk goals for this month.")
       : (es ? "Sin metas cargadas para este mes." : "No goals loaded for this month.");
-  return `<div style="width:100%;height:100%;background:#fff;padding:12px 14px;display:flex;flex-direction:column;overflow:hidden">
+  return `<div class="agy-style-365">
     ${p2BrandHeader(partner, avTitle + " · " + (mesName || "—"), avSub)}
     ${noData
-      ? `<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:.9rem">${noDataMsg}</div>`
-      : `<div style="display:flex;flex-direction:column;gap:8px;flex:1;min-height:0">${rows}</div>`}
+      ? `<div class="agy-style-396">${noDataMsg}</div>`
+      : `<div class="agy-style-366">${rows}</div>`}
     ${p2BrandFooter(idx)}
   </div>`;
 }
@@ -1166,10 +1177,10 @@ export function buildSlide2AvanceCombinado(partner, idx) {
   ];
   const cards = defs.map(d => d.goal > 0
     ? _p2MetaCard(d.label, d.real, d.goal, d.proj, d.fmtN, es)
-    : `<div style="flex:1;min-width:0;background:#fafafa;border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;justify-content:center;gap:2px">
-        <div style="font-size:.58rem;color:#aaa;font-weight:700;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(d.label)}</div>
-        <div style="font-weight:900;font-size:1rem;color:#111">${d.fmtN(d.real)}</div>
-        <div style="font-size:.6rem;color:#bbb">${es ? "Sin meta" : "No target"}</div>
+    : `<div class="agy-style-392">
+        <div class="agy-style-383">${escapeHTML(d.label)}</div>
+        <div class="agy-style-379">${d.fmtN(d.real)}</div>
+        <div class="agy-style-393">${es ? "Sin meta" : "No target"}</div>
       </div>`
   ).join("");
 
@@ -1181,11 +1192,11 @@ export function buildSlide2AvanceCombinado(partner, idx) {
     ? (es ? `Sin datos de ${escapeHTML(mesName)} para comparar con la meta.` : `No data for ${escapeHTML(mesName)} to compare.`)
     : (es ? "Sin metas cargadas para este mes." : "No goals loaded for this month.");
 
-  return `<div style="width:100%;height:100%;background:#fff;padding:12px 14px;display:flex;flex-direction:column;overflow:hidden">
+  return `<div class="agy-style-365">
     ${p2BrandHeader(partner, title + " · " + (mesName || "—"), sub, { text: es ? "🔀 COMBINADO" : "🔀 COMBINED", color: "#8b5cf6" })}
     ${noData
-      ? `<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:.9rem">${noDataMsg}</div>`
-      : `<div style="display:flex;gap:8px;flex:1;min-height:0;align-items:stretch">${cards}</div>`}
+      ? `<div class="agy-style-396">${noDataMsg}</div>`
+      : `<div class="agy-style-397">${cards}</div>`}
     ${p2BrandFooter(idx)}
   </div>`;
 }
@@ -1278,9 +1289,9 @@ export function buildSlide2Alerts(partner, dates, idx) {
     const msg = es
       ? "Alertas disponibles solo en escala Semanal (los umbrales están calibrados para esa cadencia)."
       : "Alerts available only at Weekly scale (thresholds are calibrated for that cadence).";
-    return `<div style="width:100%;height:100%;background:#fff;padding:12px 14px;display:flex;flex-direction:column;overflow:hidden">
+    return `<div class="agy-style-365">
       ${p2BrandHeader(partner, es ? "Alertas / Next Steps" : "Alerts / Next Steps", es ? "Señales automáticas para accionar con el partner" : "Automatic signals to act on with the partner")}
-      <div style="flex:1;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:.9rem">${msg}</div>
+      <div class="agy-style-396">${msg}</div>
       ${p2BrandFooter(idx)}
     </div>`;
   }
@@ -1292,19 +1303,19 @@ export function buildSlide2Alerts(partner, dates, idx) {
         // inline-block (NO inline-flex): html2canvas no pinta el texto dentro de cajas
         // inline-flex con align-items:baseline → los chips salian como pildoras vacias en
         // el PDF. inline-block + white-space:nowrap se renderiza fiable en pantalla y PDF.
-        const chips = g.items.map(it => `<span style="display:inline-block;white-space:nowrap;background:#fff;border:1px solid #eee;border-radius:14px;padding:2px 9px;font-size:.72rem;margin:2px 4px 2px 0"><b style="color:#333">${escapeHTML(it.level)}</b>${it.detail ? ` <span style="color:#666">${escapeHTML(it.detail)}</span>` : ""}</span>`).join("");
+        const chips = g.items.map(it => `<span class="agy-style-398"><b class="agy-style-399">${escapeHTML(it.level)}</b>${it.detail ? ` <span class="agy-style-400">${escapeHTML(it.detail)}</span>` : ""}</span>`).join("");
         return `<div style="display:flex;align-items:flex-start;gap:10px;padding:9px 12px;background:${sevColor(g.sev)}12;border-left:4px solid ${sevColor(g.sev)};border-radius:8px;margin-bottom:7px">
           <span style="font-size:.6rem;font-weight:800;color:#fff;background:${sevColor(g.sev)};padding:2px 7px;border-radius:10px;white-space:nowrap;margin-top:2px">${sevLabel(g.sev)}</span>
-          <div style="flex:1;min-width:0">
-            <div style="font-weight:800;color:#111;font-size:.82rem;margin-bottom:4px">${escapeHTML(g.title)}</div>
+          <div class="agy-style-282">
+            <div class="agy-style-401">${escapeHTML(g.title)}</div>
             <div>${chips}</div>
           </div>
         </div>`;
       }).join("")
-    : `<div style="padding:14px;background:#f0fdf4;border:1px solid #10b981;border-radius:10px;color:#065f46;font-weight:700">✓ ${es ? "Sin alertas — todo dentro de rango." : "No alerts — all within range."}</div>`;
-  return `<div style="width:100%;height:100%;background:#fff;padding:12px 14px;display:flex;flex-direction:column;overflow:hidden">
+    : `<div class="agy-style-402">✓ ${es ? "Sin alertas — todo dentro de rango." : "No alerts — all within range."}</div>`;
+  return `<div class="agy-style-365">
     ${p2BrandHeader(partner, es ? "Alertas / Next Steps" : "Alerts / Next Steps", es ? "Señales automáticas para accionar con el partner" : "Automatic signals to act on with the partner")}
-    <div style="flex:1;min-height:0;overflow:auto">${items}</div>
+    <div class="agy-style-375">${items}</div>
     ${p2BrandFooter(idx)}
   </div>`;
 }
@@ -1376,9 +1387,9 @@ export function p2ForecastCompute(partner) {
 
 export function _p2FcMiniCard(label, value, hint, color, tip) {
   return `<div ${tip ? `title="${escapeHTML(tip)}"` : ""} style="flex:1;min-width:0;background:#fafafa;border:1px solid #f0f0f0;border-radius:8px;padding:7px 9px;display:flex;flex-direction:column;gap:1px${tip ? ";cursor:help" : ""}">
-    <div style="font-size:.55rem;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:.2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(label)}${tip ? ` <span style="color:#bbb;font-weight:900">ⓘ</span>` : ""}</div>
+    <div class="agy-style-359">${escapeHTML(label)}${tip ? ` <span class="agy-style-403">ⓘ</span>` : ""}</div>
     <div style="font-weight:900;font-size:1rem;color:${color || "#111"}">${value}</div>
-    <div style="font-size:.56rem;color:#999;line-height:1.15">${hint}</div>
+    <div class="agy-style-404">${hint}</div>
   </div>`;
 }
 export function _p2FcPalancasHTML(C, es) {
@@ -1443,12 +1454,12 @@ export function _p2FcPalancasHTML(C, es) {
   const title = es ? "Palancas de crecimiento" : "Growth levers";
   const subt = es ? "Lo que mueve tu # de Conductores Activos. La proyección de arriba asume que se mantienen — mejorá una y sube."
                   : "What moves your Active-Driver count. The forecast above assumes they hold — improve one and it rises.";
-  return `<div style="flex:0 0 auto;margin-top:6px">
-    <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px;flex-wrap:wrap">
-      <span style="font-size:.6rem;font-weight:800;color:#888;text-transform:uppercase;letter-spacing:.4px">${title}</span>
-      <span style="font-size:.56rem;color:#aaa">${escapeHTML(subt)}</span>
+  return `<div class="agy-style-405">
+    <div class="agy-style-406">
+      <span class="agy-style-407">${title}</span>
+      <span class="agy-style-408">${escapeHTML(subt)}</span>
     </div>
-    <div style="display:flex;gap:6px">${cards.join("")}</div>
+    <div class="agy-style-307">${cards.join("")}</div>
   </div>`;
 }
 // Detalle solo-vivo para el KAM (NO va al PDF): método + precisión por KPI.
@@ -1456,27 +1467,27 @@ export function _p2FcDetailHTML(C, es) {
   const chips = P2_FC_KPIS.map(k => {
     const r = C.fc[k.key];
     const acc = r.mape != null ? "±" + r.mape.toFixed(0) + "%" : "—";
-    return `<span style="display:inline-block;background:#f4f4f4;border-radius:6px;padding:2px 7px;margin:0 4px 2px 0;font-size:.58rem;color:#555"><b>${escapeHTML(es ? k.es : k.en)}</b>: ${escapeHTML(fcMethodName(r.method, es))} · ${acc}</span>`;
+    return `<span class="agy-style-409"><b>${escapeHTML(es ? k.es : k.en)}</b>: ${escapeHTML(fcMethodName(r.method, es))} · ${acc}</span>`;
   }).join("");
-  return `<div style="flex:0 0 auto;margin-top:6px;border-top:1px dashed #eee;padding-top:5px">
-    <div style="font-size:.55rem;color:#bbb;font-weight:700;text-transform:uppercase;margin-bottom:3px">${es ? "Detalle KAM (no se incluye en el PDF)" : "KAM detail (not in PDF)"}</div>
+  return `<div class="agy-style-410">
+    <div class="agy-style-411">${es ? "Detalle KAM (no se incluye en el PDF)" : "KAM detail (not in PDF)"}</div>
     <div>${chips}</div>
   </div>`;
 }
 export function buildSlide2Forecast(partner, dates, idx) {
   const es = PRESENT2_STATE.lang === "es";
-  const shell = inner => `<div style="width:100%;height:100%;background:#fff;padding:12px 14px;display:flex;flex-direction:column;overflow:hidden">
+  const shell = inner => `<div class="agy-style-365">
     ${p2BrandHeader(partner, (es ? "Proyección · próximos 3 meses" : "Forecast · next 3 months"),
       es ? "Qué esperar si la tendencia sigue igual — y qué mover para crecer" : "What to expect if the trend holds — and what to move to grow")}
     ${inner}
     ${p2BrandFooter(idx)}
   </div>`;
   if (STATE.curMode !== "mensual") {
-    return shell(`<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:.9rem;text-align:center;padding:0 40px">${es ? "El pronóstico usa la serie MENSUAL. Cambia la escala a Mensual (arriba) para ver la proyección." : "The forecast uses the MONTHLY series. Switch the scale to Monthly to see it."}</div>`);
+    return shell(`<div class="agy-style-412">${es ? "El pronóstico usa la serie MENSUAL. Cambia la escala a Mensual (arriba) para ver la proyección." : "The forecast uses the MONTHLY series. Switch the scale to Monthly to see it."}</div>`);
   }
   const C = p2ForecastCompute(partner);
   if (!C || C.histMonths.length < 4) {
-    return shell(`<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:.9rem;text-align:center;padding:0 40px">${es ? "Se necesitan al menos 4 meses de historia para proyectar." : "At least 4 months of history are needed to forecast."}</div>`);
+    return shell(`<div class="agy-style-412">${es ? "Se necesitan al menos 4 meses de historia para proyectar." : "At least 4 months of history are needed to forecast."}</div>`);
   }
   const cards = P2_FC_KPIS.map(k => {
     const r = C.fc[k.key];
@@ -1488,21 +1499,21 @@ export function buildSlide2Forecast(partner, dates, idx) {
     const acc = r.mape != null ? "±" + r.mape.toFixed(0) + "%" : "—";
     // Cada tarjeta es una celda del grid 2×2 (altura acotada por grid-template-rows:1fr) →
     // el canvas nunca se desborda sobre las palancas de abajo.
-    return `<div style="min-width:0;min-height:0;overflow:hidden;background:#fff;border:1px solid #f0f0f0;border-radius:8px;padding:5px 8px;display:flex;flex-direction:column">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:4px">
-        <span style="display:flex;align-items:center;gap:5px;min-width:0"><span style="width:7px;height:7px;border-radius:50%;background:${k.color};flex-shrink:0"></span><span style="font-size:.6rem;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:.2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(es ? k.es : k.en)}</span></span>
+    return `<div class="agy-style-413">
+      <div class="agy-style-377">
+        <span class="agy-style-414"><span style="width:7px;height:7px;border-radius:50%;background:${k.color};flex-shrink:0"></span><span class="agy-style-415">${escapeHTML(es ? k.es : k.en)}</span></span>
         <span style="font-size:.62rem;font-weight:800;color:${gcol};background:${gcol}18;padding:1px 6px;border-radius:6px">${gtxt}</span>
       </div>
-      <div style="display:flex;align-items:baseline;gap:6px">
-        <span style="font-weight:900;font-size:.9rem;color:#111">${_p2FcFmt(k.kind, last)}</span>
-        <span style="font-size:.58rem;color:#bbb">${es ? "hoy → 3m" : "now → 3m"}</span>
+      <div class="agy-style-416">
+        <span class="agy-style-417">${_p2FcFmt(k.kind, last)}</span>
+        <span class="agy-style-418">${es ? "hoy → 3m" : "now → 3m"}</span>
         <span style="font-weight:900;font-size:.9rem;color:${k.color}">${_p2FcFmt(k.kind, f3)}</span>
-        <span style="font-size:.54rem;color:#ccc;margin-left:auto">${es ? "precisión" : "accuracy"} ${acc}</span>
+        <span class="agy-style-419">${es ? "precisión" : "accuracy"} ${acc}</span>
       </div>
-      <div style="flex:1;min-height:0;position:relative;width:100%"><canvas id="p2fc_${k.key}" style="width:100%;height:100%"></canvas></div>
+      <div class="agy-style-420"><canvas id="p2fc_${k.key}" class="agy-style-362"></canvas></div>
     </div>`;
   }).join("");
-  const partialNote = C.partial ? `<div style="flex:0 0 auto;background:#fffbeb;border:1px solid #fcd34d;border-radius:7px;padding:5px 9px;margin-bottom:5px;font-size:.62rem;color:#92400e;display:flex;justify-content:space-between;align-items:center;gap:8px">
+  const partialNote = C.partial ? `<div class="agy-style-421">
       <span>⚠️ ${es ? "El último mes parece incompleto y se excluyó del pronóstico." : "The last month looks incomplete and was excluded from the forecast."}</span>
       ${PRESENT2_STATE._exporting ? "" : `<button data-act="present2ToggleInclPartial" style="border:1px solid #f59e0b;background:${PRESENT2_STATE.fcInclPartial ? "#f59e0b" : "#fff"};color:${PRESENT2_STATE.fcInclPartial ? "#fff" : "#b45309"};border-radius:6px;padding:2px 8px;font-size:.58rem;font-weight:700;cursor:pointer;white-space:nowrap">${PRESENT2_STATE.fcInclPartial ? (es ? "Excluir" : "Exclude") : (es ? "Incluir último mes" : "Include last month")}</button>`}
     </div>` : "";
@@ -1513,24 +1524,24 @@ export function buildSlide2Forecast(partner, dates, idx) {
   const nBack = Math.min(6, C.histMonths.length - Math.max(4, C.histMonths.length - 6));
   const sw = (style) => `<span style="display:inline-block;width:16px;height:0;border-top:2px ${style};vertical-align:middle;margin-right:5px"></span>`;
   const swSolid = sw("solid #888"), swDash = sw("dashed #888"), swUp = sw("dashed #10b981"), swDown = sw("dashed #ef4444");
-  const legend = `<div style="flex:0 0 auto;display:flex;align-items:center;flex-wrap:wrap;margin-bottom:5px;font-size:.62rem;color:#666">
-      <span style="display:inline-block;margin-right:14px;white-space:nowrap">${swSolid}${es ? `Real (${C.histMonths.length} meses)` : `Actual (${C.histMonths.length} mo.)`}</span>
-      <span style="display:inline-block;margin-right:14px;white-space:nowrap">${swDash}${es ? "Proyección esperada" : "Expected forecast"}</span>
-      <span style="display:inline-block;margin-right:14px;white-space:nowrap;color:#059669">${swUp}${es ? "Si crece (máx)" : "If grows (max)"}</span>
-      <span style="display:inline-block;margin-right:14px;white-space:nowrap;color:#dc2626">${swDown}${es ? "Si decrece (mín)" : "If drops (min)"}</span>
-      ${avg != null ? `<span style="display:inline-block;margin-right:14px;color:#10b981;font-weight:700;white-space:nowrap">✓ ${es ? `Validado con tus ${nBack} meses más recientes · ±${avg.toFixed(0)}%` : `Validated on your ${nBack} most recent months · ±${avg.toFixed(0)}%`}</span>` : ""}
-      <span style="margin-left:auto;color:#999;font-style:italic">${es ? "Al ritmo actual — mové las palancas ↓ para cambiarla" : "At current pace — move the levers ↓ to change it"}</span>
+  const legend = `<div class="agy-style-422">
+      <span class="agy-style-423">${swSolid}${es ? `Real (${C.histMonths.length} meses)` : `Actual (${C.histMonths.length} mo.)`}</span>
+      <span class="agy-style-423">${swDash}${es ? "Proyección esperada" : "Expected forecast"}</span>
+      <span class="agy-style-424">${swUp}${es ? "Si crece (máx)" : "If grows (max)"}</span>
+      <span class="agy-style-425">${swDown}${es ? "Si decrece (mín)" : "If drops (min)"}</span>
+      ${avg != null ? `<span class="agy-style-426">✓ ${es ? `Validado con tus ${nBack} meses más recientes · ±${avg.toFixed(0)}%` : `Validated on your ${nBack} most recent months · ±${avg.toFixed(0)}%`}</span>` : ""}
+      <span class="agy-style-427">${es ? "Al ritmo actual — mové las palancas ↓ para cambiarla" : "At current pace — move the levers ↓ to change it"}</span>
     </div>`;
   const detail = PRESENT2_STATE._exporting ? "" : _p2FcDetailHTML(C, es);
-  const expBanner = `<div style="flex:0 0 auto;background:#fef2f2;border:1px solid #fca5a5;border-radius:7px;padding:5px 10px;margin-bottom:6px;font-size:.62rem;color:#b91c1c;font-weight:700;display:flex;align-items:center;gap:8px">
-      <span style="font-size:.9rem;line-height:1">🧪</span>
+  const expBanner = `<div class="agy-style-428">
+      <span class="agy-style-429">🧪</span>
       <span>${es ? "EXPERIMENTAL · en validación — no compartir con partners aún. No se incluye en el PDF." : "EXPERIMENTAL · under validation — do not share with partners yet. Not included in the PDF."}</span>
     </div>`;
   return shell(`
     ${expBanner}
     ${partialNote}
     ${legend}
-    <div style="flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:8px">${cards}</div>
+    <div class="agy-style-430">${cards}</div>
     ${_p2FcPalancasHTML(C, es)}
     ${detail}`);
 }
@@ -1632,56 +1643,56 @@ export function renderPresent2() {
   const curDs = (deck[PRESENT2_STATE.slide] || deck[0]).ds;
 
   el.innerHTML = `
-    <div style="min-height:100vh;background:#f2f2f2;padding:20px;display:flex;flex-direction:column">
-      <div style="display:flex;align-items:flex-end;gap:12px;margin-bottom:14px;flex-wrap:wrap">
-        <div style="position:relative">
-          <label style="font-size:.72rem;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Partner</label>
-          <input id="present2Search" type="text" class="sb-inp" style="width:220px" autocomplete="off" placeholder="${es ? "Buscar partner..." : "Search partner..."}" value="${escapeHTML(PRESENT2_STATE.partner)}" data-act-input="p2FilterPartners" data-act-focus="p2ShowPartnerList" data-act-blur="p2HidePartnerListDelayed" data-act-keydown="p2SearchKeydown"/>
-          <div id="present2PartnerList" style="display:none;position:absolute;top:100%;left:0;width:220px;max-height:280px;overflow-y:auto;background:#fff;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:100;margin-top:2px"></div>
+    <div class="agy-style-431">
+      <div class="agy-style-432">
+        <div class="agy-style-168">
+          <label class="agy-style-433">Partner</label>
+          <input id="present2Search" type="text" class="sb-inp agy-style-434" autocomplete="off" placeholder="${es ? "Buscar partner..." : "Search partner..."}" value="${escapeHTML(PRESENT2_STATE.partner)}" data-act-input="p2FilterPartners" data-act-focus="p2ShowPartnerList" data-act-blur="p2HidePartnerListDelayed" data-act-keydown="p2SearchKeydown"/>
+          <div id="present2PartnerList" class="agy-style-435"></div>
         </div>
         <div>
-          <label style="font-size:.72rem;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">${es ? "Idioma" : "Language"}</label>
+          <label class="agy-style-433">${es ? "Idioma" : "Language"}</label>
           <div class="mode-toggle">
             <button class="mode-btn ${es ? "active" : ""}" data-act="setPresent2Lang" data-lang="es">ES</button>
             <button class="mode-btn ${!es ? "active" : ""}" data-act="setPresent2Lang" data-lang="en">EN</button>
           </div>
         </div>
         <div>
-          <label style="font-size:.72rem;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">${es ? "Comparar con" : "Compare"}</label>
-          <div id="present2CmpBar" style="display:flex;gap:6px;flex-wrap:wrap">${p2CmpBar()}</div>
+          <label class="agy-style-433">${es ? "Comparar con" : "Compare"}</label>
+          <div id="present2CmpBar" class="agy-style-436">${p2CmpBar()}</div>
         </div>
         <div>
-          <label style="font-size:.72rem;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">${es ? "Vista" : "View"}</label>
+          <label class="agy-style-433">${es ? "Vista" : "View"}</label>
           <div class="mode-toggle" title="${es ? "Auto respeta el flag Fleet de Configuración" : "Auto follows the Fleet flag in Config"}">
             <button class="mode-btn ${PRESENT2_STATE.fleetMode === "auto"  ? "active" : ""}" data-act="present2SetFleetMode" data-mode="auto">Auto</button>
             <button class="mode-btn ${PRESENT2_STATE.fleetMode === "taxi"  ? "active" : ""}" data-act="present2SetFleetMode" data-mode="taxi">${es ? "Taxi" : "Taxi"}</button>
-            <button class="mode-btn ${PRESENT2_STATE.fleetMode === "fleet" ? "active" : ""}" ${canForceFleet ? `data-act="present2SetFleetMode" data-mode="fleet"` : `disabled style="opacity:.35;cursor:not-allowed"`} title="${canForceFleet ? "" : (es ? "Este partner no está marcado como Fleet" : "This partner isn't flagged as Fleet")}">Fleet</button>
+            <button class="mode-btn ${PRESENT2_STATE.fleetMode === "fleet" ? "active" : ""}" ${canForceFleet ? `data-act="present2SetFleetMode" data-mode="fleet"` : `disabled class="agy-style-437"`} title="${canForceFleet ? "" : (es ? "Este partner no está marcado como Fleet" : "This partner isn't flagged as Fleet")}">Fleet</button>
           </div>
         </div>
         ${p2TuktukSectionVisible(PRESENT2_STATE.partner) ? `
         <div>
-          <label style="font-size:.72rem;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">${es ? "Sección" : "Section"}</label>
+          <label class="agy-style-433">${es ? "Sección" : "Section"}</label>
           <div class="mode-toggle" id="present2SectionBar" title="${es ? "Salta a la sección Taxi o TukTuk del deck" : "Jump to the Taxi or TukTuk section"}">${_p2SectionBarHTML(curDs)}</div>
         </div>` : ""}
         ${p2MetaMeses().length ? `
         <div title="${es ? "Mes de la meta en 'Avance vs Meta'. Auto = el mes del 'Hasta'." : "Goal month for 'Goal vs Target'. Auto = the 'To' month."}">
-          <label style="font-size:.72rem;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">${es ? "Mes meta" : "Goal month"}</label>
-          <select data-act-change="present2SetAvanceMes" style="border:2px solid #e5e5e5;border-radius:8px;padding:7px 10px;font-size:.82rem;font-weight:600;background:#fff;cursor:pointer;height:38px">
+          <label class="agy-style-433">${es ? "Mes meta" : "Goal month"}</label>
+          <select data-act-change="present2SetAvanceMes" class="agy-style-438">
             <option value="">${es ? "Auto (según filtro)" : "Auto (by filter)"}</option>
             ${p2MetaMeses().map(m => `<option value="${escapeHTML(m)}" ${PRESENT2_STATE.avanceMesSel === m ? "selected" : ""}>${escapeHTML(m)}</option>`).join("")}
           </select>
         </div>` : ""}
-        <div style="margin-left:auto;display:flex;gap:8px;align-items:flex-end">
-          <button data-act="switchTab" data-tab="rend" style="padding:8px 16px;border-radius:8px;font-size:.82rem;font-weight:600;border:2px solid #e5e5e5;background:#fff;color:#555;cursor:pointer">← ${es ? "Volver" : "Back"}</button>
-          <button class="apply-btn" style="width:auto;padding:8px 18px" data-act="downloadPresent2PDF">⬇ ${es ? "Descargar PDF" : "Download PDF"}</button>
+        <div class="agy-style-439">
+          <button data-act="switchTab" data-tab="rend" class="agy-style-440">← ${es ? "Volver" : "Back"}</button>
+          <button class="apply-btn agy-style-441" data-act="downloadPresent2PDF">⬇ ${es ? "Descargar PDF" : "Download PDF"}</button>
         </div>
       </div>
-      <div id="present2Nav" style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <div id="present2Nav" class="agy-style-442">
         ${p2NavHTML()}
       </div>
       ${p2FreshnessWarn()}
-      <div id="slide2Container" style="width:100%;aspect-ratio:16/9;background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.12);overflow:hidden">
-        <div id="slide2Inner" style="width:100%;height:100%"></div>
+      <div id="slide2Container" class="agy-style-443">
+        <div id="slide2Inner" class="agy-style-362"></div>
       </div>
     </div>`;
 
@@ -1805,7 +1816,7 @@ export function _p2PaintPartnerList(q) {
   const lower = (q || "").toLowerCase().trim();
   const all = p2PartnerList();   // unión taxi + tuktuk (mismo criterio que el selector)
   const filtered = lower ? all.filter(p => p.toLowerCase().includes(lower)) : all;
-  if (!filtered.length) { list.innerHTML = `<div style="padding:8px 12px;font-size:.78rem;color:#aaa">Sin coincidencias</div>`; return; }
+  if (!filtered.length) { list.innerHTML = `<div class="agy-style-180">Sin coincidencias</div>`; return; }
   list.innerHTML = filtered.slice(0, 100).map(p => {
     const sel = p === PRESENT2_STATE.partner;
     // data-partner (leído via this.dataset.partner) en vez de inyectar el nombre crudo en el
@@ -1813,8 +1824,8 @@ export function _p2PaintPartnerList(q) {
     // podía inyectar un atributo HTML (el .replace solo escapaba comilla simple). dataset.*
     // decodifica el atributo HTML sin pasar por un parser de string JS → sin ese riesgo.
     return `<div class="pv-opt" data-partner="${escapeHTML(p)}" data-act-mousedown="p2SelectPartner" style="padding:7px 12px;font-size:.78rem;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid #f3f3f3;${sel ? "background:#fff0f0;font-weight:700" : ""}">
-      <span style="width:7px;height:7px;border-radius:50%;background:#FF0000;flex-shrink:0"></span>
-      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(p)}</span></div>`;
+      <span class="agy-style-444"></span>
+      <span class="agy-style-181">${escapeHTML(p)}</span></div>`;
   }).join("");
 }
 export function p2SelectPartner(p) {
@@ -1838,7 +1849,7 @@ export function p2SearchKeydown(e) {
 export async function downloadPresent2PDF() {
   const partner = PRESENT2_STATE.partner;
   if (!partner) { alert("Selecciona un partner primero."); return; }
-  if (!window.jspdf || !window.html2canvas) { alert("Librerias PDF no disponibles."); return; }
+  try { await ensurePdfLibs(); } catch (e) { alert("No se pudieron cargar las librerías de PDF. Reintentá."); return; }
   destroyPresent2Charts();
   await new Promise(r => setTimeout(r, 100));
 
@@ -1850,7 +1861,7 @@ export async function downloadPresent2PDF() {
 
   const prog = document.createElement("div");
   prog.style.cssText = "position:fixed;inset:0;background:rgba(255,255,255,.95);z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px";
-  prog.innerHTML = `<div style="width:36px;height:36px;border:4px solid #eee;border-top-color:#FF0000;border-radius:50%;animation:spin .7s linear infinite"></div><div id="p2Msg" style="font-weight:700;color:#333">${es ? "Generando PDF..." : "Generating PDF..."}</div>`;
+  prog.innerHTML = `<div class="agy-style-445"></div><div id="p2Msg" class="agy-style-446">${es ? "Generando PDF..." : "Generating PDF..."}</div>`;
   document.body.appendChild(prog);
 
   // Deck combinado: incluye sección Taxi + (si aplica) sección TukTuk. Se EXCLUYEN las
