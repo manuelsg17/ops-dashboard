@@ -26,6 +26,21 @@ import ApexCharts from "apexcharts";
 window.supabase    = { createClient };
 window.ApexCharts  = ApexCharts;
 
+// ── Red de seguridad global: chunk dinámico 404 tras un deploy ──────────────
+// Cualquier import() dinámico (loadViewModule, shared/lazyLibs.js) puede fallar
+// con "Failed to fetch dynamically imported module" si el navegador tenía el
+// index.html VIEJO cacheado justo cuando se publicó un deploy nuevo — los
+// archivos con hash viejo ya no existen. loadViewModule ya maneja su propio
+// caso (ver vendor.js); esto cubre cualquier otro import() dinámico (ej.
+// html2canvas/jsPDF en lazyLibs.js) con el mismo recovery de un solo reload.
+window.addEventListener("unhandledrejection", e => {
+  const msg = String((e.reason && e.reason.message) || e.reason || "");
+  if (!/fetch dynamically imported module|Importing a module script failed/i.test(msg)) return;
+  if (sessionStorage.getItem("_chunkReloadOnce")) return;   // ya se intentó, no loopear
+  sessionStorage.setItem("_chunkReloadOnce", "1");
+  location.reload();
+});
+
 // ── Vercel Speed Insights ──────────────────────────────────────────────────
 // Integración "Other framework" (no hay paquete Preact/vanilla dedicado): el
 // script lo sirve Vercel mismo en /_vercel/speed-insights/script.js, así que
@@ -85,14 +100,30 @@ const _loadedModules = {};
 export async function loadViewModule(viewName) {
   if (_loadedModules[viewName]) return _loadedModules[viewName];
   let mod = null;
-  if (viewName === "partnerview")            mod = await import("./partnerView.js");
-  if (viewName === "present2")               mod = await import("./presentacion2.js");
-  if (viewName === "calculator")              mod = await import("./calculator.js");
-  if (viewName === "config")                  mod = await import("./adminUsers.js");
-  if (viewName === "portal")                  mod = await import("./partnerPortal.js");
+  try {
+    if (viewName === "partnerview")            mod = await import("./partnerView.js");
+    if (viewName === "present2")               mod = await import("./presentacion2.js");
+    if (viewName === "calculator")              mod = await import("./calculator.js");
+    if (viewName === "config")                  mod = await import("./adminUsers.js");
+    if (viewName === "portal")                  mod = await import("./partnerPortal.js");
+  } catch (err) {
+    // "Failed to fetch dynamically imported module" / 404 de chunk: pasa cuando
+    // el navegador tiene cacheado el index.html VIEJO (con hashes de archivo
+    // viejos) justo después de un deploy nuevo — los archivos viejos ya no
+    // existen. Un solo reload agarra el index.html fresco (hashes correctos) y
+    // se autocura; el guard de sessionStorage evita un loop infinito si el
+    // problema fuera otra cosa.
+    if (!sessionStorage.getItem("_chunkReloadOnce")) {
+      sessionStorage.setItem("_chunkReloadOnce", "1");
+      location.reload();
+      return null;
+    }
+    throw err;
+  }
   if (mod) {
     _loadedModules[viewName] = mod;
     Object.assign(window, mod);
+    sessionStorage.removeItem("_chunkReloadOnce");   // carga OK → resetea el guard
   }
   return mod;
 }

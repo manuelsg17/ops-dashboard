@@ -366,7 +366,7 @@ export function txConsolidate(target, m) {
 // payload quede acotado por la VENTANA y no por el tamaño de la tabla — que
 // crece ~180 filas/semana para siempre. El usuario puede pedir más hacia atrás
 // (el sidebar ofrece TODOS los períodos vía dashboard_dates) y ahí se re-fetchea.
-export const LOAD_WINDOW = { semanal: 16, mensual: 6, diario: 90 };
+export const LOAD_WINDOW = { semanal: 6, mensual: 6, diario: 90 };
 
 // Columna de período por escala (cada tabla la nombra distinto).
 export const DATE_COL = { semanal: "fecha", mensual: "mes", diario: "date" };
@@ -486,36 +486,36 @@ export async function fetchAllPages(table, orderCol, opts = {}) {
   if (gte && gte.value) params.set(gte.col, `gte.${gte.value}`);
   const query = `?${params.toString()}`;
 
-  // 1. Contar filas (del rango, no de la tabla entera) — HEAD + Prefer:count=exact,
-  // fetch crudo (no sb.from): fetchAllPages se llama DENTRO del Promise.all de
-  // loadFromSupabase junto a otras 6 tablas via _pgFetch. Si este count siguiera
-  // pasando por sb.from(), competiría con ellas por el lock de sesión de
-  // supabase-js (ver comentario junto a _pgFetch) aunque las páginas ya usen
-  // fetch crudo. PostgREST devuelve el total en el header Content-Range
-  // ("*/N" en un HEAD) incluso sin traer filas.
+  const PAGE = 1000;
+
+  // 1. Primera página + conteo total EN LA MISMA request (Prefer:count=exact en
+  // un GET normal también devuelve el total en el header Content-Range, no hace
+  // falta un HEAD aparte solo para contar) — antes esto era un round-trip extra
+  // COMPLETO (~700-900ms) antes de poder ni siquiera pedir la página 1. Medido
+  // en una sesión real: mensual (2 páginas) pasó de ~2.2s a ~1.5s con este merge.
   const token = await _authToken();
-  const countRes = await fetch(`${SUPABASE_URL}/rest/v1/${table}${query}`, {
-    method: "HEAD",
-    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, Prefer: "count=exact" }
+  const firstRes = await fetch(`${SUPABASE_URL}/rest/v1/${table}${query}`, {
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, Range: `0-${PAGE - 1}`, Prefer: "count=exact" }
   });
-  if (!countRes.ok) return []; // fallback a array vacío si falla el count
-  const range = countRes.headers.get("content-range") || "";
+  if (!firstRes.ok) return []; // fallback a array vacío si falla
+  const range = firstRes.headers.get("content-range") || "";
   const count = +(range.split("/")[1] || 0);
+  const firstPage = await firstRes.json();
   if (!count) return [];
 
-  const PAGE  = 1000;
   const pages = Math.ceil(count / PAGE);
+  if (pages <= 1) return firstPage;
 
-  // Las N páginas se piden con _pgFetch (fetch crudo) — ver comentario junto a
-  // _pgFetch: sb.from() serializa llamadas concurrentes por el lock de sesión
-  // de supabase-js, así que un Promise.all de páginas con sb.from() no lograba
-  // paralelismo real.
-  const reqs = Array.from({ length: pages }, (_, i) =>
-    _pgFetch(table, query, { Range: `${i * PAGE}-${(i + 1) * PAGE - 1}` })
+  // El resto de las páginas (si hay más de 1) via _pgFetch — mismo motivo que
+  // siempre: sb.from() serializa llamadas concurrentes por el lock de sesión
+  // de supabase-js, así que un Promise.all con sb.from() no lograba paralelismo
+  // real.
+  const restReqs = Array.from({ length: pages - 1 }, (_, i) =>
+    _pgFetch(table, query, { Range: `${(i + 1) * PAGE}-${(i + 2) * PAGE - 1}` })
   );
-  const results = await Promise.all(reqs);
-  const rows = [];
-  for (const data of results) if (data) rows.push(...data);
+  const rest = await Promise.all(restReqs);
+  const rows = firstPage.slice();
+  for (const data of rest) if (data) rows.push(...data);
   return rows;
 }
 
