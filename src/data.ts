@@ -670,11 +670,11 @@ export async function loadFromSupabase(opts = {}) {
     // (clid,city,date) si ya existe detalle por fleetroom. Antes de rawDataFull.
     STATE.rawData = dropLegacyAggregateRows(STATE.rawData);
 
-    // 6. Guardar copia completa y aplicar filtro de palabras prohibidas
+    // 6. Guardar copia completa
     STATE.rawDataFull = [...STATE.rawData];
 
-    // Slice TukTuk: se separa de rawDataFull ANTES del filtro de bannedWords,
-    // para no depender de esas palabras. Incluye fleetrooms marcados is_tuktuk
+    // Slice TukTuk: se separa de rawDataFull ANTES de excluir tuktuk/exclude_from_taxi
+    // (más abajo), para no perder esas filas. Incluye fleetrooms marcados is_tuktuk
     // (por db_id) o, para filas legacy sin db_id, CLIDs is_tuktuk. Estos se
     // EXCLUYEN del resto del dashboard (solo se ven en Presentación 2.0, TukTuk).
     STATE.rawDataTuktuk = STATE.rawDataFull.filter(r => rowIsTuktuk(r));
@@ -688,11 +688,6 @@ export async function loadFromSupabase(opts = {}) {
     STATE._tuktukPartners = [...new Set(STATE.rawDataTuktuk.map(r => r.partner))].sort();
     STATE._tuktukDates    = [...new Set(STATE.rawDataTuktuk.map(r => r.date))].sort();
 
-    if (STATE.bannedWords && STATE.bannedWords.length) {
-      const banned   = STATE.bannedWords.map(w => w.toLowerCase());
-      const isBanned = name => banned.some(w => (name || "").toLowerCase().includes(w));
-      STATE.rawData  = STATE.rawData.filter(r => !isBanned(r.partner));
-    }
     // Excluir del dataset Taxi los fleetrooms tuktuk o exclude_from_taxi (o,
     // legacy, CLIDs is_tuktuk). No contaminan otras pestañas.
     STATE.rawData = STATE.rawData.filter(r => !rowExcludedFromTaxi(r));
@@ -792,11 +787,6 @@ export async function loadMensualIfNeeded() {
     STATE._tuktukMensualPartners = [...new Set(STATE.rawDataMensualTuktuk.map(r => r.partner))].sort();
     STATE._tuktukMensualDates    = [...new Set(STATE.rawDataMensualTuktuk.map(r => r.date))].sort();
 
-    if (STATE.bannedWords && STATE.bannedWords.length) {
-      const banned   = STATE.bannedWords.map(w => w.toLowerCase());
-      const isBanned = name => banned.some(w => (name || "").toLowerCase().includes(w));
-      STATE.rawDataMensual = STATE.rawDataMensual.filter(r => !isBanned(r.partner));
-    }
     // Excluir tuktuk/exclude_from_taxi por fleetroom (o CLID legacy).
     STATE.rawDataMensual = STATE.rawDataMensual.filter(r => !rowExcludedFromTaxi(r));
     // Aplicar mapeo de flotas tambien al dataset mensual
@@ -836,11 +826,6 @@ export async function loadDiarioIfNeeded() {
     }));
     STATE.rawDataDiario = dropLegacyAggregateRows(STATE.rawDataDiario);
     STATE.rawDataDiarioFull = [...STATE.rawDataDiario];
-    if (STATE.bannedWords && STATE.bannedWords.length) {
-      const banned   = STATE.bannedWords.map(w => w.toLowerCase());
-      const isBanned = name => banned.some(w => (name || "").toLowerCase().includes(w));
-      STATE.rawDataDiario = STATE.rawDataDiario.filter(r => !isBanned(r.partner));
-    }
     // Excluir tuktuk/exclude_from_taxi por fleetroom (o CLID legacy).
     STATE.rawDataDiario = STATE.rawDataDiario.filter(r => !rowExcludedFromTaxi(r));
     // Aplicar mapeo de flotas tambien al dataset diario

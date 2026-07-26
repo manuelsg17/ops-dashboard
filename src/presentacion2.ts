@@ -566,6 +566,14 @@ export function p2CohortLines(scope, dates, kpiKey) {
   return out;
 }
 
+// html2canvas (downloadPresent2PDF) captura la página a este `scale`. El
+// devicePixelRatio del canvas de Chart.js DEBE ser >= este número: si el canvas
+// fuente tiene menos resolución que la que pide el destino, el navegador lo
+// escala hacia arriba al capturar y el gráfico sale borroso — pasó exactamente
+// eso con devicePixelRatio:3 vs scale:4 (desajuste de 1x). Una sola constante
+// para ambos evita que se vuelvan a desalinear.
+export const P2_EXPORT_SCALE = 4;
+
 // ── CHART (Chart.js, registro propio) ─────────────────────────────────────────
 // Línea del partner (con puntos WoW) + tendencia de ciudad (opcional, gris punteada)
 // + líneas de cohorte (opcional, punteadas de color). isPct=true → formatea %.
@@ -611,6 +619,14 @@ export function p2Chart(canvasId, dates, partnerVals, cityVals, cohortLines, col
     type: "line",
     data: { labels: dates.map(d2s), datasets },
     options: {
+      // devicePixelRatio fijo (no el del monitor): html2canvas copia el canvas de
+      // Chart.js TAL CUAL para el PDF (no lo re-renderiza a partir de los datos), así
+      // que su nitidez tiene techo en la resolución interna del canvas. Tiene que
+      // ser >= P2_EXPORT_SCALE (el scale de html2canvas) — un valor MENOR seguía
+      // saliendo borroso porque el navegador upscalea igual al capturar (esto pasó
+      // con devicePixelRatio:3 vs scale:4, un desajuste de 1x que Manuel encontró
+      // al revisar un PDF real).
+      devicePixelRatio: P2_EXPORT_SCALE,
       responsive: true, maintainAspectRatio: false, animation: false,
       plugins: {
         legend: { display: false },
@@ -1873,14 +1889,24 @@ export async function downloadPresent2PDF() {
   PRESENT2_STATE._exporting = true;   // slides omiten bloques solo-vivo (ej. detalle KAM del pronóstico)
   try {
     const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({ orientation: "landscape", unit: "px", format: [1280, 720] });
+    // hotfixes:["px_scaling"] — bug documentado de jsPDF: sin este flag, unit:"px"
+    // arrastra un factor de conversión DPI (96→72) inconsistente entre el `format`
+    // de la página y las coordenadas de `addImage`, lo que puede recortar o
+    // desplazar levemente el contenido dentro de la hoja.
+    const pdf = new jsPDF({ orientation: "landscape", unit: "px", format: [1280, 720], hotfixes: ["px_scaling"] });
+    // Misma familia tipográfica que index.html/styles.css (body). Se fija explícita
+    // acá también (no solo heredada) para que la exportación no dependa del font
+    // por-defecto del navegador de quien exporta — Manuel pidió que el PDF se vea
+    // SIEMPRE igual, sin importar desde qué máquina/navegador se genera.
+    const P2_PDF_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) {} }
     for (let i = 0; i < deck.length; i++) {
       const entry = deck[i], s = entry.def;
       PRESENT2_STATE.dataset = entry.ds;   // scope por-slide (los accesores leen este global)
       const dates = p2SelectedDates(from, to, STATE.curMode);   // dataset-aware por slide
       const div = document.createElement("div");
       div.setAttribute("data-p2slide", "1");
-      div.style.cssText = `position:fixed;left:${s.charts ? "0" : "-9999px"};top:0;width:1280px;height:720px;overflow:hidden;background:#fff;z-index:99998`;
+      div.style.cssText = `position:fixed;left:${s.charts ? "0" : "-9999px"};top:0;width:1280px;height:720px;overflow:hidden;background:#fff;z-index:99998;font-family:${P2_PDF_FONT}`;
       div.innerHTML = s.build(partner, dates, i);
       document.body.appendChild(div);
       await new Promise(r => setTimeout(r, 300));
@@ -1892,14 +1918,23 @@ export async function downloadPresent2PDF() {
       } else {
         await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
       }
-      const canvas = await html2canvas(div, { width: 1280, height: 720, scale: 4, useCORS: true, logging: false });
+      // windowWidth/windowHeight fijos: sin esto, html2canvas usa el viewport REAL del
+      // navegador para su cálculo interno de layout, que casi nunca es 1280x720 —
+      // podía desalinear/recortar contenido según el tamaño de la ventana de quien
+      // exporta. backgroundColor explícito evita cualquier borde translúcido en el
+      // recorte. PNG (sin compresión JPEG) para que texto y líneas finas de los
+      // charts salgan nítidos, no borrosos.
+      const canvas = await html2canvas(div, {
+        width: 1280, height: 720, windowWidth: 1280, windowHeight: 720,
+        scale: P2_EXPORT_SCALE, useCORS: true, logging: false, backgroundColor: "#fff"
+      });
       if (s.charts) {
         div.querySelectorAll("canvas").forEach(c => { const ch = Chart.getChart(c); if (ch) ch.destroy(); });
         PRESENT2_STATE.charts = [];
       }
       try { if (div.parentNode) document.body.removeChild(div); } catch (e) {}
       if (i > 0) pdf.addPage();
-      pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, 1280, 720);
+      pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, 1280, 720);
     }
     stampPDF(pdf, `Presentación 2.0 — ${partner}`);
     pdf.save(`${partner}_Presentacion2_${to}.pdf`);

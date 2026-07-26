@@ -2,7 +2,11 @@
 // app.js — Inicialización principal, sidebar, tabs y helpers de UI
 
 // ── CONFIG PAGINATION STATE ───────────────────────────────────────────────────
-export const CONFIG_STATE = { page: 0, search: "", kamFilter: "all", PAGE_SIZE: 20 };
+// section: "partners" (CRUD CLID/nombre/KAM) · "usuarios" (roles/permisos, admin-only) ·
+// "mantenimiento" (alerta de declive + eliminar datos, admin-only) — antes todo esto
+// vivía apilado en una sola página larga sin agrupar; reordenado a pedido explícito
+// de Manuel ("siento un desorden general", jul 2026).
+export const CONFIG_STATE = { page: 0, search: "", kamFilter: "all", PAGE_SIZE: 20, section: "partners" };
 
 // ── LOCALSTORAGE HELPER ───────────────────────────────────────────────────────
 export function lsSet(key, val) {
@@ -674,6 +678,24 @@ export function modeToggleHTML() {
   return ""; // El selector de escala vive en el sidebar — ver .mode-toggle-row
 }
 
+// Barra de sub-secciones de Configuración (mismo patrón visual que
+// .mode-toggle-row/.mode-btn del selector de línea de Rendimiento/Metas).
+// "usuarios" y "mantenimiento" solo se ofrecen a admin — un viewer/kam no tiene
+// nada que hacer ahí (RLS igual lo bloquearía, esto es solo no ofrecer UI muerta).
+function _configSectionToggleHTML() {
+  const sec = CONFIG_STATE.section;
+  const defs = [
+    { k: "partners",      emoji: "👥", label: "Partners",           adminOnly: false },
+    { k: "usuarios",      emoji: "🔐", label: "Usuarios y Accesos",  adminOnly: true },
+    { k: "mantenimiento", emoji: "🛠️", label: "Mantenimiento",       adminOnly: true }
+  ].filter(d => !d.adminOnly || STATE.isAdmin);
+  const btns = defs.map(d => `
+    <button class="mode-btn${sec===d.k?" active":""}" data-act="cfgSetSection" data-section="${d.k}">
+      ${d.emoji} ${d.label}
+    </button>`).join("");
+  return `<div class="mode-toggle-row" style="margin-bottom:14px">${btns}</div>`;
+}
+
 // ── CONFIG TAB ────────────────────────────────────────────────────────────────
 export function renderConfig() {
   const content = document.getElementById("configContent");
@@ -685,14 +707,51 @@ export function renderConfig() {
       </div>`;
     return;
   }
+  // Un viewer/kam no tiene sub-secciones admin-only disponibles: si quedó
+  // parado en una de ellas (ej. cambio de sesión) se cae a "partners".
+  if (CONFIG_STATE.section !== "partners" && !STATE.isAdmin) CONFIG_STATE.section = "partners";
 
-  const kams = [...new Set(Object.values(STATE.KAM_MAP))].sort();
+  let html = secH("⚙️", "#10b981", "Configuración",
+    "Partners, usuarios y mantenimiento del dashboard", "");
+  html += _configSectionToggleHTML();
+
+  if (CONFIG_STATE.section === "usuarios" && STATE.isAdmin) {
+    html += _renderConfigUsuarios();
+  } else if (CONFIG_STATE.section === "mantenimiento" && STATE.isAdmin) {
+    html += _renderConfigMantenimiento();
+  } else {
+    html += _renderConfigPartners();
+  }
+
+  content.innerHTML = html;
+  if (CONFIG_STATE.section === "partners" || !STATE.isAdmin) renderConfigResults();
+  // Panel de usuarios (admin): pinta su propio estado sobre #adminUsersBox.
+  if (CONFIG_STATE.section === "usuarios" && typeof renderAdminUsers === "function") renderAdminUsers();
+}
+
+// ── Sub-sección: Usuarios y Accesos (solo admin) ─────────────────────────────
+// El contenido lo pinta renderAdminUsers() (adminUsers.js) sobre #adminUsersBox,
+// y solo tras un click explícito en "Cargar usuarios" — listar usuarios pega a
+// la Edge Function, no hace falta hacerlo en cada render de Configuración.
+function _renderConfigUsuarios() {
+  return `
+    <div class="section agy-style-30">
+      <div class="agy-style-46">👥 Usuarios y Accesos</div>
+      <div class="agy-style-47">
+        Roles (admin / kam / viewer / partner), permisos extra por usuario y —para partners— qué CLIDs puede ver cada uno.
+        Un partner sin CLIDs asignados no ve ningún dato: es el comportamiento seguro por defecto.
+      </div>
+      <div id="adminUsersBox"></div>
+    </div>`;
+}
+
+// ── Sub-sección: Mantenimiento (solo admin) ──────────────────────────────────
+// Alerta de declive (config de UI, no destructiva) + Eliminar Datos (destructiva).
+// Agrupadas aparte de "Partners" y "Usuarios" porque son acciones operativas, no
+// gestión de datos maestros — mezcladas antes en una sola página larga.
+function _renderConfigMantenimiento() {
   const metricLabel = { activeDrivers: "Conductores Activos", supplyHours: "Horas de Conexión", nr: "Nuevos + Reactivados" };
-  let html = secH("⚙️", "#10b981", "Configuración de Partners",
-    "CLIDs, nombres y KAMs · editable directamente desde aquí", "");
-
-  // ── Decline alert settings ──────────────────────────────────────────────
-  html += `
+  let html = `
     <div class="section agy-style-30">
       <div class="agy-style-31">🔔 Alerta de Declive Consecutivo</div>
       <div class="agy-style-32">
@@ -717,11 +776,9 @@ export function renderConfig() {
       </div>
     </div>`;
 
-  // ── Sección: Eliminar Datos (solo admin) ────────────────────────────────────
   // El gate definitivo es RLS en Supabase: aunque alguien fuerce el render
   // desde DevTools, la query DELETE falla con 401/PGRST.
-  if (STATE.isAdmin) {
-    html += `
+  html += `
     <div class="section agy-style-37">
       <div class="agy-style-38">🗑️ Eliminar Datos</div>
       <div class="agy-style-39">
@@ -749,104 +806,13 @@ export function renderConfig() {
         </button>
       </div>
     </div>`;
-  }
+  return html;
+}
 
-  // ── Sección: Usuarios y accesos (solo admin) ────────────────────────────────
-  // El contenido lo pinta renderAdminUsers() (adminUsers.js) sobre #adminUsersBox,
-  // y solo tras un click explícito en "Cargar usuarios" — listar usuarios pega a
-  // la Edge Function, no hace falta hacerlo en cada render de Configuración.
-  if (STATE.isAdmin) {
-    html += `
-    <div class="section agy-style-30">
-      <div class="agy-style-46">👥 Usuarios y Accesos</div>
-      <div class="agy-style-47">
-        Roles (admin / kam / viewer / partner), permisos extra por usuario y —para partners— qué CLIDs puede ver cada uno.
-        Un partner sin CLIDs asignados no ve ningún dato: es el comportamiento seguro por defecto.
-      </div>
-      <div id="adminUsersBox"></div>
-    </div>`;
-  }
-
-  // ── Sección: Filtros de Flota (palabras prohibidas) ──────────────────────────
-  // rawDataFull − rawData mezcla DOS causas: palabras prohibidas y sub-flotas
-  // TukTuk/excluidas-de-Taxi (Vista Flotas). Se desglosan por separado para no
-  // atribuir a "palabras prohibidas" exclusiones que vienen del tagging por fleetroom.
-  const excludedCount = STATE.rawDataFull.length - STATE.rawData.length;
-  const _bannedLowerCnt = (STATE.bannedWords || []).map(w => w.toLowerCase());
-  const bannedRowCount = _bannedLowerCnt.length
-    ? STATE.rawDataFull.filter(r => _bannedLowerCnt.some(w => (r.partner || "").toLowerCase().includes(w))).length
-    : 0;
-  const taxiExclCount = Math.max(0, excludedCount - bannedRowCount);
-  // bannedWords viene de localStorage y puede ser manipulado: escapamos siempre,
-  // y pasamos el valor como JSON HTML-encodeado para no romper el atributo onclick.
-  const bannedBadges  = STATE.bannedWords.map(w => {
-    const wText = escapeHTML(w);
-    return `<span class="agy-style-48">
-      ${wText}
-      <button data-act="removeBannedWord" data-word="${wText}"
-        class="agy-style-49" title="Eliminar">✕</button>
-    </span>`;
-  }).join("");
-
-  // Calcular qué partners fueron excluidos y por qué (qué palabra disparó la exclusion)
-  const bannedLower = (STATE.bannedWords || []).map(w => w.toLowerCase());
-  const excludedPartners = new Map(); // partner -> { matchedWord, rows, kam }
-  STATE.rawDataFull.forEach(r => {
-    const nameLower = (r.partner || "").toLowerCase();
-    const matched = bannedLower.find(w => nameLower.includes(w));
-    if (!matched) return;
-    if (!excludedPartners.has(r.partner)) {
-      excludedPartners.set(r.partner, { matchedWord: matched, rows: 0, kam: r.kam || getKAMForPartner(r.partner) || "—" });
-    }
-    excludedPartners.get(r.partner).rows++;
-  });
-  const excludedList = [...excludedPartners.entries()].sort((a,b) => b[1].rows - a[1].rows);
-
-  html += `
-    <div class="section agy-style-30">
-      <div class="agy-style-31">🚫 Filtros de Flota — Palabras Prohibidas</div>
-      <div class="agy-style-50">
-        Los partners cuyo nombre contenga alguna de estas palabras (sin importar mayúsculas) quedan excluidos del dashboard.
-        Por palabra prohibida: <strong class="agy-style-51">${bannedRowCount}</strong> registro(s) · <strong>${excludedPartners.size}</strong> partner(s).
-        ${taxiExclCount ? `Aparte hay <strong class="agy-style-52">${taxiExclCount}</strong> registro(s) fuera de Taxi por marcado <strong>🛺 TukTuk / ⛔ Excluir</strong> (se gestionan en <strong>Data Raw → Vista Flotas</strong>, no aquí).` : ""}
-      </div>
-      <div class="agy-style-53">
-        ${bannedBadges || `<span class="agy-style-54">Sin palabras prohibidas configuradas.</span>`}
-      </div>
-      <div class="agy-style-55">
-        <input class="crud-input" id="newBannedWord" placeholder="Nueva palabra (ej: mototaxi)"
-          class="agy-style-56"
-          data-act-keydown="addBannedWordEnter"/>
-        <button class="crud-btn crud-btn-add" data-act="addBannedWord">+ Agregar</button>
-      </div>
-      ${excludedList.length ? `
-        <details class="agy-style-57">
-          <summary class="agy-style-58">
-            Ver partners actualmente excluidos (${excludedPartners.size})
-          </summary>
-          <div class="agy-style-59">
-            <table class="agy-style-60">
-              <thead class="agy-style-61">
-                <tr>
-                  <th class="agy-style-62">Partner</th>
-                  <th class="agy-style-62">KAM</th>
-                  <th class="agy-style-62">Palabra que aplicó</th>
-                  <th class="agy-style-63">Filas</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${excludedList.map(([p, info]) => `
-                  <tr>
-                    <td class="agy-style-64">${escapeHTML(p)}</td>
-                    <td class="agy-style-65">${escapeHTML(info.kam)}</td>
-                    <td class="agy-style-64"><code class="agy-style-66">${escapeHTML(info.matchedWord)}</code></td>
-                    <td class="agy-style-67">${info.rows}</td>
-                  </tr>`).join("")}
-              </tbody>
-            </table>
-          </div>
-        </details>` : ""}
-    </div>`;
+// ── Sub-sección: Partners (CLID/nombre/KAM) — la vista por defecto ───────────
+function _renderConfigPartners() {
+  const kams = [...new Set(Object.values(STATE.KAM_MAP))].sort();
+  let html = "";
 
   // Stats per KAM
   html += `<div class="section"><div class="agy-style-68">`;
@@ -883,10 +849,7 @@ export function renderConfig() {
     </div>
     <div id="configResults"></div>
     </div>`;   // cierra la .section abierta arriba (stats KAM + Partners & CLIDs)
-  content.innerHTML = html;
-  renderConfigResults();
-  // Panel de usuarios (admin): pinta su propio estado sobre #adminUsersBox.
-  if (typeof renderAdminUsers === "function") renderAdminUsers();
+  return html;
 }
 
 // Repinta SOLO contador + tabla + paginación (sin re-crear el input de búsqueda).
@@ -1087,34 +1050,6 @@ export async function kamCrudDelete(clid) {
   showBanner(true, `"${partner}" eliminado correctamente ✓`);
 }
 
-// ── BANNED WORDS MANAGEMENT ───────────────────────────────────────────────────
-export async function addBannedWord() {
-  const input = document.getElementById("newBannedWord");
-  const word  = (input?.value || "").trim().toLowerCase();
-  if (!word) return;
-  if (STATE.bannedWords.includes(word)) {
-    showBanner(false, `"${word}" ya está en la lista.`);
-    return;
-  }
-  STATE.bannedWords.push(word);
-  lsSet("yangoBannedWords", JSON.stringify(STATE.bannedWords));
-  showLoad(true, "Aplicando filtro...");
-  await loadFromSupabase();
-  showLoad(false);
-  renderConfig();
-  showBanner(true, `"${word}" agregado a la lista de exclusión ✓`);
-}
-
-export async function removeBannedWord(word) {
-  STATE.bannedWords = STATE.bannedWords.filter(w => w !== word);
-  lsSet("yangoBannedWords", JSON.stringify(STATE.bannedWords));
-  showLoad(true, "Aplicando filtro...");
-  await loadFromSupabase();
-  showLoad(false);
-  renderConfig();
-  showBanner(true, `"${word}" eliminado de la lista de exclusión ✓`);
-}
-
 // ── UI HELPERS ────────────────────────────────────────────────────────────────
 export function showBanner(ok, msg) {
   const el = document.getElementById("dsBanner");
@@ -1242,9 +1177,7 @@ registerActions({
   // configuración
   updateDeclineSettings,
   deleteDashboardData,
-  addBannedWord,
-  addBannedWordEnter: (d, el, e) => { if (e.key === "Enter") addBannedWord(); },
-  removeBannedWord:   d => removeBannedWord(d.word),
+  cfgSetSection: d => { CONFIG_STATE.section = d.section; renderConfig(); },
   cfgSearch:    (d, el) => { CONFIG_STATE.search = el.value; CONFIG_STATE.page = 0; renderConfigResults(); },
   cfgKamFilter: (d, el) => { CONFIG_STATE.kamFilter = el.value; CONFIG_STATE.page = 0; renderConfigResults(); },
   cfgPagePrev:  () => { CONFIG_STATE.page = Math.max(0, CONFIG_STATE.page - 1); renderConfigResults(); },

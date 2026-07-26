@@ -126,16 +126,6 @@ export const STATE = {
   _partnerKAM:      null,
   _tabRenderId:     0,
   _switchingTab:    false,
-  bannedWords: (function() {
-    const fallback = ["tuktuk", "tuk tuk", "delivery", "cargo", "mototaxi", "bikes"];
-    try {
-      const raw = JSON.parse(localStorage.getItem("yangoBannedWords") || "null");
-      if (!Array.isArray(raw)) return fallback;
-      return raw
-        .filter(w => typeof w === "string" && w.length > 0 && w.length <= 40)
-        .slice(0, 100);
-    } catch { return fallback; }
-  })(),
   tuktukPatterns: (function() {
     const fallback = ["tuktuk", "tuk tuk", "tuk-tuk", "mototaxi"];
     try {

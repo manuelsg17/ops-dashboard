@@ -8,7 +8,6 @@ export const RAW_STATE = {
   city:       "all",
   dateFrom:   "",
   dateTo:     "",
-  showBanned: true,    // true = incluir flotas excluidas del dashboard
   sortCol:    "date",
   sortDir:    "asc",
   view:       "data",  // "data" = registros · "flotas" = mapeo CLID→flota · "recon" = conciliación por db_id
@@ -53,13 +52,8 @@ export function renderRawData() {
   // Ciudades únicas del full dataset
   const allCities = [...new Set(src.map(r => r.city).filter(Boolean))].sort();
 
-  // Set de partners baneados (para marcar con 🚫)
-  const banned = (STATE.bannedWords || []).map(w => w.toLowerCase());
-  const isBanned = name => banned.some(w => (name || "").toLowerCase().includes(w));
-
   // ── Aplicar filtros ──────────────────────────────────────────────────────
   let filtered = src.filter(r => {
-    if (!RAW_STATE.showBanned && isBanned(r.partner)) return false;
     if (RAW_STATE.city !== "all" && r.city !== RAW_STATE.city) return false;
     if (RAW_STATE.dateFrom && r.date < RAW_STATE.dateFrom) return false;
     if (RAW_STATE.dateTo   && r.date > RAW_STATE.dateTo)   return false;
@@ -142,11 +136,6 @@ export function renderRawData() {
         <select class="sb-sel" data-act-change="rawSetDateTo" data-reset="1">
           ${dateToOpts}
         </select>
-        <label class="agy-style-448">
-          <input type="checkbox" ${RAW_STATE.showBanned ? "checked" : ""}
-            data-act-change="rawToggleBanned"/>
-          Mostrar excluidos 🚫
-        </label>
         <button class="crud-btn" data-act="exportRawCSV"
           class="agy-style-449">
           ⬇ Exportar CSV
@@ -170,18 +159,14 @@ export function renderRawData() {
             ${thSort("Horas", "supplyHours")}
             ${thSort("Comisión", "commission")}
             ${thSort("Viajes", "trips")}
-            <th class="agy-style-451"></th>
           </tr>
         </thead>
         <tbody>`;
 
   pageRows.forEach(r => {
-    const nr        = r.newPartner + r.newService + r.reactivated;
-    const banned_r  = isBanned(r.partner);
-    const rowStyle  = banned_r ? "background:#fff8f8" : "";
-    const statusIco = banned_r ? `<span title="Excluido del dashboard">🚫</span>` : "";
+    const nr = r.newPartner + r.newService + r.reactivated;
     html += `
-          <tr style="${rowStyle}">
+          <tr>
             <td class="agy-style-452">${d2s(r.date)}</td>
             <td>
               <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${STATE.partnerColors[r.partner] || "#ccc"};margin-right:5px"></span>
@@ -194,7 +179,6 @@ export function renderRawData() {
             <td class="tn">${fmt5(r.supplyHours)}</td>
             <td class="tn" title="$${fmt5(r.commission)}">${fmtK(r.commission)}</td>
             <td class="tn">${fmt5(r.trips)}</td>
-            <td class="agy-style-27">${statusIco}</td>
           </tr>`;
   });
 
@@ -207,7 +191,6 @@ export function renderRawData() {
             <td class="tn agy-style-456">${fmt5(totSH)}</td>
             <td class="tn agy-style-456" title="$${fmt5(totCom)}">${fmtK(totCom)}</td>
             <td class="tn agy-style-456">${fmt5(totTrip)}</td>
-            <td></td>
           </tr>
         </tbody>
       </table>
@@ -245,11 +228,7 @@ export function exportRawCSV() {
   const src    = STATE.curMode === "mensual" ? STATE.rawDataMensualFull
                : STATE.curMode === "diario"  ? STATE.rawDataDiarioFull
                :                              STATE.rawDataFull;
-  const banned = (STATE.bannedWords || []).map(w => w.toLowerCase());
-  const isBanned = name => banned.some(w => (name || "").toLowerCase().includes(w));
-
   const rows = src.filter(r => {
-    if (!RAW_STATE.showBanned && isBanned(r.partner)) return false;
     if (RAW_STATE.city !== "all" && r.city !== RAW_STATE.city) return false;
     if (RAW_STATE.dateFrom && r.date < RAW_STATE.dateFrom) return false;
     if (RAW_STATE.dateTo   && r.date > RAW_STATE.dateTo)   return false;
@@ -260,11 +239,10 @@ export function exportRawCSV() {
     return true;
   });
 
-  const header = ["Fecha", "Partner", "KAM", "Ciudad", "AD", "N+R", "Horas", "Comision", "Viajes", "Excluido"];
+  const header = ["Fecha", "Partner", "KAM", "Ciudad", "AD", "N+R", "Horas", "Comision", "Viajes"];
   const lines  = [header.join(",")];
   rows.forEach(r => {
     const nr = r.newPartner + r.newService + r.reactivated;
-    const excl = isBanned(r.partner) ? "Sí" : "";
     // Wrap text fields in quotes to handle commas
     lines.push([
       r.date,
@@ -275,8 +253,7 @@ export function exportRawCSV() {
       nr,
       r.supplyHours,
       r.commission,
-      r.trips,
-      excl
+      r.trips
     ].join(","));
   });
 
@@ -337,14 +314,11 @@ export function rawSearchInput(inp, resetPage) {
 //   - Nombre EFECTIVO: el que el dashboard usa (Configuracion > flota > Excel)
 //   - KAM EFECTIVO: idem
 //   - Ciudad: lo que dice flota (o lo que vino del Excel)
-//   - Estado: activa / inactiva / excluida por palabra prohibida
+//   - Estado: activa / inactiva
 //   - Accion: editar (solo afecta tabla `flotas`)
 export function _renderFlotasView() {
   const flotasMap = STATE.flotasMap || {};
   const clids = Object.keys(flotasMap);
-
-  const bannedLower = (STATE.bannedWords || []).map(w => w.toLowerCase());
-  const isBanned = name => bannedLower.some(w => (name || "").toLowerCase().includes(w));
 
   // Mapa por CLID con la info del rendimiento.
   // `nombre_excel` = lo que vino crudo del Excel (campo `_partnerExcel`,
@@ -393,13 +367,12 @@ export function _renderFlotasView() {
 
     const tieneFlota = !!f;
     const activo     = !f || f.activo !== false;
-    const banned     = isBanned(nombre_excel) || isBanned(nombre_partners) || isBanned(nombre_flota);
 
     return {
       clid, enPartners,
       nombre_partners, nombre_flota, nombre_excel, nombre_efectivo,
       kam_partners, kam_flota, kam_efectivo,
-      ciudad, tieneFlota, activo, banned
+      ciudad, tieneFlota, activo
     };
   })
   .filter(r => {
@@ -418,13 +391,12 @@ export function _renderFlotasView() {
   const conConfig = rows.filter(r => r.enPartners).length;
   const sinConfig = rows.filter(r => !r.enPartners).length;
   const inactivas = rows.filter(r => !r.activo).length;
-  const baneadas  = rows.filter(r => r.banned).length;
 
   const allCities = [...new Set([...STATE.rawDataFull.map(r => r.city), ...Object.values(flotasMap).map(f => f.ciudad)].filter(Boolean))].sort();
   const cityOpts = allCities.map(c => `<option value="${c}"${RAW_STATE.city===c?" selected":""}>${cityLabel(c)}</option>`).join("");
 
   let html = secH("\uD83D\uDE9A", "#FF0000", "Vista Flotas",
-    `${fmt(rows.length)} CLID(s) \u00B7 ${fmt(conConfig)} configurados en partners \u00B7 ${fmt(sinConfig)} sin configurar \u00B7 ${fmt(inactivas)} inactiva(s) \u00B7 ${fmt(baneadas)} por palabra prohibida`, "");
+    `${fmt(rows.length)} CLID(s) \u00B7 ${fmt(conConfig)} configurados en partners \u00B7 ${fmt(sinConfig)} sin configurar \u00B7 ${fmt(inactivas)} inactiva(s)`, "");
 
   html += _rawViewToggle();
 
@@ -599,11 +571,9 @@ export function _renderFlotasView() {
       // \u2500\u2500\u2500 FILA EN MODO LECTURA \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
       const badge = !r.activo
         ? `<span class="agy-style-494">\uD83D\uDEAB Inactiva</span>`
-        : r.banned
-          ? `<span class="agy-style-495">\uD83D\uDEAB Palabra prohibida</span>`
-          : !r.enPartners
-            ? `<span class="agy-style-495">Sin config</span>`
-            : `<span class="agy-style-496">\u2713 Activa</span>`;
+        : !r.enPartners
+          ? `<span class="agy-style-495">Sin config</span>`
+          : `<span class="agy-style-496">\u2713 Activa</span>`;
       const cityCell = r.ciudad
         ? cityLabel(r.ciudad)
         : `<span class="agy-style-497">\u2014 sin ciudad \u2014</span>`;
@@ -1135,7 +1105,6 @@ registerActions({
   rawSetCity:     (d, el) => { RAW_STATE.city = el.value;     if (d.reset === "1") RAW_STATE.page = 0; renderRawData(); },
   rawSetDateFrom: (d, el) => { RAW_STATE.dateFrom = el.value; if (d.reset === "1") RAW_STATE.page = 0; renderRawData(); },
   rawSetDateTo:   (d, el) => { RAW_STATE.dateTo = el.value;   if (d.reset === "1") RAW_STATE.page = 0; renderRawData(); },
-  rawToggleBanned:(d, el) => { RAW_STATE.showBanned = el.checked; RAW_STATE.page = 0; renderRawData(); },
   rawPagePrev:    () => { RAW_STATE.page = Math.max(0, RAW_STATE.page - 1); renderRawData(); },
   rawPageNext:    d  => { RAW_STATE.page = Math.min((+d.total || 1) - 1, RAW_STATE.page + 1); renderRawData(); },
   rawSwitchView:  d  => rawSwitchView(d.view),
