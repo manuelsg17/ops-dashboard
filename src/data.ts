@@ -438,19 +438,36 @@ export async function fetchAllPages(table, orderCol, opts = {}) {
   );
   if (cErr || !count) return []; // fallback a array vacío si falla el count
 
-  const PAGE   = 1000;
-  const pages  = Math.ceil(count / PAGE);
-  const reqs   = Array.from({ length: pages }, (_, i) =>
-    withFilter(sb.from(table).select(cols))
-      .order(orderCol, { ascending: true })
-      .range(i * PAGE, (i + 1) * PAGE - 1)
-  );
+  const PAGE  = 1000;
+  const pages = Math.ceil(count / PAGE);
+
+  // Las N páginas se piden con fetch() crudo, NO con sb.from() — encontramos
+  // (revisando una sesión real) que supabase-js serializa internamente las
+  // llamadas concurrentes que dependen de la sesión (lock de auto-refresh de
+  // GoTrueClient): 6 páginas via Promise.all(sb.from(...)) tardaban ~3.9s, las
+  // MISMAS 6 vía fetch() con el token ya resuelto tardaban ~2s — la consulta en
+  // sí ejecuta en <50ms server-side (verificado con EXPLAIN ANALYZE), todo el
+  // resto es ese lock. Se resuelve la sesión UNA vez, afuera del Promise.all.
+  const { data: { session } } = await sb.auth.getSession();
+  const token = (session && session.access_token) || SUPABASE_ANON_KEY;
+  const params = new URLSearchParams({ select: cols, order: `${orderCol}.asc` });
+  if (gte && gte.value) params.set(gte.col, `gte.${gte.value}`);
+  const url = `${SUPABASE_URL}/rest/v1/${table}?${params.toString()}`;
+
+  const reqs = Array.from({ length: pages }, async (_, i) => {
+    const res = await fetch(url, {
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${token}`,
+        Range: `${i * PAGE}-${(i + 1) * PAGE - 1}`
+      }
+    });
+    if (!res.ok) throw new Error(`Error ${res.status} al cargar ${table}`);
+    return res.json();
+  });
   const results = await Promise.all(reqs);
   const rows = [];
-  for (const { data, error } of results) {
-    if (error) throw error;
-    if (data) rows.push(...data);
-  }
+  for (const data of results) if (data) rows.push(...data);
   return rows;
 }
 
