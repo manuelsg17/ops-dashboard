@@ -418,6 +418,45 @@ export const REND_COLS_SEMANAL  = _rendCols("fecha", "new_from_partner", "new_fr
 export const REND_COLS_MENSUAL  = _rendCols("mes",   "new_from_partner", "new_from_service", ["partner", "kam"]);
 export const REND_COLS_DIARIO   = _rendCols("date",  "new_partner",      "new_service");
 
+// ── FETCH CRUDO A POSTGREST (bypass del lock de sesión de supabase-js) ───────
+// sb.from(...) internamente pasa por GoTrueClient, que serializa con un lock
+// TODAS las llamadas concurrentes que necesitan el access_token (pensado para
+// no pisar un refresh de token en curso) — verificado en una sesión real:
+// 6 páginas en paralelo vía sb.from() tardaban ~3.9s; las MISMAS 6 vía fetch()
+// con el token ya resuelto, ~1.5-2.8s (la query en sí ejecuta en 46ms
+// server-side). El token se cachea unos segundos para que un Promise.all de
+// varias tablas solo pague el costo de auth.getSession() una vez.
+// Cachea la PROMESA en curso, no solo el valor resuelto: si no se hiciera así,
+// N llamadas simultáneas con la caché en frío (ej. las 7 tablas de
+// loadFromSupabase disparadas juntas) verían todas _authTokenCache == null y
+// cada una llamaría sb.auth.getSession() por su cuenta — reintroduciendo el
+// mismo lock que este helper existe para evitar.
+let _authTokenCache = null, _authTokenAt = 0, _authTokenInFlight = null;
+async function _authToken() {
+  const now = Date.now();
+  if (_authTokenCache && now - _authTokenAt < 5000) return _authTokenCache;
+  if (_authTokenInFlight) return _authTokenInFlight;
+  _authTokenInFlight = (async () => {
+    const { data: { session } } = await sb.auth.getSession();
+    _authTokenCache = (session && session.access_token) || SUPABASE_ANON_KEY;
+    _authTokenAt = Date.now();
+    _authTokenInFlight = null;
+    return _authTokenCache;
+  })();
+  return _authTokenInFlight;
+}
+
+// query = querystring completo incluyendo el "?" inicial (ej. "?select=*").
+// extraHeaders para Range (paginación) u otros headers puntuales.
+async function _pgFetch(table, query, extraHeaders = {}) {
+  const token = await _authToken();
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}${query}`, {
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, ...extraHeaders }
+  });
+  if (!res.ok) throw new Error(`Error ${res.status} al cargar ${table}`);
+  return res.json();
+}
+
 // ── PAGINACIÓN PARALELA ───────────────────────────────────────────────────────
 // Descarga todas las páginas de una tabla en paralelo (sin esperar página a
 // página). `opts.gte` = { col, value } aplica un filtro de rango EN EL SERVIDOR
@@ -441,30 +480,17 @@ export async function fetchAllPages(table, orderCol, opts = {}) {
   const PAGE  = 1000;
   const pages = Math.ceil(count / PAGE);
 
-  // Las N páginas se piden con fetch() crudo, NO con sb.from() — encontramos
-  // (revisando una sesión real) que supabase-js serializa internamente las
-  // llamadas concurrentes que dependen de la sesión (lock de auto-refresh de
-  // GoTrueClient): 6 páginas via Promise.all(sb.from(...)) tardaban ~3.9s, las
-  // MISMAS 6 vía fetch() con el token ya resuelto tardaban ~2s — la consulta en
-  // sí ejecuta en <50ms server-side (verificado con EXPLAIN ANALYZE), todo el
-  // resto es ese lock. Se resuelve la sesión UNA vez, afuera del Promise.all.
-  const { data: { session } } = await sb.auth.getSession();
-  const token = (session && session.access_token) || SUPABASE_ANON_KEY;
+  // Las N páginas se piden con _pgFetch (fetch crudo) — ver comentario junto a
+  // _pgFetch: sb.from() serializa llamadas concurrentes por el lock de sesión
+  // de supabase-js, así que un Promise.all de páginas con sb.from() no lograba
+  // paralelismo real.
   const params = new URLSearchParams({ select: cols, order: `${orderCol}.asc` });
   if (gte && gte.value) params.set(gte.col, `gte.${gte.value}`);
-  const url = `${SUPABASE_URL}/rest/v1/${table}?${params.toString()}`;
+  const query = `?${params.toString()}`;
 
-  const reqs = Array.from({ length: pages }, async (_, i) => {
-    const res = await fetch(url, {
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${token}`,
-        Range: `${i * PAGE}-${(i + 1) * PAGE - 1}`
-      }
-    });
-    if (!res.ok) throw new Error(`Error ${res.status} al cargar ${table}`);
-    return res.json();
-  });
+  const reqs = Array.from({ length: pages }, (_, i) =>
+    _pgFetch(table, query, { Range: `${i * PAGE}-${(i + 1) * PAGE - 1}` })
+  );
   const results = await Promise.all(reqs);
   const rows = [];
   for (const data of results) if (data) rows.push(...data);
@@ -544,9 +570,24 @@ export async function loadFromSupabase(opts = {}) {
     STATE._loadedFrom = winStart;   // desde qué período hay datos en memoria
 
     // 1. Partners + Rendimiento semanal (ventaneado) en paralelo
-    const [partners, rend] = await Promise.all([
-      sb.from("partners").select("*").then(r => { if (r.error) throw r.error; return r.data; }),
-      fetchAllPages("rendimiento", "fecha", { gte: { col: "fecha", value: winStart }, columns: REND_COLS_SEMANAL })
+    // Las 7 tablas (partners, rendimiento paginado, fleetrooms, metas, proyectos,
+    // seguimiento, flotas) son independientes entre sí — ninguna depende del
+    // resultado de otra para PEDIRSE, solo para procesarse después. Antes se
+    // pedían en 2 grupos + 4 awaits sueltos en secuencia (fleetrooms → metas →
+    // proyectos → seguimiento → flotas), ~1.5s de latencia acumulada aunque cada
+    // una es una tabla chica. Todas juntas en un solo Promise.all: el tiempo
+    // total pasa a ser el de la más lenta, no la suma. proyectos/seguimiento/
+    // flotas/fleetrooms conservan su fallback silencioso (.catch(() => [])) —
+    // metas NO tiene catch a propósito, un error ahí debe abortar la carga
+    // igual que antes (throw mErr).
+    const [partners, rend, frooms, metas, proyectos, seguimiento, flotas] = await Promise.all([
+      _pgFetch("partners", "?select=*"),
+      fetchAllPages("rendimiento", "fecha", { gte: { col: "fecha", value: winStart }, columns: REND_COLS_SEMANAL }),
+      _pgFetch("fleetrooms", "?select=*").catch(() => []),
+      _pgFetch("metas", "?select=*"),
+      _pgFetch("proyectos", "?select=*&order=semana.desc").catch(() => []),
+      _pgFetch("seguimiento", "?select=*&order=partner.asc,sort_order.asc,start_date.asc").catch(() => []),
+      _pgFetch("flotas", "?select=*").catch(() => [])
     ]);
 
     if (partners && partners.length) {
@@ -571,25 +612,22 @@ export async function loadFromSupabase(opts = {}) {
     // Invalidar caches que dependen de KAM_MAP/CLID_MAP tras un CRUD
     STATE._partnerKAM = null;
 
-    // Fleetrooms: tagging por sub-flota (keyed by db_id). La tabla puede no
-    // existir aun / estar vacia (data legacy sin db_id) → try/catch silencioso.
-    // Debe cargarse ANTES de construir rawData (usa FLEETROOM_NAME) y antes de
+    // Fleetrooms: tagging por sub-flota (keyed by db_id). Ya resuelto en el
+    // Promise.all de arriba (con fallback a [] si la tabla no existe aún).
+    // Debe procesarse ANTES de construir rawData (usa FLEETROOM_NAME) y antes de
     // los filtros de slicing (rowIsTuktuk/rowExcludedFromTaxi).
     STATE.FLEETROOM_IS_TUKTUK    = {};
     STATE.FLEETROOM_IS_FLEET     = {};
     STATE.FLEETROOM_EXCLUDE_TAXI = {};
     STATE.FLEETROOM_NAME         = {};
-    try {
-      const { data: frooms } = await sb.from("fleetrooms").select("*");
-      (frooms || []).forEach(f => {
-        const id = (f.db_id || "").trim();
-        if (!id) return;
-        STATE.FLEETROOM_IS_TUKTUK[id]    = f.is_tuktuk === true;
-        STATE.FLEETROOM_IS_FLEET[id]     = f.is_fleet === true;
-        STATE.FLEETROOM_EXCLUDE_TAXI[id] = f.exclude_from_taxi === true;
-        STATE.FLEETROOM_NAME[id]         = (f.name || "").trim();
-      });
-    } catch (_) { /* tabla fleetrooms no existe aun */ }
+    (frooms || []).forEach(f => {
+      const id = (f.db_id || "").trim();
+      if (!id) return;
+      STATE.FLEETROOM_IS_TUKTUK[id]    = f.is_tuktuk === true;
+      STATE.FLEETROOM_IS_FLEET[id]     = f.is_fleet === true;
+      STATE.FLEETROOM_EXCLUDE_TAXI[id] = f.exclude_from_taxi === true;
+      STATE.FLEETROOM_NAME[id]         = (f.name || "").trim();
+    });
 
     STATE.rawData = (rend || []).map(r => ({
       clid:          (r.clid || "").trim(),
@@ -616,9 +654,8 @@ export async function loadFromSupabase(opts = {}) {
 
     // 3. Rendimiento mensual → carga diferida (ver loadMensualIfNeeded)
 
-    // 4. Metas
-    const { data: metas, error: mErr } = await sb.from("metas").select("*");
-    if (mErr) throw mErr;
+    // 4. Metas — ya resuelto en el Promise.all de arriba (sin catch: un error
+    // real de esta tabla debe abortar la carga, como antes).
     STATE.metasData = (metas || []).map(m => ({
       partner: STATE.CLID_MAP[m.clid] || m.partner,
       kam:     STATE.KAM_MAP[m.clid] || m.kam || "",
@@ -642,38 +679,28 @@ export async function loadFromSupabase(opts = {}) {
       mtkSH:   m.meta_tk_sh       != null ? +m.meta_tk_sh       : null
     }));
 
-    // 5. Proyectos (tabla puede no existir aún — fallo silencioso)
-    try {
-      const { data: proyectos } = await sb.from("proyectos").select("*").order("semana", { ascending: false });
-      STATE.proyectosData = proyectos || [];
-    } catch (_) { STATE.proyectosData = []; }
+    // 5. Proyectos — ya resuelto en el Promise.all de arriba.
+    STATE.proyectosData = proyectos || [];
 
-    // 5b. Seguimiento / tracker de reuniones (Fase 3) — patrón silencioso.
-    try {
-      const { data: seguimiento } = await sb.from("seguimiento").select("*")
-        .order("partner", { ascending: true }).order("sort_order", { ascending: true }).order("start_date", { ascending: true });
-      STATE.seguimientoData = seguimiento || [];
-    } catch (_) { STATE.seguimientoData = []; }
+    // 5b. Seguimiento / tracker de reuniones (Fase 3) — ya resuelto arriba.
+    STATE.seguimientoData = seguimiento || [];
 
-    // 5b. Flotas (tabla puede no existir aún — fallo silencioso, no es critico)
+    // 5b. Flotas — ya resuelto arriba.
     // STATE.flotasMap[clid] = { nombre_asignado, kam, ciudad, activo, nombre_original }
     // Si existe, se aplica override: el partner del rendimiento se reemplaza por
     // nombre_asignado, y el KAM tambien si la flota lo define.
     STATE.flotasMap = {};
-    try {
-      const { data: flotas } = await sb.from("flotas").select("*");
-      (flotas || []).forEach(f => {
-        const clidT = (f.clid || "").trim();
-        if (!clidT) return;
-        STATE.flotasMap[clidT] = {
-          nombre_asignado: (f.nombre_asignado || "").trim(),
-          nombre_original: (f.nombre_original || "").trim(),
-          kam:             (f.kam || "").trim(),
-          ciudad:          normCity(f.ciudad),
-          activo:          f.activo !== false
-        };
-      });
-    } catch (_) { /* tabla no existe aún */ }
+    (flotas || []).forEach(f => {
+      const clidT = (f.clid || "").trim();
+      if (!clidT) return;
+      STATE.flotasMap[clidT] = {
+        nombre_asignado: (f.nombre_asignado || "").trim(),
+        nombre_original: (f.nombre_original || "").trim(),
+        kam:             (f.kam || "").trim(),
+        ciudad:          normCity(f.ciudad),
+        activo:          f.activo !== false
+      };
+    });
 
     // Aplicar override de flotas a rawData (semanal) + metasData
     STATE.rawData    = applyFlotasOverride(STATE.rawData);
