@@ -51,8 +51,17 @@ export function _recomputeCanWrite() {
 // extra, nunca con permisos de más.
 export async function _loadPerms() {
   try {
-    const { data, error } = await sb.from("user_permissions").select("permission");
-    if (error) return;
+    // fetch crudo (no sb.from) — esto corre en paralelo con fetchAllPeriods()
+    // (data.js, disparado por loadFromSupabase() al mismo tiempo que el login)
+    // y ambos pasando por sb.* competirían por el lock de sesión de supabase-js
+    // (ver comentario largo en data.js junto a _pgFetch).
+    const { data: { session } } = await sb.auth.getSession();
+    const token = (session && session.access_token) || SUPABASE_ANON_KEY;
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/user_permissions?select=permission`, {
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
     STATE.perms = new Set((data || []).map(r => r.permission));
     _recomputeCanWrite();
     _applyRoleGate();

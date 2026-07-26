@@ -378,8 +378,21 @@ export const DATE_COL = { semanal: "fecha", mensual: "mes", diario: "date" };
 // el caller cae al comportamiento anterior (derivar las fechas de los datos).
 export async function fetchAllPeriods(scale) {
   try {
-    const { data, error } = await sb.rpc("dashboard_dates", { scale });
-    if (error) return [];
+    // fetch crudo (no sb.rpc) por el mismo motivo que _pgFetch: esto se dispara
+    // en paralelo con _loadPerms() (auth.js, otro call site) justo al loguearse
+    // — ambos pasando por sb.* competirían por el lock de sesión de supabase-js.
+    const token = await _authToken();
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/dashboard_dates`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ scale })
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
     return (data || []).map(r => r.periodo).filter(Boolean).sort();
   } catch (_) { return []; }
 }
