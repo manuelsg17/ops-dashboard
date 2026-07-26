@@ -482,13 +482,26 @@ async function _pgFetch(table, query, extraHeaders = {}) {
 export async function fetchAllPages(table, orderCol, opts = {}) {
   const gte = opts.gte;
   const cols = opts.columns || "*";
-  const withFilter = q => (gte && gte.value) ? q.gte(gte.col, gte.value) : q;
+  const params = new URLSearchParams({ select: cols, order: `${orderCol}.asc` });
+  if (gte && gte.value) params.set(gte.col, `gte.${gte.value}`);
+  const query = `?${params.toString()}`;
 
-  // 1. Contar filas (del rango, no de la tabla entera)
-  const { count, error: cErr } = await withFilter(
-    sb.from(table).select("*", { count: "exact", head: true })
-  );
-  if (cErr || !count) return []; // fallback a array vacío si falla el count
+  // 1. Contar filas (del rango, no de la tabla entera) — HEAD + Prefer:count=exact,
+  // fetch crudo (no sb.from): fetchAllPages se llama DENTRO del Promise.all de
+  // loadFromSupabase junto a otras 6 tablas via _pgFetch. Si este count siguiera
+  // pasando por sb.from(), competiría con ellas por el lock de sesión de
+  // supabase-js (ver comentario junto a _pgFetch) aunque las páginas ya usen
+  // fetch crudo. PostgREST devuelve el total en el header Content-Range
+  // ("*/N" en un HEAD) incluso sin traer filas.
+  const token = await _authToken();
+  const countRes = await fetch(`${SUPABASE_URL}/rest/v1/${table}${query}`, {
+    method: "HEAD",
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, Prefer: "count=exact" }
+  });
+  if (!countRes.ok) return []; // fallback a array vacío si falla el count
+  const range = countRes.headers.get("content-range") || "";
+  const count = +(range.split("/")[1] || 0);
+  if (!count) return [];
 
   const PAGE  = 1000;
   const pages = Math.ceil(count / PAGE);
@@ -497,10 +510,6 @@ export async function fetchAllPages(table, orderCol, opts = {}) {
   // _pgFetch: sb.from() serializa llamadas concurrentes por el lock de sesión
   // de supabase-js, así que un Promise.all de páginas con sb.from() no lograba
   // paralelismo real.
-  const params = new URLSearchParams({ select: cols, order: `${orderCol}.asc` });
-  if (gte && gte.value) params.set(gte.col, `gte.${gte.value}`);
-  const query = `?${params.toString()}`;
-
   const reqs = Array.from({ length: pages }, (_, i) =>
     _pgFetch(table, query, { Range: `${i * PAGE}-${(i + 1) * PAGE - 1}` })
   );
