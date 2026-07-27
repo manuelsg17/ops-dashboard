@@ -488,28 +488,33 @@ export async function fetchAllPages(table, orderCol, opts = {}) {
 
   const PAGE = 1000;
 
-  // 1. Primera página + conteo total EN LA MISMA request (Prefer:count=exact en
-  // un GET normal también devuelve el total en el header Content-Range, no hace
-  // falta un HEAD aparte solo para contar) — antes esto era un round-trip extra
-  // COMPLETO (~700-900ms) antes de poder ni siquiera pedir la página 1. Medido
-  // en una sesión real: mensual (2 páginas) pasó de ~2.2s a ~1.5s con este merge.
+  // 1. Página 0 + conteo (HEAD) EN PARALELO, no fusionados en la misma request.
+  // Bug encontrado en producción (sesión real): fusionar el conteo DENTRO del
+  // GET de la página 0 hacía que las páginas 1..N-1 esperaran a que la página 0
+  // bajara sus 1000 filas completas antes de poder dispararse — si esa página 0
+  // salía lenta (~4.3s medido en vivo), arrastraba a TODAS las demás en cadena.
+  // El HEAD es liviano (sin body) y resuelve rápido sin importar cuántas filas
+  // tenga la tabla, así que dispararlo en paralelo con la página 0 no cuesta
+  // nada extra y desbloquea las páginas 1..N-1 apenas se sepa el conteo, sin
+  // esperar a la 0.
   const token = await _authToken();
-  const firstRes = await fetch(`${SUPABASE_URL}/rest/v1/${table}${query}`, {
-    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, Range: `0-${PAGE - 1}`, Prefer: "count=exact" }
-  });
-  if (!firstRes.ok) return []; // fallback a array vacío si falla
-  const range = firstRes.headers.get("content-range") || "";
+  const [countRes, firstPage] = await Promise.all([
+    fetch(`${SUPABASE_URL}/rest/v1/${table}${query}`, {
+      method: "HEAD",
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, Prefer: "count=exact" }
+    }),
+    _pgFetch(table, query, { Range: `0-${PAGE - 1}` })
+  ]);
+  if (!countRes.ok) return firstPage || [];
+  const range = countRes.headers.get("content-range") || "";
   const count = +(range.split("/")[1] || 0);
-  const firstPage = await firstRes.json();
   if (!count) return [];
 
   const pages = Math.ceil(count / PAGE);
   if (pages <= 1) return firstPage;
 
-  // El resto de las páginas (si hay más de 1) via _pgFetch — mismo motivo que
-  // siempre: sb.from() serializa llamadas concurrentes por el lock de sesión
-  // de supabase-js, así que un Promise.all con sb.from() no lograba paralelismo
-  // real.
+  // El resto de las páginas (si hay más de 1) via _pgFetch, en paralelo con la
+  // página 0 (que puede seguir en vuelo) y entre sí.
   const restReqs = Array.from({ length: pages - 1 }, (_, i) =>
     _pgFetch(table, query, { Range: `${(i + 1) * PAGE}-${(i + 2) * PAGE - 1}` })
   );
