@@ -163,7 +163,15 @@ export function restoreFilters() {
 
     if (f.dateFrom) {
       const el = document.getElementById("dateFrom");
-      if (el && optVals(el).includes(f.dateFrom)) el.value = f.dateFrom;
+      // No restaurar un "Desde" guardado más viejo que la ventana REALMENTE
+      // cargada (STATE._loadedFrom, semanal) — si no, un valor guardado hace
+      // meses (nunca expira, saveFilters() lo pisa en cada interacción)
+      // reaparecería en el selector y dispararía needsWiderRange()==true en
+      // el primer cambio de filtro, re-descargando la tabla entera (mismo bug
+      // que popDates() — ver su comentario). Un "Desde" MÁS RECIENTE que lo
+      // cargado (el usuario acotó el rango a propósito) sí se restaura normal.
+      const tooOld = STATE.curMode === "semanal" && STATE._loadedFrom && f.dateFrom < STATE._loadedFrom;
+      if (el && !tooOld && optVals(el).includes(f.dateFrom)) el.value = f.dateFrom;
     }
     if (f.dateTo) {
       const el = document.getElementById("dateTo");
@@ -404,7 +412,19 @@ export function popDates() {
     document.getElementById(id).innerHTML = opts;
   });
   if (STATE.allDates.length) {
-    document.getElementById("dateFrom").value = STATE.allDates[0];
+    // "Desde" por defecto: el inicio de la VENTANA REALMENTE CARGADA
+    // (STATE._loadedFrom, solo aplica a semanal — allDates ahí trae TODA la
+    // historia vía dashboard_dates, para que el dropdown ofrezca elegir un
+    // rango más viejo si se quiere). Usar allDates[0] (el período más viejo de
+    // toda la historia) dejaba el selector mostrando "desde el inicio de los
+    // tiempos" aunque solo estuvieran cargadas las últimas 6 semanas — y ese
+    // valor, guardado por saveFilters(), disparaba needsWiderRange()==true en
+    // la primera interacción con cualquier filtro (bug real, ver comentario en
+    // data.js junto a computeWindowStart).
+    const defaultFrom = (STATE.curMode === "semanal" && STATE._loadedFrom && opts.includes(`"${STATE._loadedFrom}"`))
+      ? STATE._loadedFrom
+      : STATE.allDates[0];
+    document.getElementById("dateFrom").value = defaultFrom;
     document.getElementById("dateTo").value   = STATE.allDates[STATE.allDates.length - 1];
   }
 }

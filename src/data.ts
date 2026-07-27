@@ -647,13 +647,21 @@ export async function loadFromSupabase(opts = {}) {
     const periodosSem = await fetchAllPeriods("semanal");
     if (periodosSem.length) STATE._allPeriods.semanal = periodosSem;
 
-    // Respetar el rango que el usuario tenía guardado: si su "Desde" es más
-    // viejo que la ventana por defecto, se carga hasta ahí (si no, al recargar
-    // vería su vista recortada sin haber pedido nada).
-    let savedFrom = null;
-    try { savedFrom = (JSON.parse(lsGet("yangoFilters") || "{}") || {}).dateFrom || null; } catch (_) {}
-    const wantFrom   = opts.from || savedFrom;
-    const winStart   = computeWindowStart(periodosSem, "semanal", wantFrom);
+    // `opts.from` (NO localStorage) es la única forma de pedir una ventana más
+    // vieja que el default — la usa needsWiderRange()/applyFilters() cuando el
+    // usuario elige un "Desde" fuera de lo cargado DENTRO de la sesión actual.
+    //
+    // Antes también se leía `yangoFilters.dateFrom` de localStorage acá (
+    // "recordar el rango entre sesiones") — bug real encontrado en producción:
+    // ese valor queda guardado PARA SIEMPRE (saveFilters() lo pisa en cada
+    // interacción), así que una sola vez que alguien mirara un rango viejo
+    // dejaba la cuenta pidiendo la tabla ENTERA en cada login futuro,
+    // anulando en silencio la ventana de LOAD_WINDOW.semanal — exactamente la
+    // razón por la que la carga inicial seguía lenta pese a reducir la
+    // ventana por defecto a 6 semanas. Ahora cada login SIEMPRE arranca con el
+    // default; ensanchar el rango es una acción explícita de la sesión actual,
+    // no algo que se herede silenciosamente de la anterior.
+    const winStart   = computeWindowStart(periodosSem, "semanal", opts.from);
     STATE._loadedFrom = winStart;   // desde qué período hay datos en memoria
 
     // 1. Partners + Rendimiento semanal (ventaneado) + fleetrooms + flotas EN
