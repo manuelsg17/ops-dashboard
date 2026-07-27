@@ -841,7 +841,45 @@ function _renderConfigMantenimiento() {
         </button>
       </div>
     </div>`;
+
+  // Fleet Externo: la sincronización real corre en GitHub Actions
+  // (.github/workflows/fleet-sync.yml, cron semanal) — este botón solo la
+  // dispara ANTES de tiempo vía la Edge Function trigger-fleet-sync. Ni el
+  // Action ni esta función tocan la base del colega desde el navegador: la
+  // credencial de solo-lectura vive como Secret de GitHub, nunca acá.
+  html += `
+    <div class="section agy-style-37">
+      <div class="agy-style-38">🔄 Fleet Externo — Sincronización</div>
+      <div class="agy-style-39">
+        Copia semanal (lunes) de las tablas de flota externa hacia <code>fleetext_*</code> en este proyecto.
+        Corre en GitHub Actions, no en el navegador — este botón solo la adelanta.
+      </div>
+      <div class="agy-style-8">
+        <button class="crud-btn" id="fleetSyncBtn" data-act="triggerFleetSync">
+          🔄 Sincronizar ahora
+        </button>
+        <span id="fleetSyncMsg" class="agy-style-54"></span>
+      </div>
+    </div>`;
   return html;
+}
+
+// ── Fleet Externo: disparo manual del sync (Edge Function trigger-fleet-sync) ─
+export async function triggerFleetSync() {
+  const btn = document.getElementById("fleetSyncBtn");
+  const msg = document.getElementById("fleetSyncMsg");
+  if (btn) { btn.disabled = true; btn.textContent = "Disparando..."; }
+  if (msg) { msg.textContent = ""; }
+  try {
+    const { data, error } = await sb.functions.invoke("trigger-fleet-sync", { method: "POST" });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    showBanner(true, data?.message || "Sincronización disparada ✓");
+  } catch (e) {
+    showBanner(false, "Error al disparar la sincronización: " + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "🔄 Sincronizar ahora"; }
+  }
 }
 
 // ── Sub-sección: Partners (CLID/nombre/KAM) — la vista por defecto ───────────
@@ -1212,6 +1250,7 @@ registerActions({
   // configuración
   updateDeclineSettings,
   deleteDashboardData,
+  triggerFleetSync,
   cfgSetSection: d => { CONFIG_STATE.section = d.section; renderConfig(); },
   cfgSearch:    (d, el) => { CONFIG_STATE.search = el.value; CONFIG_STATE.page = 0; renderConfigResults(); },
   cfgKamFilter: (d, el) => { CONFIG_STATE.kamFilter = el.value; CONFIG_STATE.page = 0; renderConfigResults(); },

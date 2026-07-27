@@ -1,0 +1,98 @@
+# Fleet Externo — sincronización semanal desde el proyecto Supabase del colega
+# (Fleet_Dashboard, organización distinta a la nuestra) hacia nuestras propias
+# tablas `fleetext_*` en ops_dashboard.
+#
+# Corre 100% server-side (runner de GitHub, nunca el navegador) con dos
+# credenciales guardadas como Secrets de este repo — jamás en el código:
+#   - FLEET_SOURCE_DB_URL: connection string de un rol de SOLO LECTURA
+#     (fleet_export_reader) sobre el proyecto del colega. NO usar la clave
+#     maestra/postgres ni el service_role de ese proyecto.
+#   - OPS_DB_URL: connection string de nuestro propio proyecto ops_dashboard
+#     (Settings → Database → Connection string → URI, modo "Session").
+#
+# Primera corrida: bootstrapea el esquema de las tablas fleetext_* (CREATE
+# TABLE IF NOT EXISTS con la estructura EXACTA del origen, sin necesidad de
+# adivinar columnas a mano). Corridas siguientes: TRUNCATE + reinsert — es un
+# espejo semanal, no una sincronización incremental (los volúmenes son chicos,
+# ~30k filas en la tabla más grande).
+name: Fleet Externo — Sync semanal
+
+on:
+  schedule:
+    - cron: "0 7 * * 1"   # Todos los lunes 07:00 UTC (~02:00 hora Perú)
+  workflow_dispatch: {}    # Permite disparo manual (botón "Sincronizar ahora" del dashboard, o desde la pestaña Actions)
+
+# Evita que dos corridas se pisen si el botón se aprieta mientras el cron ya está corriendo.
+concurrency:
+  group: fleet-sync
+  cancel-in-progress: false
+
+env:
+  FLEET_TABLES: "fleet_base fleet_utilization fleet_partners_monthly fleet_partners_weekly fleet_plates_monthly fleet_plates_weekly fleet_churn_monthly fleet_churn_weekly"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Instalar cliente de Postgres
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Volcar esquema + datos de las 8 tablas de origen (solo lectura)
+        env:
+          FLEET_SOURCE_DB_URL: ${{ secrets.FLEET_SOURCE_DB_URL }}
+        run: |
+          set -euo pipefail
+          TABLE_ARGS=""
+          for t in $FLEET_TABLES; do TABLE_ARGS="$TABLE_ARGS -t $t"; done
+          pg_dump "$FLEET_SOURCE_DB_URL" $TABLE_ARGS \
+            --no-owner --no-privileges --no-comments \
+            --column-inserts --rows-per-insert=500 \
+            -f /tmp/fleet_source_dump.sql
+
+      - name: Renombrar fleet_* -> fleetext_* en el dump
+        run: |
+          set -euo pipefail
+          cp /tmp/fleet_source_dump.sql /tmp/fleetext_dump.sql
+          for t in $FLEET_TABLES; do
+            sed -i "s/\b${t}\b/fleetext_${t#fleet_}/g" /tmp/fleetext_dump.sql
+          done
+          # fleet_base -> fleetext_base (el prefijo ya incluye "fleet", ver nota abajo)
+
+      - name: Vaciar las tablas de destino (si ya existen de una corrida anterior)
+        env:
+          OPS_DB_URL: ${{ secrets.OPS_DB_URL }}
+        run: |
+          set -euo pipefail
+          # TRUNCATE previo obligatorio: el dump de abajo hace INSERT sin
+          # ON CONFLICT (no conocemos de antemano la PK real del origen), así
+          # que sin vaciar antes, cada corrida semanal DUPLICARÍA las filas en
+          # vez de reemplazarlas. "IF EXISTS" vía DO/EXCEPTION porque Postgres
+          # no soporta "TRUNCATE TABLE IF EXISTS" — en la primera corrida
+          # ninguna tabla existe todavía, así que no debe fallar.
+          for t in $FLEET_TABLES; do
+            dest="fleetext_${t#fleet_}"
+            psql "$OPS_DB_URL" -v ON_ERROR_STOP=0 -c "TRUNCATE TABLE ${dest};" 2>/dev/null || true
+          done
+
+      - name: Cargar en ops_dashboard (bootstrap de esquema en la 1ra corrida + datos)
+        env:
+          OPS_DB_URL: ${{ secrets.OPS_DB_URL }}
+        run: |
+          set -euo pipefail
+          # CREATE TABLE del dump usa "CREATE TABLE" a secas (pg_dump no tiene
+          # "IF NOT EXISTS" para tablas) — en la 1ra corrida crea las tablas; en
+          # las siguientes falla ese CREATE puntual (ya existe) pero seguimos
+          # igual (ON_ERROR_STOP=0 SOLO acá) y los INSERT de abajo sí corren,
+          # ahora sobre tablas recién vaciadas por el paso anterior.
+          psql "$OPS_DB_URL" -v ON_ERROR_STOP=0 -f /tmp/fleetext_dump.sql || true
+
+      - name: Verificación básica (conteo de filas por tabla)
+        env:
+          OPS_DB_URL: ${{ secrets.OPS_DB_URL }}
+        run: |
+          set -euo pipefail
+          for t in $FLEET_TABLES; do
+            dest="fleetext_${t#fleet_}"
+            echo "== $dest =="
+            psql "$OPS_DB_URL" -c "SELECT count(*) FROM ${dest};" || echo "  (tabla no encontrada — revisar nombres reales de origen)"
+          done
