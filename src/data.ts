@@ -488,37 +488,38 @@ export async function fetchAllPages(table, orderCol, opts = {}) {
 
   const PAGE = 1000;
 
-  // 1. Página 0 + conteo (HEAD) EN PARALELO, no fusionados en la misma request.
-  // Bug encontrado en producción (sesión real): fusionar el conteo DENTRO del
-  // GET de la página 0 hacía que las páginas 1..N-1 esperaran a que la página 0
-  // bajara sus 1000 filas completas antes de poder dispararse — si esa página 0
-  // salía lenta (~4.3s medido en vivo), arrastraba a TODAS las demás en cadena.
-  // El HEAD es liviano (sin body) y resuelve rápido sin importar cuántas filas
-  // tenga la tabla, así que dispararlo en paralelo con la página 0 no cuesta
-  // nada extra y desbloquea las páginas 1..N-1 apenas se sepa el conteo, sin
-  // esperar a la 0.
+  // 1. Página 0 se DISPARA (no se espera todavía) + HEAD de conteo se espera
+  // SOLO A ÉL. Bug encontrado en producción dos veces seguidas: la primera vez
+  // fusionando el conteo DENTRO del GET de la página 0; la segunda, poniendo
+  // el HEAD y la página 0 en el MISMO `Promise.all` — en ambos casos, `await`
+  // no resuelve hasta que TERMINAN los dos, así que si la página 0 salía lenta
+  // (~4.3s medido en vivo, dos veces), igual bloqueaba saber `count` y por lo
+  // tanto disparar las páginas 1..N-1, quedando todo en cadena. El HEAD es
+  // liviano (sin body): se espera SOLO a él (nunca a la página 0) para poder
+  // calcular `pages` y disparar el resto cuanto antes — la página 0 sigue en
+  // vuelo en paralelo desde el principio, se recién se espera al final junto
+  // con las demás.
   const token = await _authToken();
-  const [countRes, firstPage] = await Promise.all([
-    fetch(`${SUPABASE_URL}/rest/v1/${table}${query}`, {
-      method: "HEAD",
-      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, Prefer: "count=exact" }
-    }),
-    _pgFetch(table, query, { Range: `0-${PAGE - 1}` })
-  ]);
-  if (!countRes.ok) return firstPage || [];
+  const firstPagePromise = _pgFetch(table, query, { Range: `0-${PAGE - 1}` });   // dispara YA, no se espera aún
+  const countRes = await fetch(`${SUPABASE_URL}/rest/v1/${table}${query}`, {
+    method: "HEAD",
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, Prefer: "count=exact" }
+  });
+  if (!countRes.ok) return (await firstPagePromise) || [];
   const range = countRes.headers.get("content-range") || "";
   const count = +(range.split("/")[1] || 0);
   if (!count) return [];
 
   const pages = Math.ceil(count / PAGE);
-  if (pages <= 1) return firstPage;
+  if (pages <= 1) return await firstPagePromise;
 
-  // El resto de las páginas (si hay más de 1) via _pgFetch, en paralelo con la
-  // página 0 (que puede seguir en vuelo) y entre sí.
+  // Páginas 1..N-1 disparadas AHORA (apenas se supo `count` por el HEAD, sin
+  // esperar a la página 0) + la página 0 ya en vuelo, todas juntas en un solo
+  // Promise.all → paralelismo real entre las N páginas.
   const restReqs = Array.from({ length: pages - 1 }, (_, i) =>
     _pgFetch(table, query, { Range: `${(i + 1) * PAGE}-${(i + 2) * PAGE - 1}` })
   );
-  const rest = await Promise.all(restReqs);
+  const [firstPage, ...rest] = await Promise.all([firstPagePromise, ...restReqs]);
   const rows = firstPage.slice();
   for (const data of rest) if (data) rows.push(...data);
   return rows;
