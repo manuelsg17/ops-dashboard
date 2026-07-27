@@ -573,6 +573,46 @@ export function dropLegacyAggregateRows(rows) {
   );
 }
 
+// Procesa metas/proyectos/seguimiento (fetch en paralelo con las tablas
+// críticas de loadFromSupabase, pero sin bloquear su render — ver comentario
+// junto a `critical`/`deferred` ahí). Requiere CLID_MAP/KAM_MAP/flotasMap ya
+// listos (el caller garantiza el orden — ver `deferred.then(...)`).
+function _applyMetasProyectosSeguimiento(metas, proyectos, seguimiento) {
+  STATE.metasData = (metas || []).map(m => ({
+    partner: STATE.CLID_MAP[m.clid] || m.partner,
+    kam:     STATE.KAM_MAP[m.clid] || m.kam || "",
+    city:    normCity(m.city),
+    // Normalizar mes a UPPERCASE en cliente: la BD tiene mezcla de "mayo",
+    // "Mayo", "MAYO" por uploads viejos. Sin esto, m.mes !== mesName falla
+    // por casing y los %% de cumplimiento salen inflados/incompletos.
+    mes:     (m.mes || "").trim().toUpperCase(),
+    mYear:   m.mes_year != null ? +m.mes_year : null,
+    mA:      +m.meta_active_drivers,
+    mNR:     +m.meta_nr,
+    mH:      +m.meta_supply_hours,
+    // Fleet + TukTuk (nullable): NULL = el partner no tiene esa línea. Se
+    // conserva null (no 0) para distinguir "sin meta" de "meta cero".
+    mSHcar:  m.meta_sh_car      != null ? +m.meta_sh_car      : null,
+    mAcc:    m.meta_acceptance  != null ? +m.meta_acceptance  : null,
+    mUtil:   m.meta_utilization != null ? +m.meta_utilization : null,
+    mtkAD:   m.meta_tk_ad       != null ? +m.meta_tk_ad       : null,
+    mtkNR:   m.meta_tk_nr       != null ? +m.meta_tk_nr       : null,
+    mtkCars: m.meta_tk_cars     != null ? +m.meta_tk_cars     : null,
+    mtkSH:   m.meta_tk_sh       != null ? +m.meta_tk_sh       : null
+  }));
+  STATE.metasData = applyFlotasOverride(STATE.metasData);
+  STATE.proyectosData = proyectos || [];
+  STATE.seguimientoData = seguimiento || [];
+
+  // Re-render solo si el usuario ya está parado en un tab que depende de esto
+  // y no se pintó en el dispatch inmediato de loadFromSupabase (porque estos
+  // datos todavía no habían llegado).
+  if (STATE.userRole === "partner") return;   // el portal no usa nada de esto
+  if (STATE.curTab === "metas"       && STATE.rawData.length)                        renderMetas();
+  if (STATE.curTab === "unifview"    && typeof renderUnifView === "function")         renderUnifView();
+  if (STATE.curTab === "seguimiento" && typeof renderSeguimiento === "function")      renderSeguimiento();
+}
+
 // ── LOAD FROM SUPABASE ────────────────────────────────────────────────────────
 export async function loadFromSupabase(opts = {}) {
   showLoad(true, "Cargando datos desde Supabase...");
@@ -596,26 +636,38 @@ export async function loadFromSupabase(opts = {}) {
     const winStart   = computeWindowStart(periodosSem, "semanal", wantFrom);
     STATE._loadedFrom = winStart;   // desde qué período hay datos en memoria
 
-    // 1. Partners + Rendimiento semanal (ventaneado) en paralelo
-    // Las 7 tablas (partners, rendimiento paginado, fleetrooms, metas, proyectos,
-    // seguimiento, flotas) son independientes entre sí — ninguna depende del
-    // resultado de otra para PEDIRSE, solo para procesarse después. Antes se
-    // pedían en 2 grupos + 4 awaits sueltos en secuencia (fleetrooms → metas →
-    // proyectos → seguimiento → flotas), ~1.5s de latencia acumulada aunque cada
-    // una es una tabla chica. Todas juntas en un solo Promise.all: el tiempo
-    // total pasa a ser el de la más lenta, no la suma. proyectos/seguimiento/
-    // flotas/fleetrooms conservan su fallback silencioso (.catch(() => [])) —
-    // metas NO tiene catch a propósito, un error ahí debe abortar la carga
-    // igual que antes (throw mErr).
-    const [partners, rend, frooms, metas, proyectos, seguimiento, flotas] = await Promise.all([
+    // 1. Partners + Rendimiento semanal (ventaneado) + fleetrooms + flotas EN
+    // PARALELO — son las únicas 4 tablas que Rendimiento (el tab por defecto al
+    // loguear) necesita para renderizar. metas/proyectos/seguimiento NO las usa
+    // ninguna vista salvo su propio tab (Metas/Seguimiento) — antes estaban en
+    // el MISMO Promise.all, así que un `await` sobre las 7 esperaba a la más
+    // lenta de TODAS antes de poder pintar Rendimiento, aunque no le hiciera
+    // falta ese dato. Encontrado revisando una sesión real: con la API bajo
+    // carga, 6-7 requests concurrentes compiten por la misma capacidad del
+    // proyecto (max_connections=60, tier free) y se enlentecen entre sí — menos
+    // requests en el grupo crítico = esas 4 responden antes. metas/proyectos/
+    // seguimiento se piden en paralelo IGUAL (no se demoran para después) pero
+    // sin bloquear el render de Rendimiento; si el usuario ya está en Metas o
+    // Seguimiento cuando resuelvan, se re-renderiza esa vista.
+    const critical = Promise.all([
       _pgFetch("partners", "?select=*"),
       fetchAllPages("rendimiento", "fecha", { gte: { col: "fecha", value: winStart }, columns: REND_COLS_SEMANAL }),
       _pgFetch("fleetrooms", "?select=*").catch(() => []),
-      _pgFetch("metas", "?select=*"),
-      _pgFetch("proyectos", "?select=*&order=semana.desc").catch(() => []),
-      _pgFetch("seguimiento", "?select=*&order=partner.asc,sort_order.asc,start_date.asc").catch(() => []),
       _pgFetch("flotas", "?select=*").catch(() => [])
     ]);
+    // OJO: `deferred` solo junta las respuestas crudas, NO las procesa acá — el
+    // procesamiento (más abajo, `deferred.then(...)`) necesita CLID_MAP/
+    // flotasMap ya construidos, y ese `.then` se registra DESPUÉS de que este
+    // bloque los arma. Si se procesara acá arriba, al registrarse ANTES de
+    // `await critical` correría en cuanto resuelva esta Promise.all sin
+    // importar si `critical` ya terminó — condición de carrera real si
+    // metas/proyectos/seguimiento resuelven más rápido que partners/rendimiento.
+    const deferred = Promise.all([
+      _pgFetch("metas", "?select=*").catch(() => []),
+      _pgFetch("proyectos", "?select=*&order=semana.desc").catch(() => []),
+      _pgFetch("seguimiento", "?select=*&order=partner.asc,sort_order.asc,start_date.asc").catch(() => [])
+    ]);
+    const [partners, rend, frooms, flotas] = await critical;
 
     if (partners && partners.length) {
       STATE.CLID_MAP = {};
@@ -681,36 +733,9 @@ export async function loadFromSupabase(opts = {}) {
 
     // 3. Rendimiento mensual → carga diferida (ver loadMensualIfNeeded)
 
-    // 4. Metas — ya resuelto en el Promise.all de arriba (sin catch: un error
-    // real de esta tabla debe abortar la carga, como antes).
-    STATE.metasData = (metas || []).map(m => ({
-      partner: STATE.CLID_MAP[m.clid] || m.partner,
-      kam:     STATE.KAM_MAP[m.clid] || m.kam || "",
-      city:    normCity(m.city),
-      // Normalizar mes a UPPERCASE en cliente: la BD tiene mezcla de "mayo",
-      // "Mayo", "MAYO" por uploads viejos. Sin esto, m.mes !== mesName falla
-      // por casing y los %% de cumplimiento salen inflados/incompletos.
-      mes:     (m.mes || "").trim().toUpperCase(),
-      mYear:   m.mes_year != null ? +m.mes_year : null,
-      mA:      +m.meta_active_drivers,
-      mNR:     +m.meta_nr,
-      mH:      +m.meta_supply_hours,
-      // Fleet + TukTuk (nullable): NULL = el partner no tiene esa línea. Se
-      // conserva null (no 0) para distinguir "sin meta" de "meta cero".
-      mSHcar:  m.meta_sh_car      != null ? +m.meta_sh_car      : null,
-      mAcc:    m.meta_acceptance  != null ? +m.meta_acceptance  : null,
-      mUtil:   m.meta_utilization != null ? +m.meta_utilization : null,
-      mtkAD:   m.meta_tk_ad       != null ? +m.meta_tk_ad       : null,
-      mtkNR:   m.meta_tk_nr       != null ? +m.meta_tk_nr       : null,
-      mtkCars: m.meta_tk_cars     != null ? +m.meta_tk_cars     : null,
-      mtkSH:   m.meta_tk_sh       != null ? +m.meta_tk_sh       : null
-    }));
-
-    // 5. Proyectos — ya resuelto en el Promise.all de arriba.
-    STATE.proyectosData = proyectos || [];
-
-    // 5b. Seguimiento / tracker de reuniones (Fase 3) — ya resuelto arriba.
-    STATE.seguimientoData = seguimiento || [];
+    // 4/5. Metas/Proyectos/Seguimiento: no bloquean este bloque (ver `deferred`
+    // más arriba) — se procesan en _applyMetasProyectosSeguimiento() más abajo,
+    // una vez que CLID_MAP/flotasMap están listos.
 
     // 5b. Flotas — ya resuelto arriba.
     // STATE.flotasMap[clid] = { nombre_asignado, kam, ciudad, activo, nombre_original }
@@ -729,9 +754,8 @@ export async function loadFromSupabase(opts = {}) {
       };
     });
 
-    // Aplicar override de flotas a rawData (semanal) + metasData
-    STATE.rawData    = applyFlotasOverride(STATE.rawData);
-    STATE.metasData  = applyFlotasOverride(STATE.metasData);
+    // Aplicar override de flotas a rawData (semanal)
+    STATE.rawData = applyFlotasOverride(STATE.rawData);
     // Reconstruir KAM_PARTNERS para que el sidebar refleje override de flotas
     // (el primer rebuild que corrio dentro del bloque de partners no tenia
     // flotasMap todavia).
@@ -785,21 +809,32 @@ export async function loadFromSupabase(opts = {}) {
     // Render solo el tab activo (mismo patron que applyFilters/switchMode).
     // Antes se llamaba renderRend()+renderMetas() incondicional: trabajo
     // desperdiciado si el usuario estaba en otro tab al terminar el upload,
-    // y race condition con applyFilters() debounced.
+    // y race condition con applyFilters() debounced. Los tabs que dependen de
+    // metas/proyectos/seguimiento (metas/unifview/seguimiento) NO se disparan
+    // acá — esos datos todavía pueden estar en vuelo (`deferred`), se renderizan
+    // en _applyMetasProyectosSeguimiento() apenas lleguen.
     if (STATE.rawData.length) {
       // Partner externo: su unica vista es el portal (Track C2).
       if (STATE.userRole === "partner" && typeof renderPartnerPortal === "function") {
         renderPartnerPortal();
       } else {
       if (STATE.curTab === "rend")                                        renderRend();
-      if (STATE.curTab === "metas"       && STATE.metasData.length)       renderMetas();
-      if (STATE.curTab === "unifview"    && typeof renderUnifView === "function")    renderUnifView();
       if (STATE.curTab === "partnerview" && typeof renderPartnerView === "function") renderPartnerView();
       if (STATE.curTab === "calculator"  && typeof renderCalculator === "function")  renderCalculator();
       if (STATE.curTab === "rawdata"     && typeof renderRawData === "function")     renderRawData();
-      if (STATE.curTab === "seguimiento" && typeof renderSeguimiento === "function") renderSeguimiento();
       }
     }
+
+    // metas/proyectos/seguimiento: se pidieron en paralelo desde el arranque de
+    // la función (`deferred`, ver comentario junto a `critical`) sin bloquear el
+    // render de arriba. Se esperan y procesan ACÁ (no fire-and-forget) para que
+    // cualquier caller que haga `await loadFromSupabase()` (ej. metas.js tras
+    // borrar un mes, seguimiento.js/calculator.js tras guardar) siga viendo
+    // STATE.metasData/proyectosData/seguimientoData ya refrescados al volver,
+    // igual que antes — el ÚNICO cambio real es que Rendimiento ya no espera a
+    // estas 3 tablas para poder pintarse.
+    const [metas, proyectos, seguimiento] = await deferred;
+    _applyMetasProyectosSeguimiento(metas, proyectos, seguimiento);
 
   } catch (err) {
     showBanner(false, "Error al cargar: " + err.message);
