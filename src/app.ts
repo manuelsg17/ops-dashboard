@@ -331,6 +331,21 @@ export function switchTab(tab) {
     document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
     document.getElementById(`tab-${tab}`).classList.add("active");
 
+    // Placeholder de carga en tabs que dependen de un chunk lazy (loadViewModule):
+    // sin esto, la primera vez que se visita una de estas pestañas en la sesión
+    // (mientras el navegador descarga+ejecuta su JS) el panel quedaba en BLANCO
+    // hasta que terminara el render — se sentía "trabado"/"crasheado". El
+    // contenido real lo pisa igual apenas termina, así que si el chunk ya está
+    // cacheado esto ni se alcanza a ver.
+    const LAZY_TAB_CONTENT = {
+      partnerview: "partnerViewContent", present2: "present2Content",
+      calculator: "calculatorContent", config: "configContent", portal: "portalContent"
+    };
+    const lazyBox = LAZY_TAB_CONTENT[tab] && document.getElementById(LAZY_TAB_CONTENT[tab]);
+    if (lazyBox && !lazyBox.innerHTML.trim()) {
+      lazyBox.innerHTML = `<div style="padding:60px 0;text-align:center;color:#888;font-size:.85rem">Cargando…</div>`;
+    }
+
     // Restaurar filtros guardados
     if (STATE.savedFilters) {
       const f = STATE.savedFilters;
