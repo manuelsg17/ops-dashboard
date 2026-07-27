@@ -74,16 +74,18 @@ import * as charts       from "./charts.js";
 import * as rendimiento  from "./rendimiento.js";
 import * as metas        from "./metas.js";
 import * as app          from "./app.js";
-import * as unifview     from "./unifview.js";
-import * as rawdata      from "./rawdata.js";
-import * as seguimiento  from "./seguimiento.js";
-import * as fleetexterno from "./fleetexterno.js";
-import * as forecast     from "./forecast.js";
+// unifview/rawdata/seguimiento/fleetexterno NO se importan acá — cada una es
+// SU PROPIA pestaña (Vista Unificada / Data Raw / Seguimiento / Fleet Externo),
+// nunca usada por rendimiento/metas/app (las únicas eager, junto con el login).
+// Antes vivían acá pese a sumar >2200 líneas pagadas por toda sesión sin uso —
+// ahora son chunks lazy más, vía loadViewModule, mismo patrón que partnerView/
+// calculator/presentacion2/adminUsers/partnerPortal. forecast.js se movió
+// dentro de presentacion2.js (única consumidora, ver ese archivo).
 
 // Espejar el núcleo esencial
 Object.assign(window,
   config, security, format, dates, data, auth, charts,
-  rendimiento, metas, app, unifview, rawdata, seguimiento, fleetexterno, forecast
+  rendimiento, metas, app
 );
 
 // Loader asíncrono para módulos de pantalla pesados (Lazy Loading)
@@ -106,6 +108,10 @@ export async function loadViewModule(viewName) {
     if (viewName === "calculator")              mod = await import("./calculator.js");
     if (viewName === "config")                  mod = await import("./adminUsers.js");
     if (viewName === "portal")                  mod = await import("./partnerPortal.js");
+    if (viewName === "unifview")                mod = await import("./unifview.js");
+    if (viewName === "rawdata")                  mod = await import("./rawdata.js");
+    if (viewName === "seguimiento")              mod = await import("./seguimiento.js");
+    if (viewName === "fleetext")                mod = await import("./fleetexterno.js");
   } catch (err) {
     // "Failed to fetch dynamically imported module" / 404 de chunk: pasa cuando
     // el navegador tiene cacheado el index.html VIEJO (con hashes de archivo

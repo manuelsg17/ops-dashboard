@@ -21,6 +21,12 @@ import { ensurePdfLibs } from "./shared/lazyLibs.js";
 Chart.register(ChartDataLabels);
 window.Chart = Chart;
 
+// forecast.js (funciones fc*) también vive acá por el mismo motivo: SOLO lo usa
+// el slide de Proyección de esta vista — antes vivía eager en vendor.js
+// (~250 líneas pagadas por toda sesión, incluido el login) sin necesidad.
+import * as forecast from "./forecast.js";
+Object.assign(window, forecast);
+
 // ── Helpers de presentación (ex-presentacion.js) ──────────────────────────────
 export const PRES_CITY_ORDER = ["LIMA", "AREQUIPA", "TRUJILLO"];
 
