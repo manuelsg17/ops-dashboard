@@ -669,6 +669,7 @@ export async function loadFromSupabase(opts = {}) {
       _pgFetch("seguimiento", "?select=*&order=partner.asc,sort_order.asc,start_date.asc").catch(() => [])
     ]);
     const [partners, rend, frooms, flotas] = await critical;
+    console.log("[PERF] critical resolved @", Math.round(performance.now()));
 
     if (partners && partners.length) {
       STATE.CLID_MAP = {};
@@ -708,6 +709,7 @@ export async function loadFromSupabase(opts = {}) {
       STATE.FLEETROOM_EXCLUDE_TAXI[id] = f.exclude_from_taxi === true;
       STATE.FLEETROOM_NAME[id]         = (f.name || "").trim();
     });
+    console.log("[PERF] fleetrooms procesados @", Math.round(performance.now()), "rendRows=", (rend||[]).length);
 
     STATE.rawData = (rend || []).map(r => ({
       clid:          (r.clid || "").trim(),
@@ -731,6 +733,7 @@ export async function loadFromSupabase(opts = {}) {
       trips:         +r.trips,
       ...txRowExtra(r)
     }));
+    console.log("[PERF] rawData mapeado @", Math.round(performance.now()));
 
     // 3. Rendimiento mensual → carga diferida (ver loadMensualIfNeeded)
 
@@ -765,6 +768,7 @@ export async function loadFromSupabase(opts = {}) {
     // Anti-doble-conteo: descartar la fila legacy agregada (db_id='') de una
     // (clid,city,date) si ya existe detalle por fleetroom. Antes de rawDataFull.
     STATE.rawData = dropLegacyAggregateRows(STATE.rawData);
+    console.log("[PERF] dropLegacyAggregateRows @", Math.round(performance.now()));
 
     // 6. Guardar copia completa
     STATE.rawDataFull = [...STATE.rawData];
@@ -798,11 +802,13 @@ export async function loadFromSupabase(opts = {}) {
 
     STATE.parseWarnings.clear();
     updateIndexes();          // construye indices secundarios sobre rawData
+    console.log("[PERF] updateIndexes @", Math.round(performance.now()));
     // popSidebarUI > restoreFilters > onKAMChange dispararia un render aqui;
     // suprimimos para hacer un render unico ordenado abajo.
     STATE._suppressRestoreRender = true;
     if (typeof popSidebarUI === "function") popSidebarUI();
     STATE._suppressRestoreRender = false;
+    console.log("[PERF] popSidebarUI @", Math.round(performance.now()));
     const warnSuffix = STATE.parseWarnings.size
       ? ` · ⚠ ${STATE.parseWarnings.size} campo(s) inválido(s)` : "";
     showBanner(true, "Datos cargados · " + new Date().toLocaleTimeString("es-PE") + warnSuffix);
@@ -825,6 +831,7 @@ export async function loadFromSupabase(opts = {}) {
       if (STATE.curTab === "rawdata"     && typeof renderRawData === "function")     renderRawData();
       }
     }
+    console.log("[PERF] render dispatch terminado @", Math.round(performance.now()));
 
     // metas/proyectos/seguimiento: se pidieron en paralelo desde el arranque de
     // la función (`deferred`, ver comentario junto a `critical`) sin bloquear el
