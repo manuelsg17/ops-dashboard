@@ -238,14 +238,22 @@ export function showApp(user) {
     initApp();
   }
 }
+// Enter en password ya dispara el submit nativo del <form> (ver index.html +
+// handleLoginSubmit) — solo hace falta manejar Enter en email para saltar el
+// foco a password en vez de intentar loguear con la contraseña vacía.
 document.addEventListener("DOMContentLoaded", () => {
-  document.getElementById("loginPassword")
-    ?.addEventListener("keydown", e => { if (e.key === "Enter") handleLogin(); });
   document.getElementById("loginEmail")
     ?.addEventListener("keydown", e => {
-      if (e.key === "Enter") document.getElementById("loginPassword").focus();
+      if (e.key === "Enter") { e.preventDefault(); document.getElementById("loginPassword").focus(); }
     });
   initAuth();
 });
 
-registerActions({ handleLogin, handleLogout });
+// data-act-submit del <form id="loginForm"> (index.html) — envolver los inputs
+// en un <form> de verdad silencia el aviso de DevTools "Password field is not
+// contained in a form" y deja que el gestor de contraseñas del navegador
+// funcione mejor (autocompletar, "guardar contraseña"). preventDefault evita
+// la recarga de página que hace un submit nativo sin backend.
+function handleLoginSubmit(d, el, e) { e.preventDefault(); handleLogin(); }
+
+registerActions({ handleLogin, handleLogout, handleLoginSubmit });

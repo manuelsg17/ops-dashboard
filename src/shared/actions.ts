@@ -53,7 +53,8 @@ const _WIRED = [
   ["keydown",   "data-act-keydown",   "actKeydown"],
   ["mousedown", "data-act-mousedown", "actMousedown"],
   ["focusin",   "data-act-focus",     "actFocus"],
-  ["focusout",  "data-act-blur",      "actBlur"]
+  ["focusout",  "data-act-blur",      "actBlur"],
+  ["submit",    "data-act-submit",    "actSubmit"]
 ];
 
 for (const [evName, attr, datasetKey] of _WIRED) {

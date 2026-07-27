@@ -411,6 +411,25 @@ export function computeWindowStart(allPeriods, scale, wantFrom) {
   return si > 0 ? allPeriods[si - 1] : allPeriods[0];
 }
 
+// Ventana wall-clock para mensual/diario — a diferencia de semanal (que usa
+// fetchAllPeriods + computeWindowStart porque los períodos pueden tener
+// huecos), acá alcanza con "hoy menos N" ya que mes/día son continuos.
+// LOAD_WINDOW.mensual/diario existían como config desde A3 pero nunca se
+// aplicaban acá — loadMensualIfNeeded/loadDiarioIfNeeded traían la tabla
+// ENTERA siempre (documentado como aceptable cuando mensual/diario eran
+// datasets chicos de ~1.8k/~6.5k filas; diario ya creció a 11k+ y sigue
+// creciendo ~180/semana, encontrado revisando una sesión real con el tab
+// Diario tardando mucho más de lo esperado).
+function _monthsAgoYYYYMM(n) {
+  const d = new Date();
+  d.setDate(1);   // evita overflow de mes al restar (ej. 31 de marzo - 1 mes)
+  d.setMonth(d.getMonth() - n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+function _daysAgoISO(n) {
+  return new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+}
+
 // Columnas realmente usadas por el parser de rendimiento (core + TX_NEW_COLS,
 // ver txRowExtra) — de las ~55 que tiene la tabla, evita traer el resto por
 // `select("*")`. Verificado 1x1 contra information_schema.columns real de las
@@ -857,7 +876,10 @@ export async function loadMensualIfNeeded() {
   if (STATE._mensualLoaded) return; // ya cargado
   showLoad(true, "Cargando datos mensuales...");
   try {
-    const rendM = await fetchAllPages("rendimiento_mensual", "mes", { columns: REND_COLS_MENSUAL });
+    const rendM = await fetchAllPages("rendimiento_mensual", "mes", {
+      columns: REND_COLS_MENSUAL,
+      gte: { col: "mes", value: _monthsAgoYYYYMM(LOAD_WINDOW.mensual) }
+    });
     STATE.rawDataMensual = rendM.map(r => ({
       clid:          (r.clid || "").trim(),
       partner:       STATE.CLID_MAP[r.clid] || r.partner,
@@ -912,7 +934,10 @@ export async function loadDiarioIfNeeded() {
   if (STATE._diarioLoaded) return;
   showLoad(true, "Cargando datos diarios...");
   try {
-    const rendD = await fetchAllPages("rendimiento_diario", "date", { columns: REND_COLS_DIARIO });
+    const rendD = await fetchAllPages("rendimiento_diario", "date", {
+      columns: REND_COLS_DIARIO,
+      gte: { col: "date", value: _daysAgoISO(LOAD_WINDOW.diario) }
+    });
     STATE.rawDataDiario = rendD.map(r => ({
       clid:          (r.clid || "").trim(),
       partner:       STATE.CLID_MAP[r.clid] || r.partner || r.clid,

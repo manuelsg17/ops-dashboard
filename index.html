@@ -63,10 +63,12 @@
     </div>
     <h1 class="login-title">YANGO <span>Dashboard</span></h1>
     <p class="login-sub">Partner Performance Analytics</p>
-    <input id="loginEmail"    type="email"    class="login-input" placeholder="Email"/>
-    <input id="loginPassword" type="password" class="login-input" placeholder="Contraseña"/>
-    <p id="loginError" class="login-error"></p>
-    <button id="loginBtn" class="login-btn" data-act="handleLogin">Ingresar</button>
+    <form id="loginForm" data-act-submit="handleLoginSubmit">
+      <input id="loginEmail"    type="email"    class="login-input" placeholder="Email" autocomplete="username"/>
+      <input id="loginPassword" type="password" class="login-input" placeholder="Contraseña" autocomplete="current-password"/>
+      <p id="loginError" class="login-error"></p>
+      <button id="loginBtn" type="submit" class="login-btn">Ingresar</button>
+    </form>
     <p class="login-footer">Acceso restringido · Uso interno Yango Peru</p>
   </div>
 </div>
