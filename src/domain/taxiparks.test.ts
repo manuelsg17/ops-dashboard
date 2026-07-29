@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toN, parseTaxiparksWide, parseTaxiparksLong, coberturaKpis, _txNorm, TX_COL_BY_NORM } from "./taxiparks.js";
+import { toN, parseTaxiparksWide, parseTaxiparksLong, coberturaKpis, adaptarEsquema, detectarTasasEnPorcentaje, _txNorm, TX_COL_BY_NORM } from "./taxiparks.js";
 
 // Estos tests fijan el CONTRATO del reporte de taxiparks. Importan más que de
 // costumbre porque el mismo parser corre en dos lugares (navegador y Edge
@@ -176,5 +176,64 @@ describe("cobertura de KPIs", () => {
     expect(cob.total).toBeGreaterThan(40);
     expect(cob.faltantes).toContain("gmv");
     expect(cob.faltantes).not.toContain("active_drivers");
+  });
+});
+
+describe("adaptación al esquema de cada tabla", () => {
+  // Bug real (jul 2026): la carga automática a rendimiento_diario devolvía 500
+  // "column kam does not exist". La traducción existía en el uploader del
+  // navegador pero no se movió al módulo compartido al extraer el parser.
+  const fila = () => ({
+    clid: "1", city: "LIMA", db_id: "d", fleetroom: "F",
+    partner: "Lizzo", kam: "Manuel", date: "2026-07-01",
+    active_drivers: 100, new_from_partner: 5, new_from_service: 3, gmv: 900
+  });
+
+  it("diario: descarta partner/kam y renombra new_from_* → new_*", () => {
+    const [o] = adaptarEsquema([fila()], "diario");
+    expect(o).not.toHaveProperty("partner");
+    expect(o).not.toHaveProperty("kam");
+    expect(o).not.toHaveProperty("new_from_partner");
+    expect(o).not.toHaveProperty("new_from_service");
+    expect(o.new_partner).toBe(5);
+    expect(o.new_service).toBe(3);
+    // Lo demás sobrevive intacto
+    expect(o.db_id).toBe("d");
+    expect(o.fleetroom).toBe("F");
+    expect(o.active_drivers).toBe(100);
+    expect(o.gmv).toBe(900);
+  });
+
+  it("semanal y mensual no se tocan: esas tablas SÍ tienen partner/kam", () => {
+    expect(adaptarEsquema([fila()], "semanal")[0]).toHaveProperty("kam");
+    expect(adaptarEsquema([fila()], "mensual")[0]).toHaveProperty("new_from_partner");
+  });
+});
+
+describe("porcentajes (bug de la carga automática, jul 2026)", () => {
+  it('"91.45%" es 0.9145, no 91.45', () => {
+    // Con Excel nunca se notó: XLSX con raw:true entrega la fracción cruda y el
+    // % es solo formato de celda. Al llegar como string desde JSON, el símbolo
+    // se borraba y el número quedaba ×100 — toda la semana del 20/07 entró mal.
+    expect(toN("91.45%")).toBeCloseTo(0.9145, 10);
+    expect(toN("100%")).toBe(1);
+    expect(toN("0%")).toBe(0);
+  });
+
+  it("un número sin % no se toca", () => {
+    expect(toN(0.9145)).toBe(0.9145);
+    expect(toN("0.9145")).toBeCloseTo(0.9145, 10);
+  });
+
+  it("detecta un lote con las tasas en escala 0-100", () => {
+    const enPct   = Array.from({ length: 10 }, () => ({ acceptance_rate: 91.45 }));
+    const enFracc = Array.from({ length: 10 }, () => ({ acceptance_rate: 0.9145 }));
+    expect(detectarTasasEnPorcentaje(enPct)).toContain("acceptance_rate");
+    expect(detectarTasasEnPorcentaje(enFracc)).toEqual([]);
+  });
+
+  it("no se alarma por un dato raro aislado", () => {
+    const lote = Array.from({ length: 20 }, (_, i) => ({ acceptance_rate: i === 0 ? 3 : 0.9 }));
+    expect(detectarTasasEnPorcentaje(lote)).toEqual([]);
   });
 });

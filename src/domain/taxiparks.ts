@@ -110,7 +110,14 @@ export function toN(v: any, label?: string, onWarn?: (l: string) => void): numbe
     return toN(sufMatch[1], label, onWarn) * mult;   // propagar el aviso
   }
 
-  // Eliminar % y espacios (incluido espacio fino)
+  // Un valor con % es un PORCENTAJE: "91.45%" son 0.9145, no 91.45.
+  //
+  // BUG REAL (jul 2026, carga automatica): antes solo se borraba el simbolo y
+  // el numero quedaba x100. Con Excel nunca se noto porque XLSX con raw:true
+  // entrega la fraccion cruda (0.9145) y el % es solo formato de celda; recien
+  // al llegar el dato como STRING desde JSON aparecio. Toda la semana del 20/07
+  // entro con las tasas x100.
+  const esPorcentaje = s.includes("%");
   s = s.replace(/[%\s ]/g, "");
 
   const hasDot   = s.indexOf(".") > -1;
@@ -144,7 +151,8 @@ export function toN(v: any, label?: string, onWarn?: (l: string) => void): numbe
   // Aviso por CALLBACK en vez de escribir STATE: es lo unico que ataba esta
   // funcion al navegador. En el servidor no se pasa nada y no pasa nada.
   if (isNaN(n) && label && typeof onWarn === "function") onWarn(label);
-  return isNaN(n) ? 0 : n;
+  if (isNaN(n)) return 0;
+  return esPorcentaje ? n / 100 : n;
 }
 
 export function txExtract(row: any, mc: any, onWarn?: (l: string) => void): Record<string, number> {
@@ -379,4 +387,67 @@ export function _fechaISO(v: any): string {
   const m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
   if (m) return `${m[3]}-${m[2]}-${m[1]}`;
   return "";
+}
+
+// ── ADAPTACION AL ESQUEMA DE CADA TABLA ─────────────────────────────────────
+// Las tres tablas NO tienen las mismas columnas. Verificado contra la BD:
+//
+//   columna              rendimiento  rendimiento_mensual  rendimiento_diario
+//   kam                       si              si                  NO
+//   partner                   si              si                  NO
+//   new_from_partner          si              si            se llama new_partner
+//   new_from_service          si              si            se llama new_service
+//
+// El parser produce SIEMPRE el vocabulario de semanal/mensual (que es el del
+// reporte); esta funcion lo traduce al esquema real de la tabla destino. Sin
+// esto, un upsert a rendimiento_diario falla con "column kam does not exist" —
+// y Postgres reporta de a UN error por vez, asi que se arregla uno y aparece el
+// siguiente. Pasó exactamente eso al conectar la carga automatica.
+//
+// Vive acá y no en el uploader del navegador porque los DOS caminos —la subida
+// manual y la Edge Function— escriben a las mismas tablas y necesitan la misma
+// traduccion.
+export function adaptarEsquema(flat: Record<string, any>[], escala: string): Record<string, any>[] {
+  if (escala !== "diario") return flat;
+  return flat.map(o => {
+    // partner y kam se DESCARTAN (la tabla diaria no los tiene). No se pierde
+    // informacion util: la app resuelve ambos desde `partners` por clid al leer.
+    const { new_from_partner, new_from_service, partner, kam, ...rest } = o;
+    if (new_from_partner !== undefined) rest.new_partner = new_from_partner;
+    if (new_from_service !== undefined) rest.new_service = new_from_service;
+    return rest;
+  });
+}
+
+// ── SANIDAD DE TASAS ────────────────────────────────────────────────────────
+// Estas columnas se guardan como FRACCION (0-1) en toda la historia. Si llegan
+// como porcentaje (0-100), los calculos del dashboard —que multiplican por 100
+// al mostrar— dan valores x100 y las graficas se vuelven ilegibles.
+//
+// No se corrige en silencio a proposito: dividir por 100 "por las dudas"
+// rompería un dato legitimamente mayor a 1. Se AVISA y quien manda el reporte
+// decide.
+export const TX_RATE_COLS = [
+  "acceptance_rate", "completion_rate", "bad_rated_trips_share",
+  "fraud_trips_share", "new_drivers_share", "supply_hours_share",
+  "trips_share", "commission_share", "driver_subsidies_by_gmv",
+  "driver_support_requests_share"
+];
+
+// Columnas de tasa que parecen venir en escala 0-100 en vez de 0-1. Umbral:
+// mas del 20% de las filas con valor > 1.5. Un caso aislado puede ser un dato
+// raro; la mayoria del lote es un cambio de unidad.
+export function detectarTasasEnPorcentaje(flat: Record<string, any>[]): string[] {
+  const sospechosas: string[] = [];
+  for (const col of TX_RATE_COLS) {
+    let conValor = 0, fueraDeRango = 0;
+    for (const f of flat) {
+      const v = f[col];
+      if (v === undefined || v === null || v === 0) continue;
+      conValor++;
+      if (v > 1.5) fueraDeRango++;
+    }
+    if (conValor >= 5 && fueraDeRango / conValor > 0.2) sospechosas.push(col);
+  }
+  return sospechosas;
 }

@@ -24,10 +24,10 @@ import { projectFlow } from "./domain/metrics.js";
 // que es propio del navegador: el aviso de parseo a STATE.parseWarnings.
 import {
   _txNorm, TX_COL_BY_NORM, TX_COUNT_COLS, txConsolidate, _clidStr, _fleetroomCols,
-  normCityValue, parseTaxiparksWide,
+  normCityValue, parseTaxiparksWide, adaptarEsquema,
   toN as _toNPure, txExtract as _txExtractPure
 } from "./domain/taxiparks.js";
-export { _txNorm, TX_COL_BY_NORM, TX_COUNT_COLS, txConsolidate, _clidStr, _fleetroomCols, parseTaxiparksWide };
+export { _txNorm, TX_COL_BY_NORM, TX_COUNT_COLS, txConsolidate, _clidStr, _fleetroomCols, parseTaxiparksWide, adaptarEsquema };
 
 function _warnParse(label) { if (STATE && STATE.parseWarnings) STATE.parseWarnings.add(label); }
 export function toN(v, label)       { return _toNPure(v, label, _warnParse); }
@@ -1183,15 +1183,10 @@ export async function uploadRendimientoDiario(rows) {
     });
   });
 
-  // El esquema diario usa new_partner/new_service (no new_from_*) y no tiene
-  // columnas partner/kam. Remapear los nombres core antes del upsert.
-  // db_id/fleetroom sobreviven en ...rest (no se desestructuran).
-  const flat = Object.values(agg).map(o => {
-    const { new_from_partner, new_from_service, partner, kam, ...rest } = o;
-    if (new_from_partner !== undefined) rest.new_partner = new_from_partner;
-    if (new_from_service !== undefined) rest.new_service = new_from_service;
-    return rest;
-  });
+  // El esquema diario difiere del semanal/mensual (sin partner/kam, y
+  // new_partner/new_service en vez de new_from_*). La traduccion vive en
+  // domain/taxiparks.adaptarEsquema — la MISMA que usa la Edge Function.
+  const flat = adaptarEsquema(Object.values(agg), "diario");
   if (!flat.length) throw new Error("No se encontraron datos. Verifica que las columnas tengan formato DD.MM.YYYY - Métrica");
 
   for (let i = 0; i < flat.length; i += 500) {

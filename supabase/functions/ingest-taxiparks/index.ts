@@ -45,7 +45,8 @@
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { parseTaxiparksWide, parseTaxiparksLong, coberturaKpis } from "./taxiparks.ts";
+import { parseTaxiparksWide, parseTaxiparksLong, coberturaKpis,
+         adaptarEsquema, detectarTasasEnPorcentaje } from "./taxiparks.ts";
 
 const ESCALAS: Record<string, { tabla: string; dateField: string; onConflict: string }> = {
   semanal: { tabla: "rendimiento",         dateField: "fecha", onConflict: "clid,city,fecha,db_id" },
@@ -205,6 +206,19 @@ Deno.serve(async (req: Request) => {
   }
 
   const cob = coberturaKpis(flat);
+
+  // Aviso de escala: si las tasas llegan en 0-100 en vez de 0-1, los calculos
+  // del dashboard dan valores x100. No se corrige solo (ver el comentario en
+  // detectarTasasEnPorcentaje) — se avisa y la corrida queda marcada.
+  const tasasSospechosas = detectarTasasEnPorcentaje(flat);
+  if (tasasSospechosas.length) {
+    avisos.add(`Tasas en escala 0-100 (se esperan 0-1): ${tasasSospechosas.join(", ")}. ` +
+               `Mandalas como fraccion, o con el simbolo % ("91.45%").`);
+  }
+
+  // El esquema de rendimiento_diario NO tiene partner/kam y usa
+  // new_partner/new_service. Traducir antes de escribir.
+  flat = adaptarEsquema(flat, escala);
 
   // ── 7. dry_run: valida y reporta, sin escribir ──────────────────────────
   const resumen = {

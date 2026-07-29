@@ -102,6 +102,11 @@ Manuel pidió una auditoría a fondo (carga de ~6s, "se traba y muestra páginas
 - **La copia del parser no puede divergir**: `npm run sync:ingest` la regenera y el CI corre `--check`. Ver `docs/ingest-taxiparks.md` para el contrato completo (fuera de la carpeta de la función: todo lo que está ahí entra al bundle).
 - **Pendiente de Manuel**: `supabase secrets set INGEST_TOKEN=...` + `supabase functions deploy ingest-taxiparks --no-verify-jwt`, y pasarle URL+token a la sesión de `kam-managment`.
 
+**Dos bugs encontrados al conectar la carga automática (jul 29)**
+1. **`rendimiento_diario` NO tiene las mismas columnas** que semanal/mensual: le faltan `kam` y `partner`, y usa `new_partner`/`new_service` en vez de `new_from_*`. La traducción EXISTÍA en `uploadRendimientoDiario` pero no se movió al módulo compartido al extraer el parser → la ingesta automática daba 500 `column kam does not exist`. Ahora `adaptarEsquema(flat, escala)` en `domain/taxiparks.ts`, usada por los dos caminos. Postgres reporta de a UN error por vez, así que sin el mapa completo se arregla uno y aparece el siguiente.
+2. **`toN` borraba el `%` pero no dividía por 100**: `"91.45%"` quedaba en 91,45 en vez de 0,9145. Con Excel nunca se notó porque XLSX con `raw:true` entrega la fracción cruda (el % es formato de celda); apareció recién al llegar el dato como STRING desde JSON. **Toda la semana del 20/07 entró con las tasas ×100** (acceptance_rate, completion_rate, bad_rated_trips_share, new_drivers_share, trips_share…). Se corrige reenviando esa semana, NO dividiendo por SQL: el cociente contra la semana anterior va de 10,7 a 257 porque mezcla el cambio de escala con la variación real.
+- **Detector nuevo** `detectarTasasEnPorcentaje`: si >20% de las filas de una columna de tasa vienen >1,5, la Edge Function lo AVISA en la respuesta y en `ingest_log`. No corrige solo a propósito — dividir "por las dudas" rompería un dato legítimamente mayor a 1.
+
 Pendiente: verificación con datos y sesión reales (lo de arriba se validó con build real + datos sintéticos en `npm run preview`; no hay login por la regla de contraseñas).
 
 ### Sesión Julio 2026 (cont.) — Fix PDF Presentación 2.0 + reorden de Configuración + retiro de Palabras Prohibidas
