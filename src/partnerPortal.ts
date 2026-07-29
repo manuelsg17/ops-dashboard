@@ -18,8 +18,56 @@
 import { registerActions } from "./shared/actions.js";
 import { stampPDF } from "./shared/pdfmeta.js";
 import { ensurePdfLibs } from "./shared/lazyLibs.js";
+// Mismo núcleo de cálculo que Metas, Rendimiento y el deck: el partner tiene que
+// ver EXACTAMENTE los números que su KAM le presenta.
+import { snapshotValue, seriesByDate, projectSnapshot, projectFlow, ratio, weightedAvg } from "./domain/metrics.js";
 
-export const PORTAL_STATE = { city: "all" };
+export const PORTAL_STATE = { city: "all", line: "comb" };
+
+// ── LÍNEAS DE NEGOCIO ────────────────────────────────────────────────────────
+// Mismo criterio que Rendimiento/Metas: Fleet ⊂ Agregador (sus autos hacen Taxi)
+// y TukTuk es disjunto de Taxi. Solo se ofrecen las líneas en las que ESTE
+// partner tiene datos — mostrarle una pestaña "TukTuk" vacía a quien no opera
+// TukTuk es ruido.
+export const PORTAL_LINES = [
+  { k: "comb",  emoji: "🔀", label: "Combinado", tip: "Taxi + TukTuk sumados" },
+  { k: "agg",   emoji: "📊", label: "Taxi",      tip: "Operación de taxi (incluye tus autos de flota)" },
+  { k: "fleet", emoji: "🚗", label: "Fleet",     tip: "KPIs de tu flota propia" },
+  { k: "tk",    emoji: "🛺", label: "TukTuk",    tip: "Operación TukTuk" }
+];
+
+function _portalDataset(line) {
+  const mensual = STATE.curMode === "mensual";
+  const tk = (mensual ? STATE.rawDataMensualTuktuk : STATE.rawDataTuktuk) || [];
+  if (line === "fleet") return (mensual ? STATE.rawDataMensualFleet : STATE.rawDataFleet) || [];
+  if (line === "tk")    return tk;
+  if (line === "comb")  return (STATE.rawData || []).concat(tk);
+  return STATE.rawData || [];
+}
+
+// Línea activa, degradada si la elegida no tiene datos (o si la escala diaria no
+// trae sub-flota, igual que en el resto del dashboard).
+function _portalLine() {
+  let line = PORTAL_STATE.line || "comb";
+  if (STATE.curMode === "diario" && line !== "agg") line = "agg";
+  if (!_portalDataset(line).length) line = "agg";
+  return line;
+}
+
+function _portalAvailableLines() {
+  const diario = STATE.curMode === "diario";
+  return PORTAL_LINES.filter(l => l.k === "agg" || (!diario && _portalDataset(l.k).length));
+}
+
+function _portalLineToggle() {
+  const avail = _portalAvailableLines();
+  if (avail.length < 2) return "";   // sin alternativas, el selector sobra
+  const cur = _portalLine();
+  return `<div class="mode-toggle-row" style="margin-bottom:14px">${
+    avail.map(l => `<button class="mode-btn${cur === l.k ? " active" : ""}"
+      title="${escapeHTML(l.tip)}" data-act="portalSetLine" data-line="${l.k}">${l.emoji} ${l.label}</button>`).join("")
+  }</div>`;
+}
 
 // ¿La sesión actual es de un partner externo?
 export function isPartnerSession() {
@@ -27,13 +75,32 @@ export function isPartnerSession() {
 }
 
 // Filas del rango elegido (mismo criterio de fechas que el resto del dashboard).
-function _portalRows() {
+function _portalRows(line) {
   const from = document.getElementById("dateFrom")?.value || "";
   const to   = document.getElementById("dateTo")?.value   || "";
-  return (STATE.rawData || []).filter(r =>
+  return _portalDataset(line || _portalLine()).filter(r =>
     (!from || r.date >= from) && (!to || r.date <= to) &&
     (PORTAL_STATE.city === "all" || r.city === PORTAL_STATE.city)
   );
+}
+
+// Serie por período de una métrica (Σ ciudades/sub-flotas por fecha).
+function _portalSeries(rows, fn) {
+  const by = {};
+  rows.forEach(r => { by[r.date] = (by[r.date] || 0) + (fn(r) || 0); });
+  return { dates: Object.keys(by).sort(), values: seriesByDate(by) };
+}
+
+// WoW en % entre los dos últimos valores de una serie. null cuando no hay base
+// de comparación — un "0%" ahí sería mentira, no un dato neutro.
+function _portalWow(cur, prev) {
+  if (prev == null || prev === 0 || cur == null) return null;
+  return ((cur - prev) / prev) * 100;
+}
+function _wowCell(pct) {
+  if (pct == null) return `<td class="tn agy-style-90">—</td>`;
+  const col = pct >= 0 ? "#10b981" : "#FF0000";
+  return `<td class="tn"><span style="color:${col};font-weight:700">${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%</span></td>`;
 }
 
 function _sum(rows, fn) { return rows.reduce((s, r) => s + (fn(r) || 0), 0); }
@@ -47,14 +114,19 @@ function _portalKpis(rows) {
   const prevRows = rows.filter(r => r.date === prev);
   const nr = rs => _sum(rs, r => r.newPartner + r.newService + r.reactivated);
   return {
-    last, prev,
+    last, prev, dates,
+    // Conductores activos es un SNAPSHOT: el valor del rango es el del último
+    // período, NO la suma (tener 100 activos 4 semanas seguidas es 100, no 400).
     ad:   _sum(lastRows, r => r.activeDrivers),
     adP:  _sum(prevRows, r => r.activeDrivers),
     nr:   nr(rows),            // acumulado del rango
     nrL:  nr(lastRows), nrP: nr(prevRows),
     sh:   _sum(rows,     r => r.supplyHours),
     shL:  _sum(lastRows, r => r.supplyHours),
-    shP:  _sum(prevRows, r => r.supplyHours)
+    shP:  _sum(prevRows, r => r.supplyHours),
+    tr:   _sum(rows,     r => r.trips || 0),
+    trL:  _sum(lastRows, r => r.trips || 0),
+    trP:  _sum(prevRows, r => r.trips || 0)
   };
 }
 
@@ -70,50 +142,98 @@ function _kpiCard(label, sub, valor, actual, previo, color, fmtFn = fmt) {
     </div>`;
 }
 
-// Metas del mes vs actual — solo de los CLIDs del partner (RLS ya recortó metasData).
-function _portalMetas() {
+// Metas del mes vs actual — solo de los CLIDs del partner (RLS ya recortó
+// metasData). Respeta la línea activa: en Combinado la meta es la suma de la
+// meta Taxi + la meta TukTuk, igual que en la pestaña Metas del equipo.
+function _portalMetas(line, rows) {
   const metas = STATE.metasData || [];
   if (!metas.length) return "";
   const meses = [...new Set(metas.map(m => m.mes))].filter(Boolean)
     .sort((a, b) => _metasMesOrden(b) - _metasMesOrden(a));
   const mes = meses[0];
   if (!mes) return "";
-  const delMes = metas.filter(m => m.mes === mes);
+  const delMes = metas.filter(m => m.mes === mes &&
+    (PORTAL_STATE.city === "all" || m.city === PORTAL_STATE.city));
 
-  const rows = _portalRows();
   const dates = [...new Set(rows.map(r => r.date))].sort();
   const last  = dates[dates.length - 1] || "";
   const adAct = _sum(rows.filter(r => r.date === last), r => r.activeDrivers);
   const nrAct = _sum(rows, r => r.newPartner + r.newService + r.reactivated);
   const shAct = _sum(rows, r => r.supplyHours);
+  const adSerie = _portalSeries(rows, r => r.activeDrivers).values;
+  const { daysElapsed, daysRemaining } = calcProjectionDays(last);
 
-  const mA  = _sum(delMes, m => m.mA);
-  const mNR = _sum(delMes, m => m.mNR);
-  const mH  = _sum(delMes, m => m.mH);
-  if (!mA && !mNR && !mH) return "";
-
-  const fila = (label, act, meta, fmtFn = fmt) => {
-    if (!meta) return "";
-    const p = (act / meta) * 100;
-    return `
-      <div class="agy-style-196">
-        <div class="agy-style-259">
-          <span>${label}</span>
-          <span><strong>${fmtFn(act)}</strong> <span class="agy-style-89">/ ${fmtFn(meta)}</span>
-            <strong style="color:${pColor(p)};margin-left:6px">${p.toFixed(1)}%</strong></span>
-        </div>
-        <div class="agy-style-260">
-          <div style="height:100%;width:${Math.min(p, 100).toFixed(1)}%;background:${pColor(p)};border-radius:5px"></div>
-        </div>
-      </div>`;
+  // Qué meta aplica según la línea. `null` = ese KPI no tiene meta cargada para
+  // esta línea (distinto de meta 0).
+  const pick = (taxi, tk) => {
+    if (line === "tk")    return tk;
+    if (line === "agg" || line === "fleet") return taxi;
+    return (taxi == null && tk == null) ? null : (taxi || 0) + (tk || 0);   // comb
   };
+  const sumOrNull = (fn) => {
+    let t = null;
+    delMes.forEach(m => { const v = fn(m); if (v != null) t = (t || 0) + v; });
+    return t;
+  };
+  const mA  = pick(sumOrNull(m => m.mA  || null), sumOrNull(m => m.mtkAD));
+  const mNR = pick(sumOrNull(m => m.mNR || null), sumOrNull(m => m.mtkNR));
+  const mH  = pick(sumOrNull(m => m.mH  || null), sumOrNull(m => m.mtkSH));
 
-  return secH("🎯", "#8b5cf6", `Tus metas — ${escapeHTML(mes)}`,
-      "Avance del mes contra el objetivo acordado con tu KAM", "") +
+  // Fleet mide TASAS, no cantidades: su bloque de metas es distinto.
+  if (line === "fleet") {
+    const owned = _sum(rows, r => r.ownedFleetActiveCars || 0);
+    const intSh = _sum(rows, r => r.internalFleetSh || 0);
+    const trips = _sum(rows, r => r.trips || 0);
+    const accW  = rows.reduce((s, r) => s + (r.acceptanceRate || 0) * (r.trips || 0), 0);
+    const shCar  = ratio(intSh, owned);
+    const accept = ratio(accW, trips) * 100;
+    // Las metas de tasa se re-ponderan por el mismo denominador que el actual;
+    // promediarlas a secas entre ciudades daría un número sin significado.
+    const wMeta = (key, w) => {
+      const pairs = delMes.filter(m => m[key] != null).map(m => [m[key], w]);
+      return pairs.length ? weightedAvg(pairs) : null;
+    };
+    const mShCar = wMeta("mSHcar", owned), mAcc = wMeta("mAcc", trips), mUtil = wMeta("mUtil", owned);
+    if (mShCar == null && mAcc == null && mUtil == null) return "";
+    return secH("🎯", "#0891b2", `Tus metas de flota — ${escapeHTML(mes)}`,
+        "Avance del mes contra el objetivo acordado con tu KAM", "") +
+      `<div class="section">
+        ${_portalMetaRow("SH / Auto (interno)", shCar, mShCar, null, v => fmt(v))}
+        ${_portalMetaRow("Aceptación", accept, mAcc, null, v => fmt(v) + "%")}
+        ${mUtil != null ? `<div class="agy-style-196"><div class="agy-style-259">
+            <span>Utilización</span><span><strong>${fmt(mUtil)}%</strong> <span class="agy-style-89">meta · sin actual medible</span></span>
+          </div></div>` : ""}
+      </div>`;
+  }
+
+  if (mA == null && mNR == null && mH == null) return "";
+  const lbl = line === "tk" ? "TukTuk" : line === "comb" ? "(Taxi + TukTuk)" : "";
+  return secH("🎯", "#8b5cf6", `Tus metas ${lbl} — ${escapeHTML(mes)}`.replace("  ", " "),
+      "Avance del mes contra el objetivo acordado con tu KAM · la barra clara es la proyección al cierre", "") +
     `<div class="section">
-      ${fila("Conductores Activos", adAct, mA)}
-      ${fila("Nuevos + Reactivados", nrAct, mNR)}
-      ${fila("Horas de Conexión", shAct, mH, fmtSmart)}
+      ${_portalMetaRow("Conductores Activos", adAct, mA, projectSnapshot(adSerie), fmt)}
+      ${_portalMetaRow("Nuevos + Reactivados", nrAct, mNR, projectFlow(nrAct, daysElapsed, daysRemaining), fmt)}
+      ${_portalMetaRow("Horas de Conexión", shAct, mH, projectFlow(shAct, daysElapsed, daysRemaining), fmtSmart)}
+    </div>`;
+}
+
+// Fila meta-vs-actual con barra de avance y (si aplica) marca de proyección.
+function _portalMetaRow(label, act, meta, proj, fmtFn) {
+  if (meta == null || !meta) return "";
+  const p  = (act / meta) * 100;
+  const pp = proj != null ? (proj / meta) * 100 : null;
+  return `
+    <div class="agy-style-196">
+      <div class="agy-style-259">
+        <span>${label}</span>
+        <span><strong>${fmtFn(act)}</strong> <span class="agy-style-89">/ ${fmtFn(meta)}</span>
+          <strong style="color:${pColor(p)};margin-left:6px">${p.toFixed(1)}%</strong></span>
+      </div>
+      <div class="agy-style-260" style="position:relative">
+        ${pp != null && pp > p ? `<div style="position:absolute;top:0;left:0;height:100%;width:${Math.min(pp,100).toFixed(1)}%;background:${pColor(pp)};opacity:.32;border-radius:5px"></div>` : ""}
+        <div style="position:relative;height:100%;width:${Math.min(p, 100).toFixed(1)}%;background:${pColor(p)};border-radius:5px"></div>
+      </div>
+      ${pp != null ? `<div style="font-size:.68rem;color:${pColor(pp)};margin-top:3px">Proyección al cierre: <strong>${fmtFn(proj)}</strong> (${pp.toFixed(1)}%)</div>` : ""}
     </div>`;
 }
 
@@ -122,12 +242,13 @@ export function renderPartnerPortal() {
   const box = document.getElementById("portalContent");
   if (!box) return;
 
-  const rows = _portalRows();
+  const line = _portalLine();
+  const rows = _portalRows(line);
   if (!rows.length) {
-    box.innerHTML = `
+    box.innerHTML = _portalLineToggle() + `
       <div class="empty">
         <p>Todavía no hay datos para el rango seleccionado.</p>
-        <p class="empty-sub">Probá ampliar el rango de fechas. Si el problema sigue, escribile a tu KAM.</p>
+        <p class="empty-sub">Probá ampliar el rango de fechas o cambiar de escala (diaria / semanal / mensual). Si el problema sigue, escribile a tu KAM.</p>
       </div>`;
     return;
   }
@@ -135,6 +256,10 @@ export function renderPartnerPortal() {
   const k = _portalKpis(rows);
   const misPartners = [...new Set(rows.map(r => r.partner))].sort();
   const ciudades    = [...new Set((STATE.rawData || []).map(r => r.city).filter(Boolean))].sort();
+  // Dos formas: "último mes/día" vs "última semana" (concordancia de género), y
+  // "vs el mes anterior" para la nota del WoW.
+  const escalaN = STATE.curMode === "mensual" ? "último mes" : STATE.curMode === "diario" ? "último día" : "última semana";
+  const escala  = STATE.curMode === "mensual" ? "mes" : STATE.curMode === "diario" ? "día" : "semana";
 
   // Título: normalmente 1-2 nombres (RLS recorta a los CLIDs del partner). Se
   // acota igual por robustez — un partner con muchos CLIDs bajo razones
@@ -143,8 +268,9 @@ export function renderPartnerPortal() {
     ? misPartners.slice(0, 3).map(escapeHTML).join(" · ") + ` <span class="agy-style-261">y ${misPartners.length - 3} más</span>`
     : (misPartners.map(escapeHTML).join(" · ") || "Tu operación");
 
-  let html = secH("📊", "#FF0000", titulo,
-    `Activos: último período · N+R y Horas: acumulado del rango`,
+  let html = _portalLineToggle();
+  html += secH("📊", "#FF0000", titulo,
+    `Activos: ${escalaN} · N+R, Horas y Viajes: acumulado del rango`,
     d2s(k.last));
 
   // Barra de herramientas: filtro de ciudad (solo si opera en más de una) + PDF.
@@ -152,53 +278,112 @@ export function renderPartnerPortal() {
   html += `<div class="section agy-style-262">`;
   if (ciudades.length > 1) {
     html += `<label class="agy-style-263">Ciudad</label>
-      <select class="sb-sel" data-act-change="portalSetCity" class="agy-style-10">
+      <select class="sb-sel agy-style-10" data-act-change="portalSetCity">
         <option value="all">Todas</option>
         ${ciudades.map(c => `<option value="${escapeHTML(c)}"${PORTAL_STATE.city === c ? " selected" : ""}>${cityLabel(c)}</option>`).join("")}
       </select>`;
   }
-  html += `<button class="apply-btn" id="portalPdfBtn" data-html2canvas-ignore="true"
-      data-act="portalDownloadPDF" class="agy-style-264">📄 Descargar PDF</button>
+  html += `<button class="apply-btn agy-style-264" id="portalPdfBtn" data-html2canvas-ignore="true"
+      data-act="portalDownloadPDF">📄 Descargar PDF</button>
     </div>`;
 
-  html += `<div class="section"><div class="metric-row">
-    ${_kpiCard("📊 Conductores Activos", "último período", k.ad,  k.ad,  k.adP, "#FF0000")}
-    ${_kpiCard("🆕 Nuevos + Reactivados", "acumulado del rango", k.nr, k.nrL, k.nrP, "#f97316")}
-    ${_kpiCard("⏱️ Horas de Conexión", "acumulado del rango", k.sh, k.shL, k.shP, "#8b5cf6", fmtSmart)}
-  </div></div>`;
+  // ── KPIs ────────────────────────────────────────────────────────────────
+  // Fleet tiene sus propios KPIs (tasas de flota); el resto de las líneas
+  // comparte los cuatro de siempre.
+  if (line === "fleet") {
+    const owned  = _sum(rows, r => r.ownedFleetActiveCars || 0);
+    const intSh  = _sum(rows, r => r.internalFleetSh || 0);
+    const trips  = _sum(rows, r => r.trips || 0);
+    const accW   = rows.reduce((s, r) => s + (r.acceptanceRate || 0) * (r.trips || 0), 0);
+    const ownedNow = snapshotValue(_portalSeries(rows, r => r.ownedFleetActiveCars || 0).values);
+    const brandNow = snapshotValue(_portalSeries(rows, r => r.brandedActiveCars || 0).values);
+    html += `<div class="section"><div class="metric-row">
+      ${_kpiCard("🚗 Autos propios activos", escalaN, ownedNow, ownedNow, ownedNow, "#0891b2")}
+      ${_kpiCard("🎨 Brandeados", escalaN, brandNow, brandNow, brandNow, "#7e22ce")}
+      ${_kpiCard("⏱️ SH / Auto (interno)", "ponderado del rango", ratio(intSh, owned), ratio(intSh, owned), ratio(intSh, owned), "#8b5cf6", v => fmt(v))}
+      ${_kpiCard("✅ Aceptación", "ponderada por viajes", ratio(accW, trips) * 100, ratio(accW, trips) * 100, ratio(accW, trips) * 100, "#10b981", v => fmt(v) + "%")}
+    </div></div>`;
+  } else {
+    html += `<div class="section"><div class="metric-row">
+      ${_kpiCard("📊 Conductores Activos", escalaN, k.ad,  k.ad,  k.adP, "#FF0000")}
+      ${_kpiCard("🆕 Nuevos + Reactivados", "acumulado del rango", k.nr, k.nrL, k.nrP, "#f97316")}
+      ${_kpiCard("⏱️ Horas de Conexión", "acumulado del rango", k.sh, k.shL, k.shP, "#8b5cf6", fmtSmart)}
+      ${_kpiCard("🚕 Viajes", "acumulado del rango", k.tr, k.trL, k.trP, "#0ea5e9", fmtSmart)}
+    </div></div>`;
+  }
 
-  html += _portalMetas();
+  html += _portalMetas(line, rows);
 
-  // Evolución
-  html += secH("📈", "#10b981", "Tu evolución", "Conductores activos por período", "");
-  html += `<div class="section"><div class="chart-card"><div id="portalChart"></div></div></div>`;
+  // ── Evolución: una gráfica por KPI (mismo estilo que el deck) ───────────
+  const charts = line === "fleet"
+    ? [{ id: "portalChAd",  label: "Autos propios activos", color: "#0891b2", fn: r => r.ownedFleetActiveCars || 0 },
+       { id: "portalChNr",  label: "Brandeados",            color: "#7e22ce", fn: r => r.brandedActiveCars || 0 },
+       { id: "portalChSh",  label: "Horas internas de flota", color: "#8b5cf6", fn: r => r.internalFleetSh || 0 },
+       { id: "portalChTr",  label: "Viajes",                color: "#0ea5e9", fn: r => r.trips || 0 }]
+    : [{ id: "portalChAd",  label: "Conductores Activos",   color: "#FF0000", fn: r => r.activeDrivers || 0 },
+       { id: "portalChNr",  label: "Nuevos + Reactivados",  color: "#f97316", fn: r => (r.newPartner || 0) + (r.newService || 0) + (r.reactivated || 0) },
+       { id: "portalChSh",  label: "Horas de Conexión",     color: "#8b5cf6", fn: r => r.supplyHours || 0 },
+       { id: "portalChTr",  label: "Viajes",                color: "#0ea5e9", fn: r => r.trips || 0 }];
 
-  // Detalle por período
-  html += secH("📋", "#6366f1", "Detalle por período", "Los mismos números, período a período", "");
+  html += secH("📈", "#10b981", "Tu evolución", `Período a período · escala ${STATE.curMode}`, "");
+  html += `<div class="section"><div class="agy-style-527">${
+    charts.map(c => `<div class="chart-card">
+      <div class="chart-head"><span class="chart-title">${escapeHTML(c.label)}</span></div>
+      <div id="${c.id}"></div></div>`).join("")
+  }</div></div>`;
+
+  // ── Detalle por período, con WoW ────────────────────────────────────────
+  html += secH("📋", "#6366f1", "Detalle por período",
+    `Los mismos números, período a período · WoW = variación vs el ${escala} anterior`, "");
   html += `<div class="section"><div class="tbl-wrap"><table class="dtbl"><thead><tr>
-      <th>Período</th><th class="tn">Cond. Activos</th><th class="tn">Nuevos + React.</th><th class="tn">Hs. Conexión</th>
+      <th>Período</th>
+      <th class="tn">Cond. Activos</th><th class="tn">WoW</th>
+      <th class="tn">Nuevos + React.</th><th class="tn">WoW</th>
+      <th class="tn">Hs. Conexión</th><th class="tn">WoW</th>
+      <th class="tn">Viajes</th><th class="tn">WoW</th>
     </tr></thead><tbody>`;
   const porFecha = new Map();
   rows.forEach(r => {
     let a = porFecha.get(r.date);
-    if (!a) { a = { ad: 0, nr: 0, sh: 0 }; porFecha.set(r.date, a); }
+    if (!a) { a = { ad: 0, nr: 0, sh: 0, tr: 0 }; porFecha.set(r.date, a); }
     a.ad += r.activeDrivers || 0;
     a.nr += (r.newPartner || 0) + (r.newService || 0) + (r.reactivated || 0);
     a.sh += r.supplyHours || 0;
+    a.tr += r.trips || 0;
   });
-  [...porFecha.entries()].sort((a, b) => b[0].localeCompare(a[0])).forEach(([d, v]) => {
-    html += `<tr><td>${d2s(d)}</td><td class="tn">${fmt(v.ad)}</td><td class="tn">${fmt(v.nr)}</td><td class="tn">${fmt(v.sh)}</td></tr>`;
+  const fechasAsc = [...porFecha.keys()].sort();
+  // Se recorre DESCENDENTE para mostrar lo más reciente arriba, pero el WoW se
+  // calcula contra el período inmediatamente ANTERIOR en el tiempo (índice-1 del
+  // array ascendente), no contra la fila de abajo en pantalla.
+  [...fechasAsc].reverse().forEach(d => {
+    const v = porFecha.get(d);
+    const i = fechasAsc.indexOf(d);
+    const prev = i > 0 ? porFecha.get(fechasAsc[i - 1]) : null;
+    html += `<tr>
+      <td>${d2s(d)}</td>
+      <td class="tn">${fmt(v.ad)}</td>${_wowCell(_portalWow(v.ad, prev && prev.ad))}
+      <td class="tn">${fmt(v.nr)}</td>${_wowCell(_portalWow(v.nr, prev && prev.nr))}
+      <td class="tn">${fmtSmart(v.sh)}</td>${_wowCell(_portalWow(v.sh, prev && prev.sh))}
+      <td class="tn">${fmtSmart(v.tr)}</td>${_wowCell(_portalWow(v.tr, prev && prev.tr))}
+    </tr>`;
   });
   html += `</tbody></table></div></div>`;
 
   box.innerHTML = html;
 
-  // Chart de evolución (mismo helper que el resto del dashboard)
-  const dates = [...porFecha.keys()].sort();
-  try {
-    buildLineChart("portalChart", dates,
-      [{ name: "Conductores Activos", data: dates.map(d => porFecha.get(d).ad) }], ["#FF0000"]);
-  } catch (_) { /* el chart es accesorio: nunca romper la vista por él */ }
+  // Charts (mismo helper que el resto del dashboard; ApexCharts es lazy y
+  // buildLineChart se re-encola solo si todavía no llegó).
+  charts.forEach(c => {
+    try {
+      const s = _portalSeries(rows, c.fn);
+      buildLineChart(c.id, s.dates, [{ name: c.label, data: s.values }], [c.color]);
+    } catch (_) { /* el chart es accesorio: nunca romper la vista por él */ }
+  });
+}
+
+export function portalSetLine(line) {
+  PORTAL_STATE.line = line;
+  renderPartnerPortal();
 }
 
 export function portalSetCity(city) {
@@ -236,5 +421,6 @@ export async function portalDownloadPDF() {
 
 registerActions({
   portalSetCity: (d, el) => portalSetCity(el.value),
+  portalSetLine: d => portalSetLine(d.line),
   portalDownloadPDF
 });
