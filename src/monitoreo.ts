@@ -95,7 +95,15 @@ export async function monLoad() {
       MON_STATE.users = uRes.value.data?.users || [];
     } else {
       MON_STATE.users = [];
-      MON_STATE.error = "No se pudo leer la lista de cuentas (Edge Function admin-users).";
+      // El motivo real viaja en el cuerpo de la respuesta, no en error.message
+      // (que es siempre el genérico "non-2xx status code"). Ver adminUsers.js.
+      const err = uRes.status === "fulfilled" ? uRes.value.error : uRes.reason;
+      let detalle = uRes.status === "fulfilled" && uRes.value.data?.error;
+      if (!detalle) {
+        try { detalle = (await err?.context?.json?.())?.error; } catch (_) {}
+      }
+      MON_STATE.error = "No se pudo leer la lista de cuentas: " +
+        (detalle || (err && err.message) || "motivo desconocido");
     }
     MON_STATE.audit = aRes.status === "fulfilled" ? aRes.value : [];
     MON_STATE.uso   = sRes.status === "fulfilled" ? sRes.value : [];

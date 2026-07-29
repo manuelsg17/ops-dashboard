@@ -56,7 +56,8 @@ export async function auLoadUsers() {
       sb.from("user_permissions").select("*"),
       sb.from("partner_users").select("*")
     ]);
-    if (fn.error) throw new Error("No se pudo listar usuarios (¿Edge Function desplegada?).");
+    if (fn.error) throw new Error(await _edgeErrMsg(fn.error, "No se pudo listar usuarios (¿Edge Function desplegada?)."));
+    if (fn.data && fn.data.error) throw new Error(String(fn.data.error));
     ADMIN_USERS_STATE.users    = fn.data?.users || [];
     ADMIN_USERS_STATE.perms    = permsRes.data  || [];
     ADMIN_USERS_STATE.mappings = mapRes.data    || [];
@@ -70,9 +71,33 @@ export async function auLoadUsers() {
 }
 
 // ── ACCIONES ─────────────────────────────────────────────────────────────────
+
+// Extrae el mensaje REAL de un error de Edge Function.
+//
+// POR QUÉ HACE FALTA: ante un status 4xx/5xx, supabase-js tira un
+// FunctionsHttpError cuyo `.message` es siempre el genérico "Edge Function
+// returned a non-2xx status code" — el motivo concreto viaja en el CUERPO de la
+// respuesta (nuestra función devuelve `{error: "..."}`), y ese cuerpo queda en
+// `error.context`, sin leer. Resultado: el usuario veía un banner rojo que no
+// dice nada y en los logs solo se ve "500", mientras el mensaje útil ("ya existe
+// un usuario con ese email", "Requiere rol admin", …) se perdía.
+async function _edgeErrMsg(err, fallback) {
+  try {
+    const body = await err?.context?.json?.();
+    if (body && body.error) return String(body.error);
+  } catch (_) { /* el cuerpo no era JSON */ }
+  try {
+    const txt = await err?.context?.text?.();
+    if (txt) return txt.slice(0, 300);
+  } catch (_) {}
+  return (err && err.message) || fallback;
+}
+
 async function _fn(action, body) {
   const r = await sb.functions.invoke("admin-users", { body: { action, ...body } });
-  if (r.error) throw new Error(r.error.message || "La operación fue rechazada.");
+  if (r.error) throw new Error(await _edgeErrMsg(r.error, "La operación fue rechazada."));
+  // La función también puede responder 200 con {error} en algunos caminos.
+  if (r.data && r.data.error) throw new Error(String(r.data.error));
   return r.data;
 }
 

@@ -365,7 +365,7 @@ function _renderMetasLineView(cfg) {
   kpis.forEach(k => {
     const g = _metasAggKpi(k, units);
     if (g.meta == null && g.actual == null) return;
-    html += metaResCard(k.label, k.sub || "", g.actual, g.meta || 0, g.proj, k.color || color, k.fmtFn);
+    html += metaResCard(k.label, k.sub || "", g.actual, g.meta, g.proj, k.color || color, k.fmtFn);
   });
   html += `</div></div>`;
 
@@ -392,7 +392,7 @@ function _renderMetasLineView(cfg) {
       kpis.forEach(k => {
         const g = _metasAggKpi(k, us);
         if (g.meta == null && g.actual == null) return;
-        rows += miniBar(k.label, g.actual, g.meta || 0, g.proj, k.fmtFn);
+        rows += miniBar(k.label, g.actual, g.meta, g.proj, k.fmtFn);
       });
       html += `
         <div class="city-card" style="border-top-color:${col}">
@@ -424,7 +424,7 @@ function _renderMetasLineView(cfg) {
       kpis.forEach(k => {
         const g = _metasAggKpi(k, us);
         if (g.meta == null && g.actual == null) return;
-        rows += miniBar(k.label, g.actual, g.meta || 0, g.proj, k.fmtFn);
+        rows += miniBar(k.label, g.actual, g.meta, g.proj, k.fmtFn);
       });
       html += `
         <div class="city-card" style="border-top-color:${col}">
@@ -997,6 +997,20 @@ export function metaResCard(label, sub, real, meta, proj, color, fmtFn) {
   // llega en el export). Mostrarlo con el camino normal daría "0.0% de plan",
   // que se lee como "no estamos llegando" cuando en realidad no se está
   // midiendo. Se muestra el plan y se dice explícitamente que no hay actual.
+  // KPI SIN META cargada (ej. un partner con actividad TukTuk pero sin metas
+  // TukTuk del mes). El camino normal daria "0.0% de plan 0" en rojo y una
+  // "Proyeccion: 1.104,6 (0.0%)" — se lee como incumplimiento grave cuando en
+  // realidad no hay plan contra que medir. Se muestra el valor y se dice.
+  if (real != null && !(meta > 0)) {
+    return `
+      <div class="meta-sum-card">
+        <div class="mcard-label">${label}</div>
+        <div class="mcard-sub-label">${sub}</div>
+        <div class="mcard-val">${F(real || 0)}</div>
+        <div class="agy-style-250"><span class="agy-style-251">sin meta cargada para este mes</span></div>
+        ${proj == null ? "" : `<div style="font-size:.72rem;color:#888;margin-top:4px">Proyección: <strong>${F(proj)}</strong></div>`}
+      </div>`;
+  }
   if (real == null) {
     return `
       <div class="meta-sum-card">
@@ -1041,6 +1055,15 @@ export function metaResCard(label, sub, real, meta, proj, color, fmtFn) {
 
 export function miniBar(label, real, meta, proj, fmtFn) {
   const F   = fmtFn || fmt;
+  if (real != null && !(meta > 0)) {   // sin meta — ver la nota en metaResCard
+    return `<div class="agy-style-253">
+      <div class="agy-style-254">
+        <span class="agy-style-255">${label}</span>
+        <span class="agy-style-222"><strong>${F(real || 0)}</strong></span>
+      </div>
+      <div class="agy-style-256">sin meta cargada</div>
+    </div>`;
+  }
   if (real == null) {   // solo meta — ver la nota en metaResCard
     return `<div class="agy-style-253">
       <div class="agy-style-254">
