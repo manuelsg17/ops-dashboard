@@ -634,7 +634,6 @@ function _applyMetasProyectosSeguimiento(metas, proyectos, seguimiento) {
   // datos todavía no habían llegado).
   if (STATE.userRole === "partner") return;   // el portal no usa nada de esto
   if (STATE.curTab === "metas"       && STATE.rawData.length)                        renderMetas();
-  if (STATE.curTab === "unifview"    && typeof renderUnifView === "function")         renderUnifView();
   if (STATE.curTab === "seguimiento" && typeof renderSeguimiento === "function")      renderSeguimiento();
 }
 
@@ -944,7 +943,7 @@ function _renderActiveTabAfterLoad() {
     // Antes se llamaba renderRend()+renderMetas() incondicional: trabajo
     // desperdiciado si el usuario estaba en otro tab al terminar el upload,
     // y race condition con applyFilters() debounced. Los tabs que dependen de
-    // metas/proyectos/seguimiento (metas/unifview/seguimiento) NO se disparan
+    // metas/proyectos/seguimiento (Metas/Seguimiento) NO se disparan
     // acá — esos datos todavía pueden estar en vuelo (`deferred`), se renderizan
     // en _applyMetasProyectosSeguimiento() apenas lleguen.
     if (STATE.rawData.length) {
@@ -1976,20 +1975,22 @@ export function aggDate(data) {
   data.forEach(r => {
     const k = `${r.partner}|||${r.city}|||${r.date}`;
     if (!s1[k]) s1[k] = { partner: r.partner, date: r.date,
-      ad: 0, np: 0, ns: 0, re: 0, sh: 0, co: 0 };
+      ad: 0, np: 0, ns: 0, re: 0, sh: 0, co: 0, tr: 0 };
     const e = s1[k];
     e.ad += r.activeDrivers; e.np += r.newPartner; e.ns += r.newService;
     e.re += r.reactivated;   e.sh += r.supplyHours; e.co += r.commission;
+    e.tr += r.trips || 0;
   });
   const m = {};
   Object.values(s1).forEach(r => {
     if (!m[r.date]) m[r.date] = {};
     if (!m[r.date][r.partner]) m[r.date][r.partner] = {
       activeDrivers: 0, newPartner: 0, newService: 0,
-      reactivated: 0, supplyHours: 0, commission: 0 };
+      reactivated: 0, supplyHours: 0, commission: 0, trips: 0 };
     const e = m[r.date][r.partner];
     e.activeDrivers += r.ad; e.newPartner += r.np; e.newService += r.ns;
     e.reactivated   += r.re; e.supplyHours += r.sh; e.commission += r.co;
+    e.trips         += r.tr;
   });
   return m;
 }
@@ -1999,15 +2000,16 @@ export function aggCityDate(data) {
   const s1 = {};
   data.forEach(r => {
     const k = `${r.partner}|||${r.city}|||${r.date}`;
-    if (!s1[k]) s1[k] = { date: r.date, ad: 0, nr: 0, sh: 0 };
+    if (!s1[k]) s1[k] = { date: r.date, ad: 0, nr: 0, sh: 0, tr: 0 };
     s1[k].ad += r.activeDrivers;
     s1[k].nr += r.newPartner + r.newService + r.reactivated;
     s1[k].sh += r.supplyHours;
+    s1[k].tr += r.trips || 0;
   });
   const m = {};
   Object.values(s1).forEach(r => {
-    if (!m[r.date]) m[r.date] = { ad: 0, nr: 0, sh: 0 };
-    m[r.date].ad += r.ad; m[r.date].nr += r.nr; m[r.date].sh += r.sh;
+    if (!m[r.date]) m[r.date] = { ad: 0, nr: 0, sh: 0, tr: 0 };
+    m[r.date].ad += r.ad; m[r.date].nr += r.nr; m[r.date].sh += r.sh; m[r.date].tr += r.tr;
   });
   return m;
 }

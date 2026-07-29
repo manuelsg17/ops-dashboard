@@ -58,6 +58,14 @@ export const METRICS = {
     color:  "#8b5cf6",
     type:   "cumulative",
     desc:   "Suma de horas de conexion en el rango"
+  },
+  tr: {
+    key:    "tr",
+    label:  "Viajes",
+    short:  "Viajes",
+    color:  "#0ea5e9",
+    type:   "cumulative",
+    desc:   "Suma de viajes completados en el rango"
   }
 };
 

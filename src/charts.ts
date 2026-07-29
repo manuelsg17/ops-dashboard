@@ -47,6 +47,7 @@ export function buildMultiLine(elId, dates, partners, byDate, metric, fallbackCo
       if (!dp) return 0;
       if (metric === "nr") return dp.newPartner + dp.newService + dp.reactivated;
       if (metric === "sh") return dp.supplyHours;
+      if (metric === "tr") return dp.trips || 0;
       return dp.activeDrivers;
     })
   }));

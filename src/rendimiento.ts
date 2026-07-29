@@ -29,7 +29,23 @@ export function _rendLineDataset() {
 export function _lineSelHas(selSet, sidebarSet, partner) {
   return selSet.has(partner) || !sidebarSet.has(partner);
 }
-// Filas de la línea filtradas por ciudad/fecha/partner (espeja getFiltered()).
+
+// KAM efectivo de una fila. `partners`/`flotas` mandan (getKAMForPartner); el KAM
+// que vino en el Excel es solo fallback.
+export function _lineKamOf(row) {
+  const k = (typeof getKAMForPartner === "function" && getKAMForPartner(row.partner)) || "";
+  return k || row.kam || "";
+}
+
+// Filas de la línea filtradas por ciudad/fecha/partner/KAM (espeja getFiltered()).
+//
+// OJO con el filtro de KAM — acá había un sobreconteo real: en Agregador el KAM se
+// aplica indirectamente (onKAMChange marca/desmarca los checkboxes del sidebar, así
+// que `selected` ya viene acotado), pero los partners solo-TukTuk NO están en el
+// sidebar y `_lineSelHas` los da por incluidos SIEMPRE. Resultado: al filtrar por un
+// KAM en TukTuk/Combinado se colaban los partners solo-TukTuk de TODOS los demás
+// KAMs, inflando los totales. Por eso el KAM se filtra acá de forma EXPLÍCITA en vez
+// de confiar en la selección del sidebar.
 export function _rendLineFiltered() {
   if (_rendLine() === "agg") return getFiltered();
   const f = getCurrentFilters();
@@ -38,11 +54,15 @@ export function _rendLineFiltered() {
   return _rendLineDataset().filter(r =>
     (f.city === "all" || r.city === f.city) &&
     r.date >= f.from && r.date <= f.to &&
+    (f.kam === "all" || _lineKamOf(r) === f.kam) &&
     _lineSelHas(selSet, sidebar, r.partner)
   );
 }
 // Filas de prevDate (fuera del rango) para la línea. Agregador usa el índice _byDate;
 // Fleet/TukTuk filtran su slice (arrays pequeños, sin índice dedicado).
+// El KAM se aplica por el mismo motivo que arriba: si no, el período anterior de la
+// comparación WoW incluiría partners que el período actual ya excluyó → un WoW que
+// compara dos universos distintos y siempre da caída.
 export function _rendLinePrev(prevDate, city) {
   if (!prevDate) return [];
   if (_rendLine() === "agg") {
@@ -50,7 +70,12 @@ export function _rendLinePrev(prevDate, city) {
       || STATE.rawData.filter(r => r.date === prevDate);
     return city ? base.filter(r => r.city === city) : base;
   }
-  return _rendLineDataset().filter(r => r.date === prevDate && (!city || r.city === city));
+  const kam = (getCurrentFilters().kam) || "all";
+  return _rendLineDataset().filter(r =>
+    r.date === prevDate &&
+    (!city || r.city === city) &&
+    (kam === "all" || _lineKamOf(r) === kam)
+  );
 }
 
 // Barra segmentada de línea de negocio (reusa .mode-toggle-row/.mode-btn del selector
@@ -210,6 +235,9 @@ export function _renderRendImpl() {
   const tSH = sumR(apd,      r => r.supplyHours);
   const lSH = sumR(lastRows, r => r.supplyHours);
   const pSH = sumR(prevRows, r => r.supplyHours);
+  const tTR = sumR(apd,      r => r.trips || 0);
+  const lTR = sumR(lastRows, r => r.trips || 0);
+  const pTR = sumR(prevRows, r => r.trips || 0);
 
   let html = rendLineToggleHTML();
 
@@ -226,6 +254,7 @@ export function _renderRendImpl() {
     ${mkMetricCard(METRICS.ad.label,"📊",tAD,pAD,apd,lastRows,prevRows,"ad",METRICS.ad.color,false)}
     ${mkMetricCard(METRICS.nr.label,"🆕",tNR,lNR,apd,lastRows,prevRows,"nr",METRICS.nr.color,true)}
     ${mkMetricCard(METRICS.sh.label,"⏱️",tSH,lSH,apd,lastRows,prevRows,"sh",METRICS.sh.color,true)}
+    ${mkMetricCard(METRICS.tr.label,"🚕",tTR,lTR,apd,lastRows,prevRows,"tr",METRICS.tr.color,true)}
   </div></div>`;
 
   // ── 1b. KPIs propios de TukTuk (Fleet tiene su vista dedicada arriba) ───────
@@ -248,9 +277,11 @@ export function _renderRendImpl() {
     const cAD  = sumR(cL,  r => r.activeDrivers);
     const cNR  = sumR(cL,  r => r.newPartner + r.newService + r.reactivated);
     const cSH  = sumR(cL,  r => r.supplyHours);
+    const cTR  = sumR(cL,  r => r.trips || 0);
     const cpAD = sumR(cP,  r => r.activeDrivers);
     const cpNR = sumR(cP,  r => r.newPartner + r.newService + r.reactivated);
     const cpSH = sumR(cP,  r => r.supplyHours);
+    const cpTR = sumR(cP,  r => r.trips || 0);
     const col  = CITY_COLORS[city] || "#888";
     html += `
       <div class="city-card" style="border-top-color:${col}">
@@ -269,6 +300,10 @@ export function _renderRendImpl() {
         <div class="city-kpi">
           <span class="city-kpi-label">Horas de Conexión</span>
           <div class="city-kpi-right"><span class="city-kpi-val">${fmt(cSH)}</span>${bdgMode(cSH,cpSH,"mb-badge")}</div>
+        </div>
+        <div class="city-kpi">
+          <span class="city-kpi-label">${METRICS.tr.label}</span>
+          <div class="city-kpi-right"><span class="city-kpi-val">${fmtSmart(cTR)}</span>${bdgMode(cTR,cpTR,"mb-badge")}</div>
         </div>
       </div>`;
   });
@@ -290,8 +325,10 @@ export function _renderRendImpl() {
     const kAD  = sumR(kL, r => r.activeDrivers);
     const kNR  = sumR(kL, r => r.newPartner + r.newService + r.reactivated);
     const kSH  = sumR(kL, r => r.supplyHours);
+    const kTR  = sumR(kL, r => r.trips || 0);
     const kpAD = sumR(kP, r => r.activeDrivers);
     const kpNR = sumR(kP, r => r.newPartner + r.newService + r.reactivated);
+    const kpTR = sumR(kP, r => r.trips || 0);
     const col  = KAM_COLORS[kam] || "#888";
     html += `
       <div class="mcard" style="border-left:3px solid ${col}">
@@ -301,19 +338,21 @@ export function _renderRendImpl() {
         <div class="mcard-breakdown">
           <div class="mb-row"><span class="mb-name">N+R</span><span class="mb-val">${fmt(kNR)}</span>${bdgMode(kNR,kpNR,"mb-badge")}</div>
           <div class="mb-row"><span class="mb-name">Hs. Conexión</span><span class="mb-val">${fmt(kSH)}</span></div>
+          <div class="mb-row"><span class="mb-name">${METRICS.tr.short}</span><span class="mb-val">${fmtSmart(kTR)}</span>${bdgMode(kTR,kpTR,"mb-badge")}</div>
         </div>
       </div>`;
   });
   html += `</div></div>`;
 
   // ── 4. Tendencias ─────────────────────────────────────────────────────────
-  html += secH("📈", "#10b981", "Tendencias", "Peru y ciudades · 3 KPIs principales", "");
+  html += secH("📈", "#10b981", "Tendencias", "Perú y ciudades · Activos, N+R, Horas y Viajes", "");
   html += `<div class="section">`;
   html += `<div class="agy-style-526">Peru Total</div>`;
   html += `<div class="agy-style-527">
     <div class="chart-card"><div class="chart-head"><span class="chart-title">Conductores Activos</span><button class="png-btn" data-act="dlChart" data-chart="chP_ad" data-name="AD_Peru">PNG</button></div><div id="chP_ad"></div></div>
     <div class="chart-card"><div class="chart-head"><span class="chart-title">Nuevos + Reactivados</span><button class="png-btn" data-act="dlChart" data-chart="chP_nr" data-name="NR_Peru">PNG</button></div><div id="chP_nr"></div></div>
     <div class="chart-card"><div class="chart-head"><span class="chart-title">Horas de Conexión</span><button class="png-btn" data-act="dlChart" data-chart="chP_sh" data-name="SH_Peru">PNG</button></div><div id="chP_sh"></div></div>
+    <div class="chart-card"><div class="chart-head"><span class="chart-title">${METRICS.tr.label}</span><button class="png-btn" data-act="dlChart" data-chart="chP_tr" data-name="Viajes_Peru">PNG</button></div><div id="chP_tr"></div></div>
   </div>`;
   CITIES.forEach(city => {
     const cr = filteredByCity[city];
@@ -325,6 +364,7 @@ export function _renderRendImpl() {
       <div class="chart-card"><div class="chart-head"><span class="chart-title">Conductores Activos</span><button class="png-btn" data-act="dlChart" data-chart="ch_${cid}_ad" data-name="AD_${city}">PNG</button></div><div id="ch_${cid}_ad"></div></div>
       <div class="chart-card"><div class="chart-head"><span class="chart-title">Nuevos + Reactivados</span><button class="png-btn" data-act="dlChart" data-chart="ch_${cid}_nr" data-name="NR_${city}">PNG</button></div><div id="ch_${cid}_nr"></div></div>
       <div class="chart-card"><div class="chart-head"><span class="chart-title">Horas de Conexión</span><button class="png-btn" data-act="dlChart" data-chart="ch_${cid}_sh" data-name="SH_${city}">PNG</button></div><div id="ch_${cid}_sh"></div></div>
+      <div class="chart-card"><div class="chart-head"><span class="chart-title">${METRICS.tr.label}</span><button class="png-btn" data-act="dlChart" data-chart="ch_${cid}_tr" data-name="Viajes_${city}">PNG</button></div><div id="ch_${cid}_tr"></div></div>
     </div>`;
   });
   html += `</div>`;
@@ -358,6 +398,7 @@ export function _renderRendImpl() {
     () => buildMultiLine("chP_ad", dates, partners, byDate, "ad", "#FF0000"),
     () => buildMultiLine("chP_nr", dates, partners, byDate, "nr", "#f97316"),
     () => buildMultiLine("chP_sh", dates, partners, byDate, "sh", "#8b5cf6"),
+    () => buildMultiLine("chP_tr", dates, partners, byDate, "tr", METRICS.tr.color),
   ];
   CITIES.forEach(city => {
     const cr = filteredByCity[city];
@@ -368,6 +409,7 @@ export function _renderRendImpl() {
     chartJobs.push(() => buildSingleLine(`ch_${cid}_ad`, dates, cbd, "ad", col, city));
     chartJobs.push(() => buildSingleLine(`ch_${cid}_nr`, dates, cbd, "nr", col, city));
     chartJobs.push(() => buildSingleLine(`ch_${cid}_sh`, dates, cbd, "sh", col, city));
+    chartJobs.push(() => buildSingleLine(`ch_${cid}_tr`, dates, cbd, "tr", col, city));
   });
 
   function pumpCharts(i) {
@@ -387,6 +429,7 @@ export function mkMetricCard(label, icon, val, prevWk, apd, lastRows, prevRows, 
   function gv(rows) {
     if (metric === "nr") return sumR(rows, r => r.newPartner + r.newService + r.reactivated);
     if (metric === "sh") return sumR(rows, r => r.supplyHours);
+    if (metric === "tr") return sumR(rows, r => r.trips || 0);
     return sumR(rows, r => r.activeDrivers);
   }
   const lwVal = gv(lastRows);
@@ -478,10 +521,12 @@ export function buildTable(apd, lastDate, prevDate, sel) {
       ad:           sumR(l,  r => r.activeDrivers),
       nr:           sumR(l,  r => r.newPartner + r.newService + r.reactivated),
       sh:           sumR(l,  r => r.supplyHours),
+      tr:           sumR(l,  r => r.trips || 0),
       co:           sumR(l,  r => r.commission),
       ns:           sumR(l,  r => r.newService),
       pad:          sumR(pr, r => r.activeDrivers),
       pnr:          sumR(pr, r => r.newPartner + r.newService + r.reactivated),
+      ptr:          sumR(pr, r => r.trips || 0),
       tAD:          trendI(rows.map(r => r.activeDrivers)),
       declineAlert: hasConsecutiveDecline(apdFullByPartner, p)
     };
@@ -500,8 +545,8 @@ export function renderTable() {
   const cols = [
     { k: "partner", l: "Partner" }, { k: "kam", l: "KAM" },
     { k: "ad", l: "Cond. Activos" }, { k: "nr", l: "Nuevos+React" },
-    { k: "sh", l: "Hs. Conexión" },  { k: "co", l: "Comision" },
-    { k: "ns", l: "Leads Yango" }
+    { k: "sh", l: "Hs. Conexión" },  { k: "tr", l: "Viajes" },
+    { k: "co", l: "Comision" },      { k: "ns", l: "Leads Yango" }
   ];
 
   let h = `<table class="dtbl"><thead><tr>`;
@@ -523,7 +568,8 @@ export function renderTable() {
     h += `<tr data-partner="${escapeHTML(r.partner)}"${r.ns > 0 ? ' class="leads-row"' : ""}>
       <td>${pd}${alertBd}${escapeHTML(r.partner)}</td><td>${kd}${escapeHTML(r.kam)}</td>
       <td class="tn">${fmt(r.ad)}</td><td class="tn">${fmt(r.nr)}</td>
-      <td class="tn">${fmt(r.sh)}</td><td class="tn">${fmtK(r.co)}</td>
+      <td class="tn">${fmt(r.sh)}</td><td class="tn">${fmtSmart(r.tr)}</td>
+      <td class="tn">${fmtK(r.co)}</td>
       <td class="tn">${nsCell}</td>
       <td class="tn">${bdgMode(r.ad, r.pad, "tbadge")}</td>
       <td class="agy-style-528"><span style="${r.tAD.c}">${r.tAD.i}</span></td>
@@ -551,7 +597,8 @@ export function sortTbl(col) {
   });
 
   // Actualizar indicadores de orden en cabeceras
-  const colKeys = ["partner","kam","ad","nr","sh","co","ns"];
+  // Mismo orden que `cols` en renderTable: se mapea por ÍNDICE de <th>.
+  const colKeys = ["partner","kam","ad","nr","sh","tr","co","ns"];
   document.querySelectorAll("#tblContainer th").forEach((th, i) => {
     if (i < colKeys.length) {
       th.className = STATE.tblSort.col === colKeys[i]

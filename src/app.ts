@@ -275,7 +275,6 @@ export async function switchMode(mode) {
   // Render unico del tab activo (restoreFilters no rendero por _suppressRestoreRender)
   if (STATE.curTab === "rend"        && STATE.rawData.length) renderRend();
   if (STATE.curTab === "metas"       && STATE.metasData.length && STATE.rawData.length) renderMetas();
-  if (STATE.curTab === "unifview"    && STATE.rawData.length) renderUnifView();
   if (STATE.curTab === "partnerview" && STATE.rawData.length) renderPartnerView();
   if (STATE.curTab === "calculator"  && STATE.rawData.length) renderCalculator();
 
@@ -316,7 +315,7 @@ export function switchTab(tab) {
       if (prevTab === "calculator"  && typeof calcCancelPendingRender === "function") calcCancelPendingRender();
       if (prevTab === "partnerview" && typeof _pvDestroyCharts === "function")        _pvDestroyCharts();
       if (prevTab === "present2"    && typeof destroyPresent2Charts === "function")   destroyPresent2Charts();
-      const apexConsumers = new Set(["rend","metas","unifview"]);
+      const apexConsumers = new Set(["rend","metas"]);
       if (apexConsumers.has(prevTab) && !apexConsumers.has(tab) && typeof destroyAllCharts === "function") {
         destroyAllCharts();
       }
@@ -343,7 +342,7 @@ export function switchTab(tab) {
 
     // Tabs bajo el dropdown "Análisis" (Fase 7: sincronizado con el nav visible —
     // incluye partnerview/calculator, excluye ops/proyectos ocultos).
-    const ANALISIS_TABS = ["rend", "partnerview", "calculator", "metas", "unifview", "seguimiento", "fleetext", "rawdata"];
+    const ANALISIS_TABS = ["rend", "partnerview", "calculator", "metas", "seguimiento", "fleetext", "rawdata"];
     const navAnalisis = document.getElementById("navAnalisis");
     if (navAnalisis) navAnalisis.classList.toggle("active", ANALISIS_TABS.includes(tab));
     document.querySelectorAll(".nav-tab[data-tab]").forEach(btn => {
@@ -423,7 +422,6 @@ export function switchTab(tab) {
 
       if (tab === "rend"        && STATE.rawData.length)                           renderRend();
       if (tab === "metas"       && STATE.metasData.length && STATE.rawData.length) renderMetas();
-      if (tab === "unifview")                                                       renderUnifView();
       if (tab === "rawdata")                                                        renderRawData();
       if (tab === "seguimiento")                                                    renderSeguimiento();
       if (tab === "fleetext")                                                       renderFleetExterno();
@@ -685,7 +683,6 @@ export function onKAMChange() {
   if (STATE._suppressRestoreRender) return;
   if (STATE.curTab === "rend"        && STATE.rawData.length)                           renderRend();
   if (STATE.curTab === "metas"       && STATE.metasData.length && STATE.rawData.length) renderMetas();
-  if (STATE.curTab === "unifview"    && STATE.rawData.length)                           renderUnifView();
   if (STATE.curTab === "partnerview" && STATE.rawData.length)                           renderPartnerView();
   if (STATE.curTab === "calculator"  && STATE.rawData.length)                           renderCalculator();
 }
@@ -720,7 +717,6 @@ export function applyFilters() {
   }
   if (STATE.curTab === "rend"        && STATE.rawData.length)                           renderRend();
   if (STATE.curTab === "metas"       && STATE.metasData.length && STATE.rawData.length) renderMetas();
-  if (STATE.curTab === "unifview"    && STATE.rawData.length)                           renderUnifView();
   if (STATE.curTab === "partnerview" && STATE.rawData.length)                           renderPartnerView();
   if (STATE.curTab === "calculator"  && STATE.rawData.length)                           renderCalculator();
   // Presentación 2.0: al mover el filtro, re-renderiza el slide actual (Avance vs Meta

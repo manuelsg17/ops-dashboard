@@ -14,6 +14,28 @@ Dashboard para KAMs (partner performance): modulos **TypeScript** bundleados con
 
 ## Estado actual
 
+### Sesión Julio 2026 (cont.) — Refactor por capas: arranque, capa de dominio, Metas y Rendimiento
+
+Manuel pidió una auditoría a fondo (carga de ~6s, "se traba y muestra páginas en blanco" al cambiar de pestaña) + 12 pedidos de producto, con luz verde para "un refactor gigante". **Decisión tomada con él: refactor incremental por capas, NO rewrite** — las ~15.000 líneas de lógica de negocio ya están validadas contra datos reales y un rewrite arriesga regresiones silenciosas en los cálculos, que es justo lo que no puede fallar.
+
+**Fase 1 — arranque y estabilidad (`8c8c682`, pusheado)**
+- **Bug de la recarga al abrir Vista Partner/Calculadora — causa raíz**: el `catch` de `loadViewModule` (`vendor.ts`) llamaba `location.reload()` ante CUALQUIER error del `import()` dinámico, no solo ante un chunk 404 tras deploy — y un `import()` también rechaza por un fallo de red pasajero o una excepción top-level del módulo. Son los únicos dos `location.reload()` de la app. Ahora: predicado `_isChunkError` compartido, reintento en el lugar para fallos de red, reload SOLO ante chunk 404 confirmado, y cualquier otro error se muestra en el panel (`switchTab` lo captura) en vez de esconderse detrás de una recarga.
+- **Bundle de arranque 274 kB gzip → 73 kB gzip**: ApexCharts (510 kB / 133 kB gzip) era el chunk eager más grande y se parseaba antes del login. Pasa a `charts.ensureApex()` (import dinámico) y arranca en paralelo con el fetch. `buildLineChart`/`buildDonutChart` y los 8 montajes de `partnerView.ts` se re-encolan solos si la lib aún no llegó — **trampa evitada**: partnerView tenía guards `typeof ApexCharts === "undefined" → return` que con carga diferida habrían dejado las gráficas en blanco EN SILENCIO.
+- **Caché local IndexedDB (`src/data/cache.ts`), stale-while-revalidate**: pinta con el último snapshot y refresca por detrás con indicador `#dataRefreshing`. Keyed por `user_id`, se borra en el logout, expira a 24h, `SCHEMA_V` invalida todo de golpe. `loadFromSupabase` se partió en `_applyCoreData` / `_indexCoreData` / `_renderActiveTabAfterLoad` para que caché y red usen EL MISMO pipeline. Ojo: `STATE.rawDataFull` arranca como `[]` (truthy) — el guard mira `.length`.
+- Precarga de chunks en `requestIdleCallback` (`prefetchViewModules`).
+
+**Fase 2 — capa de dominio + Metas + Rendimiento**
+- **`src/domain/metrics.ts` + Vitest (`npm test`)**: núcleo de cálculo PURO (no lee STATE, no toca el DOM). Nació porque la misma métrica se calculaba en 3 archivos distintos (`metas.ts`, `rendimiento.ts`, `presentacion2.ts`). Define snapshot vs flujo, proyecciones, ponderados. 16 tests que fijan reglas de negocio, no cobertura.
+- **Proyección de Active Drivers = máx del rango × 1.4** (`AD_PROJECTION_FACTOR`), pedido explícito de Manuel. El FACT sigue siendo el snapshot del último período. Reemplaza la proyección plana anterior (el comentario del código que decía "no ×1.4" quedó obsoleto). Los flujos (N+R, horas) siguen con extrapolación lineal por ritmo del mes.
+- **Metas: misma estructura en las 4 líneas** — General → Ciudad → KAM → Partner. Antes solo Agregador la tenía; Fleet arrancaba directo en tarjetas de partner y TukTuk/Combinado mostraban resumen país y nada más. Renderer único `_renderMetasLineView` + descriptores de KPI por línea. **Fleet lleva KPIs de TASA**: al agrupar por ciudad/KAM se RE-PONDERAN (`weight`: autos para SH/auto, viajes para aceptación) en vez de sumarse — verificado con datos sintéticos: un partner de 100 autos al 90% y uno de 2 autos al 50% dan 89.6% ponderado, no el 70% del promedio simple.
+- KPIs solo-meta (Utilización de Fleet) ya no muestran "0.0% de plan" (se leía como incumplimiento cuando en realidad no se mide): `metaResCard`/`miniBar` con `real == null` renderizan "meta · sin actual medible".
+- El selector de mes y el botón de PDF ya no desaparecen al cambiar de línea (`_metasControlsHTML` compartido).
+- **Bug de cálculo corregido en Rendimiento**: el filtro de KAM no se aplicaba en las líneas TukTuk/Combinado. En Agregador el KAM se aplica indirectamente (los checkboxes del sidebar), pero los partners solo-TukTuk NO están en el sidebar y `_lineSelHas` los da por incluidos SIEMPRE → al filtrar por un KAM se colaban los solo-TukTuk de todos los demás KAMs. Ahora `_rendLineFiltered`/`_rendLinePrev` filtran el KAM de forma explícita (`_lineKamOf`).
+- **Métrica de Viajes** en Rendimiento: tarjeta país, KPI por ciudad, breakdown por KAM, columna ordenable en la tabla y gráfica de tendencia (Perú + cada ciudad). Propagada por `aggPD`/`aggDate`/`aggCityDate` y `buildMultiLine`. **Ojo**: `colKeys` de `sortTbl` mapea por ÍNDICE de `<th>` — tiene que seguir el mismo orden que `cols` de `renderTable`.
+- **Pestaña "Rend + Metas" (`unifview`) eliminada** de punta a punta (nav, tab-panel, importer, render hooks, archivo) — Manuel confirmó que no la usa.
+
+Pendiente de Fase 2: verificación con datos y sesión reales (lo de arriba se validó con build real + datos sintéticos en `npm run preview`; no hay login por la regla de contraseñas).
+
 ### Sesión Julio 2026 (cont.) — Fix PDF Presentación 2.0 + reorden de Configuración + retiro de Palabras Prohibidas
 
 **PDF de Presentación 2.0** (`downloadPresent2PDF`, `presentacion2.ts`) — Manuel reportó tipografía distinta a la de antes, gráficos borrosos y contenido que no encuadraba bien en la hoja. Diagnóstico: nunca hubo `font-family` explícito en ningún lado del PDF (la app entera depende del `body { font-family: ... }` de `styles.css`, que sí sigue intacto) — el PDF quedaba a merced del navegador/SO de quien exporta. Fijado explícito en cada slide (misma familia que `body`) + esperar `document.fonts.ready`. Nitidez: el Chart.js de `p2Chart` no fijaba `devicePixelRatio` — en un monitor no-retina el canvas quedaba a 1x y el `scale:4` de html2canvas solo ampliaba píxeles ya borrosos (fix: `devicePixelRatio: 3` fijo). Encuadre: `jsPDF({unit:"px", ...})` sin `hotfixes:["px_scaling"]` (bug documentado de la librería, desajuste DPI 96↔72 entre el `format` de la página y `addImage`) + `html2canvas` sin `windowWidth`/`windowHeight` fijos (usaba el viewport real de quien exporta). PNG en vez de JPEG para el `addImage` final (elimina artefactos de compresión). Verificado con build limpio + un PDF de prueba standalone en Node confirmando que el marco cae exacto en los bordes de la hoja — falta la verificación con datos reales (requiere sesión logueada).
@@ -186,6 +208,8 @@ npm install        # primera vez
 npm run dev        # dev server en http://localhost:8765 (HMR)
 npm run build      # build de produccion a dist/
 npm run preview    # sirve dist/ para verificar el build
+npm test           # Vitest — tests del nucleo de calculo (src/domain/)
+npm run typecheck  # tsc --noEmit (no esta en CI: correrlo a mano)
 
 # Ya NO se usa SRI: las 7 librerias vienen de npm (pineadas en package.json +
 # package-lock), bundleadas por Vite. Ver src/vendor.js.
