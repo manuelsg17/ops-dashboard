@@ -5,7 +5,24 @@
 // (timeline por día/semana/mes, marca de hoy, agrupado por proyecto) + slide render-only
 // del deck de Presentación 2.0 (entra al PDF). Escrituras admin-gated (RLS 42501).
 
-export const SEG_STATE = { partner: null, draft: [], deleted: [] };
+// view: qué se está mirando. "resumen" es el default a propósito — antes la
+// pestaña abría directo en el editor de UN partner (el primero alfabético), así
+// que al entrar no se veía quién tiene seguimiento ni qué está pendiente. El
+// resumen responde eso de una: quién tiene tareas, en qué estado, qué está
+// vencido.
+// partner: null = "todos" (el resumen y el kanban son globales; el Gantt y el
+// editor sí necesitan un partner concreto).
+export const SEG_STATE = {
+  partner: null, draft: [], deleted: [],
+  view: "resumen", kam: "all", search: ""
+};
+
+export const SEG_VIEWS = [
+  { k: "resumen", emoji: "📊", label: "Resumen",     tip: "Quién tiene seguimiento, en qué estado y qué está vencido" },
+  { k: "kanban",  emoji: "🗂️", label: "Kanban",      tip: "Tareas por estado — arrastrá el foco a lo que está trabado" },
+  { k: "gantt",   emoji: "📅", label: "Gantt",       tip: "Línea de tiempo por tarea (requiere elegir un partner)" },
+  { k: "editor",  emoji: "✏️", label: "Editar",      tip: "Crear y modificar proyectos y tareas (requiere elegir un partner)" }
+];
 
 export const SEG_STATUS = [
   { key: "pendiente", es: "Pendiente", en: "Pending",     color: "#9ca3af" },
@@ -19,6 +36,72 @@ export function _segStatusLabel(k, en) { const s = _segStatus(k); return en ? s.
 export function _segProjColor(name) { return (typeof hashColor === "function") ? hashColor("proj:" + (name || "")) : "#64748b"; }
 
 export function _segPartners() { return (STATE.allPartners || []).slice().sort(); }
+
+// ── AGREGADOS PARA LAS VISTAS DE TABLERO ─────────────────────────────────────
+
+// Una tarea "cuenta" si tiene texto. Las filas sin `task` son borradores vacíos
+// del editor y no deben aparecer en ningún conteo.
+export function _segRealTasks(rows) {
+  return (rows || []).filter(r => (r.task || "").trim());
+}
+
+// Vencida = tiene fecha de fin, ya pasó, y no está hecha. Es la señal que el KAM
+// necesita ver primero; "bloqueado" es un estado declarado, esto es un hecho.
+export function _segIsOverdue(r) {
+  if (r.status === "hecho") return false;
+  const end = _segParseDate(r.end_date);
+  return !!end && end < _segToday();
+}
+
+export function _segKamOf(partner) {
+  return (typeof getKAMForPartner === "function" && getKAMForPartner(partner)) || "";
+}
+
+// Todas las tareas visibles según los filtros activos (KAM + búsqueda de
+// partner). NO filtra por SEG_STATE.partner: eso lo decide cada vista.
+export function _segFilteredTasks() {
+  const q = (SEG_STATE.search || "").toLowerCase().trim();
+  return _segRealTasks(STATE.seguimientoData).filter(r => {
+    if (SEG_STATE.kam !== "all" && _segKamOf(r.partner) !== SEG_STATE.kam) return false;
+    if (q && !String(r.partner || "").toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
+
+// Resumen por partner: conteos por estado, vencidas y próxima fecha de entrega.
+// Ordenado por urgencia (vencidas primero, después bloqueadas) — el orden ES la
+// priorización, no un detalle estético.
+export function _segSummaryByPartner(tasks) {
+  const by = new Map();
+  (tasks || []).forEach(r => {
+    const p = r.partner || "—";
+    let e = by.get(p);
+    if (!e) {
+      e = { partner: p, kam: _segKamOf(p), total: 0, overdue: 0, nextDue: null,
+            byStatus: { pendiente: 0, en_curso: 0, hecho: 0, bloqueado: 0 },
+            projects: new Set() };
+      by.set(p, e);
+    }
+    e.total++;
+    e.byStatus[r.status] = (e.byStatus[r.status] || 0) + 1;
+    if (r.project) e.projects.add(r.project);
+    if (_segIsOverdue(r)) e.overdue++;
+    const end = _segParseDate(r.end_date);
+    if (end && r.status !== "hecho" && (!e.nextDue || end < e.nextDue)) e.nextDue = end;
+  });
+  return [...by.values()].sort((a, b) =>
+    (b.overdue - a.overdue) ||
+    (b.byStatus.bloqueado - a.byStatus.bloqueado) ||
+    (b.total - a.total) ||
+    a.partner.localeCompare(b.partner)
+  );
+}
+
+// Partners CON tareas — es la lista que importa en esta pestaña (la del sidebar
+// trae los ~69 partners del dashboard, la mayoría sin seguimiento cargado).
+export function _segPartnersWithTasks() {
+  return [...new Set(_segRealTasks(STATE.seguimientoData).map(r => r.partner))].filter(Boolean).sort();
+}
 
 // Copia editable de las filas del partner (draft). Se recarga al cambiar de partner o
 // tras guardar; NO se pisa en re-render (para no perder ediciones en curso).
@@ -172,6 +255,165 @@ export function _segRenderGantt() {
   if (g) g.innerHTML = _segBuildGantt(SEG_STATE.draft, { en: false });
 }
 
+// ── BARRA DE CONTROL (buscador de partner + KAM + selector de vista) ─────────
+// El buscador replica el patrón de Presentación 2.0 (input + lista flotante +
+// mousedown antes del blur) porque es el que el usuario ya conoce de esa
+// pestaña; duplicar el patrón visual sería peor que reusarlo aunque el código
+// viva en otro archivo.
+function _segControlsHTML() {
+  const kams = [...new Set(_segPartnersWithTasks().map(_segKamOf))].filter(Boolean).sort();
+  const viewBtns = SEG_VIEWS.map(v => {
+    const on  = SEG_STATE.view === v.k;
+    // Gantt y Editor operan sobre UN partner: sin partner elegido no tienen qué
+    // mostrar, así que se deshabilitan en vez de renderizar un vacío confuso.
+    const needsPartner = v.k === "gantt" || v.k === "editor";
+    const dis = needsPartner && !SEG_STATE.partner;
+    return `<button class="mode-btn${on ? " active" : ""}" ${dis ? "disabled" : ""}
+      title="${dis ? "Elegí un partner primero" : escapeHTML(v.tip)}"
+      ${dis ? "" : `data-act="segSetView" data-view="${v.k}"`}
+      style="${dis ? "opacity:.4;cursor:not-allowed" : ""}">${v.emoji} ${v.label}</button>`;
+  }).join("");
+
+  return `
+    <div class="seg-controls">
+      <div class="seg-ctl-field seg-ctl-search">
+        <label class="agy-style-95">Partner</label>
+        <input id="segSearch" type="text" class="sb-inp" autocomplete="off"
+          placeholder="Todos — escribí para buscar…"
+          value="${escapeHTML(SEG_STATE.partner || SEG_STATE.search || "")}"
+          data-act-input="segFilterPartners" data-act-focus="segShowPartnerList"
+          data-act-blur="segHidePartnerListDelayed" data-act-keydown="segSearchKeydown"/>
+        <div id="segPartnerList" class="seg-partner-list"></div>
+      </div>
+      <div class="seg-ctl-field">
+        <label class="agy-style-95">KAM</label>
+        <select class="sb-sel" data-act-change="segSetKam">
+          <option value="all"${SEG_STATE.kam === "all" ? " selected" : ""}>Todos</option>
+          ${kams.map(k => `<option value="${escapeHTML(k)}"${SEG_STATE.kam === k ? " selected" : ""}>${escapeHTML(k)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="seg-ctl-field seg-ctl-views">
+        <label class="agy-style-95">Vista</label>
+        <div class="mode-toggle-row">${viewBtns}</div>
+      </div>
+      ${SEG_STATE.partner ? `<button class="mode-btn seg-clear" data-act="segClearPartner" title="Volver a ver todos los partners">✕ ${escapeHTML(SEG_STATE.partner)}</button>` : ""}
+    </div>`;
+}
+
+// ── VISTA RESUMEN ────────────────────────────────────────────────────────────
+// La pantalla que faltaba: al entrar, quién tiene seguimiento y qué está en
+// rojo. Todo lo demás (kanban, gantt, editor) se alcanza desde acá.
+function _segRenderResumen(tasks) {
+  const rows = _segSummaryByPartner(tasks);
+  const totalOverdue = rows.reduce((s, r) => s + r.overdue, 0);
+  const totalBlocked = rows.reduce((s, r) => s + r.byStatus.bloqueado, 0);
+  const totalOpen    = rows.reduce((s, r) => s + r.total - r.byStatus.hecho, 0);
+  const totalDone    = rows.reduce((s, r) => s + r.byStatus.hecho, 0);
+  const sinTareas    = _segPartners().filter(p => !rows.some(r => r.partner === p)).length;
+
+  if (!rows.length) {
+    return `<div class="section"><div class="agy-style-224">
+      No hay tareas de seguimiento cargadas${SEG_STATE.kam !== "all" ? ` para <strong>${escapeHTML(SEG_STATE.kam)}</strong>` : ""}.<br>
+      Elegí un partner arriba y usá <strong>✏️ Editar</strong> para crear el primer proyecto.
+    </div></div>`;
+  }
+
+  const kpi = (label, val, color, tip) => `
+    <div class="mcard" style="border-top:3px solid ${color}" title="${escapeHTML(tip)}">
+      <div class="mcard-label">${label}</div>
+      <div class="mcard-val" style="color:${color}">${fmt(val)}</div>
+    </div>`;
+
+  let html = `<div class="section"><div class="metric-row">
+    ${kpi("⚠️ Vencidas", totalOverdue, totalOverdue ? "#ef4444" : "#9ca3af", "Tareas con fecha de fin pasada que no están hechas")}
+    ${kpi("🚫 Bloqueadas", totalBlocked, totalBlocked ? "#f59e0b" : "#9ca3af", "Tareas marcadas como bloqueadas")}
+    ${kpi("📋 Abiertas", totalOpen, "#3b82f6", "Tareas que no están hechas")}
+    ${kpi("✅ Hechas", totalDone, "#10b981", "Tareas completadas")}
+  </div></div>`;
+
+  html += _secH("👥", "#0ea5e9", `Partners con seguimiento (${rows.length})`,
+    sinTareas ? `${sinTareas} partner${sinTareas === 1 ? "" : "es"} del dashboard todavía sin ninguna tarea cargada`
+              : "Todos los partners del dashboard tienen seguimiento");
+
+  html += `<div class="section"><div class="tbl-wrap"><table class="dtbl seg-summary">
+    <thead><tr>
+      <th>Partner</th><th>KAM</th><th>Proyectos</th>
+      <th title="Fecha de fin pasada y sin terminar">⚠️ Vencidas</th>
+      <th>Pendiente</th><th>En curso</th><th>Bloqueado</th><th>Hecho</th>
+      <th>Próxima entrega</th><th></th>
+    </tr></thead><tbody>`;
+
+  rows.forEach(r => {
+    const pcol = STATE.partnerColors[r.partner] || "#ccc";
+    const kcol = KAM_COLORS[r.kam] || "#ccc";
+    const done = r.byStatus.hecho, pct = r.total ? (done / r.total) * 100 : 0;
+    const cell = (n, color) => n
+      ? `<td class="tn"><span style="color:${color};font-weight:700">${fmt(n)}</span></td>`
+      : `<td class="tn agy-style-90">0</td>`;
+    html += `<tr class="${r.overdue ? "seg-row-alert" : ""}">
+      <td><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${pcol};margin-right:5px"></span>${escapeHTML(r.partner)}
+        <div class="seg-progress" title="${fmt(done)} de ${fmt(r.total)} tareas hechas (${pct.toFixed(0)}%)">
+          <div class="seg-progress-fill" style="width:${pct.toFixed(1)}%"></div>
+        </div>
+      </td>
+      <td><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${kcol};margin-right:4px"></span>${escapeHTML(r.kam || "—")}</td>
+      <td class="tn">${fmt(r.projects.size)}</td>
+      ${cell(r.overdue, "#ef4444")}
+      ${cell(r.byStatus.pendiente, "#6b7280")}
+      ${cell(r.byStatus.en_curso, "#3b82f6")}
+      ${cell(r.byStatus.bloqueado, "#ef4444")}
+      ${cell(done, "#10b981")}
+      <td class="tn">${r.nextDue ? _segFmtD(r.nextDue) : "—"}</td>
+      <td><button class="mode-btn seg-open" data-act="segOpenPartner" data-partner="${escapeHTML(r.partner)}" title="Ver el Gantt y las tareas de ${escapeHTML(r.partner)}">Abrir →</button></td>
+    </tr>`;
+  });
+  html += `</tbody></table></div></div>`;
+  return html;
+}
+
+// ── VISTA KANBAN ─────────────────────────────────────────────────────────────
+// Una columna por estado. Funciona global (todos los partners del filtro) o
+// acotado a uno — el caso global es el que sirve para la reunión semanal de
+// KAMs: "qué está bloqueado en toda mi cartera".
+function _segRenderKanban(tasks) {
+  const scoped = SEG_STATE.partner ? tasks.filter(t => t.partner === SEG_STATE.partner) : tasks;
+  if (!scoped.length) {
+    return `<div class="section"><div class="agy-style-224">Sin tareas para el filtro actual.</div></div>`;
+  }
+  const cols = SEG_STATUS.map(st => {
+    const items = scoped.filter(t => (t.status || "pendiente") === st.key)
+      .sort((a, b) => {
+        // Vencidas arriba, después por fecha de entrega más próxima.
+        const ao = _segIsOverdue(a) ? 0 : 1, bo = _segIsOverdue(b) ? 0 : 1;
+        if (ao !== bo) return ao - bo;
+        return String(a.end_date || "9999").localeCompare(String(b.end_date || "9999"));
+      });
+    const cards = items.map(t => {
+      const pcol = STATE.partnerColors[t.partner] || "#ccc";
+      const over = _segIsOverdue(t);
+      const end  = _segParseDate(t.end_date);
+      return `<div class="seg-card${over ? " seg-card-overdue" : ""}" style="border-left-color:${pcol}">
+        ${SEG_STATE.partner ? "" : `<div class="seg-card-partner">${escapeHTML(t.partner || "—")}</div>`}
+        <div class="seg-card-task">${escapeHTML(t.task)}</div>
+        <div class="seg-card-meta">
+          ${t.project ? `<span class="seg-chip" style="background:${_segProjColor(t.project)}22;color:${_segProjColor(t.project)}">${escapeHTML(t.project)}</span>` : ""}
+          ${t.owner ? `<span>👤 ${escapeHTML(t.owner)}</span>` : ""}
+          ${end ? `<span${over ? ' class="seg-overdue-txt" title="Vencida"' : ""}>📅 ${_segFmtD(end)}</span>` : ""}
+        </div>
+        ${t.expected_result ? `<div class="seg-card-goal">🎯 ${escapeHTML(t.expected_result)}</div>` : ""}
+      </div>`;
+    }).join("");
+    return `<div class="seg-col">
+      <div class="seg-col-head" style="border-bottom-color:${st.color}">
+        <span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${st.color};margin-right:6px"></span>
+        ${st.es}<span class="seg-col-count">${items.length}</span>
+      </div>
+      <div class="seg-col-body">${cards || `<div class="seg-col-empty">—</div>`}</div>
+    </div>`;
+  }).join("");
+  return `<div class="section"><div class="seg-kanban">${cols}</div></div>`;
+}
+
 // ── RENDER DEL TAB ──────────────────────────────────────────────────────────
 export function renderSeguimiento() {
   const host = document.getElementById("tab-seguimiento");
@@ -181,15 +423,17 @@ export function renderSeguimiento() {
     host.innerHTML = `<div class="empty"><p>Carga datos de <strong>Rendimiento</strong> para usar Seguimiento.</p></div>`;
     return;
   }
-  if (!SEG_STATE.partner || !partners.includes(SEG_STATE.partner)) {
-    SEG_STATE.partner = partners[0]; _segLoadDraft(SEG_STATE.partner);
-  }
+  // OJO: acá antes se auto-seleccionaba partners[0] si no había partner elegido.
+  // Eso es justamente lo que hacía que la pestaña abriera en el editor de un
+  // partner cualquiera (el primero alfabético, casi siempre sin tareas) y diera
+  // la sensación de "está todo vacío". Ahora partner=null es un estado válido y
+  // significa "todos" — el resumen y el kanban lo entienden.
+  const tasks   = _segFilteredTasks();
   const partner = SEG_STATE.partner;
-  const kam = (typeof getKAMForPartner === "function" && getKAMForPartner(partner)) || "";
+  const kam     = partner ? _segKamOf(partner) : "";
   const isAdmin = !!STATE.isAdmin;
-  const order = _segProjectOrder(SEG_STATE.draft);
+  const order   = _segProjectOrder(SEG_STATE.draft);
 
-  const partnerOpts = partners.map(p => `<option value="${escapeHTML(p)}" ${p === partner ? "selected" : ""}>${escapeHTML(p)}</option>`).join("");
   const statusOpts = st => SEG_STATUS.map(s => `<option value="${s.key}" ${s.key === st ? "selected" : ""}>${s.es}</option>`).join("");
 
   // Editor (admin) agrupado por proyecto.
@@ -218,7 +462,7 @@ export function renderSeguimiento() {
     return `<tr>${headerCells}</tr>${idxs.map(taskRowHtml).join("")}`;
   }).join("");
 
-  const editor = isAdmin ? `
+  const editor = !partner ? "" : isAdmin ? `
     <div class="agy-style-561">
       <table class="agy-style-562">
         <thead><tr class="agy-style-563">
@@ -237,26 +481,109 @@ export function renderSeguimiento() {
     </div>`
     : `<div class="agy-style-572">🔒 Solo lectura — editar el seguimiento requiere permisos de administrador.</div>`;
 
+  // Cuerpo según la vista activa. Solo Gantt y Editor usan el `draft` del
+  // partner seleccionado; Resumen y Kanban leen directo de STATE.seguimientoData
+  // (así el kanban global no depende de haber cargado ningún draft).
+  let body = "";
+  if (SEG_STATE.view === "resumen") {
+    body = _segRenderResumen(tasks);
+  } else if (SEG_STATE.view === "kanban") {
+    body = _segRenderKanban(tasks);
+  } else if (SEG_STATE.view === "gantt") {
+    body = _secH("📊", "#10b981", `Gantt · ${partner}`,
+             "Línea de tiempo por tarea (día / semana / mes según el rango)")
+         + `<div class="section"><div id="segGantt">${_segBuildGantt(SEG_STATE.draft, { en: false })}</div></div>`;
+  } else {
+    body = _secH("📋", "#0ea5e9", `Seguimiento · ${partner}`,
+             "Proyecto → tareas · Owner · fechas · resultado esperado — se comparte en el PDF del partner")
+         + editor
+         + _secH("📊", "#10b981", "Gantt", "Se actualiza mientras editás")
+         + `<div class="section"><div id="segGantt">${_segBuildGantt(SEG_STATE.draft, { en: false })}</div></div>`;
+  }
+
   host.innerHTML = `
     <div class="agy-style-573">
-      <div class="agy-style-574">
-        <div>
-          <label class="agy-style-95">Partner</label>
-          <select class="sb-sel agy-style-575" data-act-change="segOnPartnerChange">${partnerOpts}</select>
-        </div>
-        ${kam ? `<span style="background:${(KAM_COLORS && KAM_COLORS[kam]) || "#888"};color:#fff;font-size:.7rem;font-weight:700;padding:5px 10px;border-radius:12px">${escapeHTML(kam)}</span>` : ""}
-      </div>
-
-      ${_secH("📋", "#0ea5e9", "Seguimiento de reuniones", "Proyecto → tareas · Owner · fechas · resultado esperado — se comparte en el PDF del partner")}
-      ${editor}
-
-      ${_secH("📊", "#10b981", "Gantt", "Línea de tiempo por tarea (día / semana / mes según el rango)")}
-      <div class="section"><div id="segGantt">${_segBuildGantt(SEG_STATE.draft, { en: false })}</div></div>
+      ${_segControlsHTML()}
+      ${partner && kam ? `<div class="seg-kam-badge"><span style="background:${(KAM_COLORS && KAM_COLORS[kam]) || "#888"}">${escapeHTML(kam)}</span></div>` : ""}
+      ${body}
     </div>`;
 }
 
 // ── INTERACCIONES ────────────────────────────────────────────────────────────
 export function segOnPartnerChange(p) { SEG_STATE.partner = p; _segLoadDraft(p); renderSeguimiento(); }
+
+export function segSetView(v) { SEG_STATE.view = v; renderSeguimiento(); }
+export function segSetKam(k)  { SEG_STATE.kam  = k; renderSeguimiento(); }
+
+// Volver a "todos": limpia partner Y búsqueda (dejar la búsqueda puesta haría
+// que el resumen siguiera mostrando un solo partner y pareciera que el botón
+// no hizo nada).
+export function segClearPartner() {
+  SEG_STATE.partner = null; SEG_STATE.search = ""; SEG_STATE.draft = []; SEG_STATE.deleted = [];
+  if (SEG_STATE.view === "gantt" || SEG_STATE.view === "editor") SEG_STATE.view = "resumen";
+  renderSeguimiento();
+}
+
+// "Abrir →" del resumen: seleccionar el partner y saltar a su Gantt — el paso
+// natural después de detectar que algo está vencido.
+export function segOpenPartner(p) {
+  SEG_STATE.partner = p; SEG_STATE.search = "";
+  _segLoadDraft(p);
+  SEG_STATE.view = "gantt";
+  renderSeguimiento();
+}
+
+// ── BUSCADOR DE PARTNER (mismo patrón que Presentación 2.0) ─────────────────
+// La lista ofrece PRIMERO los partners que ya tienen tareas (que es lo que se
+// busca el 90% de las veces) y después el resto, para poder empezar uno nuevo.
+export function _segPaintPartnerList(q) {
+  const list = document.getElementById("segPartnerList");
+  if (!list) return;
+  const lower = (q || "").toLowerCase().trim();
+  const withTasks = _segPartnersWithTasks();
+  const wt = new Set(withTasks);
+  const rest = _segPartners().filter(p => !wt.has(p));
+  const match = p => !lower || p.toLowerCase().includes(lower);
+  const a = withTasks.filter(match), b = rest.filter(match);
+  if (!a.length && !b.length) { list.innerHTML = `<div class="agy-style-180">Sin coincidencias</div>`; return; }
+  const opt = (p, has) => {
+    const sel = p === SEG_STATE.partner;
+    return `<div class="pv-opt seg-opt${sel ? " seg-opt-sel" : ""}" data-partner="${escapeHTML(p)}" data-act-mousedown="segSelectPartner">
+      <span class="seg-opt-dot" style="background:${STATE.partnerColors[p] || "#ccc"}"></span>
+      <span class="agy-style-181">${escapeHTML(p)}</span>
+      ${has ? `<span class="seg-opt-tag">con seguimiento</span>` : ""}
+    </div>`;
+  };
+  list.innerHTML = a.slice(0, 60).map(p => opt(p, true)).join("")
+                 + b.slice(0, 60).map(p => opt(p, false)).join("");
+}
+export function segFilterPartners(q) { SEG_STATE.search = q; _segPaintPartnerList(q); segShowPartnerList(); }
+export function segShowPartnerList() {
+  const l = document.getElementById("segPartnerList");
+  if (!l) return;
+  l.style.display = "block";
+  if (!l.innerHTML) { const i = document.getElementById("segSearch"); _segPaintPartnerList(i ? i.value : ""); }
+}
+export function segHidePartnerList() { const l = document.getElementById("segPartnerList"); if (l) l.style.display = "none"; }
+// El blur del input dispara ANTES del click en la opción; el delay le da tiempo
+// al mousedown de la opción a correr. Mismo truco que Presentación 2.0.
+export function segHidePartnerListDelayed() { setTimeout(segHidePartnerList, 150); }
+export function segSelectPartner(p) {
+  SEG_STATE.partner = p; SEG_STATE.search = "";
+  _segLoadDraft(p);
+  segHidePartnerList();
+  // Desde el resumen, elegir un partner salta al Gantt: es la vista útil una vez
+  // que ya sabés de quién estás hablando.
+  if (SEG_STATE.view === "resumen") SEG_STATE.view = "gantt";
+  renderSeguimiento();
+}
+export function segSearchKeydown(e) {
+  if (e.key === "Enter") {
+    const f = document.querySelector("#segPartnerList .seg-opt");
+    if (f) f.dispatchEvent(new MouseEvent("mousedown"));
+    e.preventDefault();
+  } else if (e.key === "Escape") { segHidePartnerList(); }
+}
 export function segSet(i, field, val) { if (SEG_STATE.draft[i]) { SEG_STATE.draft[i][field] = val; _segRenderGantt(); } }
 export function segAddProject() {
   const name = prompt("Nombre del proyecto:", "");
@@ -364,6 +691,15 @@ export function buildSlide2Seguimiento(partner, idx) {
 import { registerActions } from "./shared/actions.js";
 
 registerActions({
+  segSetView:        d => segSetView(d.view),
+  segSetKam:         (d, el) => segSetKam(el.value),
+  segClearPartner,
+  segOpenPartner:    d => segOpenPartner(d.partner),
+  segFilterPartners: (d, el) => segFilterPartners(el.value),
+  segShowPartnerList,
+  segHidePartnerListDelayed,
+  segSelectPartner:  d => segSelectPartner(d.partner),
+  segSearchKeydown:  (d, el, e) => segSearchKeydown(e),
   segSet:            (d, el) => segSet(+d.i, d.field, el.value),
   segDeleteRow:      d => segDeleteRow(+d.i),
   segRenameProject:  (d, el) => segRenameProject(+d.pidx, el.value),

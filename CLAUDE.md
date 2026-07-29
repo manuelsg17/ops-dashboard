@@ -34,7 +34,16 @@ Manuel pidió una auditoría a fondo (carga de ~6s, "se traba y muestra páginas
 - **Métrica de Viajes** en Rendimiento: tarjeta país, KPI por ciudad, breakdown por KAM, columna ordenable en la tabla y gráfica de tendencia (Perú + cada ciudad). Propagada por `aggPD`/`aggDate`/`aggCityDate` y `buildMultiLine`. **Ojo**: `colKeys` de `sortTbl` mapea por ÍNDICE de `<th>` — tiene que seguir el mismo orden que `cols` de `renderTable`.
 - **Pestaña "Rend + Metas" (`unifview`) eliminada** de punta a punta (nav, tab-panel, importer, render hooks, archivo) — Manuel confirmó que no la usa.
 
-Pendiente de Fase 2: verificación con datos y sesión reales (lo de arriba se validó con build real + datos sintéticos en `npm run preview`; no hay login por la regla de contraseñas).
+**Fase 3 — Seguimiento como tablero de proyecto (puntos 7 y 10)**
+- **El problema que resolvía**: la pestaña abría auto-seleccionando `partners[0]` (el primero alfabético, casi siempre sin tareas) directo en el editor → al entrar parecía que no había nada cargado y no había forma de saber quién tenía seguimiento. Ahora `SEG_STATE.partner = null` es un estado válido y significa "todos".
+- **4 vistas** (`SEG_STATE.view`): **Resumen** (default) · **Kanban** · **Gantt** · **Editar**. Gantt y Editar se deshabilitan sin partner elegido (operan sobre UN partner); Resumen y Kanban son globales y leen directo de `STATE.seguimientoData`, sin depender de haber cargado un draft.
+- **Resumen**: 4 KPIs (vencidas / bloqueadas / abiertas / hechas) + tabla de partners con seguimiento ordenada **por urgencia** (vencidas → bloqueadas → volumen), con barra de progreso, próxima entrega y botón "Abrir →" que salta al Gantt de ese partner. `_segIsOverdue` = tiene fecha de fin, ya pasó y no está hecha (es un hecho, a diferencia de "bloqueado" que es un estado declarado).
+- **Kanban**: una columna por estado de `SEG_STATUS`; global (toda la cartera del KAM) o acotado a un partner. Las vencidas van arriba de cada columna y con borde rojo.
+- **Buscador de partner con autocompletado**: mismo patrón que Presentación 2.0 (input + lista flotante + `mousedown` que corre antes del `blur`, con `setTimeout` de 150ms). Ofrece PRIMERO los partners que ya tienen tareas (etiqueta "con seguimiento") y después el resto.
+- Filtro por KAM propio de la pestaña (`_segKamOf` vía `getKAMForPartner`), no el del sidebar — Seguimiento está en `NO_SIDEBAR_TABS`.
+- CSS nuevo en `styles.css` bajo "SEGUIMIENTO: tablero de proyecto".
+
+Pendiente de Fases 2-3: verificación con datos y sesión reales (lo de arriba se validó con build real + datos sintéticos en `npm run preview`; no hay login por la regla de contraseñas).
 
 ### Sesión Julio 2026 (cont.) — Fix PDF Presentación 2.0 + reorden de Configuración + retiro de Palabras Prohibidas
 
