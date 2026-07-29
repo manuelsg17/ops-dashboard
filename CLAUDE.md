@@ -55,6 +55,12 @@ Manuel pidió una auditoría a fondo (carga de ~6s, "se traba y muestra páginas
 - **Diferido a `requestIdleCallback`**: `sb.from()` necesita el access token y supabase-js SERIALIZA tras un mismo lock — disparar el insert en el acto lo pondría a competir con el fetch de datos, justo el camino crítico que se optimizó en la Fase 1.
 - El panel de Monitoreo muestra ingresos, personas activas, descargas y ranking de secciones, en bloque SEPARADO del `audit_log` a propósito: `audit_log` lo escribe Postgres y es EVIDENCIA; `access_log` lo escribe el navegador y es TELEMETRÍA — nunca decidir seguridad con la segunda.
 
+**Rendimiento reordenado y con la mitad de gráficas (punto 4, cierre)**
+- **16 gráficas → 8**. Había 4 métricas × CADA ciudad (12 con 3 ciudades) + 4 de Perú. Cada `ApexCharts.render()` bloquea 30-80ms → ~800ms de hilo principal, y encima obligaba a hacer scroll y memorizar para comparar dos ciudades. Ahora las de ciudad son 4 comparativas (una serie por ciudad en el mismo gráfico): menos trabajo y la comparación se lee de una.
+- **Sección "Productividad"** (ratios, no volúmenes): horas por conductor, viajes por conductor, viajes por hora. Responden "¿cada conductor rinde más?", pregunta distinta de "¿tenemos más conductores?" — un mes puede crecer en AD y caer en horas/conductor sin que se note.
+- **Sección "Quién se movió"**: top 5 que más subieron y top 5 que más cayeron en AD vs el período anterior. Se excluyen los partners sin base previa (no es una caída, es que no había con qué comparar). Evita leer 60 filas para saber a quién llamar.
+- Orden final: General → Ciudad → KAM → Tendencias → Productividad → Quién se movió → Tabla → Tarjetas.
+
 Pendiente: verificación con datos y sesión reales (lo de arriba se validó con build real + datos sintéticos en `npm run preview`; no hay login por la regla de contraseñas).
 
 ### Sesión Julio 2026 (cont.) — Fix PDF Presentación 2.0 + reorden de Configuración + retiro de Palabras Prohibidas

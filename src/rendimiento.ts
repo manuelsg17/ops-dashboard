@@ -1,6 +1,9 @@
 //@ts-nocheck
 // rendimiento.js — Pestaña Rendimiento
 
+// Núcleo de cálculo compartido (ver domain/metrics.ts).
+import { ratio } from "./domain/metrics.js";
+
 // ── LÍNEA DE NEGOCIO (Agregador / Fleet / TukTuk / Combinado) ─────────────────
 // Localizado a Rendimiento: NO muta STATE.rawData (el agregador queda intacto para
 // Metas/Calculadora/etc). Se filtra el slice de la línea con los MISMOS filtros del
@@ -345,29 +348,85 @@ export function _renderRendImpl() {
   html += `</div></div>`;
 
   // ── 4. Tendencias ─────────────────────────────────────────────────────────
-  html += secH("📈", "#10b981", "Tendencias", "Perú y ciudades · Activos, N+R, Horas y Viajes", "");
+  html += secH("📈", "#10b981", "Tendencias",
+    "Perú por partner · y comparativa directa entre ciudades", "");
   html += `<div class="section">`;
-  html += `<div class="agy-style-526">Peru Total</div>`;
+  html += `<div class="agy-style-526">Perú Total · por partner</div>`;
   html += `<div class="agy-style-527">
     <div class="chart-card"><div class="chart-head"><span class="chart-title">Conductores Activos</span><button class="png-btn" data-act="dlChart" data-chart="chP_ad" data-name="AD_Peru">PNG</button></div><div id="chP_ad"></div></div>
     <div class="chart-card"><div class="chart-head"><span class="chart-title">Nuevos + Reactivados</span><button class="png-btn" data-act="dlChart" data-chart="chP_nr" data-name="NR_Peru">PNG</button></div><div id="chP_nr"></div></div>
     <div class="chart-card"><div class="chart-head"><span class="chart-title">Horas de Conexión</span><button class="png-btn" data-act="dlChart" data-chart="chP_sh" data-name="SH_Peru">PNG</button></div><div id="chP_sh"></div></div>
     <div class="chart-card"><div class="chart-head"><span class="chart-title">${METRICS.tr.label}</span><button class="png-btn" data-act="dlChart" data-chart="chP_tr" data-name="Viajes_Peru">PNG</button></div><div id="chP_tr"></div></div>
   </div>`;
-  CITIES.forEach(city => {
-    const cr = filteredByCity[city];
-    if (!cr.length) return;
-    const cid = city.toLowerCase();
-    const col = CITY_COLORS[city] || "#888";
-    html += `<div style="font-weight:700;font-size:.78rem;color:${col};margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px">${city}</div>`;
+
+  // Comparativa entre ciudades: UNA gráfica por métrica con una línea por ciudad.
+  //
+  // Antes había 4 gráficas POR CIUDAD (12 con 3 ciudades, 16 en total con las de
+  // Perú). Cada render de ApexCharts bloquea 30-80ms, así que eran ~800ms de hilo
+  // principal, y encima obligaba a hacer scroll y memorizar para comparar dos
+  // ciudades. Consolidado: 8 gráficas en total, y la comparación se lee de una.
+  const citiesWithData = CITIES.filter(c => (filteredByCity[c] || []).length);
+  if (citiesWithData.length) {
+    html += `<div class="agy-style-526" style="margin-top:18px">Comparativa por ciudad</div>`;
     html += `<div class="agy-style-527">
-      <div class="chart-card"><div class="chart-head"><span class="chart-title">Conductores Activos</span><button class="png-btn" data-act="dlChart" data-chart="ch_${cid}_ad" data-name="AD_${city}">PNG</button></div><div id="ch_${cid}_ad"></div></div>
-      <div class="chart-card"><div class="chart-head"><span class="chart-title">Nuevos + Reactivados</span><button class="png-btn" data-act="dlChart" data-chart="ch_${cid}_nr" data-name="NR_${city}">PNG</button></div><div id="ch_${cid}_nr"></div></div>
-      <div class="chart-card"><div class="chart-head"><span class="chart-title">Horas de Conexión</span><button class="png-btn" data-act="dlChart" data-chart="ch_${cid}_sh" data-name="SH_${city}">PNG</button></div><div id="ch_${cid}_sh"></div></div>
-      <div class="chart-card"><div class="chart-head"><span class="chart-title">${METRICS.tr.label}</span><button class="png-btn" data-act="dlChart" data-chart="ch_${cid}_tr" data-name="Viajes_${city}">PNG</button></div><div id="ch_${cid}_tr"></div></div>
+      <div class="chart-card"><div class="chart-head"><span class="chart-title">Conductores Activos</span><button class="png-btn" data-act="dlChart" data-chart="chC_ad" data-name="AD_Ciudades">PNG</button></div><div id="chC_ad"></div></div>
+      <div class="chart-card"><div class="chart-head"><span class="chart-title">Nuevos + Reactivados</span><button class="png-btn" data-act="dlChart" data-chart="chC_nr" data-name="NR_Ciudades">PNG</button></div><div id="chC_nr"></div></div>
+      <div class="chart-card"><div class="chart-head"><span class="chart-title">Horas de Conexión</span><button class="png-btn" data-act="dlChart" data-chart="chC_sh" data-name="SH_Ciudades">PNG</button></div><div id="chC_sh"></div></div>
+      <div class="chart-card"><div class="chart-head"><span class="chart-title">${METRICS.tr.label}</span><button class="png-btn" data-act="dlChart" data-chart="chC_tr" data-name="Viajes_Ciudades">PNG</button></div><div id="chC_tr"></div></div>
     </div>`;
-  });
+  }
   html += `</div>`;
+
+  // ── 4b. Productividad ─────────────────────────────────────────────────────
+  // Ratios, no volúmenes: responden "¿cada conductor rinde más o menos?", que es
+  // una pregunta distinta de "¿tenemos más conductores?". Un mes puede crecer en
+  // AD y caer en horas por conductor — sin estos ratios eso pasa desapercibido.
+  const prodOf = rs => {
+    const ad = sumR(rs, r => r.activeDrivers), sh = sumR(rs, r => r.supplyHours), tr = sumR(rs, r => r.trips || 0);
+    return { shAd: ratio(sh, ad), trAd: ratio(tr, ad), trSh: ratio(tr, sh) };
+  };
+  const pNow = prodOf(lastRows), pPrev = prodOf(prevRows);
+  html += secH("⚡", "#eab308", "Productividad",
+    `Rendimiento por conductor y por hora · ${d2s(lastDate)} vs período anterior`, "");
+  html += `<div class="section"><div class="metric-row">
+    ${_rendKpiCard("Horas por conductor", "⏱️", pNow.shAd, pPrev.shAd, "#8b5cf6", v => fmt(v))}
+    ${_rendKpiCard("Viajes por conductor", "🚕", pNow.trAd, pPrev.trAd, "#0ea5e9", v => fmt(v))}
+    ${_rendKpiCard("Viajes por hora", "📐", pNow.trSh, pPrev.trSh, "#10b981", v => v.toFixed(2))}
+  </div></div>`;
+
+  // ── 4c. Quién se movió ────────────────────────────────────────────────────
+  // El KAM no necesita leer 60 filas para saber a quién llamar: acá salen los 5
+  // que más subieron y los 5 que más cayeron en Conductores Activos vs el
+  // período anterior. Se excluyen los partners sin base previa (no es una caída,
+  // es que no había con qué comparar).
+  const prevByPartner = new Map();
+  prevRows.forEach(r => prevByPartner.set(r.partner, (prevByPartner.get(r.partner) || 0) + r.activeDrivers));
+  const movers = lastRows.map(r => {
+    const prev = prevByPartner.get(r.partner) || 0;
+    return { partner: r.partner, now: r.activeDrivers, prev, delta: r.activeDrivers - prev,
+             pct: prev > 0 ? ((r.activeDrivers - prev) / prev) * 100 : null };
+  }).filter(m => m.pct != null);
+  const suben = movers.slice().sort((a, b) => b.delta - a.delta).filter(m => m.delta > 0).slice(0, 5);
+  const bajan = movers.slice().sort((a, b) => a.delta - b.delta).filter(m => m.delta < 0).slice(0, 5);
+  if (suben.length || bajan.length) {
+    const lista = (items, color, signo) => items.length
+      ? items.map(m => `<div class="agy-style-247">
+          <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${STATE.partnerColors[m.partner] || "#ccc"};margin-right:5px"></span>${escapeHTML(m.partner)}</span>
+          <span><strong style="color:${color}">${signo}${fmt(Math.abs(m.delta))}</strong>
+            <span class="agy-style-90" style="margin-left:5px">${m.pct >= 0 ? "+" : ""}${m.pct.toFixed(1)}%</span></span>
+        </div>`).join("")
+      : `<div class="agy-style-90" style="font-size:.76rem;padding:6px 0">Sin movimientos</div>`;
+    html += secH("↕️", "#ec4899", "Quién se movió",
+      `Mayores variaciones de Conductores Activos vs ${prevDate ? d2s(prevDate) : "el período anterior"}`, "");
+    html += `<div class="section"><div class="city-grid">
+      <div class="city-card" style="border-top-color:#10b981">
+        <div class="city-name">📈 Los que más subieron</div>${lista(suben, "#10b981", "+")}
+      </div>
+      <div class="city-card" style="border-top-color:#ef4444">
+        <div class="city-name">📉 Los que más cayeron</div>${lista(bajan, "#ef4444", "−")}
+      </div>
+    </div></div>`;
+  }
 
   // ── 5. Tabla ───────────────────────────────────────────────────────────────
   // Resumen de leads Yango para el encabezado
@@ -400,16 +459,16 @@ export function _renderRendImpl() {
     () => buildMultiLine("chP_sh", dates, partners, byDate, "sh", "#8b5cf6"),
     () => buildMultiLine("chP_tr", dates, partners, byDate, "tr", METRICS.tr.color),
   ];
-  CITIES.forEach(city => {
-    const cr = filteredByCity[city];
-    if (!cr.length) return;
-    const cid = city.toLowerCase();
-    const col = CITY_COLORS[city] || "#888";
-    const cbd = aggCityDatec(cr, city);
-    chartJobs.push(() => buildSingleLine(`ch_${cid}_ad`, dates, cbd, "ad", col, city));
-    chartJobs.push(() => buildSingleLine(`ch_${cid}_nr`, dates, cbd, "nr", col, city));
-    chartJobs.push(() => buildSingleLine(`ch_${cid}_sh`, dates, cbd, "sh", col, city));
-    chartJobs.push(() => buildSingleLine(`ch_${cid}_tr`, dates, cbd, "tr", col, city));
+  // Una gráfica por métrica con una serie por ciudad (ver el comentario en la
+  // sección Tendencias): 4 renders en vez de 4 × nº de ciudades.
+  const cityCols = citiesWithData.map(c => CITY_COLORS[c] || "#888");
+  const cityByDateAll = citiesWithData.map(c => aggCityDatec(filteredByCity[c], c));
+  [["chC_ad", "ad"], ["chC_nr", "nr"], ["chC_sh", "sh"], ["chC_tr", "tr"]].forEach(([elId, metric]) => {
+    chartJobs.push(() => buildLineChart(elId, dates,
+      citiesWithData.map((c, i) => ({
+        name: cityLabel(c),
+        data: dates.map(d => (cityByDateAll[i][d] || {})[metric] || 0)
+      })), cityCols));
   });
 
   function pumpCharts(i) {
