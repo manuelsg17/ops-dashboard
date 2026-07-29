@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   snapshotValue, flowValue, projectSnapshot, projectFlow,
-  weightedAvg, ratio, attainmentPct, sumKpis, groupSum, seriesByDate,
+  weightedAvg, ratio, attainmentPct, sumKpis, groupSum, seriesByDate, retentionSeries,
   AD_PROJECTION_FACTOR
 } from "./metrics.js";
 
@@ -109,6 +109,28 @@ describe("tasas", () => {
     expect(attainmentPct(50, 0)).toBe(0);
     expect(attainmentPct(50, 100)).toBe(50);
     expect(attainmentPct(150, 100)).toBe(150);   // el overachievement no se recorta
+  });
+});
+
+describe("retención", () => {
+  it("descuenta del AD actual lo que entró en el período", () => {
+    // Base 100 → hoy 110, de los cuales 20 son nuevos y 5 reactivados:
+    // sobreviven 110-20-5 = 85 de los 100 anteriores → 85%.
+    expect(retentionSeries([100, 110], [0, 20], [0, 5])![1]).toBeCloseTo(0.85, 10);
+  });
+
+  it("el primer período y una base de 0 dan null, no 0", () => {
+    // Un 0 se promediaría después como "perdimos a todos"; null se excluye.
+    const r = retentionSeries([0, 50, 60], [0, 10, 5], [0, 0, 0]);
+    expect(r[0]).toBeNull();
+    expect(r[1]).toBeNull();       // AD anterior = 0 → indefinida
+    expect(r[2]).toBeCloseTo((60 - 5) / 50, 10);
+  });
+
+  it("no recorta los negativos", () => {
+    // Entraron más de los que hay activos hoy: churn severo. Recortarlo a 0
+    // escondería justo el caso que hay que mirar.
+    expect(retentionSeries([100, 50], [0, 60], [0, 0])![1]).toBeLessThan(0);
   });
 });
 

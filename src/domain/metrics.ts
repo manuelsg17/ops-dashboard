@@ -107,6 +107,34 @@ export function attainmentPct(actual: number, meta: number): number {
   return (actual / meta) * 100;
 }
 
+// ── Retención ───────────────────────────────────────────────────────────────
+
+/**
+ * Serie de retención período a período:
+ *
+ *     retención[i] = (AD[i] − nuevos[i] − reactivados[i]) / AD[i−1]
+ *
+ * Léase: "de los conductores que tenía el período pasado, qué fracción sigue
+ * activa" — al AD de hoy se le descuenta todo lo que entró en el período, y lo
+ * que queda se compara contra la base anterior.
+ *
+ * Devuelve `null` (no 0) en el primer período y cuando el AD anterior es 0: sin
+ * base previa la retención no está definida, y un 0 se promediaría después como
+ * si fuera "perdimos a todos".
+ *
+ * Puede dar negativo si entraron más conductores de los que hay activos hoy
+ * (churn muy alto). Es un número real y se muestra tal cual — recortarlo a 0
+ * escondería justo el caso que hay que mirar.
+ */
+export function retentionSeries(ad: Serie, nuevos: Serie, react: Serie): Array<number | null> {
+  return ad.map((_, i) => {
+    if (i === 0) return null;
+    const prev = ad[i - 1];
+    if (!prev) return null;
+    return ((ad[i] || 0) - (nuevos[i] || 0) - (react[i] || 0)) / prev;
+  });
+}
+
 // ── Rollups ─────────────────────────────────────────────────────────────────
 
 export interface LineKpis {

@@ -28,7 +28,7 @@ window.Chart = Chart;
 // PARTNER, así que es justo donde menos puede haber una fórmula propia: si Metas
 // dice "proyectamos 210" y el deck dice 120 para el mismo partner y el mismo mes,
 // el problema no es cosmético, es de credibilidad delante del cliente.
-import { projectSnapshot, projectFlow, snapshotValue } from "./domain/metrics.js";
+import { projectSnapshot, projectFlow, snapshotValue, retentionSeries } from "./domain/metrics.js";
 import * as forecast from "./forecast.js";
 Object.assign(window, forecast);
 
@@ -451,7 +451,7 @@ export function p2Metrics(partner, scope, dates) {
   const trips = p2Vals(partner, scope, dates, P2_GET.trips);
   const comm  = p2Vals(partner, scope, dates, P2_GET.comm);
   const nr    = dates.map((_, i) => (newd[i] || 0) + (react[i] || 0));
-  const ret   = dates.map((_, i) => (i === 0 || !ad[i - 1]) ? null : (ad[i] - newd[i] - react[i]) / ad[i - 1]);
+  const ret   = retentionSeries(ad, newd, react);   // ver domain/metrics.ts
   const tripsPerSh = dates.map((_, i) => sh[i] ? trips[i] / sh[i] : null);   // Trips/SH
   const tripsPerAd = dates.map((_, i) => ad[i] ? trips[i] / ad[i] : null);   // Trips/AD
   const shPerAd    = dates.map((_, i) => ad[i] ? sh[i] / ad[i] : null);      // SH/AD
@@ -463,7 +463,10 @@ export function p2CityRet(partner, scope, dates) {
   const ad    = p2CityVals(partner, scope, dates, P2_GET.ad);
   const newd  = p2CityVals(partner, scope, dates, P2_GET.newd);
   const react = p2CityVals(partner, scope, dates, P2_GET.react);
-  return dates.map((_, i) => (i === 0 || !ad[i - 1]) ? null : (ad[i] - newd[i] - react[i]) / ad[i - 1]);
+  // MISMA fórmula que p2Metrics — antes estaba escrita dos veces en este mismo
+  // archivo, así que la retención del partner y la de su ciudad podían quedar
+  // definidas distinto sin que nadie lo notara.
+  return retentionSeries(ad, newd, react);
 }
 
 // ── SERIE FLEET (ponderada) ───────────────────────────────────────────────────
@@ -548,7 +551,11 @@ export function p2CohortAvg(members, scope, dates, kpiKey) {
       const ad = p2Vals(p, scope, dates, P2_GET.ad);
       const nd = p2Vals(p, scope, dates, P2_GET.newd);
       const rc = p2Vals(p, scope, dates, P2_GET.react);
-      return dates.map((_, i) => (i === 0 || !ad[i - 1]) ? null : (ad[i] - nd[i] - rc[i]) / ad[i - 1]);
+      // Tercera copia de la misma fórmula que había en este archivo: la del
+      // partner, la de su ciudad y la del cohorte. Si el promedio del cohorte se
+      // calculara distinto que la línea del partner, el gráfico compararía dos
+      // cosas que no son comparables — y es exactamente lo que el partner mira.
+      return retentionSeries(ad, nd, rc);
     });
   } else {
     const fn = kpiKey === "nr" ? (r => r.newPartner + r.newService + r.reactivated) : P2_GET[kpiKey];
