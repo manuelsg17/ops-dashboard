@@ -34,10 +34,28 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Alineado con el Node de desarrollo local (24.x). Cuando esto decía
+          # 20, el CI corría npm 10 y local npm 11: el lockfile que generaba
+          # local pasaba `npm ci` acá pero era RECHAZADO allá. Mantener el mismo
+          # major evita esa clase de fallo, que solo aparece en CI y confunde
+          # (el diagnóstico obvio —"el lockfile está desincronizado"— no era la
+          # causa: el lockfile estaba INCOMPLETO).
+          node-version: 24
           cache: npm
       - name: Install dependencies
+        # `npm ci` (no `npm install`) A PROPÓSITO: falla si el lockfile no
+        # describe exactamente el árbol de package.json, que es justo la
+        # garantía de reproducibilidad que se quiere en un deploy. Cambiarlo a
+        # `npm install` "para que pase" esconde el problema y hace que
+        # producción se construya con dependencias distintas a las probadas.
         run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Tests del núcleo de cálculo
+        # Los tests de src/domain fijan reglas de negocio (snapshot vs flujo,
+        # proyecciones, ponderados). Corrían solo a mano; acá el deploy se
+        # detiene si un cálculo cambia de significado sin querer.
+        run: npm test
       - name: Build
         run: npm run build
       - name: Setup Pages
