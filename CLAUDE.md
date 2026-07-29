@@ -75,6 +75,12 @@ Manuel pidió una auditoría a fondo (carga de ~6s, "se traba y muestra páginas
 - **Regla**: una métrica SNAPSHOT se puede sumar entre unidades para el FACT (Lima + Arequipa son conductores distintos) pero su PROYECCIÓN se recalcula sobre la serie agregada del nivel — sumar proyecciones asume que todo picó el mismo período y sobre-estima siempre. Implementado con `snapSeries` en los descriptores de KPI (`_metasAggKpi`) y `_projADde` en el agregador. Test en `domain/metrics.test.ts`.
 - **Brandeados NO lleva `snapSeries`**: su proyección es plana (= nivel actual). El ×1.4 es una regla específica de Active Drivers, no de cualquier snapshot.
 
+**Usuarios: eliminar cuentas + rediseño del panel (jul 29)**
+- **Edge Function `admin-users` v4** (desplegada vía MCP `deploy_edge_function`): nueva acción `deleteUser` con DOS guards anti-lockout que viven en el SERVIDOR, no en la UI: (1) nadie se borra a sí mismo; (2) no se puede eliminar al ÚLTIMO admin — sin eso, borrarlo dejaba la administración de usuarios inaccesible desde la app y había que arreglarlo por SQL. Los mapeos de `partner_users` y los grants de `user_permissions` se van solos por `ON DELETE CASCADE`; el `audit_log` NO se toca porque guarda `user_email` desnormalizado justamente para que la historia sobreviva a la baja de la cuenta.
+- **Panel rediseñado**: de una tabla densa de 5 columnas a **una tarjeta por usuario** — el objeto que se administra es la PERSONA y sus atributos (rol, permisos, CLIDs) son heterogéneos, no se leen bien como columnas. Buscador por email, chips de filtro por rol con conteo, rol como botones (4 opciones mutuamente excluyentes: verlas todas evita abrir un desplegable para descubrir qué hay), antigüedad del último acceso coloreada, "Invitar" plegado (acción ocasional que ocupaba el tope en cada visita). Estado de UI en `AU_UI` (no en el DOM) porque el panel se repinta entero tras cada acción.
+- **Confirmación de borrado EN LÍNEA**, no `confirm()`: se ve a QUIÉN se está borrando mientras se confirma. Un diálogo del navegador tapa la pantalla y se acepta por reflejo — justo lo que no querés en la única acción irreversible del panel.
+- CSS nuevo en `styles.css` bajo "CONFIGURACIÓN → USUARIOS Y ACCESOS" (prefijo `.au-`).
+
 Pendiente: verificación con datos y sesión reales (lo de arriba se validó con build real + datos sintéticos en `npm run preview`; no hay login por la regla de contraseñas).
 
 ### Sesión Julio 2026 (cont.) — Fix PDF Presentación 2.0 + reorden de Configuración + retiro de Palabras Prohibidas

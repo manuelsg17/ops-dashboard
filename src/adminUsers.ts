@@ -134,6 +134,29 @@ export async function auInvite() {
   } finally { showLoad(false); }
 }
 
+// Elimina la cuenta. IRREVERSIBLE.
+//
+// La confirmación NO va acá con confirm(): vive en la propia tarjeta
+// (AU_UI.confirmDelete) para que se vea a QUIÉN se está borrando mientras se
+// confirma. Un diálogo del navegador tapa la pantalla y se acepta por reflejo,
+// que es justo lo que no querés en la única acción sin vuelta atrás del panel.
+//
+// Los guards duros (no borrarse a sí mismo, no dejar el sistema sin admin)
+// están en la Edge Function, no acá: esto es UI y se puede saltear.
+export async function auDeleteUser(userId) {
+  const u = ADMIN_USERS_STATE.users.find(x => x.id === userId);
+  try {
+    await _fn("deleteUser", { userId });
+    AU_UI.confirmDelete = null;
+    showBanner(true, `Usuario ${u?.email || ""} eliminado`);
+    await auLoadUsers();
+  } catch (e) {
+    AU_UI.confirmDelete = null;
+    showBanner(false, "No se pudo eliminar: " + (e.message || e));
+    renderAdminUsers();
+  }
+}
+
 export async function auForceSignOut(userId) {
   const u = ADMIN_USERS_STATE.users.find(x => x.id === userId);
   if (!confirm(`¿Cerrar todas las sesiones de ${u?.email || userId}?\n\nSe usa para que un cambio de rol aplique de inmediato.`)) return;
@@ -200,6 +223,39 @@ export async function auRemoveClid(mappingId) {
 }
 
 // ── RENDER ───────────────────────────────────────────────────────────────────
+// ── ESTADO DE UI ─────────────────────────────────────────────────────────────
+// Búsqueda y filtro por rol viven acá (no en el DOM) para que sobrevivan al
+// re-render: el panel se repinta entero tras cada acción.
+export const AU_UI = { q: "", rol: "todos", confirmDelete: null };
+
+const AU_ROLE_META = {
+  admin:   { emoji: "🛡️", label: "Admin",   color: "#dc2626", bg: "#fef2f2", desc: "Todo, incluido borrar datos y gestionar usuarios" },
+  kam:     { emoji: "👤", label: "KAM",     color: "#0891b2", bg: "#ecfeff", desc: "Sube datos y metas · no borra" },
+  viewer:  { emoji: "👁️", label: "Viewer",  color: "#6b7280", bg: "#f9fafb", desc: "Solo lectura" },
+  partner: { emoji: "🤝", label: "Partner", color: "#7e22ce", bg: "#faf5ff", desc: "Solo SUS CLIDs · portal externo" }
+};
+function _roleMeta(r) { return AU_ROLE_META[r] || AU_ROLE_META.viewer; }
+
+function _fechaCorta(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(+d)) return null;
+  return d.toLocaleDateString("es-PE", { day: "2-digit", month: "short", year: "numeric" });
+}
+// Antigüedad del último acceso: el dato accionable de un panel de usuarios es
+// "hace cuánto", no la fecha exacta.
+function _hace(iso) {
+  if (!iso) return { txt: "nunca ingresó", color: "#9ca3af", frio: true };
+  const dias = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (isNaN(dias)) return { txt: "—", color: "#9ca3af", frio: true };
+  if (dias <= 0)  return { txt: "hoy",            color: "#10b981" };
+  if (dias === 1) return { txt: "ayer",           color: "#10b981" };
+  if (dias < 7)   return { txt: `hace ${dias} d`, color: "#10b981" };
+  if (dias < 30)  return { txt: `hace ${dias} d`, color: "#f59e0b" };
+  const m = Math.floor(dias / 30);
+  return { txt: `hace ${m} ${m === 1 ? "mes" : "meses"}`, color: "#ef4444" };
+}
+
 export function renderAdminUsers() {
   const box = document.getElementById("adminUsersBox");
   if (!box) return;
@@ -209,18 +265,23 @@ export function renderAdminUsers() {
 
   if (!S.loaded && !S.loading && !S.error) {
     box.innerHTML = `
-      <div style="padding:12px 0">
-        <button class="crud-btn crud-btn-add" data-act="auLoad">👥 Cargar usuarios</button>
-        <span style="font-size:.72rem;color:#888;margin-left:8px">Se consulta al servidor solo cuando lo pedís.</span>
+      <div class="au-empty">
+        <div class="au-empty-ico">👥</div>
+        <div class="au-empty-txt">Los usuarios se consultan al servidor solo cuando los pedís.</div>
+        <button class="au-btn au-btn-primary" data-act="auLoad">Cargar usuarios</button>
       </div>`;
     return;
   }
-  if (S.loading) { box.innerHTML = `<div style="padding:14px;color:#888;font-size:.8rem">Cargando usuarios…</div>`; return; }
+  if (S.loading) {
+    box.innerHTML = `<div class="au-empty"><div class="au-spinner"></div><div class="au-empty-txt">Cargando usuarios…</div></div>`;
+    return;
+  }
   if (S.error) {
     box.innerHTML = `
-      <div style="padding:12px;background:#fff5f5;border:1px solid #fecaca;border-radius:6px;color:#991b1b;font-size:.78rem">
-        ${escapeHTML(S.error)}
-        <button class="crud-btn" data-act="auLoad" style="margin-left:10px">Reintentar</button>
+      <div class="au-alert">
+        <strong>No se pudo cargar</strong>
+        <div>${escapeHTML(S.error)}</div>
+        <button class="au-btn" data-act="auLoad">Reintentar</button>
       </div>`;
     return;
   }
@@ -236,91 +297,169 @@ export function renderAdminUsers() {
     clidsByUser.get(m.user_id).push(m);
   });
 
-  // ── Invitar ──
+  // ── Filtros ─────────────────────────────────────────────────────────────
+  const q = (AU_UI.q || "").toLowerCase().trim();
+  const visibles = S.users.filter(u =>
+    (AU_UI.rol === "todos" || u.role === AU_UI.rol) &&
+    (!q || String(u.email || "").toLowerCase().includes(q))
+  );
+  const conteo = r => S.users.filter(u => u.role === r).length;
+
   let html = `
-    <div class="section" style="margin-bottom:14px;background:#f0f9ff;border:1px solid #bae6fd">
-      <div style="font-size:.78rem;font-weight:700;color:#075985;margin-bottom:8px">✉️ Invitar usuario</div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <input class="crud-input" id="auInviteEmail" type="email" placeholder="email@dominio.com" style="flex:1;min-width:200px;max-width:300px"/>
-        <select class="crud-input" id="auInviteRole" style="width:auto">
-          ${AU_ROLES.map(r => `<option value="${r}"${r === "viewer" ? " selected" : ""}>${r}</option>`).join("")}
+    <div class="au-toolbar">
+      <input class="au-search" type="search" placeholder="Buscar por email…" value="${escapeHTML(AU_UI.q)}"
+             data-act-input="auSearch" autocomplete="off"/>
+      <div class="au-chips">
+        <button class="au-chip${AU_UI.rol === "todos" ? " on" : ""}" data-act="auFilterRol" data-rol="todos">
+          Todos <b>${S.users.length}</b>
+        </button>
+        ${AU_ROLES.map(r => {
+          const m = _roleMeta(r), n = conteo(r);
+          return `<button class="au-chip${AU_UI.rol === r ? " on" : ""}" data-act="auFilterRol" data-rol="${r}"
+                    style="${AU_UI.rol === r ? `border-color:${m.color};color:${m.color}` : ""}">
+                    ${m.emoji} ${m.label} <b>${n}</b></button>`;
+        }).join("")}
+      </div>
+      <button class="au-btn au-icon-btn" data-act="auLoad" title="Refrescar">↻</button>
+    </div>
+
+    <details class="au-invite">
+      <summary><span class="au-invite-plus">＋</span> Invitar usuario</summary>
+      <div class="au-invite-body">
+        <input class="au-input" id="auInviteEmail" type="email" placeholder="email@dominio.com"/>
+        <select class="au-input au-input-sm" id="auInviteRole">
+          ${AU_ROLES.map(r => `<option value="${r}"${r === "viewer" ? " selected" : ""}>${_roleMeta(r).emoji} ${_roleMeta(r).label}</option>`).join("")}
         </select>
-        <button class="crud-btn crud-btn-add" data-act="auInvite">Enviar invitación</button>
+        <button class="au-btn au-btn-primary" data-act="auInvite">Enviar invitación</button>
+        <p class="au-hint">
+          Recibe un mail para <strong>fijar su propia contraseña</strong>. Si elegís <strong>Partner</strong>,
+          acordate de asignarle sus CLIDs después: sin CLIDs no ve ningún dato.
+        </p>
       </div>
-      <div style="font-size:.7rem;color:#0369a1;margin-top:6px">
-        Recibe un mail para fijar su contraseña. Para un <strong>partner</strong>, después asignale sus CLIDs abajo —
-        sin CLIDs asignados no ve ningún dato (por diseño).
-      </div>
-    </div>`;
+    </details>`;
 
-  // ── Tabla de usuarios ──
-  html += `<div class="tbl-wrap"><table class="dtbl"><thead><tr>
-      <th>Email</th><th style="width:110px">Rol</th><th>Permisos extra</th>
-      <th>CLIDs (partner)</th><th style="width:90px">Sesión</th>
-    </tr></thead><tbody>`;
+  if (!visibles.length) {
+    html += `<div class="au-empty"><div class="au-empty-txt">Ningún usuario coincide con el filtro.</div></div>`;
+    box.innerHTML = html + _auFooterHTML();
+    return;
+  }
 
-  S.users.forEach(u => {
-    const uid    = escapeHTML(u.id);
-    const misP   = permsByUser.get(u.id) || new Set();
-    const misC   = clidsByUser.get(u.id) || [];
+  // ── Tarjeta por usuario ─────────────────────────────────────────────────
+  html += `<div class="au-grid">`;
+  visibles.forEach(u => {
+    const uid  = escapeHTML(u.id);
+    const misP = permsByUser.get(u.id) || new Set();
+    const misC = clidsByUser.get(u.id) || [];
+    const rm   = _roleMeta(u.role);
     const esPartner = u.role === "partner";
     const esAdmin   = u.role === "admin";
+    const soyYo     = u.id === STATE.userId;
+    const acceso    = _hace(u.lastSignInAt);
+    const pidiendoBorrar = AU_UI.confirmDelete === u.id;
 
-    const permChips = AU_PERMISOS.map(([key, label]) => {
-      const on = misP.has(key);
-      // Un admin ya puede todo (can() devuelve true por is_admin): mostrar los
-      // permisos como implícitos en vez de sugerir que hay que tildarlos.
-      if (esAdmin) return `<span style="font-size:.62rem;color:#bbb;margin-right:5px" title="admin ya tiene todos los permisos">${escapeHTML(label)}</span>`;
-      return `<label style="display:inline-flex;align-items:center;gap:3px;margin:0 7px 3px 0;font-size:.68rem;cursor:pointer">
-          <input type="checkbox" data-act-change="auTogglePerm" data-uid="${uid}" data-perm="${escapeHTML(key)}" ${on ? "checked" : ""}/>
-          <span style="${on ? "font-weight:700;color:#166534" : "color:#666"}">${escapeHTML(label)}</span>
-        </label>`;
-    }).join("");
+    const permChips = esAdmin
+      ? `<span class="au-perm-implicit">Un admin ya tiene todos los permisos</span>`
+      : AU_PERMISOS.map(([key, label]) => {
+          const on = misP.has(key);
+          return `<label class="au-perm${on ? " on" : ""}">
+            <input type="checkbox" data-act-change="auTogglePerm" data-uid="${uid}" data-perm="${escapeHTML(key)}" ${on ? "checked" : ""}/>
+            <span>${escapeHTML(label)}</span></label>`;
+        }).join("");
 
-    const clidChips = misC.map(m => `
-      <span style="display:inline-flex;align-items:center;gap:3px;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:10px;padding:1px 4px 1px 8px;font-size:.68rem;margin:0 4px 3px 0">
-        ${escapeHTML(m.clid)}
-        <span style="color:#8b5cf6;font-size:.6rem">${escapeHTML(STATE.CLID_MAP[m.clid] || "")}</span>
-        <button data-act="auRemoveClid" data-mid="${escapeHTML(m.id)}" title="Quitar" style="border:none;background:none;color:#7c3aed;cursor:pointer;font-weight:700;padding:0 3px">×</button>
-      </span>`).join("");
+    const clidBlock = esPartner ? `
+      <div class="au-field">
+        <div class="au-field-label">CLIDs asignados</div>
+        ${misC.length
+          ? `<div class="au-clids">${misC.map(m => `
+              <span class="au-clid">
+                <b>${escapeHTML(m.clid)}</b>
+                ${STATE.CLID_MAP[m.clid] ? `<i>${escapeHTML(STATE.CLID_MAP[m.clid])}</i>` : ""}
+                <button data-act="auRemoveClid" data-mid="${escapeHTML(m.id)}" title="Quitar">×</button>
+              </span>`).join("")}</div>`
+          : `<div class="au-warn">⚠ Sin CLIDs: esta cuenta no ve ningún dato</div>`}
+        <div class="au-clid-add">
+          <input class="au-input au-input-sm" id="auClid_${uid}" placeholder="CLID"/>
+          <button class="au-btn" data-act="auAddClid" data-uid="${uid}">Asignar</button>
+        </div>
+      </div>` : "";
 
-    const clidCell = esPartner
-      ? `${clidChips || `<span style="font-size:.66rem;color:#b45309">⚠ sin CLIDs: no ve nada</span>`}
-         <div style="display:flex;gap:4px;margin-top:4px">
-           <input class="crud-input" id="auClid_${uid}" placeholder="CLID" style="width:120px;font-size:.68rem"/>
-           <button class="crud-btn" data-act="auAddClid" data-uid="${uid}" style="font-size:.66rem">+ Asignar</button>
-         </div>`
-      : `<span style="color:#ddd;font-size:.7rem">— solo rol partner —</span>`;
+    // Confirmación EN LÍNEA en vez de confirm(): un borrado irreversible merece
+    // ver a quién se está borrando mientras se confirma, no un diálogo del
+    // navegador que tapa la pantalla y se acepta por reflejo.
+    const zonaPeligro = pidiendoBorrar ? `
+      <div class="au-danger">
+        <div class="au-danger-txt">
+          Se elimina <strong>${escapeHTML(u.email || "")}</strong> de forma permanente,
+          junto con sus permisos y CLIDs. <strong>No se puede deshacer.</strong>
+          El historial de cambios que haya hecho se conserva.
+        </div>
+        <div class="au-danger-actions">
+          <button class="au-btn" data-act="auCancelDelete">Cancelar</button>
+          <button class="au-btn au-btn-danger" data-act="auDelete" data-uid="${uid}">Sí, eliminar</button>
+        </div>
+      </div>` : "";
 
-    html += `<tr>
-      <td style="font-size:.76rem">${escapeHTML(u.email || "")}
-        <div style="font-size:.62rem;color:#aaa">${u.lastSignInAt ? "último ingreso " + escapeHTML(String(u.lastSignInAt).slice(0,10)) : "nunca ingresó"}</div>
-      </td>
-      <td>
-        <select class="crud-input" data-act-change="auSetRole" data-uid="${uid}" style="width:100%;font-size:.72rem">
-          ${AU_ROLES.map(r => `<option value="${r}"${r === u.role ? " selected" : ""}>${r}</option>`).join("")}
-        </select>
-      </td>
-      <td>${permChips}</td>
-      <td>${clidCell}</td>
-      <td style="text-align:center">
-        <button class="crud-btn" data-act="auForceSignOut" data-uid="${uid}" title="Cierra sus sesiones para que un cambio de rol aplique ya" style="font-size:.66rem">Cerrar</button>
-      </td>
-    </tr>`;
+    html += `
+      <div class="au-card${pidiendoBorrar ? " au-card-danger" : ""}" style="--au-role:${rm.color}">
+        <div class="au-card-head">
+          <div class="au-avatar" style="background:${rm.bg};color:${rm.color}">${rm.emoji}</div>
+          <div class="au-ident">
+            <div class="au-email">${escapeHTML(u.email || "—")}${soyYo ? `<span class="au-you">vos</span>` : ""}</div>
+            <div class="au-meta">
+              <span style="color:${acceso.color}">● ${escapeHTML(acceso.txt)}</span>
+              ${_fechaCorta(u.createdAt) ? `<span>· alta ${escapeHTML(_fechaCorta(u.createdAt))}</span>` : ""}
+            </div>
+          </div>
+          <div class="au-actions">
+            <button class="au-btn au-icon-btn" data-act="auForceSignOut" data-uid="${uid}"
+                    title="Cierra sus sesiones para que un cambio de rol aplique ya">⎋</button>
+            <button class="au-btn au-icon-btn au-icon-danger" data-act="auAskDelete" data-uid="${uid}"
+                    title="${soyYo ? "No podés eliminar tu propia cuenta" : "Eliminar usuario"}"
+                    ${soyYo ? "disabled" : ""}>🗑</button>
+          </div>
+        </div>
+
+        <div class="au-field">
+          <div class="au-field-label">Rol <span class="au-field-hint">${escapeHTML(rm.desc)}</span></div>
+          <div class="au-roles">
+            ${AU_ROLES.map(r => {
+              const m = _roleMeta(r), on = r === u.role;
+              return `<button class="au-role${on ? " on" : ""}" data-act="auSetRoleBtn" data-uid="${uid}" data-rol="${r}"
+                        style="${on ? `background:${m.bg};border-color:${m.color};color:${m.color}` : ""}">
+                        ${m.emoji} ${m.label}</button>`;
+            }).join("")}
+          </div>
+        </div>
+
+        <div class="au-field">
+          <div class="au-field-label">Permisos extra</div>
+          <div class="au-perms">${permChips}</div>
+        </div>
+
+        ${clidBlock}
+        ${zonaPeligro}
+      </div>`;
   });
+  html += `</div>`;
 
-  html += `</tbody></table></div>
-    <div style="font-size:.7rem;color:#888;margin-top:8px">
-      El rol viaja dentro del token de sesión: un cambio recién aplica cuando la persona vuelve a iniciar sesión
-      (o si le cerrás la sesión con "Cerrar"). Los permisos extra y los CLIDs, en cambio, aplican al instante.
-    </div>
-    <div style="margin-top:8px"><button class="crud-btn" data-act="auLoad">↻ Refrescar</button></div>`;
+  box.innerHTML = html + _auFooterHTML();
+}
 
-  box.innerHTML = html;
+function _auFooterHTML() {
+  return `<p class="au-hint au-footnote">
+    El rol viaja dentro del token de sesión: un cambio recién aplica cuando la persona vuelve a entrar
+    (o si le cerrás la sesión con <b>⎋</b>). Los permisos extra y los CLIDs, en cambio, aplican al instante.
+  </p>`;
 }
 
 registerActions({
   auLoad:   () => auLoadUsers(),
+  auSearch:    (d, el) => { AU_UI.q = el.value; renderAdminUsers(); },
+  auFilterRol: d => { AU_UI.rol = d.rol; renderAdminUsers(); },
+  auSetRoleBtn:  d => auSetRole(d.uid, d.rol),
+  auAskDelete:   d => { AU_UI.confirmDelete = d.uid; renderAdminUsers(); },
+  auCancelDelete:() => { AU_UI.confirmDelete = null; renderAdminUsers(); },
+  auDelete:      d => auDeleteUser(d.uid),
   auInvite: () => auInvite(),
   auSetRole:      (d, el) => auSetRole(d.uid, el.value),
   auTogglePerm:   (d, el) => auTogglePerm(d.uid, d.perm, el.checked),

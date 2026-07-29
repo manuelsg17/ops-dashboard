@@ -130,6 +130,43 @@ Deno.serve(async (req: Request) => {
       return json(req, { ok: true, userId, role });
     }
 
+    // ── ELIMINAR usuario (irreversible) ─────────────────────────────────────
+    // Borra la cuenta de auth.users. Los mapeos de partner_users y los grants de
+    // user_permissions se van solos por ON DELETE CASCADE. El audit_log NO se
+    // toca: guarda `user_email` desnormalizado justamente para que la historia
+    // de "quién cambió qué" sobreviva a la baja de la cuenta.
+    if (action === "deleteUser") {
+      const userId = String(body.userId || "");
+      if (!userId) return json(req, { error: "Falta userId." }, 400);
+
+      // Guard 1 — anti-lockout personal: nadie se borra a sí mismo. Es el error
+      // más fácil de cometer y el único sin vuelta atrás desde la propia UI.
+      if (userId === user.id) {
+        return json(req, { error: "No podés eliminar tu propia cuenta." }, 400);
+      }
+
+      // Guard 2 — anti-lockout del proyecto: no dejar el sistema sin ningún
+      // admin. Sin esto, borrar al último admin deja la administración de
+      // usuarios inaccesible desde la app y hay que ir a arreglarlo por SQL.
+      const { data: target, error: getErr } = await admin.auth.admin.getUserById(userId);
+      if (getErr) throw getErr;
+      const targetRole = (target?.user?.app_metadata as Record<string, unknown> | null)?.role;
+      if (targetRole === "admin") {
+        const { data: all, error: listErr } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+        if (listErr) throw listErr;
+        const admins = (all?.users || []).filter(
+          u => (u.app_metadata as Record<string, unknown> | null)?.role === "admin"
+        );
+        if (admins.length <= 1) {
+          return json(req, { error: "Es el último administrador: no se puede eliminar." }, 400);
+        }
+      }
+
+      const { error } = await admin.auth.admin.deleteUser(userId);
+      if (error) throw error;
+      return json(req, { ok: true, userId, email: target?.user?.email ?? null });
+    }
+
     // ── FORZAR logout (el rol se hornea en el JWT: sin re-login no aplica) ───
     if (action === "signOut") {
       const userId = String(body.userId || "");

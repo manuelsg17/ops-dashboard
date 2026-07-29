@@ -794,3 +794,173 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 .seg-card-goal    { margin-top: 6px; font-size: .68rem; color: #0e7490; }
 .seg-chip         { font-weight: 700; padding: 1px 7px; border-radius: 9px; }
 .seg-overdue-txt  { color: #ef4444; font-weight: 700; }
+
+/* ── CONFIGURACIÓN → USUARIOS Y ACCESOS ────────────────────────────────────
+   Panel de administración de cuentas. Se pasó de una tabla densa (5 columnas
+   con selects y checkboxes apretados) a una tarjeta por usuario: el objeto que
+   se administra es LA PERSONA, y sus atributos —rol, permisos, CLIDs— son
+   heterogéneos y no se leen bien como columnas de una grilla. */
+.au-toolbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.au-search {
+  flex: 1; min-width: 200px; max-width: 320px;
+  border: 1px solid #e5e5e5; border-radius: 8px;
+  padding: 8px 12px; font-size: .82rem; outline: none;
+  transition: border-color .15s;
+}
+.au-search:focus { border-color: #FF0000; }
+.au-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.au-chip {
+  border: 1px solid #e5e5e5; background: #fff; color: #666;
+  border-radius: 20px; padding: 5px 12px;
+  font-size: .74rem; cursor: pointer; transition: all .15s;
+}
+.au-chip:hover { background: #fafafa; }
+.au-chip.on    { border-color: #111; color: #111; font-weight: 700; }
+.au-chip b     { font-weight: 800; margin-left: 3px; }
+
+.au-btn {
+  border: 1px solid #e5e5e5; background: #fff; color: #444;
+  border-radius: 7px; padding: 6px 12px;
+  font-size: .76rem; font-weight: 600; cursor: pointer; transition: all .15s;
+}
+.au-btn:hover:not(:disabled) { border-color: #bbb; background: #fafafa; }
+.au-btn:disabled { opacity: .35; cursor: not-allowed; }
+.au-btn-primary { background: #FF0000; border-color: #FF0000; color: #fff; }
+.au-btn-primary:hover:not(:disabled) { opacity: .88; background: #FF0000; }
+.au-btn-danger  { background: #dc2626; border-color: #dc2626; color: #fff; }
+.au-btn-danger:hover:not(:disabled) { opacity: .88; background: #dc2626; }
+.au-icon-btn { padding: 6px 9px; font-size: .85rem; line-height: 1; }
+.au-icon-danger:hover:not(:disabled) { border-color: #dc2626; color: #dc2626; background: #fef2f2; }
+
+/* Invitar: plegado por defecto — es una acción ocasional y ocupaba el espacio
+   de arriba en todas las visitas. */
+.au-invite {
+  border: 1px solid #bae6fd; background: #f0f9ff;
+  border-radius: 10px; margin-bottom: 14px; overflow: hidden;
+}
+.au-invite > summary {
+  cursor: pointer; padding: 10px 14px;
+  font-size: .8rem; font-weight: 700; color: #075985;
+  list-style: none; display: flex; align-items: center; gap: 7px;
+}
+.au-invite > summary::-webkit-details-marker { display: none; }
+.au-invite-plus { font-size: 1rem; font-weight: 800; }
+.au-invite-body {
+  padding: 0 14px 14px; display: flex; gap: 8px;
+  align-items: center; flex-wrap: wrap;
+}
+.au-input {
+  border: 1px solid #d7dde3; border-radius: 7px;
+  padding: 7px 11px; font-size: .8rem; outline: none; background: #fff;
+  flex: 1; min-width: 180px;
+}
+.au-input:focus { border-color: #0284c7; }
+.au-input-sm { flex: 0 0 auto; min-width: 0; width: auto; }
+.au-hint { font-size: .7rem; color: #0369a1; line-height: 1.5; flex-basis: 100%; margin: 2px 0 0; }
+.au-footnote { color: #888; margin-top: 12px; }
+
+/* Grilla de tarjetas */
+.au-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 12px;
+}
+.au-card {
+  background: #fff; border: 1px solid #ececec;
+  border-left: 3px solid var(--au-role, #ccc);
+  border-radius: 10px; padding: 13px 15px;
+}
+.au-card-danger { border-color: #fecaca; background: #fffafa; }
+.au-card-head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
+.au-avatar {
+  width: 34px; height: 34px; border-radius: 9px; flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center; font-size: 1rem;
+}
+.au-ident { flex: 1; min-width: 0; }
+.au-email {
+  font-size: .82rem; font-weight: 700; color: #111;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.au-you {
+  font-size: .58rem; font-weight: 800; text-transform: uppercase;
+  background: #111; color: #fff; padding: 1px 6px; border-radius: 8px; margin-left: 6px;
+}
+.au-meta { font-size: .66rem; color: #999; margin-top: 2px; display: flex; gap: 5px; flex-wrap: wrap; }
+.au-actions { display: flex; gap: 4px; flex: 0 0 auto; }
+
+.au-field { margin-bottom: 11px; }
+.au-field:last-child { margin-bottom: 0; }
+.au-field-label {
+  font-size: .64rem; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .5px; color: #999; margin-bottom: 5px;
+}
+.au-field-hint { font-weight: 500; text-transform: none; letter-spacing: 0; color: #bbb; margin-left: 5px; }
+
+/* Rol: botones en vez de <select>. Los 4 roles son pocos y mutuamente
+   excluyentes, así que verlos todos a la vez evita abrir un desplegable para
+   descubrir qué opciones hay. */
+.au-roles { display: flex; gap: 5px; flex-wrap: wrap; }
+.au-role {
+  border: 1px solid #e5e5e5; background: #fff; color: #777;
+  border-radius: 7px; padding: 5px 10px;
+  font-size: .72rem; font-weight: 600; cursor: pointer; transition: all .15s;
+}
+.au-role:hover { background: #fafafa; }
+.au-role.on    { font-weight: 800; }
+
+.au-perms { display: flex; flex-wrap: wrap; gap: 5px; }
+.au-perm {
+  display: inline-flex; align-items: center; gap: 5px;
+  border: 1px solid #eee; border-radius: 7px; padding: 4px 9px;
+  font-size: .7rem; color: #666; cursor: pointer; transition: all .15s;
+}
+.au-perm:hover { background: #fafafa; }
+.au-perm.on { border-color: #86efac; background: #f0fdf4; color: #166534; font-weight: 700; }
+.au-perm input { margin: 0; cursor: pointer; }
+.au-perm-implicit { font-size: .7rem; color: #bbb; font-style: italic; }
+
+.au-clids { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
+.au-clid {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 8px;
+  padding: 3px 4px 3px 9px; font-size: .7rem; color: #6b21a8;
+}
+.au-clid i      { font-style: normal; color: #a78bfa; font-size: .64rem; }
+.au-clid button {
+  border: none; background: none; color: #7c3aed;
+  cursor: pointer; font-weight: 800; padding: 0 4px; font-size: .85rem; line-height: 1;
+}
+.au-clid button:hover { color: #dc2626; }
+.au-clid-add { display: flex; gap: 5px; }
+.au-warn {
+  font-size: .7rem; color: #b45309; background: #fffbeb;
+  border: 1px solid #fde68a; border-radius: 7px; padding: 6px 9px; margin-bottom: 6px;
+}
+
+/* Confirmación de borrado EN LÍNEA: se ve a quién se está borrando mientras se
+   confirma, a diferencia de un confirm() que tapa la pantalla. */
+.au-danger {
+  margin-top: 12px; padding: 11px 12px;
+  background: #fef2f2; border: 1px solid #fecaca; border-radius: 9px;
+}
+.au-danger-txt { font-size: .72rem; color: #991b1b; line-height: 1.55; margin-bottom: 9px; }
+.au-danger-actions { display: flex; gap: 7px; justify-content: flex-end; }
+
+.au-empty { text-align: center; padding: 34px 16px; }
+.au-empty-ico { font-size: 2rem; margin-bottom: 8px; }
+.au-empty-txt { font-size: .82rem; color: #888; margin-bottom: 14px; }
+.au-alert {
+  background: #fff5f5; border: 1px solid #fecaca; border-radius: 9px;
+  padding: 13px 15px; color: #991b1b; font-size: .8rem; line-height: 1.6;
+}
+.au-alert button { margin-top: 9px; }
+.au-spinner {
+  width: 26px; height: 26px; margin: 0 auto 12px;
+  border: 3px solid #eee; border-top-color: #FF0000; border-radius: 50%;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .au-spinner { animation: auSpin .8s linear infinite; }
+}
+@keyframes auSpin { to { transform: rotate(360deg) } }
