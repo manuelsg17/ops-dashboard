@@ -57,19 +57,18 @@ export function setMetasMes(mes) {
 // Independiente de Rendimiento (STATE.metasLine propio). Diario no trae db_id → cae
 // a Agregador. Actuales de Fleet/TukTuk salen de los slices materializados (Fase 2).
 export function _metasLine() {
-  let line = STATE.metasLine || "comb";
-  if (STATE.curMode === "diario" && line !== "agg") line = "agg";
-  return line;
+  // Ver la nota en rendimiento._rendLine: el diario ya trae db_id, así que las
+  // 4 líneas funcionan en las 3 escalas.
+  return STATE.metasLine || "comb";
 }
 export function setMetasLine(line) {
   if ((STATE.metasLine || "comb") === line) return;
-  if (STATE.curMode === "diario" && line !== "agg") return;
   STATE.metasLine = line;
   if (STATE.curTab === "metas") renderMetas();
 }
 export function metasLineToggleHTML() {
   const line   = _metasLine();
-  const diario = STATE.curMode === "diario";
+  const diario = false;   // las 4 líneas ya funcionan en las 3 escalas
   const defs = [
     { k: "comb",  emoji: "🔀", label: "Combinado", tip: "Taxi + TukTuk sumados vs meta combinada — avance total del partner" },
     { k: "agg",   emoji: "📊", label: "Agregador", tip: "Metas Taxi (AD, N+R, Horas)" },
@@ -93,10 +92,15 @@ export function metasLineToggleHTML() {
 // Slice de performance de la línea para la escala actual (Fase 2).
 // "comb" = Taxi + TukTuk (disjuntos: TukTuk se excluye de rawData al cargar → sin doble conteo).
 export function _metasLineDataset(line) {
-  const mensual = STATE.curMode === "mensual";
-  if (line === "fleet") return (mensual ? STATE.rawDataMensualFleet  : STATE.rawDataFleet)  || [];
-  if (line === "tk")    return (mensual ? STATE.rawDataMensualTuktuk : STATE.rawDataTuktuk) || [];
-  if (line === "comb")  return STATE.rawData.concat((mensual ? STATE.rawDataMensualTuktuk : STATE.rawDataTuktuk) || []);
+  const slice = base => {
+    const m = STATE.curMode;
+    if (m === "mensual") return STATE["rawDataMensual" + base] || [];
+    if (m === "diario")  return STATE["rawDataDiario"  + base] || [];
+    return STATE["rawData" + base] || [];
+  };
+  if (line === "fleet") return slice("Fleet");
+  if (line === "tk")    return slice("Tuktuk");
+  if (line === "comb")  return STATE.rawData.concat(slice("Tuktuk"));
   return STATE.rawData;
 }
 // Actuales Fleet por (partner|||city) en [from,to]: SH/auto interno y aceptación
@@ -328,6 +332,33 @@ function _metasAggKpi(kpi, units) {
   };
 }
 
+// Aviso de escala: la META es MENSUAL, así que el % de cumplimiento solo se lee
+// derecho en escala mensual. En diario y semanal el FACT de Active Drivers es un
+// SNAPSHOT del período (los activos de UN día / de UNA semana) contra un
+// objetivo de MES entero — comparación que da un porcentaje bajo por
+// construcción, aunque el mes vaya perfecto.
+//
+// Caso real que motivó esto (jul 2026): el mismo negocio mostraba 25,6% en
+// diario y 54,9% en semanal. Ninguno de los dos era el cumplimiento real.
+function _metasEscalaAviso() {
+  const m = STATE.curMode;
+  if (m === "mensual") return "";
+  const esDiario = m === "diario";
+  const unidad   = esDiario ? "un día" : "una semana";
+  return `<div class="metas-escala-aviso">
+    <span class="mea-ico">${esDiario ? "📅" : "🗓️"}</span>
+    <div>
+      <strong>Los % de cumplimiento no son comparables en esta escala.</strong>
+      La meta del mes se compara contra <strong>Conductores Activos de ${unidad}</strong>:
+      un conductor que maneja varios días cuenta una sola vez en el mes, pero acá se lo
+      mide en un período mucho más corto. El porcentaje va a verse bajo aunque el mes
+      vaya bien.
+      <span class="mea-hint">Nuevos+Reactivados y Horas sí acumulan, así que esos avanzan
+      normal. Para leer el cumplimiento real, cambiá la escala a <strong>Mensual</strong>.</span>
+    </div>
+  </div>`;
+}
+
 // Barra de controles de Metas: selector de mes + borrado (admin) + PDF.
 // Vive acá porque la usan TANTO el agregador como las vistas de línea — antes
 // solo la pintaba el agregador, así que cambiar a Fleet/TukTuk/Combinado hacía
@@ -372,6 +403,7 @@ function _renderMetasLineView(cfg) {
 
   let html = metasLineToggleHTML();
   html += _metasControlsHTML(mesName, cfg.mesesDisponibles || []);
+  html += _metasEscalaAviso();
   html += secH(icon, color, title + " — " + mesName, sub, "Peru");
 
   if (!metaRows.length) {
@@ -840,6 +872,7 @@ export function _renderMetasImpl() {
 
   let html = metasLineToggleHTML();
   html += _metasControlsHTML(mesName, mesesDisponibles);
+  html += _metasEscalaAviso();
 
   // ── 1. Peru Summary ───────────────────────────────────────────────────────
   // Contador de partners en perf SIN meta asignada (sus fact suma al total

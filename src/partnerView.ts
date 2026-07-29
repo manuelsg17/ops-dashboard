@@ -366,21 +366,29 @@ export function _pvSeriesByPartnerCity(partner, city, dates) {
 // secciones — no tienen sentido para sub-flotas de un solo partner).
 export function _pvLine() {
   let line = PARTNER_VIEW_STATE.line || "comb";
-  if (STATE.curMode === "diario" && line !== "agg") line = "agg";
+  // (El guard que forzaba "agg" en diario se retiró: el export diario ya trae
+  //  db_id, así que Fleet/TukTuk/Combinado funcionan en las 3 escalas.)
   return line;
 }
 export function _pvLineDataset() {
   const line = _pvLine();
   if (line === "agg") return STATE.rawData;
-  const mensual = STATE.curMode === "mensual";
-  const tk = (mensual ? STATE.rawDataMensualTuktuk : STATE.rawDataTuktuk) || [];
-  if (line === "fleet") return (mensual ? STATE.rawDataMensualFleet : STATE.rawDataFleet) || [];
+  // Slice por ESCALA (3, no 2): antes un booleano `mensual ?` hacía que diario
+  // cayera al slice semanal en silencio.
+  const _sl = base => {
+    const m = STATE.curMode;
+    if (m === "mensual") return STATE["rawDataMensual" + base] || [];
+    if (m === "diario")  return STATE["rawDataDiario"  + base] || [];
+    return STATE["rawData" + base] || [];
+  };
+  const tk = _sl("Tuktuk");
+  if (line === "fleet") return _sl("Fleet");
   if (line === "comb")  return STATE.rawData.concat(tk);
   return tk;
 }
 export function _pvLineToggleHTML() {
   const line   = _pvLine();
-  const diario = STATE.curMode === "diario";
+  const diario = false;   // las 4 líneas ya funcionan en las 3 escalas
   const defs = [
     { k: "comb",  emoji: "🔀", label: "Combinado", tip: "Taxi + TukTuk sumados — avance total del partner" },
     { k: "agg",   emoji: "📊", label: "Agregador", tip: "Taxi — incluye la actividad de las flotas" },
@@ -399,7 +407,6 @@ export function _pvLineToggleHTML() {
 }
 export function setPvLine(line) {
   if ((PARTNER_VIEW_STATE.line || "comb") === line) return;
-  if (STATE.curMode === "diario" && line !== "agg") return;
   PARTNER_VIEW_STATE.line = line;
   renderPartnerView();
 }

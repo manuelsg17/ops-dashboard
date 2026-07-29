@@ -89,6 +89,11 @@ Manuel pidió una auditoría a fondo (carga de ~6s, "se traba y muestra páginas
 - **Índice faltante en `rendimiento_diario`** (`migrations/2026-07-29_idx_rendimiento_diario_date.sql`, APLICADA): la tabla se consulta por ventana de fecha pero su único índice útil lideraba con `clid` → Seq Scan + Sort. Medido: **644 ms → 57 ms**. `rendimiento_mensual` ya tenía el equivalente, y por eso esa escala nunca dio problemas.
 - **`partners`/`fleetrooms`/`flotas` ya no esperan la RPC `dashboard_dates`** (116 ms + round-trip): no dependen de la ventana, así que se disparan en paralelo. Solo el fetch de `rendimiento` necesita `winStart`.
 
+**Fleet/TukTuk/Combinado habilitados en escala DIARIA (jul 29)**
+- **El supuesto que cayó**: "el export diario no trae `db_id`" (Fase F de la sesión de julio). Ya no es cierto — verificado contra la BD: las **5.516 filas** de la ventana diaria tienen `db_id`, y el tagging separa bien (julio: 7.943 de N+R en Taxi vs 1.009 en TukTuk). `loadDiarioIfNeeded` ahora construye `rawDataDiarioTuktuk` / `rawDataDiarioFleet` espejando al mensual, y se retiraron los guards de `_rendLine`/`_metasLine`/`setRendLine`/`setMetasLine`/`_pvLine`/`_portalLine` y los `disabled` de los toggles.
+- **Bug latente que esto destapó**: los selectores de dataset eran `mensual ? mensualX : semanalX` — un BOOLEANO para TRES escalas. En diario caían al slice SEMANAL en silencio. Ahora hay un helper `_sliceEscala(base)` en rendimiento/metas/partnerView/partnerPortal que resuelve las tres. Verificado con una fila trampa: ningún dataset diario se contamina con el semanal.
+- **Aviso de escala en Metas** (`_metasEscalaAviso`): en diario y semanal se avisa que **el % de cumplimiento no es comparable**, porque la meta es MENSUAL y el FACT de Active Drivers es un SNAPSHOT del período. Caso que lo motivó: el mismo negocio mostraba **25,6% en diario y 54,9% en semanal** — ninguno era el cumplimiento real. El aviso NO aparece en mensual (verificado en las 3 escalas). N+R y Horas sí acumulan, y eso se aclara en el texto.
+
 Pendiente: verificación con datos y sesión reales (lo de arriba se validó con build real + datos sintéticos en `npm run preview`; no hay login por la regla de contraseñas).
 
 ### Sesión Julio 2026 (cont.) — Fix PDF Presentación 2.0 + reorden de Configuración + retiro de Palabras Prohibidas

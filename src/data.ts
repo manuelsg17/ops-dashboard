@@ -1167,10 +1167,32 @@ export async function loadDiarioIfNeeded() {
     }));
     STATE.rawDataDiario = dropLegacyAggregateRows(STATE.rawDataDiario);
     STATE.rawDataDiarioFull = [...STATE.rawDataDiario];
+
+    // Slices TukTuk y Fleet DIARIOS — espejo exacto del mensual y del semanal.
+    //
+    // Antes no existían y las líneas Fleet/TukTuk/Combinado estaban
+    // deshabilitadas en escala diaria porque "el export diario no trae db_id".
+    // Eso dejó de ser cierto: verificado contra la BD el 2026-07-29, las 5.516
+    // filas de la ventana diaria TIENEN db_id, y el tagging separa bien
+    // (7.943 de N+R en Taxi vs 1.009 en TukTuk sobre julio). Con los slices
+    // construidos, las 4 líneas funcionan en diario sin lógica nueva.
+    STATE.rawDataDiarioTuktuk = applyFlotasOverride(STATE.rawDataDiarioFull.filter(r => rowIsTuktuk(r)));
+    STATE._tuktukDiarioByCityDate = new Map();
+    STATE.rawDataDiarioTuktuk.forEach(r => {
+      const k = `${r.city}|||${r.date}`;
+      let a = STATE._tuktukDiarioByCityDate.get(k);
+      if (!a) { a = []; STATE._tuktukDiarioByCityDate.set(k, a); }
+      a.push(r);
+    });
+    STATE._tuktukDiarioPartners = [...new Set(STATE.rawDataDiarioTuktuk.map(r => r.partner))].sort();
+    STATE._tuktukDiarioDates    = [...new Set(STATE.rawDataDiarioTuktuk.map(r => r.date))].sort();
+
     // Excluir tuktuk/exclude_from_taxi por fleetroom (o CLID legacy).
     STATE.rawDataDiario = STATE.rawDataDiario.filter(r => !rowExcludedFromTaxi(r));
     // Aplicar mapeo de flotas tambien al dataset diario
     STATE.rawDataDiario = applyFlotasOverride(STATE.rawDataDiario);
+    // Fleet ⊂ Agregador: se filtra del agregador YA deduplicado, sin re-fetch.
+    STATE.rawDataDiarioFleet = STATE.rawDataDiario.filter(r => rowIsFleet(r));
     STATE._diarioLoaded = true;
   } catch (err) {
     showBanner(false, "Error al cargar diario: " + err.message);

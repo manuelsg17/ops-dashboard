@@ -169,7 +169,7 @@ export async function handleLogout() {
 
 export function _clearStateAndLocalStorage() {
   // Drop de datos del dataset en memoria.
-  ["rawData","rawDataMensual","rawDataMensualTuktuk","rawDataFleet","rawDataMensualFleet",
+  ["rawData","rawDataMensual","rawDataMensualTuktuk","rawDataDiarioTuktuk","rawDataFleet","rawDataMensualFleet","rawDataDiarioFleet",
    "rawDataFull","rawDataMensualFull",
    "rawDataDiario","rawDataDiarioFull","rawDataTuktuk","metasData","proyectosData","seguimientoData",
    "fleetExterno","fleetExternoCols",

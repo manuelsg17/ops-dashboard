@@ -38,9 +38,16 @@ export const PORTAL_LINES = [
 ];
 
 function _portalDataset(line) {
-  const mensual = STATE.curMode === "mensual";
-  const tk = (mensual ? STATE.rawDataMensualTuktuk : STATE.rawDataTuktuk) || [];
-  if (line === "fleet") return (mensual ? STATE.rawDataMensualFleet : STATE.rawDataFleet) || [];
+  // Slice por ESCALA (3, no 2): antes un booleano `mensual ?` hacía que diario
+  // cayera al slice semanal en silencio.
+  const _sl = base => {
+    const m = STATE.curMode;
+    if (m === "mensual") return STATE["rawDataMensual" + base] || [];
+    if (m === "diario")  return STATE["rawDataDiario"  + base] || [];
+    return STATE["rawData" + base] || [];
+  };
+  const tk = _sl("Tuktuk");
+  if (line === "fleet") return _sl("Fleet");
   if (line === "tk")    return tk;
   if (line === "comb")  return (STATE.rawData || []).concat(tk);
   return STATE.rawData || [];
@@ -50,13 +57,14 @@ function _portalDataset(line) {
 // trae sub-flota, igual que en el resto del dashboard).
 function _portalLine() {
   let line = PORTAL_STATE.line || "comb";
-  if (STATE.curMode === "diario" && line !== "agg") line = "agg";
+  // (El guard que forzaba "agg" en diario se retiró: el export diario ya trae
+  //  db_id, así que Fleet/TukTuk/Combinado funcionan en las 3 escalas.)
   if (!_portalDataset(line).length) line = "agg";
   return line;
 }
 
 function _portalAvailableLines() {
-  const diario = STATE.curMode === "diario";
+  const diario = false;   // las 4 líneas ya funcionan en las 3 escalas
   return PORTAL_LINES.filter(l => l.k === "agg" || (!diario && _portalDataset(l.k).length));
 }
 

@@ -12,17 +12,28 @@ import { ratio } from "./domain/metrics.js";
 // que el concat no double-cuenta). El diario no trae db_id (sin sub-flota) →
 // Fleet/TukTuk/Combinado se deshabilitan y cae a Agregador.
 export function _rendLine() {
-  let line = STATE.rendLine || "comb";
-  if (STATE.curMode === "diario" && line !== "agg") line = "agg";
-  return line;
+  // Las 4 líneas funcionan en las 3 escalas. El guard que forzaba "agg" en
+  // diario existía porque el export diario no traía db_id — dejó de ser cierto
+  // (verificado contra la BD el 2026-07-29: las 5.516 filas de la ventana lo
+  // tienen), y ahora loadDiarioIfNeeded construye los slices Fleet/TukTuk.
+  return STATE.rendLine || "comb";
 }
 // Dataset completo (todas las fechas) de la línea activa para la escala actual.
+// Slice de una línea para la ESCALA ACTIVA. Antes esto era un booleano
+// `mensual ? ... : ...`, que en diario caía silenciosamente al slice SEMANAL.
+// Ahora las tres escalas tienen sus propios slices (ver loadDiarioIfNeeded).
+function _sliceEscala(base) {
+  const m = STATE.curMode;
+  if (m === "mensual") return STATE["rawDataMensual" + base] || [];
+  if (m === "diario")  return STATE["rawDataDiario"  + base] || [];
+  return STATE["rawData" + base] || [];
+}
+
 export function _rendLineDataset() {
   const line = _rendLine();
   if (line === "agg") return STATE.rawData;
-  const mensual = STATE.curMode === "mensual";
-  const tk = (mensual ? STATE.rawDataMensualTuktuk : STATE.rawDataTuktuk) || [];
-  if (line === "fleet") return (mensual ? STATE.rawDataMensualFleet : STATE.rawDataFleet) || [];
+  const tk = _sliceEscala("Tuktuk");
+  if (line === "fleet") return _sliceEscala("Fleet");
   if (line === "comb")  return STATE.rawData.concat(tk);
   return tk;
 }
@@ -100,7 +111,7 @@ export function _rendLinePrev(prevDate, city) {
 // de escala). En diario, Fleet/TukTuk quedan deshabilitados (sin datos por sub-flota).
 export function rendLineToggleHTML() {
   const line   = _rendLine();
-  const diario = STATE.curMode === "diario";
+  const diario = false;   // las 4 líneas ya funcionan en las 3 escalas
   const defs = [
     { k: "comb",  emoji: "🔀", label: "Combinado", tip: "Taxi + TukTuk sumados — avance total del partner" },
     { k: "agg",   emoji: "📊", label: "Agregador", tip: "Taxi — incluye la actividad de las flotas" },
@@ -122,7 +133,6 @@ export function rendLineToggleHTML() {
 }
 export function setRendLine(line) {
   if ((STATE.rendLine || "comb") === line) return;
-  if (STATE.curMode === "diario" && line !== "agg") return;
   STATE.rendLine = line;
   renderRend();
 }
