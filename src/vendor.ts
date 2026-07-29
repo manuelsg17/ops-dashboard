@@ -112,7 +112,10 @@ const _VIEW_IMPORTERS = {
   partnerview: () => import("./partnerView.js"),
   present2:    () => import("./presentacion2.js"),
   calculator:  () => import("./calculator.js"),
-  config:      () => import("./adminUsers.js"),
+  // Configuración carga adminUsers Y monitoreo: son dos sub-secciones de la
+  // misma pestaña, así que separarlas en dos chunks no ahorra nada.
+  config:      () => Promise.all([import("./adminUsers.js"), import("./monitoreo.js")])
+                       .then(([a, m]) => ({ ...a, ...m })),
   portal:      () => import("./partnerPortal.js"),
   rawdata:     () => import("./rawdata.js"),
   seguimiento: () => import("./seguimiento.js"),

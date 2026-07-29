@@ -749,6 +749,7 @@ function _configSectionToggleHTML() {
   const defs = [
     { k: "partners",      emoji: "👥", label: "Partners",           adminOnly: false },
     { k: "usuarios",      emoji: "🔐", label: "Usuarios y Accesos",  adminOnly: true },
+    { k: "monitoreo",     emoji: "📡", label: "Monitoreo",          adminOnly: true },
     { k: "mantenimiento", emoji: "🛠️", label: "Mantenimiento",       adminOnly: true }
   ].filter(d => !d.adminOnly || STATE.isAdmin);
   const btns = defs.map(d => `
@@ -779,6 +780,8 @@ export function renderConfig() {
 
   if (CONFIG_STATE.section === "usuarios" && STATE.isAdmin) {
     html += _renderConfigUsuarios();
+  } else if (CONFIG_STATE.section === "monitoreo" && STATE.isAdmin) {
+    html += _renderConfigMonitoreo();
   } else if (CONFIG_STATE.section === "mantenimiento" && STATE.isAdmin) {
     html += _renderConfigMantenimiento();
   } else {
@@ -789,6 +792,24 @@ export function renderConfig() {
   if (CONFIG_STATE.section === "partners" || !STATE.isAdmin) renderConfigResults();
   // Panel de usuarios (admin): pinta su propio estado sobre #adminUsersBox.
   if (CONFIG_STATE.section === "usuarios" && typeof renderAdminUsers === "function") renderAdminUsers();
+  if (CONFIG_STATE.section === "monitoreo" && typeof renderMonitoreo === "function") renderMonitoreo();
+}
+
+// ── Sub-sección: Monitoreo (solo admin) ──────────────────────────────────────
+// El contenido lo pinta renderMonitoreo() (monitoreo.js) sobre #monitoreoBox, y
+// solo tras un click explícito: listar accesos pega a la Edge Function
+// admin-users, no corresponde hacerlo en cada render de Configuración.
+function _renderConfigMonitoreo() {
+  return `
+    <div class="section agy-style-30">
+      <div class="agy-style-46">📡 Monitoreo de uso</div>
+      <div class="agy-style-47">
+        Quién entra al dashboard y cuándo (con foco en las cuentas de partner), y el registro
+        de cambios sobre los datos — lo escriben triggers de Postgres, así que no se puede
+        alterar desde la aplicación.
+      </div>
+      <div id="monitoreoBox"></div>
+    </div>`;
 }
 
 // ── Sub-sección: Usuarios y Accesos (solo admin) ─────────────────────────────
