@@ -13,18 +13,20 @@
 //   supabase.createClient · XLSX · ApexCharts · Chart · html2canvas · jspdf.jsPDF
 import "./styles.css";
 import { createClient } from "@supabase/supabase-js";
-import ApexCharts from "apexcharts";
 
-// XLSX (solo uploads de Excel), Chart.js (solo Presentación 2.0) y jsPDF/
-// html2canvas (solo exportar PDF) NO se importan acá — cada uno pesa cientos
-// de KB y hasta la pantalla de login pagaba el costo completo aunque nadie
-// suba un Excel ni exporte nada en esa sesión. Se cargan bajo demanda desde
-// shared/lazyLibs.js (XLSX/PDF) o directo en presentacion2.js (Chart.js, que
-// ya es un chunk lazy vía loadViewModule — no hace falta indirección extra).
-// ApexCharts SÍ queda eager: lo usa Rendimiento, el tab por defecto al loguear.
+// NINGUNA librería pesada se importa acá. XLSX (uploads), Chart.js (solo
+// Presentación 2.0), jsPDF/html2canvas (solo exportar PDF) y ApexCharts
+// (gráficas) se cargan bajo demanda — cada una pesa cientos de KB y la
+// pantalla de login pagaba ese costo completo aunque nadie suba un Excel,
+// exporte un PDF ni llegue a ver una gráfica en esa sesión.
+//
+// ApexCharts era la última que quedaba eager (510 kB / 133 kB gzip, el chunk
+// más grande del arranque) con el argumento de que Rendimiento es el tab por
+// defecto. Pero las gráficas se pintan al FINAL del render y no bloquean nada
+// de lo anterior, así que ahora se carga en paralelo (charts.js → ensureApex)
+// y se saca del camino crítico del primer pintado.
 
-window.supabase    = { createClient };
-window.ApexCharts  = ApexCharts;
+window.supabase = { createClient };
 
 // ── Red de seguridad global: chunk dinámico 404 tras un deploy ──────────────
 // Cualquier import() dinámico (loadViewModule, shared/lazyLibs.js) puede fallar
@@ -33,9 +35,17 @@ window.ApexCharts  = ApexCharts;
 // archivos con hash viejo ya no existen. loadViewModule ya maneja su propio
 // caso (ver vendor.js); esto cubre cualquier otro import() dinámico (ej.
 // html2canvas/jsPDF en lazyLibs.js) con el mismo recovery de un solo reload.
+// Un import() dinámico puede rechazar por MUCHAS razones (red caída, error de
+// sintaxis/ejecución en el módulo, chunk inexistente). Solo el chunk 404 se
+// arregla recargando — el resto NO, y recargar ahí solo pierde el estado del
+// usuario. Este predicado es el único lugar donde se decide eso.
+export function _isChunkError(err) {
+  const msg = String((err && err.message) || err || "");
+  return /fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i.test(msg);
+}
+
 window.addEventListener("unhandledrejection", e => {
-  const msg = String((e.reason && e.reason.message) || e.reason || "");
-  if (!/fetch dynamically imported module|Importing a module script failed/i.test(msg)) return;
+  if (!_isChunkError(e.reason)) return;
   if (sessionStorage.getItem("_chunkReloadOnce")) return;   // ya se intentó, no loopear
   sessionStorage.setItem("_chunkReloadOnce", "1");
   location.reload();
@@ -98,39 +108,85 @@ Object.assign(window,
 // silencio (el `typeof renderAdminUsers === "function"` de app.js no tira
 // error, solo no hace nada). Mismo problema con "partnerPortal" vs el tab
 // real "portal" — más grave, es la única pantalla del rol partner.
+const _VIEW_IMPORTERS = {
+  partnerview: () => import("./partnerView.js"),
+  present2:    () => import("./presentacion2.js"),
+  calculator:  () => import("./calculator.js"),
+  config:      () => import("./adminUsers.js"),
+  portal:      () => import("./partnerPortal.js"),
+  unifview:    () => import("./unifview.js"),
+  rawdata:     () => import("./rawdata.js"),
+  seguimiento: () => import("./seguimiento.js"),
+  fleetext:    () => import("./fleetexterno.js")
+};
+
 const _loadedModules = {};
+const _inflight = {};
+
 export async function loadViewModule(viewName) {
   if (_loadedModules[viewName]) return _loadedModules[viewName];
-  let mod = null;
-  try {
-    if (viewName === "partnerview")            mod = await import("./partnerView.js");
-    if (viewName === "present2")               mod = await import("./presentacion2.js");
-    if (viewName === "calculator")              mod = await import("./calculator.js");
-    if (viewName === "config")                  mod = await import("./adminUsers.js");
-    if (viewName === "portal")                  mod = await import("./partnerPortal.js");
-    if (viewName === "unifview")                mod = await import("./unifview.js");
-    if (viewName === "rawdata")                  mod = await import("./rawdata.js");
-    if (viewName === "seguimiento")              mod = await import("./seguimiento.js");
-    if (viewName === "fleetext")                mod = await import("./fleetexterno.js");
-  } catch (err) {
-    // "Failed to fetch dynamically imported module" / 404 de chunk: pasa cuando
-    // el navegador tiene cacheado el index.html VIEJO (con hashes de archivo
-    // viejos) justo después de un deploy nuevo — los archivos viejos ya no
-    // existen. Un solo reload agarra el index.html fresco (hashes correctos) y
-    // se autocura; el guard de sessionStorage evita un loop infinito si el
-    // problema fuera otra cosa.
-    if (!sessionStorage.getItem("_chunkReloadOnce")) {
-      sessionStorage.setItem("_chunkReloadOnce", "1");
-      location.reload();
-      return null;
+  const importer = _VIEW_IMPORTERS[viewName];
+  if (!importer) return null;
+  // Dedupe: dos switchTab seguidos al mismo tab no deben lanzar dos import().
+  if (_inflight[viewName]) return _inflight[viewName];
+
+  _inflight[viewName] = (async () => {
+    let mod = null;
+    try {
+      mod = await importer();
+    } catch (err) {
+      // OJO — acá vivía un bug de UX serio: el catch recargaba la página ante
+      // CUALQUIER error del import(), y un import() dinámico rechaza tanto por
+      // un chunk 404 como por un error de red pasajero o por una excepción en
+      // el código top-level del propio módulo. Resultado: abrir Vista Partner o
+      // Calculadora recargaba todo y devolvía a la pantalla principal, tirando
+      // a la basura los segundos de data ya cargada. Ahora:
+      //   1. Un fallo de red pasajero se REINTENTA en el lugar (sin recargar).
+      //   2. Solo un fallo de CHUNK confirmado (index.html viejo cacheado tras
+      //      un deploy) justifica el reload — es el único caso que un reload
+      //      realmente arregla.
+      //   3. Cualquier otro error se propaga: que se vea el error real en vez
+      //      de esconderlo detrás de una recarga misteriosa.
+      if (!_isChunkError(err)) throw err;
+      try {
+        await new Promise(r => setTimeout(r, 250));
+        mod = await importer();
+      } catch (err2) {
+        if (!sessionStorage.getItem("_chunkReloadOnce")) {
+          sessionStorage.setItem("_chunkReloadOnce", "1");
+          location.reload();
+          return null;
+        }
+        throw err2;
+      }
+    } finally {
+      delete _inflight[viewName];
     }
-    throw err;
-  }
-  if (mod) {
-    _loadedModules[viewName] = mod;
-    Object.assign(window, mod);
-    sessionStorage.removeItem("_chunkReloadOnce");   // carga OK → resetea el guard
-  }
-  return mod;
+    if (mod) {
+      _loadedModules[viewName] = mod;
+      Object.assign(window, mod);
+      sessionStorage.removeItem("_chunkReloadOnce");   // carga OK → resetea el guard
+    }
+    return mod;
+  })();
+  return _inflight[viewName];
 }
+
+// Precarga en tiempo ocioso: al terminar la carga inicial, bajar los chunks de
+// las pantallas más usadas mientras el navegador no hace nada. Cambiar de
+// pestaña deja de esperar una descarga (que es lo que se sentía "trabado").
+export function prefetchViewModules(names) {
+  const list = (names || []).filter(n => _VIEW_IMPORTERS[n] && !_loadedModules[n]);
+  if (!list.length) return;
+  const idle = window.requestIdleCallback || (cb => setTimeout(() => cb({ timeRemaining: () => 50 }), 800));
+  const next = () => {
+    const n = list.shift();
+    if (!n) return;
+    // Fallo de precarga = silencioso a propósito: es una optimización, no una
+    // funcionalidad. Si falla, loadViewModule lo reintenta cuando haga falta.
+    loadViewModule(n).catch(() => {}).then(() => idle(next));
+  };
+  idle(next);
+}
+window.prefetchViewModules = prefetchViewModules;
 window.loadViewModule = loadViewModule;

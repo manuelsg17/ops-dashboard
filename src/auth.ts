@@ -13,6 +13,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./core/config.js";
 import { registerActions } from "./shared/actions.js";
+import { snapshotClear } from "./data/cache.js";
 
 export const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // El resto del código (funciones, no top-level) sigue usando `STATE`, `showApp`,
@@ -193,6 +194,7 @@ export function _clearStateAndLocalStorage() {
   STATE._diarioLoaded   = false;
   STATE.userRole        = null;
   STATE.userEmail       = null;
+  STATE.userId          = null;
   STATE.isAdmin         = false;
   STATE.canWrite        = false;
   if (STATE.perms) STATE.perms = new Set();
@@ -208,6 +210,10 @@ export function _clearStateAndLocalStorage() {
     localStorage.removeItem("yangoDecline");
     localStorage.removeItem("yangoFleetExtConfig");
   } catch {}
+  // Caché de datos en IndexedDB (data/cache.js): cerrar sesión tiene que borrar
+  // la DATA, no solo el token — si no, quien use después ese navegador podría
+  // ver el último snapshot de negocio sin loguearse.
+  snapshotClear();
 }
 
 export function showLoginScreen() {
@@ -230,6 +236,7 @@ export function showApp(user) {
   document.getElementById("appContainer").style.display = "flex";
   document.getElementById("userBadge").textContent      = user.email;
   STATE.userEmail = user.email;   // firma de los PDFs exportados (shared/pdfmeta.js)
+  STATE.userId    = user.id;      // clave del caché local (data/cache.js)
 
   _setRoleFromUser(user);
 

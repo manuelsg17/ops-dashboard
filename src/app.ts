@@ -35,6 +35,13 @@ export function _debouncedApplyCancel() { if (_debouncedApply && _debouncedApply
 
 // ── APP INIT ──────────────────────────────────────────────────────────────────
 export function initApp() {
+  // Arrancar la descarga de ApexCharts YA, en paralelo con el fetch de datos:
+  // no bloquea nada (buildLineChart/buildDonutChart se re-encolan solos si aún
+  // no llegó) pero para cuando el render llega a las gráficas, casi siempre ya
+  // está lista. initApp corre post-login, así que la pantalla de login sigue
+  // sin pagar los 133 kB.
+  if (typeof ensureApex === "function") ensureApex().catch(() => {});
+
   // Restaurar configuración de alerta de declive
   try {
     const d = JSON.parse(lsGet("yangoDecline") || "{}");
@@ -102,7 +109,16 @@ export function initApp() {
     });
   }
 
-  loadFromSupabase();
+  // Precarga en tiempo ocioso de las pantallas más usadas, DESPUÉS de que la
+  // carga inicial terminó: bajar sus chunks mientras el navegador está libre es
+  // gratis, y hace que cambiar de pestaña no tenga que esperar una descarga
+  // (era buena parte de la sensación de "trabado / pantalla en blanco").
+  const _prefetch = () => {
+    if (typeof window.prefetchViewModules === "function") {
+      window.prefetchViewModules(["partnerview", "calculator", "present2", "rawdata", "seguimiento"]);
+    }
+  };
+  Promise.resolve(loadFromSupabase()).then(_prefetch, _prefetch);
 }
 
 export function toggleUploadMenu(e) {
@@ -385,7 +401,22 @@ export function switchTab(tab) {
       if (STATE.curTab !== tab) return;
 
       if (typeof window.loadViewModule === "function") {
-        await window.loadViewModule(tab);
+        try {
+          await window.loadViewModule(tab);
+        } catch (err) {
+          // loadViewModule ya reintenta los fallos de red y solo recarga ante un
+          // chunk 404 real. Si igual llegó acá, es un error de verdad: mostrarlo
+          // EN el panel en vez de dejar el placeholder "Cargando…" para siempre
+          // (que se leía como app colgada).
+          if (STATE.curTab !== tab) return;
+          const box = lazyBox || document.getElementById(`tab-${tab}`);
+          if (box) {
+            box.innerHTML = `<div class="empty"><p>No se pudo cargar esta sección.</p>
+              <p style="font-size:.78rem;color:#888">${escapeHTML((err && err.message) || String(err))}</p>
+              <button class="btn" data-act="reloadApp">Reintentar</button></div>`;
+          }
+          return;
+        }
       }
 
       if (STATE._tabRenderId !== tokenAtDispatch || STATE.curTab !== tab) return;
@@ -1246,6 +1277,9 @@ registerActions({
   switchTabFromMenu: d => switchTabFromMenu(d.tab),
   toggleUploadMenu:  (d, el, e) => toggleUploadMenu(e),
   toggleAnalisisMenu:(d, el, e) => toggleAnalisisMenu(e),
+  // Botón del estado de error de un chunk que no cargó (ver switchTab). Limpia
+  // el guard para que el recovery de vendor.js pueda volver a intentar.
+  reloadApp: () => { try { sessionStorage.removeItem("_chunkReloadOnce"); } catch (e) {} location.reload(); },
 
   // configuración
   updateDeclineSettings,

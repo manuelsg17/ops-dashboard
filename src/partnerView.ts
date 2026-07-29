@@ -3,6 +3,10 @@
 // Pensado para reuniones semanales/mensuales con el partner.
 // Estructura: header, KPIs globales, sección por ciudad con charts.
 
+// Import explícito (no el espejo en window): ApexCharts es lazy y este módulo
+// necesita la MISMA promesa cacheada que usa charts.js, no una copia.
+import { ensureApex } from "./charts.js";
+
 export const PARTNER_VIEW_STATE = {
   partner: null,
   line:    "comb",   // comb | agg | fleet | tk — mismo patrón que STATE.rendLine/metasLine
@@ -273,7 +277,20 @@ export function _pvDestroyCharts() {
 // sigue en el DOM: destruimos la instancia previa y creamos una nueva EN EL MISMO
 // div, sin reconstruir todo renderPartnerView (resumen ejecutivo, conversión,
 // KPIs, innerHTML). Los animations:false ya hacen barato el render.
+// ApexCharts ya no viene en el bundle de arranque (ver charts.js → ensureApex).
+// Estas funciones de montaje son síncronas y las llaman ~8 sitios distintos, así
+// que en vez de volverlas async se re-encolan solas cuando la librería termina
+// de cargar. OJO: antes acá había `typeof ApexCharts === "undefined" → return`,
+// que con la carga diferida dejaría la gráfica en blanco EN SILENCIO — el
+// re-encolado es justamente lo que evita esa regresión.
+function _pvNeedApex(retry) {
+  if (window.ApexCharts) return false;
+  ensureApex().then(retry).catch(() => {});
+  return true;
+}
+
 export function _pvMountChart(elId, el, opts) {
+  if (_pvNeedApex(() => _pvMountChart(elId, el, opts))) return;
   const reg = PARTNER_VIEW_STATE.scopeCharts || (PARTNER_VIEW_STATE.scopeCharts = {});
   const prev = reg[elId];
   if (prev) { try { prev.destroy(); } catch (e) {} }
@@ -1164,7 +1181,8 @@ export function _pvBuildCityCharts(partner, city, dates, recibeLeads, seriesCach
 
 export function _pvSimpleLine(elId, labels, series, colors, formatter) {
   const el = document.getElementById(elId);
-  if (!el || typeof ApexCharts === "undefined") return;
+  if (!el) return;
+  if (_pvNeedApex(() => _pvSimpleLine(elId, labels, series, colors, formatter))) return;
   // Marcar el contenedor con clase para que las reglas CSS de fondo claro
   // (styles.css .pv-chart .apexcharts-datalabel-background) apliquen.
   el.classList.add("pv-chart");
@@ -1203,7 +1221,8 @@ export function _pvSimpleLine(elId, labels, series, colors, formatter) {
 
 export function _pvStackedColumn(elId, labels, series, colors) {
   const el = document.getElementById(elId);
-  if (!el || typeof ApexCharts === "undefined") return;
+  if (!el) return;
+  if (_pvNeedApex(() => _pvStackedColumn(elId, labels, series, colors))) return;
   el.classList.add("pv-chart");
   // Headroom sobre el total de la barra mas alta para que su etiqueta no se corte.
   const _totals = labels.map((_, i) => series.reduce((s, ser) => s + (ser.data[i] || 0), 0));
@@ -1257,7 +1276,8 @@ export function _pvStackedColumn(elId, labels, series, colors) {
 
 export function _pvDualLine(elId, labels, series, colors) {
   const el = document.getElementById(elId);
-  if (!el || typeof ApexCharts === "undefined") return;
+  if (!el) return;
+  if (_pvNeedApex(() => _pvDualLine(elId, labels, series, colors))) return;
   el.classList.add("pv-chart");
   // Ambas series usan fmtSmart (Viajes y Comision suelen ser numeros grandes).
   // seriesIndex 0 = Viajes (sin $), seriesIndex 1 = Comision (con $).
@@ -1567,7 +1587,8 @@ export function _pvConvInner(selectedPartner) {
 // Omite "1er viaje" (≈100% para todos). Misma técnica de headroom + padding.
 export function _pvConvMountChart(selectedPartner) {
   const el = document.getElementById("pvConvChart");
-  if (!el || typeof ApexCharts === "undefined") return;
+  if (!el) return;
+  if (_pvNeedApex(() => _pvConvMountChart(selectedPartner))) return;
   el.classList.add("pv-chart");
   const d = _pvConvData(selectedPartner);
   const which = PARTNER_VIEW_STATE.convCohort === "top5" ? "top5" : "top10";
@@ -1828,7 +1849,8 @@ export function _pvCohortAvg(cohortPartners, scopeCity, dates, getter) {
 // Línea: serie del partner + (opcional) líneas de promedio de cohortes.
 export function _pvCmpLine(elId, labels, partnerSeries, cohortLines, color, fmtFn, money) {
   const el = document.getElementById(elId);
-  if (!el || typeof ApexCharts === "undefined") return;
+  if (!el) return;
+  if (_pvNeedApex(() => _pvCmpLine(elId, labels, partnerSeries, cohortLines, color, fmtFn, money))) return;
   el.classList.add("pv-chart");
   const share = !!PARTNER_VIEW_STATE.shareMode;   // modo compartir: sin valores
   // Si ni el partner ni los cohortes tienen dato (p.ej. KPI fleet en un partner
@@ -1873,7 +1895,8 @@ export function _pvCmpLine(elId, labels, partnerSeries, cohortLines, color, fmtF
 // N+R: columnas apiladas (partner/yango/react) + (opcional) líneas de total de cohortes.
 export function _pvCmpNR(elId, labels, series, recibeLeads, cohortLines) {
   const el = document.getElementById(elId);
-  if (!el || typeof ApexCharts === "undefined") return;
+  if (!el) return;
+  if (_pvNeedApex(() => _pvCmpNR(elId, labels, series, recibeLeads, cohortLines))) return;
   el.classList.add("pv-chart");
   const share = !!PARTNER_VIEW_STATE.shareMode;   // modo compartir: sin valores
   const isEN = PARTNER_VIEW_STATE.lang === "en";
@@ -2102,7 +2125,8 @@ export function _pvChannelInner(selectedPartner) {
 // toggle compartido con la conversión). Conteos (no %). Headroom + padding.
 export function _pvChannelMountChart(selectedPartner) {
   const el = document.getElementById("pvChannelChart");
-  if (!el || typeof ApexCharts === "undefined") return;
+  if (!el) return;
+  if (_pvNeedApex(() => _pvChannelMountChart(selectedPartner))) return;
   el.classList.add("pv-chart");
   const d = _pvChannelData(selectedPartner);
   const which = PARTNER_VIEW_STATE.convCohort === "top5" ? "top5" : "top10";

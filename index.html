@@ -168,6 +168,12 @@
       <input type="file" id="fileFlotas"      accept=".xlsx,.xls"/>
       <input type="file" id="fileConversion"  accept=".xlsx,.xls"/>
 
+      <!-- Indicador de refresco en segundo plano: la vista arranca con el
+           snapshot local (data/cache.js) y esto avisa, sin bloquear nada, que
+           todavía está llegando la data fresca. Inline a propósito — data.js
+           lo muestra/oculta con .style.display (ver la nota de CLAUDE.md sobre
+           no convertir a clase CSS elementos toggleados desde JS). -->
+      <span id="dataRefreshing" class="data-refreshing" style="display:none" title="Mostrando los últimos datos guardados mientras se descargan los actuales">↻ Actualizando…</span>
       <span id="userBadge" class="user-badge"></span>
       <button class="logout-btn" data-act="handleLogout">Salir →</button>
     </div>

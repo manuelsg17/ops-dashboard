@@ -64,6 +64,29 @@ export function buildSingleLine(elId, dates, cityByDate, metric, color, label) {
 
 import { ChartRegistry } from "./core/chartRegistry.js";
 
+// ── ApexCharts bajo demanda ───────────────────────────────────────────────────
+// ApexCharts pesa 510 kB (133 kB gzip) y era el chunk EAGER más grande: se
+// descargaba y parseaba antes de la pantalla de login, aunque solo lo usan las
+// gráficas de Rendimiento/Metas/Vista Partner. Sacarlo del arranque es la
+// mayor mordida al tiempo de primer pintado.
+//
+// Se mantiene la API SÍNCRONA de buildLineChart/buildDonutChart a propósito
+// (las llaman ~20 sitios dentro de renders que arman HTML): si la librería
+// todavía no está, la llamada se re-encola cuando termina de cargar. Las
+// gráficas son lo último que el usuario mira, así que ese diferimiento no se
+// nota — y a esa altura el prefetch de abajo casi siempre ya la trajo.
+let _apexPromise = null;
+export function ensureApex() {
+  if (window.ApexCharts) return Promise.resolve(window.ApexCharts);
+  if (!_apexPromise) {
+    _apexPromise = import("apexcharts").then(m => {
+      window.ApexCharts = m.default || m;
+      return window.ApexCharts;
+    });
+  }
+  return _apexPromise;
+}
+
 // Destruye todas las instancias ApexCharts en STATE.charts y ChartRegistry.
 export function destroyAllCharts() {
   ChartRegistry.destroyAll();
@@ -76,6 +99,7 @@ export function destroyAllCharts() {
 
 // ── BASE LINE CHART ───────────────────────────────────────────────────────────
 export function buildLineChart(elId, dates, series, colors) {
+  if (!window.ApexCharts) { ensureApex().then(() => buildLineChart(elId, dates, series, colors)); return; }
   const opts = {
     series,
     chart: {
@@ -153,6 +177,7 @@ export function buildLineChart(elId, dates, series, colors) {
 // no). Comparte STATE.charts con las líneas → destroyAllCharts()/dlChart() ya
 // funcionan sin cambios.
 export function buildDonutChart(elId, labels, series, colors) {
+  if (!window.ApexCharts) { ensureApex().then(() => buildDonutChart(elId, labels, series, colors)); return; }
   const total = series.reduce((a, b) => a + b, 0);
   const opts = {
     series,

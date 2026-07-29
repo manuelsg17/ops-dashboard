@@ -10,6 +10,11 @@
 
 // hashColor/normCity/cityLabel → src/core/format.js (Fase A2, espejadas a window)
 
+// Import explícito (no global bare): el caché se consulta al ARRANQUE, antes de
+// que muchas cosas estén listas, y no vale la pena que dependa del espejado a
+// window de vendor.js.
+import { snapshotLoad, snapshotSave, snapshotClear } from "./data/cache.js";
+
 // Aplica el mapeo de flotas (STATE.flotasMap) a un array de rows con `clid`.
 //
 // CONTRATO (importante):
@@ -633,9 +638,61 @@ function _applyMetasProyectosSeguimiento(metas, proyectos, seguimiento) {
   if (STATE.curTab === "seguimiento" && typeof renderSeguimiento === "function")      renderSeguimiento();
 }
 
+// ── CACHÉ LOCAL: arranque instantáneo (stale-while-revalidate) ───────────────
+// El cuello de botella del arranque no era el cliente sino los round-trips a
+// Supabase. En vez de pelear con eso, se pinta primero con el último snapshot
+// conocido (IndexedDB, ~200ms) y se refresca por detrás. La data fresca pisa la
+// vista apenas llega. Ver data/cache.js para el detalle de privacidad/expiración.
+let _paintedFromCache = false;
+
+// Indicador discreto de "refrescando en segundo plano". NO es showLoad(): ese
+// tapa la pantalla, y el punto de todo esto es que el usuario pueda trabajar
+// mientras llega la data fresca.
+function _setRefreshing(on) {
+  const el = document.getElementById("dataRefreshing");
+  if (el) el.style.display = on ? "" : "none";
+}
+
+async function _hydrateFromCache() {
+  let snap = null;
+  try { snap = await snapshotLoad(); } catch (e) { snap = null; }
+  if (!snap || !snap.rend || !snap.rend.length) return false;
+  try {
+    if (!STATE._allPeriods) STATE._allPeriods = {};
+    if (snap.periodos && snap.periodos.length) STATE._allPeriods.semanal = snap.periodos;
+    STATE._loadedFrom = snap.winStart;
+    _applyCoreData(snap.partners, snap.rend, snap.frooms, snap.flotas, { resetLine: true });
+    _indexCoreData();
+    _renderActiveTabAfterLoad();
+    _applyMetasProyectosSeguimiento(snap.metas, snap.proyectos, snap.seguimiento);
+    return true;
+  } catch (e) {
+    // Snapshot incompatible con el pipeline actual (ej. se agregó una columna
+    // sin subir SCHEMA_V). Se descarta y se sigue por red: nunca dejar la app
+    // a medio pintar con datos que no se pudieron procesar.
+    if (typeof DEBUG !== "undefined" && DEBUG) console.warn("Caché descartado:", e);
+    snapshotClear();
+    return false;
+  }
+}
+
 // ── LOAD FROM SUPABASE ────────────────────────────────────────────────────────
 export async function loadFromSupabase(opts = {}) {
-  showLoad(true, "Cargando datos desde Supabase...");
+  // El caché solo aplica al arranque limpio. Un re-load tras un upload o un
+  // ensanche de ventana (opts.from) DEBE ir a la red sí o sí — mostrarle a
+  // alguien el snapshot viejo justo después de subir un Excel sería el peor
+  // momento posible para hacerlo.
+  _paintedFromCache = false;
+  // OJO con el check: STATE.rawDataFull arranca como [] (truthy), así que hay
+  // que mirar .length — un `!STATE.rawDataFull` a secas nunca sería true y el
+  // caché quedaría muerto en silencio.
+  if (opts.useCache !== false && !opts.from && !(STATE.rawDataFull || []).length) {
+    _paintedFromCache = await _hydrateFromCache();
+  }
+
+  if (_paintedFromCache) _setRefreshing(true);
+  else showLoad(true, "Cargando datos desde Supabase...");
+
   try {
     // ── Ventana de carga (Fase A3) ─────────────────────────────────────────
     // Antes se traía la tabla ENTERA (crece ~180 filas/semana, sin techo) y se
@@ -696,7 +753,47 @@ export async function loadFromSupabase(opts = {}) {
       _pgFetch("seguimiento", "?select=*&order=partner.asc,sort_order.asc,start_date.asc").catch(() => [])
     ]);
     const [partners, rend, frooms, flotas] = await critical;
+    _applyCoreData(partners, rend, frooms, flotas, { resetLine: !_paintedFromCache });
+    _indexCoreData();
 
+    const warnSuffix = STATE.parseWarnings.size
+      ? ` · ⚠ ${STATE.parseWarnings.size} campo(s) inválido(s)` : "";
+    showBanner(true, "Datos cargados · " + new Date().toLocaleTimeString("es-PE") + warnSuffix);
+    _renderActiveTabAfterLoad();
+
+    // metas/proyectos/seguimiento: se pidieron en paralelo desde el arranque de
+    // la función (`deferred`, ver comentario junto a `critical`) sin bloquear el
+    // render de arriba. Se esperan y procesan ACÁ (no fire-and-forget) para que
+    // cualquier caller que haga `await loadFromSupabase()` (ej. metas.js tras
+    // borrar un mes, seguimiento.js/calculator.js tras guardar) siga viendo
+    // STATE.metasData/proyectosData/seguimientoData ya refrescados al volver,
+    // igual que antes — el ÚNICO cambio real es que Rendimiento ya no espera a
+    // estas 3 tablas para poder pintarse.
+    const [metas, proyectos, seguimiento] = await deferred;
+    _applyMetasProyectosSeguimiento(metas, proyectos, seguimiento);
+
+    // Guardar el snapshot para el próximo arranque (ver _hydrateFromCache).
+    // Fire-and-forget a propósito: si IndexedDB falla o está lleno, la app
+    // funciona igual — el caché es una optimización, nunca una dependencia.
+    snapshotSave({
+      periodos: periodosSem, winStart,
+      partners, rend, frooms, flotas, metas, proyectos, seguimiento
+    });
+
+  } catch (err) {
+    showBanner(false, "Error al cargar: " + err.message);
+    console.error(err);
+  }
+  showLoad(false);
+  _setRefreshing(false);
+}
+
+// Construye TODO el STATE derivado a partir de las 4 respuestas crudas del
+// grupo crítico. Extraído de loadFromSupabase para poder aplicar exactamente el
+// mismo pipeline dos veces: una desde el caché local (arranque instantáneo) y
+// otra desde la red (datos frescos). Que sea EL MISMO código en ambos caminos
+// es el punto — dos pipelines paralelos serían dos oportunidades de divergir.
+function _applyCoreData(partners, rend, frooms, flotas, opts = {}) {
     if (partners && partners.length) {
       STATE.CLID_MAP = {};
       STATE.KAM_MAP  = {};
@@ -820,9 +917,19 @@ export async function loadFromSupabase(opts = {}) {
     // excluyen), así que se filtra del agregador ya deduplicado con rowIsFleet. Lo usa
     // el selector de línea de Rendimiento; NUNCA se re-fetchea (sin doble conteo).
     STATE.rawDataFleet = STATE.rawData.filter(r => rowIsFleet(r));
-    STATE.rendLine  = "comb";   // carga fresca → vista base Combinado (Taxi+TukTuk)
-    STATE.metasLine = "comb";
+    // Solo en la PRIMERA aplicación: si el refresco de fondo reseteara el
+    // selector, le cambiaría la vista bajo los pies a alguien que ya eligió
+    // Fleet o TukTuk mientras la data fresca estaba en vuelo.
+    if (opts.resetLine !== false) {
+      STATE.rendLine  = "comb";   // carga fresca → vista base Combinado (Taxi+TukTuk)
+      STATE.metasLine = "comb";
+    }
+}
 
+// Índices secundarios + sidebar. Separado de _applyCoreData porque es el paso
+// caro (recorre rawData entero) y de _renderActiveTabAfterLoad porque el render
+// depende del tab activo, que puede cambiar entre el pintado de caché y el de red.
+function _indexCoreData() {
     STATE.parseWarnings.clear();
     updateIndexes();          // construye indices secundarios sobre rawData
     // popSidebarUI > restoreFilters > onKAMChange dispararia un render aqui;
@@ -830,10 +937,9 @@ export async function loadFromSupabase(opts = {}) {
     STATE._suppressRestoreRender = true;
     if (typeof popSidebarUI === "function") popSidebarUI();
     STATE._suppressRestoreRender = false;
-    const warnSuffix = STATE.parseWarnings.size
-      ? ` · ⚠ ${STATE.parseWarnings.size} campo(s) inválido(s)` : "";
-    showBanner(true, "Datos cargados · " + new Date().toLocaleTimeString("es-PE") + warnSuffix);
+}
 
+function _renderActiveTabAfterLoad() {
     // Render solo el tab activo (mismo patron que applyFilters/switchMode).
     // Antes se llamaba renderRend()+renderMetas() incondicional: trabajo
     // desperdiciado si el usuario estaba en otro tab al terminar el upload,
@@ -852,23 +958,6 @@ export async function loadFromSupabase(opts = {}) {
       if (STATE.curTab === "rawdata"     && typeof renderRawData === "function")     renderRawData();
       }
     }
-
-    // metas/proyectos/seguimiento: se pidieron en paralelo desde el arranque de
-    // la función (`deferred`, ver comentario junto a `critical`) sin bloquear el
-    // render de arriba. Se esperan y procesan ACÁ (no fire-and-forget) para que
-    // cualquier caller que haga `await loadFromSupabase()` (ej. metas.js tras
-    // borrar un mes, seguimiento.js/calculator.js tras guardar) siga viendo
-    // STATE.metasData/proyectosData/seguimientoData ya refrescados al volver,
-    // igual que antes — el ÚNICO cambio real es que Rendimiento ya no espera a
-    // estas 3 tablas para poder pintarse.
-    const [metas, proyectos, seguimiento] = await deferred;
-    _applyMetasProyectosSeguimiento(metas, proyectos, seguimiento);
-
-  } catch (err) {
-    showBanner(false, "Error al cargar: " + err.message);
-    console.error(err);
-  }
-  showLoad(false);
 }
 
 // ¿El "Desde" que pide el usuario está fuera de la ventana cargada? (Fase A3)
