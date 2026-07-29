@@ -17,6 +17,22 @@ import { snapshotLoad, snapshotSave, snapshotClear } from "./data/cache.js";
 // Formulas de proyeccion: una sola definicion para todo el dashboard.
 import { projectFlow } from "./domain/metrics.js";
 
+
+// ── PARSER DE TAXIPARKS ─────────────────────────────────────────────────────
+// La logica vive en domain/taxiparks.ts porque tambien corre en el SERVIDOR
+// (Edge Function `ingest-taxiparks`). Aca solo se re-exporta y se le enchufa lo
+// que es propio del navegador: el aviso de parseo a STATE.parseWarnings.
+import {
+  _txNorm, TX_COL_BY_NORM, TX_COUNT_COLS, txConsolidate, _clidStr, _fleetroomCols,
+  normCityValue, parseTaxiparksWide,
+  toN as _toNPure, txExtract as _txExtractPure
+} from "./domain/taxiparks.js";
+export { _txNorm, TX_COL_BY_NORM, TX_COUNT_COLS, txConsolidate, _clidStr, _fleetroomCols, parseTaxiparksWide };
+
+function _warnParse(label) { if (STATE && STATE.parseWarnings) STATE.parseWarnings.add(label); }
+export function toN(v, label)       { return _toNPure(v, label, _warnParse); }
+export function txExtract(row, mc)  { return _txExtractPure(row, mc, _warnParse); }
+
 // Aplica el mapeo de flotas (STATE.flotasMap) a un array de rows con `clid`.
 //
 // CONTRATO (importante):
@@ -56,62 +72,6 @@ export function applyFlotasOverride(rows) {
 // de separador, decide por la cantidad de digitos despues del ultimo:
 // exactamente 3 = separador de miles; 1-2 = decimal.
 // Registra en STATE.parseWarnings cuando una celda no es numerica.
-export function toN(v, label) {
-  if (v === null || v === undefined || v === "") return 0;
-  // Si XLSX entregó un número (raw:true), ESE es el valor exacto y completo.
-  // No aplicar heurísticas de separador/sufijo: romperían decimales reales
-  // (p.ej. 1611576.849 → "1611576.849" → digitsAfter===3 lo trataría como
-  // separador de miles → 1611576849, error ×1000). Devolver tal cual.
-  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
-  let s = String(v).trim();
-  if (s === "" || s === "0") return 0;
-
-  // Sufijo de magnitud (case-insensitive): K=mil, M/MM=millón, B/G=mil millones.
-  // Solo si hay parte numérica antes del sufijo. Convierte "1.8M" → 1800000 y
-  // "51.7K" → 51700. ANTES solo se manejaba "K"; "1.8M" caía en parseFloat=1.8,
-  // perdiendo el 99.9% del valor (raíz del GMV "clavado"/saltos en el dashboard).
-  const sufMatch = s.match(/^([-+]?[\d.,\s]+)(K|MM|M|B|G)$/i);
-  if (sufMatch) {
-    const mult = { K: 1e3, MM: 1e6, M: 1e6, B: 1e9, G: 1e9 }[sufMatch[2].toUpperCase()];
-    return toN(sufMatch[1], label) * mult;
-  }
-
-  // Eliminar % y espacios (incluido espacio fino)
-  s = s.replace(/[%\s ]/g, "");
-
-  const hasDot   = s.indexOf(".") > -1;
-  const hasComma = s.indexOf(",") > -1;
-
-  if (hasDot && hasComma) {
-    // Ambos: el ultimo separador es el decimal
-    if (s.lastIndexOf(",") > s.lastIndexOf(".")) {
-      s = s.replace(/\./g, "").replace(",", ".");          // 1.234,56 → 1234.56
-    } else {
-      s = s.replace(/,/g, "");                              // 1,234.56 → 1234.56
-    }
-  } else if (hasComma) {
-    const commaCount = (s.match(/,/g) || []).length;
-    const digitsAfter = s.length - s.lastIndexOf(",") - 1;
-    if (commaCount > 1 || digitsAfter === 3) {
-      s = s.replace(/,/g, "");                              // 1,234,567 o 1,234 → 1234567 / 1234
-    } else {
-      s = s.replace(",", ".");                              // 12,5 → 12.5
-    }
-  } else if (hasDot) {
-    const dotCount = (s.match(/\./g) || []).length;
-    const digitsAfter = s.length - s.lastIndexOf(".") - 1;
-    if (dotCount > 1 || (digitsAfter === 3 && s.indexOf(".") > 0)) {
-      s = s.replace(/\./g, "");                              // 1.234.567 o 1.234 → 1234567 / 1234
-    }
-    // else dejar el punto como decimal
-  }
-
-  const n = parseFloat(s);
-  if (isNaN(n) && label && STATE?.parseWarnings !== undefined) {
-    STATE.parseWarnings.add(label);
-  }
-  return isNaN(n) ? 0 : n;
-}
 
 // fmt/fmt5/fmtK/fmtSmart/d2s/semCls/pColor/trendI → src/core/format.js (Fase A2)
 
@@ -229,72 +189,11 @@ export function hasConsecutiveDecline(apdByPartner, partner) {
 // El match es EXACTO sobre el nombre normalizado (lower + solo [a-z0-9] + espacios)
 // para evitar colisiones por substring (ej. "new drivers from partner" vs
 // "new profiles from partner").
-export function _txNorm(s) { return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); }
 export function _snakeToCamel(s) { return s.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase()); }
 
-export const TX_COL_BY_NORM = {
-  // ── core (nombre historico, NO cambiar) ──
-  "active drivers": "active_drivers",
-  "new drivers from partner": "new_from_partner",
-  "new drivers from service": "new_from_service",
-  "reactivated drivers": "reactivated",
-  "supply hours": "supply_hours",
-  "partner commission": "commission",
-  "trips": "trips",
-  // ── nuevas: conteos / montos ──
-  "gmv": "gmv",
-  "new drivers": "new_drivers",
-  "new drivers from partner with 50 trips": "new_from_partner_50t",
-  "new drivers from service with 50 trips": "new_from_service_50t",
-  "active cars": "active_cars",
-  "branded active cars": "branded_active_cars",
-  "owned fleet active cars": "owned_fleet_active_cars",
-  "owned fleet branded active cars": "owned_fleet_branded_active_cars",
-  "internal fleet sh": "internal_fleet_sh",
-  "external fleet sh": "external_fleet_sh",
-  "new profiles": "new_profiles",
-  "new profiles from partner": "new_profiles_partner",
-  "new profiles from partner with 50 trips": "new_profiles_partner_50t",
-  "new profiles from service": "new_profiles_service",
-  "new profiles from service with 50 trips": "new_profiles_service_50t",
-  // ── nuevas: ratios / shares / promedios ──
-  "new drivers share": "new_drivers_share",
-  "acceptance rate": "acceptance_rate",
-  "completion rate": "completion_rate",
-  "trips per hour": "trips_per_hour",
-  "money per hour": "money_per_hour",
-  "avg driver rating": "avg_driver_rating",
-  "avg fare after surge": "avg_fare_after_surge",
-  "bad rated trips share": "bad_rated_trips_share",
-  "fraud trips share": "fraud_trips_share",
-  "driver subsidies by gmv": "driver_subsidies_by_gmv",
-  "driver support requests share": "driver_support_requests_share",
-  "internal fleet sh share": "internal_fleet_sh_share",
-  "internal fleet sh per active car": "internal_fleet_sh_per_active_car",
-  "sh per active car": "sh_per_active_car",
-  "sh per active driver": "sh_per_active_driver",
-  "supply hours share": "supply_hours_share",
-  "trips share": "trips_share",
-  "partner commission share": "commission_share",
-  "new profiles from partner reg 1 trip": "new_profiles_partner_reg1",
-  "new profiles from partner reg 10 trip": "new_profiles_partner_reg10",
-  "new profiles from partner reg 50 trip": "new_profiles_partner_reg50",
-  "new profiles from partner reg 100 trip": "new_profiles_partner_reg100",
-  "new profiles from service reg 1 trip": "new_profiles_service_reg1",
-  "new profiles from service reg 10 trip": "new_profiles_service_reg10",
-  "new profiles from service reg 50 trip": "new_profiles_service_reg50",
-  "new profiles from service reg 100 trip": "new_profiles_service_reg100"
-};
 
 // Columnas que se SUMAN al consolidar duplicados (clid|city|periodo). El resto
 // (ratios/shares/promedios) se asignan: ultima ocurrencia con valor gana.
-export const TX_COUNT_COLS = new Set([
-  "active_drivers", "new_drivers", "new_from_partner", "new_from_service", "reactivated",
-  "supply_hours", "commission", "trips", "gmv", "new_from_partner_50t", "new_from_service_50t",
-  "active_cars", "branded_active_cars", "owned_fleet_active_cars", "owned_fleet_branded_active_cars",
-  "internal_fleet_sh", "external_fleet_sh", "new_profiles", "new_profiles_partner",
-  "new_profiles_partner_50t", "new_profiles_service", "new_profiles_service_50t"
-]);
 
 // Columnas NUEVAS (no-core) que viajan en memoria como camelCase (gmv, acceptanceRate, …).
 export const TX_NEW_COLS = [
@@ -322,51 +221,8 @@ export function txRowExtra(r) {
 
 // Extrae todas las metricas reconocidas de una fila para un periodo.
 // mc: { metricLower -> excelColKey }. Devuelve { colSnake: valor }.
-export function txExtract(row, mc) {
-  const out = {};
-  // 1) Match EXACTO por nombre normalizado (cubre el export ancho de taxiparks
-  //    sin colisiones, p.ej. "new drivers from partner" vs "new profiles from partner").
-  for (const [metricName, excelCol] of Object.entries(mc)) {
-    const col = TX_COL_BY_NORM[_txNorm(metricName)];
-    if (col && out[col] === undefined) out[col] = toN(row[excelCol], metricName);
-  }
-  // 2) Fallback FUZZY solo para las 7 core (compat con formatos viejos/variantes
-  //    cuyos headers no calzan exacto: "Commission", "Viajes", "Active Driver"...).
-  //    Solo rellena columnas que el match exacto no encontro.
-  const fuzzy = (...needles) => {
-    for (const n of needles)
-      for (const [mk, excelCol] of Object.entries(mc))
-        if (_txNorm(mk).includes(n)) return toN(row[excelCol], mk);
-    return undefined;
-  };
-  const setIf = (col, ...needles) => {
-    if (out[col] !== undefined) return;
-    const v = fuzzy(...needles);
-    if (v !== undefined) out[col] = v;
-  };
-  setIf("active_drivers", "active driver");
-  setIf("new_from_partner", "new drivers from partner", "new profile from partner", "from partner");
-  setIf("new_from_service", "new drivers from service", "new profile from service", "from service");
-  setIf("reactivated", "reactivat");
-  setIf("supply_hours", "supply hour");
-  setIf("commission", "commission", "comisi");
-  setIf("trips", "trip", "viaje");
-  // 3) Compat: si no vinieron las columnas split de "New Drivers" pero si el total,
-  //    mandarlo a new_from_partner para que np+ns+re siga cuadrando.
-  if (out.new_from_partner === undefined && out.new_from_service === undefined && out.new_drivers !== undefined) {
-    out.new_from_partner = out.new_drivers;
-  }
-  return out;
-}
 
 // Consolida `m` dentro de `target` (suma counts, ultima-con-valor gana en ratios).
-export function txConsolidate(target, m) {
-  for (const col in m) {
-    const v = m[col];
-    if (TX_COUNT_COLS.has(col)) target[col] = (target[col] || 0) + (v || 0);
-    else if (target[col] === undefined || (v !== null && v !== undefined && v !== 0)) target[col] = v;
-  }
-}
 
 // ── VENTANA DE CARGA (Fase A3: paginación por rango de fechas) ────────────────
 // Cuántos períodos se traen por defecto en cada escala. El objetivo es que el
@@ -1748,90 +1604,30 @@ export async function setFleetroomFlag(dbId, key, value, ctx = {}) {
 
 // ── UPLOAD RENDIMIENTO (pivot → flat rows) ────────────────────────────────────
 export async function uploadRendimiento(rows) {
-  if (!rows.length) throw new Error("Archivo vacío");
-
-  const keys = Object.keys(rows[0]);
-  const dateColMap = {};
-  const { cDbId, cName } = _fleetroomCols(keys);
-
-  keys.forEach(k => {
-    const m = k.match(/^(\d{2})\.(\d{2})\.(\d{4})\s*-\s*(.+)$/);
-    if (!m) return;
-    const iso = `${m[3]}-${m[2]}-${m[1]}`;
-    if (!dateColMap[iso]) dateColMap[iso] = {};
-    dateColMap[iso][m[4].trim().toLowerCase()] = k;
+  // El parseo vive en domain/taxiparks.js — el MISMO codigo que corre en la
+  // Edge Function de ingesta automatica. Aca solo queda lo especifico del
+  // navegador: el KAM desde STATE y el upsert con la sesion del usuario.
+  const flat = parseTaxiparksWide(rows, {
+    dateField: "fecha",
+    kamOf: clid => STATE.KAM_MAP[clid] || "",
+    onWarn: label => { if (STATE && STATE.parseWarnings) STATE.parseWarnings.add(label); }
   });
 
-  // Aggregate by clid+city+fecha+db_id to avoid duplicates (registro unico).
-  // db_id separa fleetrooms del MISMO clid (antes se colapsaban en 1 fila).
-  const agg = {};
-  rows.forEach(row => {
-    const clid    = String(row["CLID"] || row["clid"] || "").trim();
-    // Guardamos el partner TAL CUAL del Excel; la resolucion al nombre
-    // configurado se hace al cargar desde BD a memoria.
-    const partner = String(row["Partner"] || row["partner"] || "").trim() || clid || "Unknown";
-    const kam  = STATE.KAM_MAP[clid] || "";
-    const city = normCity(row["City"] || row["city"] || row["Ciudad"]);
-    // db_id: id estable de fleetroom (vacio en Excels legacy sin la columna).
-    // fleetroom: nombre; columna explicita si existe, sino el Partner del Excel.
-    const db_id     = cDbId ? String(row[cDbId] || "").trim() : "";
-    const fleetroom = cName ? String(row[cName] || "").trim() : (db_id ? partner : "");
-
-    Object.entries(dateColMap).forEach(([fecha, mc]) => {
-      const m = txExtract(row, mc);
-      if (!Object.values(m).some(v => v)) return;
-      const k = `${clid}|||${city}|||${fecha}|||${db_id}`;
-      if (!agg[k]) agg[k] = { clid, partner, kam, city, fecha, db_id, fleetroom };
-      txConsolidate(agg[k], m);
-    });
-  });
-
-  const flat = Object.values(agg);
-  if (!flat.length) throw new Error("No se encontraron datos en el archivo");
-
-  // Batch upsert 500 rows at a time
   for (let i = 0; i < flat.length; i += 500) {
     const { error } = await sb.from("rendimiento")
       .upsert(flat.slice(i, i + 500), { onConflict: "clid,city,fecha,db_id" });
     if (error) throw error;
   }
 }
+
 // Detecta las columnas db_id (id estable de fleetroom) y nombre de fleetroom
 // por header normalizado. Tolerante a casing/espacios ("DB ID", "db_id",
 // "Fleetroom", "Sala", "Sub Flota"). Devuelve { cDbId, cName } (claves de
 // columna del Excel o undefined). Mismo patron que pickKey de uploadConversion.
-export function _fleetroomCols(keys) {
-  const pick = (except, ...needles) => keys.find(k => {
-    if (k === except) return false;
-    const n = _txNorm(k);
-    return needles.some(nd => n === nd || n.includes(nd));
-  });
-  const cDbId = pick(null, "db id", "dbid", "fleetroom id", "sala id", "park id", "parkid");
-  return {
-    cDbId,
-    // El nombre del fleetroom suele venir en la columna "Partner" del export de
-    // DataLens (City|CLID|db_id|Partner|...); ahi lo toma el uploader como
-    // fallback. Solo si el Excel trae una columna EXPLICITA de nombre la usamos.
-    // Se excluye la columna db_id para que "fleetroom id" no calce como nombre.
-    cName: pick(cDbId, "fleetroom name", "sala", "sub flota", "subflota")
-  };
-}
 
 // Normaliza un valor de CLID a string entero. Maneja: number (raw),
 // string entero, string con decimal trailing, string en notacion cientifica.
 // Si detecta cientifica devuelve null (CLID degradado, no usable).
-export function _clidStr(v) {
-  if (v == null || v === "") return "";
-  if (typeof v === "number") {
-    if (!Number.isFinite(v)) return "";
-    return String(Math.trunc(v));
-  }
-  const s = String(v).trim();
-  if (/^-?\d+$/.test(s)) return s;
-  if (/^-?\d+\.\d+$/.test(s)) return s.split(".")[0];
-  if (/^-?\d+(\.\d+)?[eE][+-]?\d+$/.test(s)) return null; // degradado
-  return s;
-}
 
 // ── UPLOAD METAS ──────────────────────────────────────────────────────────────
 // Columna opcional de metas: busca el header (union de claves, case/space-insensitive)

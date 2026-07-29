@@ -49,6 +49,12 @@ jobs:
         # `npm install` "para que pase" esconde el problema y hace que
         # producción se construya con dependencias distintas a las probadas.
         run: npm ci
+      - name: Parser de ingesta sincronizado
+        # La Edge Function ingest-taxiparks lleva una COPIA de
+        # src/domain/taxiparks.ts (no puede importar de src/). Si alguien edita
+        # el original y no corre `npm run sync:ingest`, la carga automática
+        # empezaría a parsear distinto que la manual — en silencio.
+        run: npm run sync:ingest -- --check
       - name: Typecheck
         run: npm run typecheck
       - name: Tests del núcleo de cálculo
