@@ -70,6 +70,11 @@ Manuel pidió una auditoría a fondo (carga de ~6s, "se traba y muestra páginas
 
 **Dato sucio detectado (no es código)**: hay CLIDs sin fila en `partners`, así que se muestran con el número crudo. `400011836443` (Dale Taxi SAC) y `400012046457` (FLOTA GBC AUTOMOTRIZ) además tienen `flotas.nombre_asignado` = el propio CLID. Se arregla cargándolos en Configuración → Partners.
 
+**Proyección de snapshots: NO se suma hacia arriba (jul 29, encontrado comparando deck vs Metas con Lizzo)**
+- Metas daba 3.876,6 de proyección de AD y el deck/portal 3.866,8 para el MISMO partner y mes. Causa: Metas sumaba los máximos por (partner, ciudad) mientras el deck tomaba el máximo de la serie total. Lima picó 2.490 una semana y Arequipa 229 en OTRA → la suma (2.769) es un número que **nunca ocurrió**; el máximo real de la serie total es 2.762. La regla es "la semana con el número más alto de AD", así que la única lectura fiel es el máximo de la serie del nivel que se muestra.
+- **Regla**: una métrica SNAPSHOT se puede sumar entre unidades para el FACT (Lima + Arequipa son conductores distintos) pero su PROYECCIÓN se recalcula sobre la serie agregada del nivel — sumar proyecciones asume que todo picó el mismo período y sobre-estima siempre. Implementado con `snapSeries` en los descriptores de KPI (`_metasAggKpi`) y `_projADde` en el agregador. Test en `domain/metrics.test.ts`.
+- **Brandeados NO lleva `snapSeries`**: su proyección es plana (= nivel actual). El ×1.4 es una regla específica de Active Drivers, no de cualquier snapshot.
+
 Pendiente: verificación con datos y sesión reales (lo de arriba se validó con build real + datos sintéticos en `npm run preview`; no hay login por la regla de contraseñas).
 
 ### Sesión Julio 2026 (cont.) — Fix PDF Presentación 2.0 + reorden de Configuración + retiro de Palabras Prohibidas

@@ -197,6 +197,10 @@ function _finishSeries(e) {
   e.projAd = projectSnapshot(adS);
   e.projNr = projectFlow(e.nr, daysElapsed, daysRemaining);
   e.projSh = projectFlow(e.sh, daysElapsed, daysRemaining);
+  // La serie por fecha SE CONSERVA (no se borra) porque la proyección de un
+  // SNAPSHOT no se puede sumar hacia arriba: ver _metasAggKpi.
+  e.adByDate   = e._ad;
+  e.carsByDate = e._cars || {};
   delete e._ad; delete e._cars; delete e._nr; delete e._sh;
 }
 
@@ -287,14 +291,34 @@ function _metasAggKpi(kpi, units) {
     };
   }
   let a = 0, m = 0, p = 0, hasA = false, hasM = false, hasP = false;
+  // Proyección de un SNAPSHOT (Active Drivers): NO se suman las proyecciones de
+  // cada unidad — se reconstruye la serie del NIVEL que se está mostrando y se
+  // toma su máximo.
+  //
+  // POR QUÉ IMPORTA (caso real, Lizzo): Lima pico 2.490 en una semana y Arequipa
+  // 229 en OTRA. Sumar los máximos da 2.769, un número que nunca ocurrió; el
+  // máximo de la serie total es 2.762, que sí es una semana real. La regla de
+  // negocio dice "la semana con el número más alto de AD", así que la única
+  // lectura fiel es la segunda. Sumar hacia arriba asumía que todas las ciudades
+  // (y todos los partners) picaban el mismo día, y sobre-estimaba siempre.
+  const serieAgregada = kpi.snapSeries ? {} : null;
   units.forEach(u => {
     const av = u.a ? kpi.act(u.a) : null;
     if (av != null) { a += av; hasA = true; }
     const mv = u.m ? kpi.meta(u.m) : null;
     if (mv != null) { m += mv; hasM = true; }
+    if (serieAgregada) {
+      const byDate = u.a ? kpi.snapSeries(u.a) : null;
+      if (byDate) {
+        Object.keys(byDate).forEach(d => { serieAgregada[d] = (serieAgregada[d] || 0) + byDate[d]; });
+        hasP = true;
+      }
+      return;
+    }
     const pv = (u.a && kpi.proj) ? kpi.proj(u.a) : null;
     if (pv != null) { p += pv; hasP = true; }
   });
+  if (serieAgregada && hasP) p = projectSnapshot(seriesByDate(serieAgregada));
   return {
     actual: hasA ? a : null,
     meta:   hasM ? m : null,
@@ -524,10 +548,14 @@ export function _renderMetasTk(mesName, from, to, selSet, cityFilter, kamFilter,
       selSet, cityFilter, kamFilter),
     kpis: [
       { label: "Active Drivers", sub: "último período", color: "#7e22ce",
-        meta: m => m.mtkAD, act: a => a.ad, proj: a => a.projAd, fmtFn: v => fmt(v) },
+        meta: m => m.mtkAD, act: a => a.ad, proj: a => a.projAd,
+        snapSeries: a => a.adByDate, fmtFn: v => fmt(v) },
       { label: "Nuevos + React", sub: "acumulado", color: "#f97316",
         meta: m => m.mtkNR, act: a => a.nr, proj: a => a.projNr, fmtFn: v => fmt(v) },
       { label: "Brandeados", sub: "último período", color: "#0891b2",
+        // Brandeados NO lleva snapSeries: su proyección es PLANA (= nivel
+        // actual), no máx × 1.4 — el factor 1.4 es una regla específica de
+        // Active Drivers, no de cualquier snapshot.
         meta: m => m.mtkCars, act: a => a.cars, proj: a => a.cars, fmtFn: v => fmt(v) },
       { label: "Horas Conexión", sub: "acumulado", color: "#8b5cf6",
         meta: m => m.mtkSH, act: a => a.sh, proj: a => a.projSh, fmtFn: v => fmtSmart(v) }
@@ -556,7 +584,8 @@ export function _renderMetasComb(mesName, from, to, selSet, cityFilter, kamFilte
       selSet, cityFilter, kamFilter),
     kpis: [
       { label: "Active Drivers", sub: "último período", color: "#8b5cf6",
-        meta: m => sumMeta(m.mA || null, m.mtkAD), act: a => a.ad, proj: a => a.projAd, fmtFn: v => fmt(v) },
+        meta: m => sumMeta(m.mA || null, m.mtkAD), act: a => a.ad, proj: a => a.projAd,
+        snapSeries: a => a.adByDate, fmtFn: v => fmt(v) },
       { label: "Nuevos + React", sub: "acumulado", color: "#f97316",
         meta: m => sumMeta(m.mNR || null, m.mtkNR), act: a => a.nr, proj: a => a.projNr, fmtFn: v => fmt(v) },
       { label: "Horas Conexión", sub: "acumulado", color: "#0891b2",
@@ -685,7 +714,7 @@ export function _renderMetasImpl() {
     const rows = (city === "" || city === "all")
       ? (cpByPartnerAll.get(partner) || [])
       : (cpByPartnerCity.get(`${partner}|||${city}`) || []);
-    if (!rows.length) return { ad: 0, nr: 0, sh: 0, lastAD: 0, nrV: [], shV: [], adV: [] };
+    if (!rows.length) return { ad: 0, nr: 0, sh: 0, lastAD: 0, nrV: [], shV: [], adV: [], adByDate: {} };
     // Agregar por fecha (sumando ciudades cuando city = "all")
     const bd = {};
     rows.forEach(r => {
@@ -694,6 +723,11 @@ export function _renderMetasImpl() {
     });
     const sortedDates = Object.keys(bd).sort();
     const sorted = sortedDates.map(d => bd[d]);
+    // Mapa fecha -> AD: hace falta para proyectar a nivel ciudad/KAM/país sobre
+    // la serie AGREGADA de ese nivel, en vez de sumar proyecciones por partner
+    // (ver la nota larga en _metasAggKpi).
+    const adByDate = {};
+    sortedDates.forEach(d => { adByDate[d] = bd[d].ad; });
     // Calcular max/sum en una sola pasada en lugar de 3 pasadas
     let adMax = 0, nrSum = 0, shSum = 0;
     const nrV = [], shV = [], adV = [];
@@ -712,7 +746,8 @@ export function _renderMetasImpl() {
       lastAD: sorted[sorted.length - 1]?.ad || 0,
       nrV,
       shV,
-      adV     // serie por periodo: alimenta projectSnapshot (max x 1.4)
+      adV,      // serie por periodo: alimenta projectSnapshot (max x 1.4)
+      adByDate  // misma serie keyed por fecha, para re-agregar por nivel
     };
   }
 
@@ -732,6 +767,8 @@ export function _renderMetasImpl() {
         mA: p.mA, mNR: p.mNR, mH: p.mH,
         ad: r.lastAD, nr: r.nr, sh: r.sh,
         projAD: projectSnapshot(r.adV),
+      adByDate: r.adByDate,
+        adByDate: r.adByDate,
         projNR: projA(r.nrV, daysElapsed, daysRemaining),
         projSH: projA(r.shV, daysElapsed, daysRemaining) });
     });
@@ -742,6 +779,8 @@ export function _renderMetasImpl() {
         mA: m.mA, mNR: m.mNR, mH: m.mH,
         ad: r.lastAD, nr: r.nr, sh: r.sh,
         projAD: projectSnapshot(r.adV),
+      adByDate: r.adByDate,
+        adByDate: r.adByDate,
         projNR: projA(r.nrV, daysElapsed, daysRemaining),
         projSH: projA(r.shV, daysElapsed, daysRemaining) });
     });
@@ -766,6 +805,7 @@ export function _renderMetasImpl() {
       mA: 0, mNR: 0, mH: 0,
       ad: r.lastAD, nr: r.nr, sh: r.sh,
       projAD: projectSnapshot(r.adV),
+      adByDate: r.adByDate,
       projNR: projA(r.nrV, daysElapsed, daysRemaining),
       projSH: projA(r.shV, daysElapsed, daysRemaining),
       noMeta: true
@@ -779,7 +819,19 @@ export function _renderMetasImpl() {
   const tAD = combos.reduce((s, c) => s + c.ad,  0);
   const tNR = combos.reduce((s, c) => s + c.nr,  0);
   const tSH = combos.reduce((s, c) => s + c.sh,  0);
-  const tPAD= combos.reduce((s, c) => s + c.projAD, 0);
+  // Proyección de AD del NIVEL (no la suma de las de cada partner): se juntan
+  // las series por fecha y se toma el máximo del total. Sumar los máximos
+  // individuales asume que todos los partners picaron la misma semana y
+  // sobre-estima siempre. Ver la nota en _metasAggKpi.
+  const _projADde = (arr) => {
+    const merged = {};
+    arr.forEach(c => {
+      const m = c.adByDate || {};
+      Object.keys(m).forEach(d => { merged[d] = (merged[d] || 0) + m[d]; });
+    });
+    return projectSnapshot(seriesByDate(merged));
+  };
+  const tPAD= _projADde(combos);
   const tPNR= combos.reduce((s, c) => s + c.projNR, 0);
   const tPSH= combos.reduce((s, c) => s + c.projSH, 0);
 
@@ -900,7 +952,7 @@ export function _renderMetasImpl() {
     const krAD = kc.reduce((s, c) => s + c.ad,  0);
     const krNR = kc.reduce((s, c) => s + c.nr,  0);
     const krSH = kc.reduce((s, c) => s + c.sh,  0);
-    const kpAD = kc.reduce((s, c) => s + c.projAD, 0);
+    const kpAD = _projADde(kc);
     const kpNR = kc.reduce((s, c) => s + c.projNR, 0);
     const kpSH = kc.reduce((s, c) => s + c.projSH, 0);
     const col  = KAM_COLORS[kam] || "#888";

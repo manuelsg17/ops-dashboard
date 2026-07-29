@@ -80,6 +80,27 @@ describe("una sola regla por métrica (Metas, Rendimiento y el deck deben coinci
     expect(projectFlow(total, 10, 20)).toBeCloseTo(900, 10);
   });
 
+  it("la proyección de un snapshot NO se puede sumar hacia arriba", () => {
+    // Caso real (Lizzo, jul 2026): Lima picó 2490 en una semana y Arequipa 229
+    // en OTRA. Metas sumaba los máximos por ciudad → 2769 × 1.4 = 3876.6, un
+    // número que nunca ocurrió. El máximo de la serie TOTAL es 2762 → 3866.8,
+    // que sí es una semana real. La regla dice "la semana con el número más
+    // alto de AD", así que la única lectura fiel es la segunda.
+    const lima     = [2490, 2450, 2400];
+    const arequipa = [222, 229, 219];
+    const trujillo = [50, 39, 40];
+    const total    = lima.map((_, i) => lima[i] + arequipa[i] + trujillo[i]);
+
+    const sumaDeMaximos = projectSnapshot(lima) + projectSnapshot(arequipa) + projectSnapshot(trujillo);
+    const maximoDelTotal = projectSnapshot(total);
+
+    expect(maximoDelTotal).toBeCloseTo(2762 * 1.4, 6);
+    expect(sumaDeMaximos).toBeCloseTo(2769 * 1.4, 6);
+    // Sumar hacia arriba SIEMPRE sobre-estima (o empata, si todo pica el mismo
+    // período). Nunca puede dar menos.
+    expect(sumaDeMaximos).toBeGreaterThan(maximoDelTotal);
+  });
+
   it("el FACT de un snapshot es el último período, no el máximo", () => {
     // Distinción deliberada: el FACT responde "¿cuántos hay hoy?" y la
     // PROYECCIÓN responde "¿a cuánto puede llegar?". Colapsarlas fue el origen
