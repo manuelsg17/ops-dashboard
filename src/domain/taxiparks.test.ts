@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toN, parseTaxiparksWide, _txNorm, TX_COL_BY_NORM } from "./taxiparks.js";
+import { toN, parseTaxiparksWide, parseTaxiparksLong, coberturaKpis, _txNorm, TX_COL_BY_NORM } from "./taxiparks.js";
 
 // Estos tests fijan el CONTRATO del reporte de taxiparks. Importan más que de
 // costumbre porque el mismo parser corre en dos lugares (navegador y Edge
@@ -110,5 +110,71 @@ describe("mapeo de measures", () => {
     expect(TX_COL_BY_NORM["active drivers"]).toBe("active_drivers");
     expect(TX_COL_BY_NORM["gmv"]).toBe("gmv");
     expect(TX_COL_BY_NORM["trips"]).toBe("trips");
+  });
+});
+
+describe("formato long (el que conviene para la ingesta automática)", () => {
+  const rec = (extra: Record<string, unknown> = {}) => ({
+    city: "Lima", clid: "400001264902", db_id: "sub1", partner: "Lizzo",
+    date: "2026-07-01",
+    "Active Drivers": 100, "GMV": "1.8M",
+    ...extra
+  });
+
+  it("mapea las measures por su nombre de DataLens, no por snake_case", () => {
+    // Clave del diseño: el llamador NO conoce el mapeo de las 50 measures —
+    // manda los nombres tal cual vienen del reporte y el mapeo queda de este
+    // lado, una sola vez.
+    const out = parseTaxiparksLong([rec()], { dateField: "fecha" });
+    expect(out).toHaveLength(1);
+    expect(out[0].active_drivers).toBe(100);
+    expect(out[0].gmv).toBe(1_800_000);
+    expect(out[0].fecha).toBe("2026-07-01");
+    expect(out[0].city).toBe("LIMA");
+  });
+
+  it("ignora claves desconocidas en vez de escribirlas", () => {
+    // Un llamador con el token no puede inyectar columnas arbitrarias.
+    const out = parseTaxiparksLong([rec({ "DROP TABLE": 1, columna_inventada: 9 })], {});
+    expect(out[0]).not.toHaveProperty("DROP TABLE");
+    expect(out[0]).not.toHaveProperty("columna_inventada");
+  });
+
+  it("acepta ISO, DD.MM.YYYY y YYYY-MM", () => {
+    expect(parseTaxiparksLong([rec({ date: "01.07.2026" })], {})[0].fecha).toBe("2026-07-01");
+    expect(parseTaxiparksLong([rec({ date: "2026-07" })], { dateField: "mes" })[0].mes).toBe("2026-07");
+  });
+
+  it("avisa por los registros sin fecha reconocible en vez de descartarlos callado", () => {
+    const avisos: string[] = [];
+    parseTaxiparksLong([rec(), rec({ date: "ayer" })], { onWarn: l => avisos.push(l) });
+    expect(avisos.some(a => /sin fecha/.test(a))).toBe(true);
+  });
+
+  it("da el MISMO resultado que el formato wide para los mismos datos", () => {
+    // Si las dos rutas divergieran, el mismo reporte entraría distinto según el
+    // formato elegido — exactamente lo que este módulo existe para evitar.
+    const wide = parseTaxiparksWide([{
+      City: "Lima", CLID: "400001264902", db_id: "sub1", Partner: "Lizzo",
+      "01.07.2026 - Active Drivers": 100, "01.07.2026 - GMV": "1.8M"
+    }], { dateField: "fecha" });
+    const long = parseTaxiparksLong([rec()], { dateField: "fecha" });
+    expect(long[0]).toEqual(wide[0]);
+  });
+});
+
+describe("cobertura de KPIs", () => {
+  it("reporta qué measures faltaron en el lote", () => {
+    // Es lo accionable: si una measure deja de venir, entra como 0 y el gráfico
+    // se ve plano sin que nadie se entere.
+    const flat = parseTaxiparksLong([{
+      city: "Lima", clid: "1", db_id: "d", partner: "P", date: "2026-07-01",
+      "Active Drivers": 10
+    }], {});
+    const cob = coberturaKpis(flat);
+    expect(cob.ok).toBe(1);
+    expect(cob.total).toBeGreaterThan(40);
+    expect(cob.faltantes).toContain("gmv");
+    expect(cob.faltantes).not.toContain("active_drivers");
   });
 });

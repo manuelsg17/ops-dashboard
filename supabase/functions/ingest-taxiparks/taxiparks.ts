@@ -298,3 +298,88 @@ export function parseTaxiparksWide(rows: any[], opts: {
   if (!flat.length) throw new Error("No se encontraron datos en el reporte");
   return flat;
 }
+
+// ── COBERTURA DE KPIs ───────────────────────────────────────────────────────
+// Todas las columnas que el reporte PUEDE traer. Sirve para responder "¿vinieron
+// los 48 KPIs?" comparando contra lo que realmente entro.
+export const TX_ALL_COLS: string[] = [...new Set(Object.values(TX_COL_BY_NORM))];
+
+// Que columnas trajeron AL MENOS UN valor distinto de 0/null en el lote.
+// Devuelve tambien las que faltaron, que es lo accionable: si una measure deja
+// de venir (cambio de nombre en DataLens, se saco del chart), entra como 0 y
+// nadie se entera hasta que un grafico se ve plano.
+export function coberturaKpis(flat: Record<string, any>[]) {
+  const vistos = new Set<string>();
+  for (const fila of flat) {
+    for (const col of TX_ALL_COLS) {
+      const v = fila[col];
+      if (v !== undefined && v !== null && v !== 0) vistos.add(col);
+    }
+  }
+  const faltantes = TX_ALL_COLS.filter(c => !vistos.has(c));
+  return { total: TX_ALL_COLS.length, ok: vistos.size, faltantes, vistos: [...vistos] };
+}
+
+// ── FORMATO LONG ────────────────────────────────────────────────────────────
+// Una fila por (clid, ciudad, sub-flota, PERIODO) con las measures como claves,
+// usando los MISMOS nombres que el reporte de DataLens ("Active Drivers", …).
+//
+// POR QUE LOS NOMBRES SE MANTIENEN COMO EN DATALENS: si el llamador mandara ya
+// `active_drivers`, tendria que conocer el mapeo de las 50 measures — o sea una
+// SEGUNDA copia del mapeo, del lado de kam-managment, que es justo lo que este
+// modulo existe para evitar. El pivot lo hace el llamador; el mapeo, nosotros.
+//
+//   { "city":"Lima", "clid":"400…", "db_id":"077…", "partner":"Lizzo",
+//     "date":"2026-07-01", "Active Drivers":2490, "GMV":"1.8M", … }
+export function parseTaxiparksLong(records: any[], opts: {
+  dateField?: string;
+  kamOf?: (clid: string) => string;
+  onWarn?: (label: string) => void;
+} = {}): Record<string, any>[] {
+  if (!records || !records.length) throw new Error("Reporte vacio");
+  const dateField = opts.dateField || "fecha";
+  const kamOf     = opts.kamOf || (() => "");
+  const onWarn    = opts.onWarn;
+
+  const agg: Record<string, any> = {};
+  let sinFecha = 0;
+  records.forEach(rec => {
+    const fecha = _fechaISO(rec.date ?? rec.fecha ?? rec.mes ?? rec.periodo ?? rec.Date);
+    if (!fecha) { sinFecha++; return; }
+    const clid  = _clidStr(rec.clid ?? rec.CLID ?? "");
+    const city  = normCityValue(rec.city ?? rec.City ?? rec.Ciudad);
+    const db_id = String(rec.db_id ?? rec.dbId ?? rec["db id"] ?? "").trim();
+    const partner = String(rec.partner ?? rec.Partner ?? "").trim() || clid || "Unknown";
+    const fleetroom = String(rec.fleetroom ?? rec.Fleetroom ?? "").trim() || (db_id ? partner : "");
+
+    // Las claves que no son measures conocidas se IGNORAN (no se escriben a la
+    // base): el llamador no puede inyectar columnas arbitrarias.
+    const mc: Record<string, string> = {};
+    Object.keys(rec).forEach(k => { mc[k.trim().toLowerCase()] = k; });
+    const m = txExtract(rec, mc, onWarn);
+    if (!Object.values(m).some(v => v)) return;
+
+    const k = `${clid}|||${city}|||${fecha}|||${db_id}`;
+    if (!agg[k]) {
+      agg[k] = { clid, partner, kam: kamOf(clid) || "", city, db_id, fleetroom };
+      agg[k][dateField] = fecha;
+    }
+    txConsolidate(agg[k], m);
+  });
+
+  if (sinFecha && onWarn) onWarn(`${sinFecha} registro(s) sin fecha reconocible`);
+  const flat = Object.values(agg);
+  if (!flat.length) throw new Error("No se encontraron datos en el reporte");
+  return flat;
+}
+
+// Acepta ISO (2026-07-01), DD.MM.YYYY y YYYY-MM. Devuelve "" si no reconoce.
+export function _fechaISO(v: any): string {
+  const s = String(v ?? "").trim();
+  if (!s) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  if (/^\d{4}-\d{2}$/.test(s))        return s;         // mensual
+  const m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  return "";
+}

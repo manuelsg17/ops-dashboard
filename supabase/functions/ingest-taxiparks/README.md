@@ -10,12 +10,59 @@ Authorization: Bearer <INGEST_TOKEN>
 Content-Type: application/json
 ```
 
-## Cuerpo
+## Cuerpo — usá `records` (formato long)
+
+**Recomendado.** Un registro por (clid, ciudad, sub-flota, período). Las measures
+van con **su nombre de DataLens**, no en snake_case: el mapeo de las 50 measures
+queda de nuestro lado, así que kam-managment no tiene que conocerlo ni mantenerlo.
 
 ```jsonc
 {
-  "scale": "semanal",        // "semanal" | "mensual" | "diario"
-  "rows": [                  // filas del reporte en formato WIDE, tal cual salen de DataLens
+  "scale": "semanal",              // "semanal" | "mensual" | "diario"
+  "source": "dashboard-ops-cron",  // opcional, queda en la bitácora
+  "dry_run": false,                // true = valida y reporta, NO escribe
+  "records": [
+    {
+      "city": "Lima",
+      "clid": "400001264902",
+      "db_id": "0777bab3fb404f8894e566c7a99c38a6",
+      "partner": "Lizzo",
+      "date": "2026-07-01",        // ISO, DD.MM.YYYY o YYYY-MM (mensual)
+      "Active Drivers": 2490,
+      "GMV": "1.8M",
+      "Trips": 18432
+      // … el resto de las measures, con su nombre del reporte
+    }
+  ]
+}
+```
+
+### Por qué long y no wide
+
+Medido con el reporte real (312 filas × 4 semanas × 50 measures):
+
+| | crudo | gzip |
+|---|---|---|
+| wide | 2.587 kB | 22 kB |
+| **long** | **1.914 kB** | **14 kB** |
+
+Pero el argumento fuerte no es el tamaño: **el formato wide depende del string
+del header** (`"DD.MM.YYYY - Measure"`). Si DataLens cambia el separador o el
+formato de fecha, ninguna columna matchea y entran **cero filas** — un 422, no un
+error evidente. En long la fecha es un campo propio.
+
+Hay un test que verifica que ambos formatos producen **exactamente el mismo
+resultado**, así que migrar de uno a otro no cambia ningún número.
+
+## Cuerpo alternativo — `rows` (formato wide)
+
+Se acepta porque es lo que sale nativo de DataLens y lo que usa la subida manual
+del Excel.
+
+```jsonc
+{
+  "scale": "semanal",
+  "rows": [                  // filas del reporte en formato WIDE
     {
       "City": "Lima",
       "CLID": "400001264902",

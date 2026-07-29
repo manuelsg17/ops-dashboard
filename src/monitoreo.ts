@@ -33,6 +33,7 @@ export const MON_STATE = {
   users: null,        // null = todavía no se pidió
   audit: null,
   uso: null,
+  ingestas: null,
   loading: false,
   error: "",
   auditTable: "all",
@@ -86,10 +87,11 @@ export async function monLoad() {
     // Las dos fuentes son independientes: si el audit_log falla (o la migración
     // no está aplicada) igual queremos mostrar los accesos, y viceversa. Por eso
     // allSettled y no all.
-    const [uRes, aRes, sRes] = await Promise.allSettled([
+    const [uRes, aRes, sRes, iRes] = await Promise.allSettled([
       sb.functions.invoke("admin-users", { body: { action: "list" } }),
       _loadAudit(),
-      _loadUso()
+      _loadUso(),
+      _loadIngestas()
     ]);
     if (uRes.status === "fulfilled" && !uRes.value.error && !uRes.value.data?.error) {
       MON_STATE.users = uRes.value.data?.users || [];
@@ -107,6 +109,7 @@ export async function monLoad() {
     }
     MON_STATE.audit = aRes.status === "fulfilled" ? aRes.value : [];
     MON_STATE.uso   = sRes.status === "fulfilled" ? sRes.value : [];
+    MON_STATE.ingestas = iRes.status === "fulfilled" ? iRes.value : [];
   } catch (e) {
     MON_STATE.error = (e && e.message) || String(e);
   } finally {
@@ -124,6 +127,16 @@ async function _loadUso() {
     .gte("at", desde)
     .order("at", { ascending: false })
     .limit(1000);
+  if (error) throw error;
+  return data || [];
+}
+
+// Ultimas ingestas automaticas de taxiparks (Edge Function ingest-taxiparks).
+async function _loadIngestas() {
+  const { data, error } = await sb.from("ingest_log")
+    .select("at,scale,tabla,status,formato,origen,filas_recibidas,filas_escritas,periodos,kpis_ok,kpis_faltantes,avisos,error,duracion_ms")
+    .order("at", { ascending: false })
+    .limit(30);
   if (error) throw error;
   return data || [];
 }
@@ -170,6 +183,7 @@ export function renderMonitoreo() {
 
   html += _renderAccesos();
   html += _renderAuditoria();
+  html += _renderIngestas();
   html += _renderUso();
   box.innerHTML = html;
 }
@@ -254,6 +268,87 @@ function _renderAuditoria() {
 // Panel de USO: qué se abre y qué se descarga. Separado de "Accesos" (que sale
 // de auth.users) y de "Registro de cambios" (que sale de triggers) porque son
 // tres fuentes con niveles de confianza distintos — ver la cabecera del archivo.
+
+// ── INGESTA AUTOMATICA DE TAXIPARKS ─────────────────────────────────────────
+// Responde de un vistazo: se actualizo la data? que escala? entraron los 48
+// KPIs? hubo errores? Sin esto habria que mirar las filas de rendimiento y
+// adivinar si la corrida del martes funciono.
+function _renderIngestas() {
+  const items = MON_STATE.ingestas;
+  if (items == null) return "";
+
+  if (!items.length) {
+    return secH("🔄", "#0891b2", "Ingesta automática de taxiparks", "Carga de la tarea \"Dashboard OPS\"", "") +
+      `<div class="section"><div class="agy-style-224">
+        Todavía no hubo ninguna ingesta automática. Mientras tanto la carga sigue
+        siendo manual (Actualizar información → Rendimiento).
+        Ver <code>supabase/functions/ingest-taxiparks/README.md</code> para conectarla.
+      </div></div>`;
+  }
+
+  // Estado por escala: cuando entro por ultima vez cada una. Es la pregunta
+  // operativa real — "¿la semanal esta al dia?"— y no se responde mirando una
+  // lista cronologica mezclada.
+  const porEscala = ["semanal", "mensual", "diario"].map(esc => {
+    const ult = items.find(i => i.scale === esc && i.status === "ok");
+    const h   = _hace(ult && ult.at);
+    return { esc, ult, h };
+  });
+
+  const tarjeta = ({ esc, ult, h }) => {
+    const col = !ult ? "#9ca3af" : _staleColor(h.dias);
+    const nombre = esc.charAt(0).toUpperCase() + esc.slice(1);
+    return `<div class="mcard" style="border-top:3px solid ${col}">
+      <div class="mcard-label">${nombre}</div>
+      <div class="mcard-val" style="color:${col};font-size:1.05rem">${escapeHTML(h.txt)}</div>
+      <div class="agy-style-90" style="font-size:.68rem">
+        ${ult ? `${fmt(ult.filas_escritas || 0)} filas · ${(ult.periodos || []).length} período(s)` : "sin ingestas"}
+      </div>
+    </div>`;
+  };
+
+  const filas = items.map(i => {
+    const col = i.status === "ok" ? "#10b981" : i.status === "rechazado" ? "#f59e0b" : "#ef4444";
+    const falt = (i.kpis_faltantes || []).length;
+    const kpiTxt = i.kpis_ok == null ? "—"
+      : `${i.kpis_ok}${falt ? ` <span style="color:#f59e0b" title="Faltaron: ${escapeHTML((i.kpis_faltantes || []).slice(0, 12).join(", "))}">(−${falt})</span>` : ""}`;
+    const per = (i.periodos || []);
+    const perTxt = !per.length ? "—"
+      : per.length <= 2 ? per.join(", ")
+      : `${per[0]} … ${per[per.length - 1]} (${per.length})`;
+    return `<tr>
+      <td class="agy-style-90">${_fmtWhen(i.at)}</td>
+      <td><span style="font-size:.66rem;font-weight:700;color:#fff;background:${col};padding:2px 8px;border-radius:10px">${escapeHTML(i.status)}</span></td>
+      <td>${escapeHTML(i.scale || "")}<span class="agy-style-90" style="font-size:.64rem;margin-left:4px">${escapeHTML(i.formato || "")}</span></td>
+      <td class="tn">${i.filas_escritas == null ? "—" : fmt(i.filas_escritas)}</td>
+      <td class="tn">${kpiTxt}</td>
+      <td class="agy-style-90" style="font-size:.7rem">${escapeHTML(perTxt)}</td>
+      <td class="agy-style-90" style="font-size:.7rem;color:${i.error ? "#b91c1c" : "#999"}">${escapeHTML(i.error || "")}</td>
+    </tr>`;
+  }).join("");
+
+  // Un KPI faltante NO es un error: entra como 0 y el grafico se ve plano sin
+  // que nadie se entere. Por eso se avisa arriba y no solo en la fila.
+  const ultOk = items.find(i => i.status === "ok");
+  const alerta = ultOk && (ultOk.kpis_faltantes || []).length
+    ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 12px;font-size:.76rem;color:#92400e;margin-bottom:12px">
+         ⚠️ En la última ingesta faltaron <strong>${(ultOk.kpis_faltantes || []).length} de ${(ultOk.kpis_faltantes || []).length + (ultOk.kpis_ok || 0)}</strong> KPIs.
+         Entran como 0 y las gráficas se ven planas sin avisar. Suele ser una measure renombrada en DataLens.
+         <div style="margin-top:4px;font-family:monospace;font-size:.7rem">${escapeHTML((ultOk.kpis_faltantes || []).slice(0, 15).join(", "))}</div>
+       </div>` : "";
+
+  return secH("🔄", "#0891b2", "Ingesta automática de taxiparks",
+      "Última carga por escala · KPIs recibidos · errores", "") +
+    `<div class="section">
+      ${alerta}
+      <div class="metric-row">${porEscala.map(tarjeta).join("")}</div>
+      <div class="tbl-wrap" style="margin-top:14px"><table class="dtbl">
+        <thead><tr><th>Cuándo</th><th>Estado</th><th>Escala</th><th class="tn">Filas</th>
+          <th class="tn" title="KPIs con datos (y cuántos faltaron)">KPIs</th><th>Períodos</th><th>Detalle</th></tr></thead>
+        <tbody>${filas}</tbody></table></div>
+    </div>`;
+}
+
 function _renderUso() {
   const evs = MON_STATE.uso;
   if (evs == null) return "";
