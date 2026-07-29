@@ -57,6 +57,39 @@ describe("proyección de flujos", () => {
   });
 });
 
+describe("una sola regla por métrica (Metas, Rendimiento y el deck deben coincidir)", () => {
+  // Este bloque existe por un bug real: Metas proyectaba Active Drivers como
+  // máx × 1.4 y Presentación 2.0 lo proyectaba plano (= último período), con un
+  // comentario en el código argumentando explícitamente contra el ×1.4. Para el
+  // MISMO partner y el MISMO mes, las dos pantallas daban números distintos — y
+  // el deck es lo que ve el partner.
+  it("la proyección de AD no depende de quién la llame", () => {
+    const serie = [100, 150, 120];
+    const desdeMetas = projectSnapshot(serie);
+    const desdeDeck  = projectSnapshot(serie);
+    expect(desdeMetas).toBe(desdeDeck);
+    expect(desdeMetas).toBeCloseTo(210, 10);
+  });
+
+  it("proyectar un flujo desde la serie o desde el total da lo mismo", () => {
+    // metas.ts pasa la serie (proyA); presentacion2.ts pasa el total ya sumado.
+    // Si estas dos se separaran, N+R diferiría entre Metas y el deck.
+    const serie = [100, 120, 80];
+    const total = serie.reduce((a, b) => a + b, 0);
+    expect(projectFlow(total, 10, 20)).toBeCloseTo(projectFlow(300, 10, 20), 10);
+    expect(projectFlow(total, 10, 20)).toBeCloseTo(900, 10);
+  });
+
+  it("el FACT de un snapshot es el último período, no el máximo", () => {
+    // Distinción deliberada: el FACT responde "¿cuántos hay hoy?" y la
+    // PROYECCIÓN responde "¿a cuánto puede llegar?". Colapsarlas fue el origen
+    // de la divergencia.
+    const serie = [100, 150, 120];
+    expect(snapshotValue(serie)).toBe(120);
+    expect(projectSnapshot(serie)).toBeCloseTo(210, 10);
+  });
+});
+
 describe("tasas", () => {
   it("la aceptación se pondera por viajes, no se promedia a secas", () => {
     // Partner A: 90% sobre 1000 viajes. Partner B: 50% sobre 10 viajes.

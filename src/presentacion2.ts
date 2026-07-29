@@ -24,6 +24,11 @@ window.Chart = Chart;
 // forecast.js (funciones fc*) también vive acá por el mismo motivo: SOLO lo usa
 // el slide de Proyección de esta vista — antes vivía eager en vendor.js
 // (~250 líneas pagadas por toda sesión, incluido el login) sin necesidad.
+// Núcleo de cálculo compartido con Metas y Rendimiento. El deck es lo que ve el
+// PARTNER, así que es justo donde menos puede haber una fórmula propia: si Metas
+// dice "proyectamos 210" y el deck dice 120 para el mismo partner y el mismo mes,
+// el problema no es cosmético, es de credibilidad delante del cliente.
+import { projectSnapshot, projectFlow, snapshotValue } from "./domain/metrics.js";
 import * as forecast from "./forecast.js";
 Object.assign(window, forecast);
 
@@ -963,16 +968,28 @@ export function p2ActualsMTD(partner, scopeCity, monthDates) {
   const ad     = adTot.length ? Math.max(...adTot) : 0;        // máx de (Σciudades por fecha)
   const nr     = nrV.reduce((s, v) => s + v, 0);
   const sh     = shV.reduce((s, v) => s + v, 0);
-  const lastAD = adTot.length ? adTot[adTot.length - 1] : 0;   // Σciudades en la última fecha (base de proyección)
-  return { ad, nr, sh, nrV, shV, lastAD };
+  const lastAD = adTot.length ? adTot[adTot.length - 1] : 0;   // Σciudades en la última fecha (el FACT que se muestra)
+  // adV (serie por período) va en el return porque la proyección de AD necesita
+  // el MÁXIMO del rango, no solo el último valor. Ver p2ProjMTD.
+  return { ad, nr, sh, nrV, shV, adV: adTot, lastAD };
 }
 export function p2ProjMTD(act, lastDate) {
   const { daysElapsed, daysRemaining } = calcProjectionDays(lastDate);
-  // AD es SNAPSHOT (nivel), no un flujo acumulado: la proyección honesta de cierre de mes
-  // es el nivel actual (plano), NO lastAD×1.4 (un +40% fijo que ignora los días restantes e
-  // inflaba la marca en el deck partner-facing; además contradecía a Brandeados que ya iba
-  // plano). N+R y SH (flujos) sí se extrapolan con projA por días restantes. Ver auditoría.
-  return { ad: act.lastAD, nr: projA(act.nrV, daysElapsed, daysRemaining), sh: projA(act.shV, daysElapsed, daysRemaining) };
+  // AD es SNAPSHOT (nivel), no un flujo acumulado, así que NO se extrapola por
+  // días restantes como N+R y las horas. Su proyección es el período de MAYOR AD
+  // del rango × 1.4 (AD_PROJECTION_FACTOR en domain/metrics.ts) — regla de
+  // negocio definida por Manuel, la misma que usa la pestaña Metas.
+  //
+  // OJO: acá antes la proyección era plana (= último período) con un comentario
+  // que argumentaba explícitamente CONTRA el ×1.4. Eso convertía al deck y a
+  // Metas en dos respuestas distintas a la misma pregunta para el mismo partner
+  // y el mismo mes. La regla vive ahora en UN solo lugar; si hay que discutirla,
+  // se discute allá, no se bifurca acá.
+  return {
+    ad: projectSnapshot(act.adV || []),
+    nr: projectFlow(act.nr, daysElapsed, daysRemaining),
+    sh: projectFlow(act.sh, daysElapsed, daysRemaining)
+  };
 }
 // Mismos rangos que pColor() (data.js), usado en Metas/Ops/Insights: >100 morado,
 // >=80 verde, >=50 amarillo, <50 rojo. Antes esta función tenía su propio corte en
@@ -1188,7 +1205,10 @@ export function buildSlide2AvanceCombinado(partner, idx) {
 
   const defs = [
     { label: es ? "Conductores Activos" : "Active Drivers",
-      real: taxiAct.lastAD + tkAct.lastAD, proj: taxiAct.lastAD + tkAct.lastAD,
+      // FACT = snapshot del último período de cada línea, sumados. PROYECCIÓN =
+      // la de cada línea (máx × 1.4) sumada — antes acá la proyección era igual
+      // al fact, así que la marca de proyección nunca se movía en esta slide.
+      real: taxiAct.lastAD + tkAct.lastAD, proj: taxiProj.ad + tkProj.ad,
       goal: (meta.mA || 0) + (meta.mtkAD || 0), fmtN: fmt },
     { label: es ? "Nuevos + Reactivados" : "New + React",
       real: taxiAct.nr + tkAct.nr, proj: taxiProj.nr + tkProj.nr,

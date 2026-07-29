@@ -14,6 +14,8 @@
 // que muchas cosas estén listas, y no vale la pena que dependa del espejado a
 // window de vendor.js.
 import { snapshotLoad, snapshotSave, snapshotClear } from "./data/cache.js";
+// Formulas de proyeccion: una sola definicion para todo el dashboard.
+import { projectFlow } from "./domain/metrics.js";
 
 // Aplica el mapeo de flotas (STATE.flotasMap) a un array de rows con `clid`.
 //
@@ -173,20 +175,20 @@ export function calcProjectionDays(lastDate) {
 // Proyeccion lineal por avance del mes: total acumulado escalado al mes completo
 // (total * daysInMonth / daysElapsed). Devuelve `total` tal cual en mensual o si ya
 // no quedan dias. Ver detalle en el cuerpo.
+// Proyeccion de un FLUJO (N+R, horas) al cierre del mes, a partir de su serie
+// por periodo. La formula vive en domain/metrics.projectFlow — aca solo se
+// prepara la entrada (sumar la serie) y se aplica la unica regla propia de la
+// app: en escala MENSUAL el periodo ya esta cerrado, no se proyecta.
+//
+// Este wrapper existe para que las ~10 llamadas historicas con firma de ARRAY
+// sigan andando sin tocarlas, pero SIN una segunda implementacion de la
+// formula: antes esta funcion y presentacion2.js calculaban lo mismo por
+// separado y podian divergir.
 export function projA(vals, daysElapsed, daysRemaining) {
-  const v = vals.filter(x => x > 0);
-  if (!v.length) return 0;
-  const total = v.reduce((s, x) => s + x, 0);
-  if (STATE.curMode === "mensual" || daysRemaining === 0) return total;
-  // Proyeccion lineal:
-  //   proyeccion = (total acumulado * daysInMonth) / daysElapsed
-  // Interpretacion: "si en daysElapsed dias del mes acumule `total`,
-  // al ritmo actual acumulare `total * daysInMonth/daysElapsed` al cierre".
-  // Mas robusto que promediar las ultimas 3 semanas porque depende del avance
-  // real del mes, no del numero de filas en el rango.
-  if (daysElapsed <= 0) return total;
-  const daysInMonth = daysElapsed + daysRemaining;
-  return (total * daysInMonth) / daysElapsed;
+  const total = (vals || []).reduce((s, x) => s + (x > 0 ? x : 0), 0);
+  if (!total) return 0;
+  if (STATE.curMode === "mensual") return total;
+  return projectFlow(total, daysElapsed, daysRemaining);
 }
 
 export function sumR(rows, fn) { return rows.reduce((s, r) => s + fn(r), 0); }
