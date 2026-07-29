@@ -110,7 +110,7 @@ export function _metasLineDataset(line) {
 // que uno con 300).
 export function _metasFleetActuals(from, to, selSet, cityFilter) {
   const by = new Map();
-  const _sidebar = new Set(STATE.allPartners);
+  const _sidebar = new Set(STATE.sidebarPartners || STATE.allPartners);
   _metasLineDataset("fleet").forEach(r => {
     if (r.date < from || r.date > to) return;
     if (cityFilter !== "all" && r.city !== cityFilter) return;
@@ -142,7 +142,7 @@ export function _metasFleetActuals(from, to, selSet, cityFilter) {
 // de flujo el ritmo lineal). Ver src/domain/metrics.ts.
 export function _metasTkActuals(from, to, selSet, cityFilter) {
   const by = new Map();
-  const _sidebar = new Set(STATE.allPartners);
+  const _sidebar = new Set(STATE.sidebarPartners || STATE.allPartners);
   _metasLineDataset("tk").forEach(r => {
     if (r.date < from || r.date > to) return;
     if (cityFilter !== "all" && r.city !== cityFilter) return;
@@ -167,7 +167,7 @@ export function _metasTkActuals(from, to, selSet, cityFilter) {
 // fecha se suman antes de tomar el snapshot.
 export function _metasCombActuals(from, to, selSet, cityFilter) {
   const by = new Map();
-  const _sidebar = new Set(STATE.allPartners);
+  const _sidebar = new Set(STATE.sidebarPartners || STATE.allPartners);
   _metasLineDataset("comb").forEach(r => {
     if (r.date < from || r.date > to) return;
     if (cityFilter !== "all" && r.city !== cityFilter) return;
@@ -478,7 +478,7 @@ function _metasLineRows(mesName, hasLineMeta, selSet, cityFilter, kamFilter) {
     m.mes === mesName &&
     hasLineMeta(m) &&
     (kamFilter === "all" || m.kam === kamFilter) &&
-    (!selSet.size || _lineSelHas(selSet, new Set(STATE.allPartners), m.partner)) &&
+    (!selSet.size || _lineSelHas(selSet, new Set(STATE.sidebarPartners || STATE.allPartners), m.partner)) &&
     (cityFilter === "all" || m.city === cityFilter)
   ).sort((a, b) => a.partner.localeCompare(b.partner));
 }

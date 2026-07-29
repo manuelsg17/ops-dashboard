@@ -33,6 +33,15 @@ export let _sidebarResizeTimer = null;
 export let _debouncedApply       = null;
 export function _debouncedApplyCancel() { if (_debouncedApply && _debouncedApply.cancel) _debouncedApply.cancel(); }
 
+// Universo de partners del sidebar: Taxi + los que SOLO operan TukTuk (ver
+// updateIndexes en data.js). Fallback a allPartners por si se llama antes de
+// que updateIndexes haya corrido.
+function _sidebarList() {
+  return (STATE.sidebarPartners && STATE.sidebarPartners.length)
+    ? STATE.sidebarPartners
+    : (STATE.allPartners || []);
+}
+
 // ── APP INIT ──────────────────────────────────────────────────────────────────
 export function initApp() {
   // Arrancar la descarga de ApexCharts YA, en paralelo con el fetch de datos:
@@ -577,11 +586,11 @@ export function popPartners(selected) {
   const list   = document.getElementById("pList");
   const selSet = new Set(selected);
 
-  if (STATE.allPartners.length <= VIRT_THRESHOLD) {
+  if (_sidebarList().length <= VIRT_THRESHOLD) {
     // Render completo para listas pequeñas
     list.style.height = "";
     list.style.overflowY = "";
-    list.innerHTML = STATE.allPartners.map(p => _pItem(p, selSet)).join("");
+    list.innerHTML = _sidebarList().map(p => _pItem(p, selSet)).join("");
     return;
   }
 
@@ -592,10 +601,10 @@ export function popPartners(selected) {
   const renderWindow = () => {
     const scrollTop  = list.scrollTop;
     const start      = Math.max(0, Math.floor(scrollTop / VIRT_ITEM_H) - 2);
-    const end        = Math.min(STATE.allPartners.length, start + VIRT_VISIBLE + 4);
+    const end        = Math.min(_sidebarList().length, start + VIRT_VISIBLE + 4);
     const topPad     = start * VIRT_ITEM_H;
-    const botPad     = (STATE.allPartners.length - end) * VIRT_ITEM_H;
-    const items      = STATE.allPartners.slice(start, end)
+    const botPad     = (_sidebarList().length - end) * VIRT_ITEM_H;
+    const items      = _sidebarList().slice(start, end)
                          .map(p => _pItem(p, selSet)).join("");
     list.innerHTML =
       `<div style="height:${topPad}px"></div>` +
@@ -629,15 +638,15 @@ export function popSidebarUI() {
   popDates();
   rerenderSidebarPresets();
   popKAM();
-  popPartners(STATE.allPartners);
+  popPartners(_sidebarList());
   restoreFilters();
 }
 
 export function filterPList() {
   const q = document.getElementById("partnerSearch").value.toLowerCase();
-  if (STATE.allPartners.length > VIRT_THRESHOLD) {
+  if (_sidebarList().length > VIRT_THRESHOLD) {
     // En modo virtual, reconstruir con la lista filtrada
-    const filtered = STATE.allPartners.filter(p => p.toLowerCase().includes(q));
+    const filtered = _sidebarList().filter(p => p.toLowerCase().includes(q));
     const list     = document.getElementById("pList");
     const selSet   = new Set(getSel());
     list.style.height    = Math.min(filtered.length, VIRT_VISIBLE) * VIRT_ITEM_H + "px";

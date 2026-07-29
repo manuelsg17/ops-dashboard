@@ -197,7 +197,7 @@ function _portalMetas(line, rows) {
     const mShCar = wMeta("mSHcar", owned), mAcc = wMeta("mAcc", trips), mUtil = wMeta("mUtil", owned);
     if (mShCar == null && mAcc == null && mUtil == null) return "";
     return secH("🎯", "#0891b2", `Tus metas de flota — ${escapeHTML(mes)}`,
-        "Avance del mes contra el objetivo acordado con tu KAM", "") +
+        "Acumulado del RANGO seleccionado vs el objetivo mensual acordado con tu KAM · para un % representativo, elegí el mes completo", "") +
       `<div class="section">
         ${_portalMetaRow("SH / Auto (interno)", shCar, mShCar, null, v => fmt(v))}
         ${_portalMetaRow("Aceptación", accept, mAcc, null, v => fmt(v) + "%")}
@@ -292,17 +292,36 @@ export function renderPartnerPortal() {
   // Fleet tiene sus propios KPIs (tasas de flota); el resto de las líneas
   // comparte los cuatro de siempre.
   if (line === "fleet") {
-    const owned  = _sum(rows, r => r.ownedFleetActiveCars || 0);
-    const intSh  = _sum(rows, r => r.internalFleetSh || 0);
-    const trips  = _sum(rows, r => r.trips || 0);
-    const accW   = rows.reduce((s, r) => s + (r.acceptanceRate || 0) * (r.trips || 0), 0);
-    const ownedNow = snapshotValue(_portalSeries(rows, r => r.ownedFleetActiveCars || 0).values);
-    const brandNow = snapshotValue(_portalSeries(rows, r => r.brandedActiveCars || 0).values);
+    // Los KPIs de flota se muestran como SNAPSHOT del último período, igual que
+    // en la pestaña Rendimiento del equipo — si acá se mostrara el ponderado del
+    // rango completo, el partner vería un número distinto al que su KAM tiene en
+    // pantalla para el mismo filtro, que es exactamente el tipo de discrepancia
+    // que hay que evitar en una vista de cara al cliente.
+    // (El bloque de metas de más abajo SÍ usa el acumulado del rango, porque ahí
+    //  se compara contra un objetivo mensual — y está etiquetado como tal.)
+    const dts  = [...new Set(rows.map(r => r.date))].sort();
+    const dLast = dts[dts.length - 1], dPrev = dts[dts.length - 2];
+    const rowsLast = rows.filter(r => r.date === dLast);
+    const rowsPrev = dPrev ? rows.filter(r => r.date === dPrev) : [];
+    // OJO: acá estaba el bug de los "+0.0%" — se pasaba el MISMO valor como
+    // actual y como anterior, así que bdgMode() siempre comparaba un número
+    // contra sí mismo. Ahora el período anterior se calcula de verdad.
+    const fl = rs => {
+      const owned = _sum(rs, r => r.ownedFleetActiveCars || 0);
+      const trips = _sum(rs, r => r.trips || 0);
+      return {
+        owned,
+        branded: _sum(rs, r => r.brandedActiveCars || 0),
+        shCar:   ratio(_sum(rs, r => r.internalFleetSh || 0), owned),
+        accept:  ratio(rs.reduce((s, r) => s + (r.acceptanceRate || 0) * (r.trips || 0), 0), trips) * 100
+      };
+    };
+    const now = fl(rowsLast), prev = fl(rowsPrev);
     html += `<div class="section"><div class="metric-row">
-      ${_kpiCard("🚗 Autos propios activos", escalaN, ownedNow, ownedNow, ownedNow, "#0891b2")}
-      ${_kpiCard("🎨 Brandeados", escalaN, brandNow, brandNow, brandNow, "#7e22ce")}
-      ${_kpiCard("⏱️ SH / Auto (interno)", "ponderado del rango", ratio(intSh, owned), ratio(intSh, owned), ratio(intSh, owned), "#8b5cf6", v => fmt(v))}
-      ${_kpiCard("✅ Aceptación", "ponderada por viajes", ratio(accW, trips) * 100, ratio(accW, trips) * 100, ratio(accW, trips) * 100, "#10b981", v => fmt(v) + "%")}
+      ${_kpiCard("🚗 Autos propios activos", escalaN, now.owned, now.owned, prev.owned, "#0891b2")}
+      ${_kpiCard("🎨 Brandeados", escalaN, now.branded, now.branded, prev.branded, "#7e22ce")}
+      ${_kpiCard("⏱️ SH / Auto (interno)", escalaN, now.shCar, now.shCar, prev.shCar, "#8b5cf6", v => fmt(v))}
+      ${_kpiCard("✅ Aceptación", `${escalaN} · ponderada por viajes`, now.accept, now.accept, prev.accept, "#10b981", v => fmt(v) + "%")}
     </div></div>`;
   } else {
     html += `<div class="section"><div class="metric-row">

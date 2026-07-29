@@ -26,11 +26,26 @@ export function _rendLineDataset() {
   if (line === "comb")  return STATE.rawData.concat(tk);
   return tk;
 }
-// Partners fuera de la lista del sidebar (solo-TukTuk, ej. PIAGGIO): el usuario no
-// puede (des)marcarlos porque la lista se construye del dataset Taxi → en las líneas
-// TukTuk/Combinado se tratan como siempre-incluidos (excluirlos mudo sub-contaba).
+// ¿Este partner está incluido en la selección del sidebar?
+//
+// HISTORIA (importante, tuvo dos versiones incorrectas): los partners solo-TukTuk
+// (ej. PIAGGIO) no llegaban al sidebar porque la lista salía del dataset Taxi.
+//   v1: `selSet.has(partner)` a secas → nunca aparecían: SUB-conteo.
+//   v2: `selSet.has(partner) || !sidebarSet.has(partner)` → aparecían SIEMPRE,
+//       incluso al elegir un único partner: SOBRE-conteo (se veía "Perú 145"
+//       con un partner de 77 seleccionado, los otros 68 eran PIAGGIO).
+// Ninguna de las dos es correcta porque el problema no estaba acá sino en el
+// sidebar, que no podía expresar esos partners. Ahora `STATE.sidebarPartners`
+// los incluye (ver updateIndexes en data.js), así que la selección alcanza y
+// esta función vuelve a ser lo simple que siempre debió ser.
+//
+// El segundo parámetro se conserva por compatibilidad con los call sites y como
+// red de seguridad: si algún partner quedara fuera del sidebar por un camino no
+// previsto, se lo sigue incluyendo (preferimos sobre-contar visiblemente antes
+// que perder data en silencio).
 export function _lineSelHas(selSet, sidebarSet, partner) {
-  return selSet.has(partner) || !sidebarSet.has(partner);
+  if (selSet.has(partner)) return true;
+  return !!sidebarSet && !sidebarSet.has(partner);
 }
 
 // KAM efectivo de una fila. `partners`/`flotas` mandan (getKAMForPartner); el KAM
@@ -53,7 +68,7 @@ export function _rendLineFiltered() {
   if (_rendLine() === "agg") return getFiltered();
   const f = getCurrentFilters();
   const selSet = new Set(f.selected);
-  const sidebar = new Set(STATE.allPartners);
+  const sidebar = new Set(STATE.sidebarPartners || STATE.allPartners);
   return _rendLineDataset().filter(r =>
     (f.city === "all" || r.city === f.city) &&
     r.date >= f.from && r.date <= f.to &&
@@ -206,7 +221,7 @@ export function _renderRendImpl() {
   // prevRows: datos de prevDate fuera del rango filtrado
   const cityFilter = document.getElementById("cityFilter").value;
   const selSet     = new Set(getSel());
-  const _sidebarSet = new Set(STATE.allPartners);
+  const _sidebarSet = new Set(STATE.sidebarPartners || STATE.allPartners);
   // Lookup de la línea activa (agg usa _byDate; fleet/tk/comb filtran su slice).
   const _prevAll = _rendLinePrev(prevDate, null);
   const prevFiltered = _prevAll.filter(r =>

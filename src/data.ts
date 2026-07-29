@@ -1843,7 +1843,26 @@ export function updateIndexes() {
     ? periods.slice()
     : [...new Set(STATE.rawData.map(r => r.date))].sort();
   STATE.allPartners = [...new Set(STATE.rawData.map(r => r.partner))].sort();
-  STATE.allPartners.forEach(p => {
+
+  // Lista del SIDEBAR = Taxi + los partners que SOLO operan TukTuk.
+  //
+  // POR QUÉ ESTÁN SEPARADAS: `allPartners` es el universo TAXI y hay código que
+  // depende de eso (presentacion2.p2HasTaxi pregunta justamente "¿este partner
+  // tiene Taxi?"). Pero la lista de checkboxes del sidebar tiene que poder
+  // expresar TODO lo que las vistas muestran.
+  //
+  // BUG QUE ESTO ARREGLA (caso PIAGGIO, is_tuktuk, 68 AD): los partners
+  // solo-TukTuk se excluyen de rawData, así que no llegaban al sidebar. Como el
+  // usuario no podía deseleccionarlos, `_lineSelHas` los daba por incluidos
+  // SIEMPRE → al elegir un solo partner en las líneas TukTuk/Combinado, los
+  // totales seguían sumando los solo-TukTuk de todos los demás. Se veía como
+  // "Perú 145" cuando el partner elegido tenía 77.
+  const _tkOnly = (STATE.rawDataTuktuk || [])
+    .map(r => r.partner)
+    .filter(p => p && !STATE.allPartners.includes(p));
+  STATE.sidebarPartners = [...new Set([...STATE.allPartners, ..._tkOnly])].sort();
+
+  STATE.sidebarPartners.forEach(p => {
     if (!STATE.partnerColors[p]) STATE.partnerColors[p] = hashColor(p);
   });
   // Índices secundarios — todas las consultas frecuentes evitan filter() sobre rawData

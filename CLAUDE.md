@@ -61,6 +61,15 @@ Manuel pidió una auditoría a fondo (carga de ~6s, "se traba y muestra páginas
 - **Sección "Quién se movió"**: top 5 que más subieron y top 5 que más cayeron en AD vs el período anterior. Se excluyen los partners sin base previa (no es una caída, es que no había con qué comparar). Evita leer 60 filas para saber a quién llamar.
 - Orden final: General → Ciudad → KAM → Tendencias → Productividad → Quién se movió → Tabla → Tarjetas.
 
+**Sobre-conteo en TukTuk/Combinado — encontrado comparando admin vs portal real (jul 29)**
+- Con UN partner seleccionado, Perú TukTuk mostraba 145 y Combinado 2.855, mientras el portal de ese partner mostraba 77 y 2.787. La diferencia era **PIAGGIO** (CLID `400011321576`, `is_tuktuk`, KAM Matías, 68 AD): solo-TukTuk → fuera de `rawData` → fuera del sidebar → `_lineSelHas` lo daba por incluido SIEMPRE.
+- **Arreglo de fondo**: `STATE.sidebarPartners` (= Taxi ∪ solo-TukTuk) en `updateIndexes`; el sidebar y `_lineSelHas` lo usan. `STATE.allPartners` queda como el universo TAXI a propósito — `presentacion2.p2HasTaxi()` pregunta exactamente eso. Las dos versiones previas de `_lineSelHas` erraban en direcciones opuestas (sub-conteo y sobre-conteo): el problema nunca estuvo en el filtro sino en el sidebar, que no podía expresar esos partners.
+- **Bug propio en el portal**: los KPIs de Fleet mostraban `+0.0%` en todo porque se pasaba el MISMO valor como actual y anterior a `_kpiCard`. Ahora el período anterior se calcula de verdad.
+- **Fleet en el portal pasa a snapshot del último período** (era ponderado del rango), para dar el mismo número que ve el KAM en Rendimiento con el mismo filtro. El bloque de metas sí usa el acumulado del rango —se compara contra un objetivo mensual— y quedó etiquetado como tal.
+- **Método de verificación que conviene repetir**: filtrar la vista admin a UN partner y compararla contra el portal de ese mismo partner. Tienen que dar idéntico; cualquier diferencia es un bug de filtrado o de definición.
+
+**Dato sucio detectado (no es código)**: hay CLIDs sin fila en `partners`, así que se muestran con el número crudo. `400011836443` (Dale Taxi SAC) y `400012046457` (FLOTA GBC AUTOMOTRIZ) además tienen `flotas.nombre_asignado` = el propio CLID. Se arregla cargándolos en Configuración → Partners.
+
 Pendiente: verificación con datos y sesión reales (lo de arriba se validó con build real + datos sintéticos en `npm run preview`; no hay login por la regla de contraseñas).
 
 ### Sesión Julio 2026 (cont.) — Fix PDF Presentación 2.0 + reorden de Configuración + retiro de Palabras Prohibidas
