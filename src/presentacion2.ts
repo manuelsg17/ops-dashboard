@@ -16,6 +16,7 @@
 // Vite lo empaqueta en ESE chunk en vez de en el bundle eager que paga todo el
 // mundo, incluida la pantalla de login.
 import Chart from "chart.js/auto";
+import { logAccess } from "./shared/accessLog.js";
 import ChartDataLabels from "chartjs-plugin-datalabels";
 import { ensurePdfLibs } from "./shared/lazyLibs.js";
 Chart.register(ChartDataLabels);
@@ -1896,6 +1897,7 @@ export function p2SearchKeydown(e) {
 // 1280×720 y se captura con html2canvas. Los charts se construyen acotados al div
 // (root.querySelector) para no chocar con los canvas de la vista en vivo (ids dup).
 export async function downloadPresent2PDF() {
+  logAccess("download_pdf", "presentacion2:" + (PRESENT2_STATE.partner || "?"));
   const partner = PRESENT2_STATE.partner;
   if (!partner) { alert("Selecciona un partner primero."); return; }
   try { await ensurePdfLibs(); } catch (e) { alert("No se pudieron cargar las librerías de PDF. Reintentá."); return; }

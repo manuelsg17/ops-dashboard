@@ -280,6 +280,7 @@ export function fleetExtSearchInput(inp)      { FLEET_EXT_STATE.search = inp.val
 export function fleetExtTableFilterInput(inp) { FLEET_EXT_STATE.tableFilter = inp.value; _fleetExtRefocus(inp); }
 
 export function exportFleetExtCSV() {
+  logAccess("download_csv", "fleet_externo");
   const rows = STATE.fleetExterno || [], cols = STATE.fleetExternoCols || [];
   if (!rows.length) { showBanner(false, "No hay data para exportar."); return; }
   const esc = v => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
@@ -294,6 +295,7 @@ export function exportFleetExtCSV() {
 
 // ── ACCIONES DELEGADAS (Fase A2) ─────────────────────────────────────────────
 import { registerActions } from "./shared/actions.js";
+import { logAccess } from "./shared/accessLog.js";
 
 registerActions({
   fleetExtSaveConfig, fleetExtReload, fleetExtClearConfig, exportFleetExtCSV,

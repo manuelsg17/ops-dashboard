@@ -15,12 +15,16 @@
 //   políticas de INSERT/UPDATE/DELETE a propósito (solo escribe el trigger), así
 //   que es tamper-evident: ni un admin puede reescribir la historia vía API.
 //
-// ── LO QUE ESTA PANTALLA TODAVÍA NO PUEDE MOSTRAR ───────────────────────────
-// Descargas de PDF/CSV y aperturas de pestaña NO se registran: hoy no existe una
-// tabla donde escribirlas (audit_log no acepta escrituras del cliente, y está
-// bien que así sea). La migración `migrations/2026-07-28_access_log.sql` crea
-// `access_log` para eso; hasta que se aplique, el bloque correspondiente avisa
-// que la métrica no está disponible en vez de mostrar un cero engañoso.
+// - Uso (logins, pestañas abiertas, descargas): tabla `access_log`, que escribe
+//   el propio navegador vía shared/accessLog.js. SELECT admin-only.
+//
+// ── DOS NIVELES DE CONFIANZA, NO MEZCLARLOS ─────────────────────────────────
+//   audit_log  → lo escribe Postgres (trigger). Es EVIDENCIA: no se puede
+//                fabricar ni borrar desde la API, ni siquiera siendo admin.
+//   access_log → lo escribe el NAVEGADOR. Es TELEMETRÍA: sirve para saber si
+//                los partners entran y qué usan. Alguien podría bloquear la
+//                request o falsear un evento — nunca decidir seguridad con esto.
+// La UI los muestra en secciones separadas justamente para que no se confundan.
 
 import { registerActions } from "./shared/actions.js";
 import { sb } from "./auth.js";
@@ -28,6 +32,7 @@ import { sb } from "./auth.js";
 export const MON_STATE = {
   users: null,        // null = todavía no se pidió
   audit: null,
+  uso: null,
   loading: false,
   error: "",
   auditTable: "all",
@@ -81,9 +86,10 @@ export async function monLoad() {
     // Las dos fuentes son independientes: si el audit_log falla (o la migración
     // no está aplicada) igual queremos mostrar los accesos, y viceversa. Por eso
     // allSettled y no all.
-    const [uRes, aRes] = await Promise.allSettled([
+    const [uRes, aRes, sRes] = await Promise.allSettled([
       sb.functions.invoke("admin-users", { body: { action: "list" } }),
-      _loadAudit()
+      _loadAudit(),
+      _loadUso()
     ]);
     if (uRes.status === "fulfilled" && !uRes.value.error && !uRes.value.data?.error) {
       MON_STATE.users = uRes.value.data?.users || [];
@@ -92,12 +98,26 @@ export async function monLoad() {
       MON_STATE.error = "No se pudo leer la lista de cuentas (Edge Function admin-users).";
     }
     MON_STATE.audit = aRes.status === "fulfilled" ? aRes.value : [];
+    MON_STATE.uso   = sRes.status === "fulfilled" ? sRes.value : [];
   } catch (e) {
     MON_STATE.error = (e && e.message) || String(e);
   } finally {
     MON_STATE.loading = false;
     renderMonitoreo();
   }
+}
+
+// Últimos 30 días de uso. No se pagina: el panel responde "¿quién entra y qué
+// usa?", no "listame todos los eventos" — para eso está el SQL editor.
+async function _loadUso() {
+  const desde = new Date(Date.now() - 30 * 86400000).toISOString();
+  const { data, error } = await sb.from("access_log")
+    .select("at,user_email,event,detail")
+    .gte("at", desde)
+    .order("at", { ascending: false })
+    .limit(1000);
+  if (error) throw error;
+  return data || [];
 }
 
 async function _loadAudit() {
@@ -142,7 +162,7 @@ export function renderMonitoreo() {
 
   html += _renderAccesos();
   html += _renderAuditoria();
-  html += _renderPendiente();
+  html += _renderUso();
   box.innerHTML = html;
 }
 
@@ -223,20 +243,76 @@ function _renderAuditoria() {
     </div>`;
 }
 
-// Se dice explícitamente qué NO se está midiendo. Un panel de monitoreo que
-// omite en silencio una dimensión es peor que no tenerla: da la impresión de
-// cobertura completa.
-function _renderPendiente() {
-  return `<div class="section" style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px 14px">
-    <div style="font-weight:700;font-size:.8rem;color:#92400e;margin-bottom:4px">⏳ Todavía no se registra</div>
-    <div style="font-size:.76rem;color:#78350f;line-height:1.5">
-      Descargas de PDF/CSV y aperturas de pestaña no aparecen acá: no hay dónde escribirlas.
-      El <code>audit_log</code> no acepta escrituras desde el navegador —a propósito, para que
-      nadie pueda alterar la historia de cambios— así que hace falta una tabla aparte.
-      La migración <code>migrations/2026-07-28_access_log.sql</code> la crea; aplicala desde
-      el SQL editor de Supabase y esta sección empieza a mostrarlas.
-    </div>
-  </div>`;
+// Panel de USO: qué se abre y qué se descarga. Separado de "Accesos" (que sale
+// de auth.users) y de "Registro de cambios" (que sale de triggers) porque son
+// tres fuentes con niveles de confianza distintos — ver la cabecera del archivo.
+function _renderUso() {
+  const evs = MON_STATE.uso;
+  if (evs == null) return "";
+  if (!evs.length) {
+    return secH("📈", "#f59e0b", "Uso del dashboard", "Últimos 30 días", "") +
+      `<div class="section"><div class="agy-style-224">
+        Todavía no hay eventos registrados. Se empiezan a acumular a medida que
+        el equipo y los partners usen el dashboard — los eventos anteriores a la
+        activación del registro no existen.
+      </div></div>`;
+  }
+
+  const logins    = evs.filter(e => e.event === "login").length;
+  const descargas = evs.filter(e => e.event === "download_pdf" || e.event === "download_csv").length;
+  const personas  = new Set(evs.map(e => e.user_email).filter(Boolean)).size;
+
+  // Ranking de pestañas: cuenta de PRIMERAS visitas por sesión (ver accessLog.js),
+  // así que se lee como "cuántas sesiones abrieron esta sección", no como clicks.
+  const porTab = {};
+  evs.filter(e => e.event === "tab").forEach(e => { porTab[e.detail || "?"] = (porTab[e.detail || "?"] || 0) + 1; });
+  const tabs = Object.entries(porTab).sort((a, b) => b[1] - a[1]);
+  const maxTab = tabs.length ? tabs[0][1] : 1;
+
+  const porDesc = {};
+  evs.filter(e => e.event.startsWith("download")).forEach(e => {
+    const k = (e.detail || "?").split(":")[0];
+    porDesc[k] = (porDesc[k] || 0) + 1;
+  });
+  const descs = Object.entries(porDesc).sort((a, b) => b[1] - a[1]);
+
+  const kpi = (label, val, color, tip) => `
+    <div class="mcard" style="border-top:3px solid ${color}" title="${escapeHTML(tip)}">
+      <div class="mcard-label">${label}</div>
+      <div class="mcard-val" style="color:${color}">${fmt(val)}</div>
+    </div>`;
+
+  const barras = (list, color) => list.length
+    ? list.map(([k, n]) => `
+        <div style="margin-bottom:7px">
+          <div style="display:flex;justify-content:space-between;font-size:.74rem;margin-bottom:2px">
+            <span>${escapeHTML(k)}</span><strong>${fmt(n)}</strong>
+          </div>
+          <div style="height:6px;background:#f0f0f0;border-radius:3px;overflow:hidden">
+            <div style="height:100%;width:${(n / maxTab * 100).toFixed(1)}%;background:${color}"></div>
+          </div>
+        </div>`).join("")
+    : `<div class="agy-style-90" style="font-size:.76rem">Sin datos</div>`;
+
+  return secH("📈", "#f59e0b", "Uso del dashboard",
+      "Últimos 30 días · lo registra el navegador, es telemetría de uso (no auditoría)", "") +
+    `<div class="section">
+      <div class="metric-row">
+        ${kpi("🔓 Ingresos", logins, "#0ea5e9", "Eventos de login en los últimos 30 días")}
+        ${kpi("🙋 Personas activas", personas, "#10b981", "Cuentas distintas con algún evento")}
+        ${kpi("⬇️ Descargas", descargas, "#8b5cf6", "PDFs y CSVs exportados")}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;margin-top:14px">
+        <div>
+          <div style="font-weight:700;font-size:.78rem;margin-bottom:8px">Secciones más abiertas</div>
+          <div title="Cuenta la PRIMERA visita de cada sesión a cada sección, no cada click">${barras(tabs, "#0ea5e9")}</div>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:.78rem;margin-bottom:8px">Qué se descarga</div>
+          ${barras(descs, "#8b5cf6")}
+        </div>
+      </div>
+    </div>`;
 }
 
 registerActions({

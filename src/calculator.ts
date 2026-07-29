@@ -1,5 +1,6 @@
 //@ts-nocheck
 import { ensureHtml2Canvas } from "./shared/lazyLibs.js";
+import { logAccess } from "./shared/accessLog.js";
 // calculator.js — Calculadora de Metas (flujo por PESTAÑAS de línea de negocio)
 // El KAM ingresa su meta TOTAL por línea y se reparte (disgrega) a cada partner+ciudad
 // segun su % de representacion en el ULTIMO MES. En vez de un scroll con 6+ tablas,
@@ -1349,6 +1350,7 @@ export function _calcBuildMetaRows(m) {
 // Plantilla CSV con TODAS las líneas (Agregador + Fleet + TukTuk). Headers alineados
 // con uploadMetas → se puede resubir en Configuración → Metas. Blanks donde no aplica.
 export function calcExportExcel() {
+  logAccess("download_csv", "calculadora");
   const m = _calcComputeModel();
   const { rows, mesName, mesYear } = _calcBuildMetaRows(m);
   const header = ["CLID", "PARTNER", "CIUDAD", "MES", "AÑO",

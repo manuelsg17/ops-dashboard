@@ -301,6 +301,8 @@ export function switchTab(tab) {
     // render sincrono pesado durante la transicion.
     STATE.curTab = tab;
     STATE._tabRenderId++;
+    // Telemetría: primera visita a cada pestaña en la sesión (ver accessLog.js).
+    logAccess("tab", tab);
 
     // ── 2. BLUR sincronico del input editado ────────────────────────────────
     // Fuerza el `onchange`/`oninput` final del input que tenia foco para que
@@ -1284,6 +1286,7 @@ export async function deleteDashboardData() {
 
 // ── ACCIONES DELEGADAS (Fase A2) ─────────────────────────────────────────────
 import { registerActions } from "./shared/actions.js";
+import { logAccess } from "./shared/accessLog.js";
 
 registerActions({
   // sidebar / filtros

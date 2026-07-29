@@ -768,6 +768,7 @@ export function removeTuktukPattern(word) {
 }
 
 export function exportFlotasCSV() {
+  logAccess("download_csv", "flotas");
   const flotasMap = STATE.flotasMap || {};
   const fromRawAll = new Map();
   STATE.rawDataFull.forEach(r => {
@@ -1051,6 +1052,7 @@ export function reconExpandAll(open) {
 
 // Export CSV: una fila por (clid, db_id) con valores EXACTOS + clasificaci\u00F3n.
 export function exportReconCSV() {
+  logAccess("download_csv", "conciliacion");
   const src0 = STATE.curMode === "mensual" ? STATE.rawDataMensualFull
              : STATE.curMode === "diario"  ? STATE.rawDataDiarioFull
              :                              STATE.rawDataFull;
@@ -1097,6 +1099,7 @@ export function exportReconCSV() {
 // Cada entrada mapea un data-act/data-act-* del HTML a su función. El dispatcher
 // (shared/actions.js) las invoca con (dataset, elemento, evento).
 import { registerActions } from "./shared/actions.js";
+import { logAccess } from "./shared/accessLog.js";
 
 registerActions({
   // tabla de registros

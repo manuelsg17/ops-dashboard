@@ -16,6 +16,7 @@
 // los agregados de abajo son "su total" sin filtrar nada explícitamente.
 
 import { registerActions } from "./shared/actions.js";
+import { logAccess } from "./shared/accessLog.js";
 import { stampPDF } from "./shared/pdfmeta.js";
 import { ensurePdfLibs } from "./shared/lazyLibs.js";
 // Mismo núcleo de cálculo que Metas, Rendimiento y el deck: el partner tiene que
@@ -395,6 +396,7 @@ export function portalSetCity(city) {
 // (shared/pdfmeta.js): si un partner reenvía el PDF, queda claro de qué cuenta
 // salió y que es material de uso restringido.
 export async function portalDownloadPDF() {
+  logAccess("download_pdf", "portal");
   const content = document.getElementById("portalContent");
   if (!content) return;
   const btn = document.getElementById("portalPdfBtn");

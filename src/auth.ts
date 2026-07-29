@@ -14,6 +14,7 @@ import { createClient } from "@supabase/supabase-js";
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./core/config.js";
 import { registerActions } from "./shared/actions.js";
 import { snapshotClear } from "./data/cache.js";
+import { logAccess, resetAccessLogSession } from "./shared/accessLog.js";
 
 export const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // El resto del código (funciones, no top-level) sigue usando `STATE`, `showApp`,
@@ -132,7 +133,7 @@ export async function initAuth() {
     showLoginScreen();
   }
   sb.auth.onAuthStateChange((event, session) => {
-    if (event === "SIGNED_IN")        showApp(session.user);
+    if (event === "SIGNED_IN")      { showApp(session.user); logAccess("login", null); }
     if (event === "TOKEN_REFRESHED")  _setRoleFromUser(session && session.user);
     if (event === "SIGNED_OUT")       showLoginScreen();
   });
@@ -214,6 +215,7 @@ export function _clearStateAndLocalStorage() {
   // la DATA, no solo el token — si no, quien use después ese navegador podría
   // ver el último snapshot de negocio sin loguearse.
   snapshotClear();
+  resetAccessLogSession();
 }
 
 export function showLoginScreen() {
@@ -237,6 +239,17 @@ export function showApp(user) {
   document.getElementById("userBadge").textContent      = user.email;
   STATE.userEmail = user.email;   // firma de los PDFs exportados (shared/pdfmeta.js)
   STATE.userId    = user.id;      // clave del caché local (data/cache.js)
+
+  // Telemetría de uso (Configuración → Monitoreo). Va DESPUÉS de fijar
+  // userId/userEmail: logAccess se corta solo si no hay sesión.
+  //
+  // Se registra la pestaña inicial, NO un "login": showApp corre también al
+  // RESTAURAR una sesión existente (cada hard refresh), así que loguear "login"
+  // acá inflaría la cuenta de ingresos. El login de verdad se registra en el
+  // evento SIGNED_IN de onAuthStateChange. Sin esto, en cambio, alguien que
+  // refresca y se queda mirando Rendimiento no generaría ningún evento (a esa
+  // pestaña se llega sin pasar por switchTab).
+  logAccess("tab", STATE.curTab || "rend");
 
   _setRoleFromUser(user);
 

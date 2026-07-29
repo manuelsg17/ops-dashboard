@@ -1,5 +1,6 @@
 //@ts-nocheck
 import { ensurePdfLibs } from "./shared/lazyLibs.js";
+import { logAccess } from "./shared/accessLog.js";
 // Núcleo de cálculo compartido (snapshot vs flujo, proyecciones, ponderados).
 // Import explícito y no global: es el módulo que define QUÉ significa cada
 // número, y tiene tests — que se vea de dónde sale.
@@ -1112,6 +1113,7 @@ export function barProj(pR, pP) {
 }
 
 export async function downloadMetasPDF() {
+  logAccess("download_pdf", "metas");
   const content = document.getElementById("metasContent");
   if (!content) return;
   const btn = document.getElementById("metasPdfBtn");
