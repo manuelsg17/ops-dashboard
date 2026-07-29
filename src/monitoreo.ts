@@ -282,7 +282,7 @@ function _renderIngestas() {
       `<div class="section"><div class="agy-style-224">
         Todavía no hubo ninguna ingesta automática. Mientras tanto la carga sigue
         siendo manual (Actualizar información → Rendimiento).
-        Ver <code>supabase/functions/ingest-taxiparks/README.md</code> para conectarla.
+        Ver <code>docs/ingest-taxiparks.md</code> para conectarla.
       </div></div>`;
   }
 
