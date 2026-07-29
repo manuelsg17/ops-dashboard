@@ -431,6 +431,16 @@ export function switchTab(tab) {
 
       if (STATE._tabRenderId !== tokenAtDispatch || STATE.curTab !== tab) return;
 
+      // Columnas pesadas bajo demanda: estas 4 pestañas son las únicas que leen
+      // las 26 columnas que el arranque NO pide (ver TX_DEFERRED_COLS en
+      // data.js). Se traen solo las que faltan y se fusionan sobre las filas ya
+      // cargadas; es una vez por escala y por sesión.
+      const NEED_FULL_COLS = new Set(["partnerview", "present2", "rawdata", "calculator"]);
+      if (NEED_FULL_COLS.has(tab) && typeof ensureFullRendColumns === "function") {
+        try { await ensureFullRendColumns(); } catch (e) { /* nunca bloquear el render */ }
+        if (STATE._tabRenderId !== tokenAtDispatch || STATE.curTab !== tab) return;
+      }
+
       if (tab === "rend"        && STATE.rawData.length)                           renderRend();
       if (tab === "metas"       && STATE.metasData.length && STATE.rawData.length) renderMetas();
       if (tab === "rawdata")                                                        renderRawData();

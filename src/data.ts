@@ -450,8 +450,34 @@ const REND_CORE_COLS = [
   "clid", "city", "db_id", "fleetroom",
   "active_drivers", "reactivated", "supply_hours", "commission", "trips"
 ];
+// -- COLUMNAS: lo que hace falta AL ARRANQUE vs lo que puede esperar ---------
+//
+// De las 41 columnas de KPIs taxiparks, solo 15 las lee alguna vista del
+// arranque (Rendimiento, Metas y el portal del partner). Las otras 26 -entre
+// ellas las 12 del funnel `new_profiles_*`- las usan unicamente Presentacion
+// 2.0, Vista Partner, Calculadora y Data Raw, que YA son chunks lazy.
+//
+// Traerlas todas de entrada costaba 3.195 kB de JSON por sesion contra 1.403 kB
+// (-56%, medido sobre la ventana real de 6 semanas). Ahora se piden recien
+// cuando se abre una de esas pestanas, y se piden SOLO LAS QUE FALTAN + la
+// clave, asi que quien las necesita no descarga nada dos veces.
+//
+// AL AGREGAR UNA COLUMNA NUEVA: si alguna vista del arranque la lee, va en
+// TX_EAGER_COLS; si no, en TX_DEFERRED_COLS. Ponerla en la lista equivocada no
+// rompe nada visible de inmediato (queda en null hasta que se dispara la carga
+// diferida), asi que conviene verificarlo a conciencia -- ver CLAUDE.md.
+export const TX_EAGER_COLS = ["gmv", "new_drivers", "acceptance_rate", "completion_rate", "trips_per_hour", "money_per_hour", "bad_rated_trips_share", "fraud_trips_share", "driver_subsidies_by_gmv", "driver_support_requests_share", "active_cars", "branded_active_cars", "owned_fleet_active_cars", "internal_fleet_sh", "external_fleet_sh"];
+export const TX_DEFERRED_COLS = ["new_drivers_share", "new_from_partner_50t", "new_from_service_50t", "avg_driver_rating", "avg_fare_after_surge", "owned_fleet_branded_active_cars", "internal_fleet_sh_share", "internal_fleet_sh_per_active_car", "sh_per_active_car", "sh_per_active_driver", "supply_hours_share", "trips_share", "commission_share", "new_profiles", "new_profiles_partner", "new_profiles_partner_50t", "new_profiles_partner_reg1", "new_profiles_partner_reg10", "new_profiles_partner_reg50", "new_profiles_partner_reg100", "new_profiles_service", "new_profiles_service_50t", "new_profiles_service_reg1", "new_profiles_service_reg10", "new_profiles_service_reg50", "new_profiles_service_reg100"];
+
+// Clave natural de una fila de rendimiento. Verificado contra la BD: (clid,
+// city, fecha, db_id) es UNICA en la ventana de carga -- sin esa garantia el
+// merge de las columnas diferidas asignaria valores a la fila equivocada.
+function _rowKey(r) {
+  return (r.clid || "") + "|||" + (r.city || "") + "|||" + (r.date || "") + "|||" + (r.db_id || "");
+}
+
 function _rendCols(dateCol, newPartnerCol, newServiceCol, extra = []) {
-  return [...REND_CORE_COLS, dateCol, newPartnerCol, newServiceCol, ...extra, ...TX_NEW_COLS].join(",");
+  return [...REND_CORE_COLS, dateCol, newPartnerCol, newServiceCol, ...extra, ...TX_EAGER_COLS].join(",");
 }
 export const REND_COLS_SEMANAL  = _rendCols("fecha", "new_from_partner", "new_from_service", ["partner", "kam"]);
 export const REND_COLS_MENSUAL  = _rendCols("mes",   "new_from_partner", "new_from_service", ["partner", "kam"]);
@@ -702,6 +728,15 @@ export async function loadFromSupabase(opts = {}) {
     // pedir explícitamente una ventana más vieja (lo usa ensureRangeLoaded
     // cuando el usuario elige un "Desde" fuera de lo cargado).
     if (!STATE._allPeriods) STATE._allPeriods = {};
+
+    // partners / fleetrooms / flotas NO dependen de la ventana de fechas, así que
+    // se disparan JUNTO con la RPC de períodos en vez de esperarla. Antes el
+    // `await fetchAllPeriods` las bloqueaba: ~116ms de RPC + el round-trip a
+    // us-east, pagados en serie por tres requests que no los necesitaban.
+    const pPartners   = _pgFetch("partners", "?select=*");
+    const pFleetrooms = _pgFetch("fleetrooms", "?select=*").catch(() => []);
+    const pFlotas     = _pgFetch("flotas", "?select=*").catch(() => []);
+
     const periodosSem = await fetchAllPeriods("semanal");
     if (periodosSem.length) STATE._allPeriods.semanal = periodosSem;
 
@@ -736,10 +771,11 @@ export async function loadFromSupabase(opts = {}) {
     // sin bloquear el render de Rendimiento; si el usuario ya está en Metas o
     // Seguimiento cuando resuelvan, se re-renderiza esa vista.
     const critical = Promise.all([
-      _pgFetch("partners", "?select=*"),
+      pPartners,
+      // La ÚNICA que necesitaba winStart, y por eso la única que espera la RPC.
       fetchAllPages("rendimiento", "fecha", { gte: { col: "fecha", value: winStart }, columns: REND_COLS_SEMANAL }),
-      _pgFetch("fleetrooms", "?select=*").catch(() => []),
-      _pgFetch("flotas", "?select=*").catch(() => [])
+      pFleetrooms,
+      pFlotas
     ]);
     // OJO: `deferred` solo junta las respuestas crudas, NO las procesa acá — el
     // procesamiento (más abajo, `deferred.then(...)`) necesita CLID_MAP/
@@ -795,6 +831,8 @@ export async function loadFromSupabase(opts = {}) {
 // otra desde la red (datos frescos). Que sea EL MISMO código en ambos caminos
 // es el punto — dos pipelines paralelos serían dos oportunidades de divergir.
 function _applyCoreData(partners, rend, frooms, flotas, opts = {}) {
+    // Filas nuevas -> el merge de columnas diferidas hay que rehacerlo.
+    resetFullRendColumns();
     if (partners && partners.length) {
       STATE.CLID_MAP = {};
       STATE.KAM_MAP  = {};
@@ -959,6 +997,79 @@ function _renderActiveTabAfterLoad() {
       if (STATE.curTab === "rawdata"     && typeof renderRawData === "function")     renderRawData();
       }
     }
+}
+
+// ── CARGA DIFERIDA DE LAS COLUMNAS PESADAS ──────────────────────────────────
+// Trae las 26 columnas que el arranque NO pidió (ver TX_DEFERRED_COLS) y las
+// fusiona sobre las filas YA cargadas. La llaman las pestañas que las usan
+// (switchTab), una vez por escala y por sesión.
+//
+// POR QUÉ EL MERGE ES SEGURO Y BARATO: todas las vistas comparten las MISMAS
+// referencias de fila — rawDataFull es una copia superficial de rawData, y
+// rawDataTuktuk/rawDataFleet/_semanalData son `filter()` sobre esos mismos
+// objetos. Mutar la fila una vez se propaga a todos los slices sin recorrerlos.
+const _colsFull = { semanal: false, mensual: false, diario: false };
+
+export async function ensureFullRendColumns() {
+  const mode = STATE.curMode || "semanal";
+  if (_colsFull[mode]) return;
+  const rows = mode === "mensual" ? STATE.rawDataMensualFull
+             : mode === "diario"  ? STATE.rawDataDiarioFull
+             : STATE.rawDataFull;
+  if (!rows || !rows.length) return;
+
+  const dateCol = mode === "mensual" ? "mes" : mode === "diario" ? "date" : "fecha";
+  const tabla   = mode === "mensual" ? "rendimiento_mensual"
+                : mode === "diario"  ? "rendimiento_diario" : "rendimiento";
+  // Solo la clave + lo que falta: quien abre estas pestañas NO re-descarga las
+  // columnas que ya tiene.
+  const cols = ["clid", "city", "db_id", dateCol, ...TX_DEFERRED_COLS].join(",");
+
+  // Se marca ANTES de await: si el usuario abre dos pestañas pesadas seguidas,
+  // la segunda no dispara un segundo fetch de lo mismo.
+  _colsFull[mode] = true;
+  try {
+    // El "desde" se deriva de las filas YA cargadas, no de recalcular la ventana:
+    // _daysAgoISO/_monthsAgoYYYYMM dependen de la fecha de hoy y, si la sesión
+    // cruza la medianoche, devolverían un rango distinto al que se cargó → algunas
+    // filas quedarían sin su complemento, en silencio.
+    let desde = null;
+    for (const r of rows) if (r.date && (desde === null || r.date < desde)) desde = r.date;
+    const extra = await fetchAllPages(tabla, dateCol, {
+      gte: desde ? { col: dateCol, value: desde } : null,
+      columns: cols
+    });
+    const byKey = new Map();
+    (extra || []).forEach(e => {
+      byKey.set(
+        (String(e.clid || "").trim()) + "|||" + normCity(e.city) + "|||" +
+        (e[dateCol] || "") + "|||" + (String(e.db_id || "").trim()),
+        e
+      );
+    });
+    let aplicadas = 0;
+    rows.forEach(r => {
+      const e = byKey.get(_rowKey(r));
+      if (!e) return;
+      for (const col of TX_DEFERRED_COLS) {
+        const v = e[col];
+        r[_snakeToCamel(col)] = (v === null || v === undefined || v === "") ? null : +v;
+      }
+      aplicadas++;
+    });
+    if (DEBUG) console.log(`[cols] ${mode}: ${aplicadas}/${rows.length} filas completadas`);
+  } catch (err) {
+    // Si falla, se deja reintentar: las columnas quedan en null y las vistas que
+    // las usan muestran "—", pero nada se rompe.
+    _colsFull[mode] = false;
+    if (DEBUG) console.warn("ensureFullRendColumns falló:", err);
+  }
+}
+
+// Un upload o un cambio de ventana reemplaza las filas: el merge anterior ya no
+// aplica sobre los objetos nuevos.
+export function resetFullRendColumns() {
+  _colsFull.semanal = _colsFull.mensual = _colsFull.diario = false;
 }
 
 // ¿El "Desde" que pide el usuario está fuera de la ventana cargada? (Fase A3)

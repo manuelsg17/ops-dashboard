@@ -81,6 +81,14 @@ Manuel pidió una auditoría a fondo (carga de ~6s, "se traba y muestra páginas
 - **Confirmación de borrado EN LÍNEA**, no `confirm()`: se ve a QUIÉN se está borrando mientras se confirma. Un diálogo del navegador tapa la pantalla y se acepta por reflejo — justo lo que no querés en la única acción irreversible del panel.
 - CSS nuevo en `styles.css` bajo "CONFIGURACIÓN → USUARIOS Y ACCESOS" (prefijo `.au-`).
 
+**Arranque, segunda vuelta (jul 29) — medido, no estimado**
+- **Columnas diferidas**: de las 41 columnas de KPIs taxiparks, solo **15** las lee alguna vista del arranque; las otras **26** (incluidas las 12 del funnel `new_profiles_*`) las usan únicamente Presentación 2.0, Vista Partner, Calculadora y Data Raw, que ya son chunks lazy. Traerlas todas costaba **3.195 kB de JSON vs 1.403 kB (−56%)** sobre la ventana real. Ahora `TX_EAGER_COLS` / `TX_DEFERRED_COLS` en `data.ts`, y `ensureFullRendColumns()` trae **solo las que faltan + la clave** y las fusiona sobre las filas ya cargadas (una vez por escala y sesión, disparado desde `switchTab`). Quien abre esas pestañas no descarga nada dos veces.
+  - **Por qué el merge es seguro**: `(clid, city, fecha, db_id)` es ÚNICA — verificado contra la BD antes de implementarlo (0 duplicados). Y todas las vistas comparten las MISMAS referencias de fila (`rawDataFull` es copia superficial; los slices son `filter()`), así que mutar la fila una vez se propaga a todos los slices.
+  - **Riesgo evaluado antes de tocar nada**: se buscaron accesos dinámicos (`r[key]`) en los módulos eager. Los que hay operan sobre objetos YA AGREGADOS con vocabulario fijo (`ad/nr/sh/tr`, `owned/shCar/accept/...`), nunca sobre columnas arbitrarias de una fila cruda; y ningún módulo itera `Object.keys(row)`.
+  - **Al agregar una columna nueva**: decidir a conciencia en qué lista va. En la equivocada no rompe nada visible de inmediato (queda `null` hasta que se dispara la carga diferida).
+- **Índice faltante en `rendimiento_diario`** (`migrations/2026-07-29_idx_rendimiento_diario_date.sql`, APLICADA): la tabla se consulta por ventana de fecha pero su único índice útil lideraba con `clid` → Seq Scan + Sort. Medido: **644 ms → 57 ms**. `rendimiento_mensual` ya tenía el equivalente, y por eso esa escala nunca dio problemas.
+- **`partners`/`fleetrooms`/`flotas` ya no esperan la RPC `dashboard_dates`** (116 ms + round-trip): no dependen de la ventana, así que se disparan en paralelo. Solo el fetch de `rendimiento` necesita `winStart`.
+
 Pendiente: verificación con datos y sesión reales (lo de arriba se validó con build real + datos sintéticos en `npm run preview`; no hay login por la regla de contraseñas).
 
 ### Sesión Julio 2026 (cont.) — Fix PDF Presentación 2.0 + reorden de Configuración + retiro de Palabras Prohibidas
