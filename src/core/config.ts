@@ -5,8 +5,17 @@
 // exports a window para que los archivos aún clásicos (public/*.js) sigan
 // leyéndolos como globales durante la transición A2.
 
-export const SUPABASE_URL      = "https://oqakoinyzvdgqilxwjjv.supabase.co";
-export const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9xYWtvaW55enZkZ3FpbHh3amp2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MTgyMTQsImV4cCI6MjA5MDI5NDIxNH0.ODvMd19d7FoPZnYYdHl2a6ifQYVIO9YT8l8UrCMjyiI";
+// Sin `.env.local` apunta a produccion, que es lo que hace el deploy (Vercel y
+// Pages buildean sin env vars). Con `.env.local` presente Vite inyecta el
+// Supabase local de Docker y la app corre contra datos de prueba.
+const _ENV = (import.meta as any).env || {};
+
+export const SUPABASE_URL      = _ENV.VITE_SUPABASE_URL      || "https://oqakoinyzvdgqilxwjjv.supabase.co";
+export const SUPABASE_ANON_KEY = _ENV.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9xYWtvaW55enZkZ3FpbHh3amp2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MTgyMTQsImV4cCI6MjA5MDI5NDIxNH0.ODvMd19d7FoPZnYYdHl2a6ifQYVIO9YT8l8UrCMjyiI";
+
+// Aviso visible: correr contra local y creer que son datos reales (o al reves)
+// es el error caro de este setup.
+export const IS_LOCAL_SUPABASE = /localhost|127\.0\.0\.1/.test(SUPABASE_URL);
 
 // Flag de debug: false por default (no filtrar CLIDs/partners en consola).
 // Activar desde DevTools con `window.DEBUG = true`. Nota (A2): mientras los

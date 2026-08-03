@@ -26,14 +26,21 @@
 
        frame-ancestors no se incluye: el spec lo ignora vía <meta> (solo funciona
        como header HTTP) — se agrega como header real en Vercel (ver vercel.json),
-       GitHub Pages no lo soporta. -->
+       GitHub Pages no lo soporta.
+
+       Los :54331 de connect-src son el Supabase LOCAL de Docker (docs/local-dev.md).
+       Sin ellos la CSP bloquea TODA llamada al stack local y el sintoma es un
+       "Failed to fetch" pelado que no menciona la CSP — cuesta horas ubicarlo.
+       No debilita produccion: connect-src esta para impedir exfiltracion hacia
+       un dominio del atacante, y el localhost de la victima no sirve para eso
+       (ya habia precedente con los ws:// de HMR). -->
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src 'self';
     style-src 'self' 'unsafe-inline';
     img-src 'self' data: blob:;
     font-src 'self' data:;
-    connect-src 'self' https://*.supabase.co wss://*.supabase.co ws://127.0.0.1:8765 ws://localhost:8765;
+    connect-src 'self' https://*.supabase.co wss://*.supabase.co ws://127.0.0.1:8765 ws://localhost:8765 http://127.0.0.1:54331 http://localhost:54331;
     object-src 'none';
     base-uri 'self';
   "/>

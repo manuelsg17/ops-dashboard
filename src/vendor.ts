@@ -98,6 +98,21 @@ Object.assign(window,
   rendimiento, metas, app
 );
 
+// ── Banda de entorno LOCAL ──────────────────────────────────────────────────
+// Solo aparece cuando la app apunta al Supabase de Docker (ver core/config.js).
+// El error caro de este setup es confundir una pantalla de datos sintéticos con
+// producción — o al revés, borrar datos reales creyendo que era la copia local.
+// Es una banda fija arriba, imposible de no ver, y no existe en el deploy.
+if (config.IS_LOCAL_SUPABASE) {
+  const b = document.createElement("div");
+  b.textContent = "⚠ SUPABASE LOCAL — datos de prueba, no es producción";
+  b.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:99999;" +
+    "background:#b45309;color:#fff;font:600 12px/1 system-ui,sans-serif;" +
+    "padding:6px 10px;text-align:center;letter-spacing:.3px";
+  document.body.appendChild(b);
+  document.body.style.paddingTop = "24px";
+}
+
 // Loader asíncrono para módulos de pantalla pesados (Lazy Loading)
 //
 // viewName = el NOMBRE DE TAB REAL que usa el resto de la app (STATE.curTab),

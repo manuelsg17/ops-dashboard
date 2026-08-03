@@ -14,6 +14,23 @@ Dashboard para KAMs (partner performance): modulos **TypeScript** bundleados con
 
 ## Estado actual
 
+### Sesión Agosto 2026 — Entorno local con sesión real (Supabase en Docker)
+
+**Por qué**: era el hueco más viejo del proyecto. Media docena de secciones de este archivo terminan en "pendiente: verificación con sesión real" porque no había forma de ejercitar una vista autenticada sin tocar producción. El entorno local cierra eso. **Detalle completo en `docs/local-dev.md`** — acá va solo lo que hay que saber de entrada.
+
+- **Repo movido a `~/Projects/ops-dashboard`** (clonado por SSH desde GitHub). La copia vieja en Proton Drive queda obsoleta — trabajar en la nueva. Al día con `origin/main`.
+- **`src/core/config.ts` parametrizado**: `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` con **fallback a producción**. Sin `.env.local` no cambia nada, que es lo que hacen los builds de Vercel y Pages — verificado en ambos sentidos con `npm run build`.
+- **Banda naranja fija** cuando la app apunta a local (`IS_LOCAL_SUPABASE` → `vendor.ts`). Confundir local con producción es el error caro de este setup.
+- **4 usuarios, uno por rol**, sembrados por `supabase/seed.sql` con el rol en `app_metadata.role` igual que producción. Password de juguete, en texto plano, base descartable.
+- **`npm run local:session <rol>`**: abre sesión sin tipear la password en un formulario (la regla de agentes sigue vigente — ver la sección de reglas). Verificado en navegador: la UI autenticada renderiza con el gating de rol correcto.
+- **Puertos +10** (API 54331, DB 54332, Studio 54333) porque `pricing-ci-dashboard` ocupa los 5432x en la misma máquina.
+
+**El bug que casi cuesta el entorno entero**: la CSP de `index.html` solo permitía `https://*.supabase.co` en `connect-src`, así que contra local **nada** funcionaba, ni el formulario de login — y el síntoma es un `TypeError: Failed to fetch` pelado que no menciona la CSP. Agregados `http://127.0.0.1:54331` y `http://localhost:54331`. No debilita producción: `connect-src` está para impedir exfiltración hacia el dominio de un atacante, y el localhost de la víctima no sirve para eso (ya había precedente con los `ws://` de HMR). **Si se cambia el puerto de la API, hay que tocar la CSP también.**
+
+Otras dos trampas, ambas con errores que no dicen su causa, documentadas en `docs/local-dev.md`: `Database error querying schema` al loguear = un `NULL` en las columnas `*_token` de `auth.users` (gotrue las escanea a string; el seed las siembra en `''` a propósito), y el healthcheck de `[analytics]` tumbaba el arranque entero (desactivado en `config.toml`, además era la imagen más pesada).
+
+**BLOQUEADO — próximo paso concreto**: la base local **no tiene las tablas de la app**; la UI carga y muestra `Error 404 al cargar partners`. Las tablas core (`partners`, `rendimiento*`, `metas`, `conversion_pais`, `proyectos`) se crearon a mano desde el panel de Supabase y **nunca existieron como migración** — `migrations/` solo tiene los `ALTER` posteriores, así que `db reset` no reconstruye nada. Hace falta un baseline vía `supabase db dump --schema-only` de producción, y para eso la connection string, **que nunca va por el chat**: el usuario la deja en `~/.ops_dashboard.env` y se referencia por variable de entorno. Receta exacta al final de `docs/local-dev.md`. Después, generar datos **sintéticos** — no copiar datos reales a la máquina.
+
 ### Sesión Julio 2026 (cont.) — Refactor por capas: arranque, capa de dominio, Metas y Rendimiento
 
 Manuel pidió una auditoría a fondo (carga de ~6s, "se traba y muestra páginas en blanco" al cambiar de pestaña) + 12 pedidos de producto, con luz verde para "un refactor gigante". **Decisión tomada con él: refactor incremental por capas, NO rewrite** — las ~15.000 líneas de lógica de negocio ya están validadas contra datos reales y un rewrite arriesga regresiones silenciosas en los cálculos, que es justo lo que no puede fallar.
@@ -227,7 +244,9 @@ Cero elementos sin handler = migracion completa. `focus`/`blur` NO burbujean (a 
 - RLS/permisos: simular el JWT a nivel SQL (`SET LOCAL role authenticated; SET LOCAL request.jwt.claims = '...'`) dentro de `BEGIN...ROLLBACK` — nunca una mutacion de prueba suelta sin transaccion.
 - JS/CSP/build: `npm run preview` (build real) + Console/Network del navegador, sin sesion.
 - Mecanica de eventos que no se puede ejercitar sin sesion real (ej. un navegador automatizado sin foco de ventana — `document.hasFocus()` da `false` y `.focus()` real no dispara el evento): validar el mecanismo aislado (dispatch sintetico del evento) en vez de asumir que "no disparo" = "esta roto".
-- Lo que de verdad requiera clickear una vista autenticada real: decirlo explicitamente como pendiente, nunca reportarlo como probado.
+- Lo que de verdad requiera clickear una vista autenticada real: **usar el entorno local** (ver abajo). Si por algun motivo no esta disponible, decirlo explicitamente como pendiente, nunca reportarlo como probado.
+
+**Vistas autenticadas: usar el Supabase LOCAL** (`docs/local-dev.md`, ago 2026). La regla de arriba nacio contra PRODUCCION, donde una sesion real significa datos y credenciales reales. El entorno local en Docker remueve ese motivo: base descartable, 4 usuarios de prueba (uno por rol), password de juguete en texto plano en `supabase/seed.sql`. **Lo que NO cambia**: un agente sigue sin tipear contraseñas en formularios, ni siquiera locales. La via es `npm run local:session <rol>` → pegar el snippet en la consola del navegador. No es un bypass — el token sale del mismo endpoint que el formulario y lleva el mismo claim `app_metadata.role`, asi que corre el camino real de autorizacion (`is_admin()`/`is_partner()` + RLS); un rol mal configurado falla igual que en produccion. Una persona simplemente escribe la password en el formulario.
 
 **Cambios a RLS/politicas de base de datos:** cualquier cambio que toque el kill-switch de partners u otra tabla compartida de produccion requiere confirmacion explicita del usuario antes de aplicar (el propio entorno ya lo bloquea solo — no intentar rodearlo). Despues de aplicar, re-correr la MISMA bateria de tests SQL (kill-switch en 0 filas, scoping exacto por CLID, escritura no-admin → 42501, admin sin regresion) — un refactor "semanticamente equivalente" no se asume, se confirma. Toda mutacion de datos de prueba va dentro de `BEGIN...ROLLBACK`.
 
@@ -258,6 +277,9 @@ Todo el codigo de app vive en `src/` como modulos ES. `index.html` esta en la ra
 - `src/unifview.js`, `src/seguimiento.js`, `src/charts.js`
 - `supabase/functions/admin-users/` — Edge Function (Deno). Lo unico que usa `service_role`
 - `migrations/` — SQL versionado; se aplica via MCP Supabase (`apply_migration`, project `oqakoinyzvdgqilxwjjv`) o en el SQL editor. Ver memoria `supabase-mcp-direct-changes`
+- `supabase/config.toml` + `supabase/seed.sql` — entorno LOCAL en Docker (puertos 5433x, 4 usuarios de prueba). Solo lo lee el CLI local, nunca produccion
+- `scripts/local-session.mjs` — abre sesion local sin tipear password (`npm run local:session <rol>`)
+- `docs/local-dev.md` — **empezar por aca** para cualquier cosa de entorno local: puertos, usuarios, trampas ya resueltas y el bloqueador del esquema
 
 ## Modelo de datos
 
@@ -284,6 +306,12 @@ npm run preview    # sirve dist/ para verificar el build
 npm test           # Vitest — tests del nucleo de calculo (src/domain/)
 npm run typecheck  # tsc --noEmit (no esta en CI: correrlo a mano)
 
+# Entorno local con sesion real — ver docs/local-dev.md para todo el detalle.
+# Sin .env.local la app apunta a PRODUCCION (por eso el deploy no cambia).
+npx supabase start          # stack en Docker, puertos 5433x (no 5432x: los usa pricing-ci)
+npm run local:session admin # snippet de sesion para la consola (admin|kam|viewer|partner)
+npx supabase db reset       # re-aplica migraciones + seed de usuarios
+
 # Ya NO se usa SRI: las 7 librerias vienen de npm (pineadas en package.json +
 # package-lock), bundleadas por Vite. Ver src/vendor.js.
 
@@ -307,7 +335,7 @@ SELECT at, user_email, action, table_name, row_key
 
 ## Caveats
 
-- **Proton Drive sync** ha causado archivos de conflicto silenciosos (`(# Edit conflict ... #).js`) que sobreescribieron cambios. Si aparecen archivos desconocidos, NO borrar — investigar primero y consultar al usuario.
+- **Proton Drive sync** (aplicaba a la ubicacion vieja del repo, `~/Library/CloudStorage/ProtonDrive-.../Dashboard KAMS V1`, hoy obsoleta — ver la sesion de agosto 2026): causaba archivos de conflicto silenciosos (`(# Edit conflict ... #).js`) que sobreescribian cambios. En `~/Projects/ops-dashboard` ya no hay sync de por medio. Si igual aparecen archivos desconocidos, NO borrar — investigar primero y consultar al usuario.
 - **Excel en varios formatos** (numero completo o texto "1.8M"). Los uploads de rendimiento/conversion usan `raw:true` + `toN` (expande K/M/B y pasa numeros tal cual). NO volver a `raw:false` ni quitar el passthrough de numeros en `toN` → rompe precision/decimales. Ver memoria `excel-upload-full-precision`.
 - **Excel de Conversion = 2 pestañas**: "Conversion" (funnel) y "Adquisition by channel". `handleFile` lee ambas en una sola subida; el upsert por (clid,mes) actualiza solo funnel o solo canal sin pisar el otro.
 - Gate antes de commitear: `npm run build` sin errores (Vite valida al bundlear) + smoke test del tab tocado en `npm run dev`.
@@ -315,5 +343,5 @@ SELECT at, user_email, action, table_name, row_key
 - **NO agregar libs por CDN** — van por npm, se bundlean.
 - Cuidado con el codigo **top-level** en un modulo: corre antes de que `vendor.js` espeje los globales. Si necesita algo de otro modulo, importarlo explicitamente (ver `auth.js`).
 - El anon key vive en `core/config.js` (es publico por diseno, pero no debe filtrarse en screenshots ni en repos publicos). El `service_role` **solo** existe dentro de la Edge Function.
-- `bannedWords` viene de `localStorage` y puede ser manipulado — siempre re-escapar al renderizar.
-- **Proton Drive**: `node_modules/` debe quedar fuera del sync ademas del `.gitignore`.
+- Todo lo que venga de `localStorage` puede ser manipulado — siempre re-escapar al renderizar (este caveat nombraba `bannedWords`, que se retiro por completo; el principio sigue).
+- **`.env.local` NUNCA se commitea** (esta en `.gitignore`). Y ojo: `npm run build` tambien lo lee, asi que con el archivo presente el `dist/` apunta al Supabase local, no a produccion.

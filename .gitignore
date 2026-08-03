@@ -19,3 +19,8 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Entorno local (Supabase en Docker) — NUNCA commitear
+.env
+.env.local
+.env.*.local

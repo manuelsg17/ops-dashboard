@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "sync:ingest": "node scripts/sync-ingest-parser.mjs"
+    "sync:ingest": "node scripts/sync-ingest-parser.mjs",
+    "local:session": "node scripts/local-session.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.45.4",
