@@ -946,7 +946,10 @@ export function _calcSec5_exportPartner(agg, totals, lastMonth) {
     }).join("");
     const heads = [{h:_calcLab("city",lang),a:"left"},{h:_calcLab("ad",lang)},{h:_calcLab("sh",lang)},{h:_calcLab("nr",lang)}].map(_th).join("");
     return `
-      <div class="agy-style-158">🚕 Taxi</div>
+      <!-- Desde ago-2026 estas cifras incluyen TukTuk: la etiqueta tiene que decirlo.
+           Esta tarjeta se le manda al partner — si dice "Taxi" y el numero trae
+           TukTuk adentro, el partner recibe una meta que no puede reconciliar. -->
+      <div class="agy-style-158">🚕 Taxi + 🛺 TukTuk</div>
       <table class="agy-style-159">
         <thead><tr class="agy-style-160">${heads}</tr></thead>
         <tbody>${rows}</tbody>
