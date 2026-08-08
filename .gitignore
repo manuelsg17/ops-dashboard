@@ -24,3 +24,10 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+
+# Artefactos de trabajo con datos REALES de negocio (CLIDs, metas, db_ids).
+# Nunca se commitean: el repo es publico en GitHub Pages.
+/backups/
+/*.xls
+/*.xlsx
+/top5_por_ciudad_dbids.csv

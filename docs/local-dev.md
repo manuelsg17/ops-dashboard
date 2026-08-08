@@ -110,47 +110,61 @@ maquina puede confundir.
 
 ---
 
-## Estado y siguiente paso
+## Estado
 
-**Funciona hoy** (verificado en navegador): stack arriba, la app apunta a local,
-banda de aviso visible, los 4 roles loguean, la sesion se establece y la UI
-autenticada renderiza con el gating de rol correcto.
+**Entorno completo y verificado (2026-08-07).** El bloqueador del esquema quedo
+resuelto: hay baseline, datos sinteticos y la UI autenticada renderiza con datos.
 
-**Bloqueado:** la base local **no tiene las tablas de la app**. La UI carga y
-muestra `Error 404 al cargar partners`. Las tablas core (`partners`,
-`rendimiento*`, `metas`, `conversion_pais`, `proyectos`) se crearon a mano desde
-el panel de Supabase y **no existen como migracion** — `migrations/` solo tiene
-los cambios posteriores, que hacen `ALTER` sobre tablas que localmente no estan.
-Por eso `supabase db reset` no alcanza para reconstruir el esquema.
-
-Para destrabarlo hace falta un baseline. **La connection string nunca va por el
-chat** — el usuario crea el archivo:
+### Puesta en marcha desde cero
 
 ```bash
-echo 'export OPS_DB_URL="postgresql://..."' > ~/.ops_dashboard.env
-chmod 600 ~/.ops_dashboard.env
+npx supabase start                     # stack en Docker (aplica migrations + seed de usuarios)
+cp .env.local.example .env.local       # y pegar el ANON_KEY que imprime supabase start
+psql "postgresql://postgres:postgres@127.0.0.1:54332/postgres" -f supabase/seed_synthetic.sql
+npm run dev
+npm run local:session admin            # pegar el snippet en la consola y recargar
 ```
 
-(esta en Supabase → Settings → Database → Connection string → URI). Despues, en
-**una sola invocacion** (el estado de shell no persiste entre comandos):
+### El baseline del esquema
 
-```bash
-source ~/.ops_dashboard.env && npx supabase db dump --db-url "$OPS_DB_URL" -f supabase/migrations/00000000000000_baseline.sql
-```
+`supabase/migrations/00000000000000_baseline.sql` — 16 tablas, 49 policies, 10
+funciones, 28 indices, 14 triggers. **Se genero por introspeccion via el MCP de
+Supabase**, no con `db dump`: no hizo falta la connection string, asi que nunca
+hubo que pasar credenciales por ningun lado.
 
-Ese dump es **solo esquema, sin datos** — no arrastra CLIDs ni partners reales.
-Despues `npx supabase db reset` levanta todo y hay que **generar datos
-sinteticos** para probar (no copiar datos de produccion a la maquina).
+Lleva **solo esquema**. Los CLID, partners y metricas reales no estan ni deben
+estar en la maquina.
 
-Alternativa sin credenciales: reconectar el MCP de Supabase a la organizacion de
-`ops_dashboard` (hoy apunta a la de `pricing-ci-dashboard`) y reconstruir el
-esquema por introspeccion — mas lento y con mas chance de que se escape un
-detalle (defaults, triggers, policies).
+**Si el esquema de produccion cambia**, este archivo NO se actualiza solo: las
+migraciones nuevas van como archivos aparte con fecha posterior. Regenerarlo
+entero solo si el drift se vuelve inmanejable.
+
+### Los datos sinteticos
+
+`supabase/seed_synthetic.sql` — 6 partners inventados (CLID `9000000000xx`, un
+rango que no existe en produccion), 3 ciudades, 3 meses.
+
+Estan **diseñados para verificar a ojo**: los volumenes son redondos y la relacion
+entre ellos exacta. Reproducen los casos que importan — TukTuk concentrado en Lima
+(como en produccion, donde Arequipa y Trujillo tienen cero), un partner solo-TukTuk
+sin operacion de taxi (el caso PIAGGIO), un sub-fleet de delivery que debe quedar
+fuera, y un partner sin TukTuk que sirve de control.
+
+El invariante que hace facil la verificacion: **si se carga un goal igual a la base,
+la cuota de cada partner tiene que salir identica a su propio volumen**. Cualquier
+otro numero es un bug de reparto. Los valores esperados estan al final del archivo.
+
+### Trampa que sigue viva
+
+`npm run build` **tambien lee `.env.local`**, asi que con el archivo presente el
+`dist/` local apunta a Supabase local. No afecta al deploy (Vercel y Pages buildean
+sin ese archivo, y `dist/` esta en `.gitignore`), pero un `npm run preview` despues
+de un build local va contra local, no contra produccion.
 
 ## Reset
 
 ```bash
-npx supabase db reset          # re-aplica migraciones + seed
+npx supabase db reset          # re-aplica migraciones + seed (hay que re-correr seed_synthetic)
 npx supabase stop              # baja el stack (los datos sobreviven)
 npx supabase stop --no-backup  # baja y borra el volumen
 ```
