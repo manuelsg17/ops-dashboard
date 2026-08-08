@@ -174,6 +174,11 @@ export function p2PartnerList() {
 }
 // Portada divisoria de sección (se inserta antes de la sección TukTuk).
 export const P2_DIVIDER = { es: "TukTuk", en: "TukTuk", charts: false, build: (p) => buildSlide2SectionCover(p, "tuktuk") };
+// Criterios del mes (TukTuk). Va SOLO en la sección TukTuk, justo después del
+// divisor: es lo primero que el partner tiene que ver de esa línea, porque es lo
+// que se le pide. Ver TK_META_NUEVOS_MES en rendimiento.ts (misma constante, una
+// sola definición) y buildSlide2TkCriterios abajo para por qué Full Timers no está.
+export const P2_TK_CRITERIOS_SLIDE = { es: "Criterios del mes", en: "Monthly criteria", charts: false, build: (p, d, i) => buildSlide2TkCriterios(p, i) };
 // Slide de Seguimiento (Fase 3, render-only): solo si el partner tiene tareas cargadas.
 // Va al final del deck y entra al PDF automáticamente (no es noPdf). Definida en seguimiento.js.
 export const P2_SEG_SLIDE = { es: "Seguimiento", en: "Follow-up", charts: false, build: (p, d, i) => buildSlide2Seguimiento(p, i) };
@@ -200,6 +205,7 @@ export function p2Deck(partner) {
   }
   if (showTk) {
     deck.push({ def: P2_DIVIDER, ds: "tuktuk" });
+    deck.push({ def: P2_TK_CRITERIOS_SLIDE, ds: "tuktuk" });
     body.forEach(def => deck.push({ def, ds: "tuktuk" }));
   }
   // Seguimiento (Fase 3): al final del deck, solo si el partner tiene tareas.
@@ -355,6 +361,113 @@ export function buildSlide2SectionCover(partner, ds) {
       <div class="agy-style-354">${title}</div>
       <div style="color:${accent};font-weight:800;font-size:1.1rem;margin-top:6px">${escapeHTML(partner)}</div>
       <div class="agy-style-355">${sub} <strong class="agy-style-352">${tk ? "TukTuk" : "Taxi"}</strong></div>
+    </div>`;
+}
+
+// ── SLIDE: Criterios del mes (TukTuk) ────────────────────────────────────────
+// Muestra "Nuevos conductores de adquisición propia" vs la meta del criterio.
+//
+// LA DEFINICIÓN ES LA LETRA CHICA: el criterio dice "de adquisición propia: no
+// contempla self-registration", y esa distinción existe tal cual en la fuente —
+// new_from_partner (los trae el partner, CUENTAN) vs new_from_service
+// (self-registration, NO cuentan). El desglose se muestra abajo a propósito: este
+// deck se le manda al partner, así que tiene que poder auditar de dónde sale el
+// número en vez de recibir un total sin explicación.
+//
+// FULL TIMERS NO ESTÁ, y no es un olvido: la measure no existe en las 48 del
+// reporte de taxiparks y NO se puede derivar de sh_per_active_driver, que es un
+// PROMEDIO — el share de conductores sobre 40h necesita la distribución. Un
+// promedio de 40h sale igual con todos en 40h que con la mitad en 80h y la otra
+// mitad en cero. Mostrar un placeholder en un deck que ve el partner sería peor
+// que no mostrarlo: se agrega cuando la fuente exponga la métrica.
+export function buildSlide2TkCriterios(partner, idx) {
+  const es = PRESENT2_STATE.lang === "es";
+  const META = 100;                       // = TK_META_NUEVOS_MES (criterios del mes)
+  const dates = p2AllDates();
+  const rows  = p2RawDataset().filter(r => r.partner === partner);
+  const last  = dates[dates.length - 1], prev = dates[dates.length - 2];
+
+  const sumOn = (d, get) => rows.reduce((a, r) => a + (r.date === d ? (get(r) || 0) : 0), 0);
+  const propios = sumOn(last, r => r.newPartner);
+  const self    = sumOn(last, r => r.newService);
+  const pPropios = prev ? sumOn(prev, r => r.newPartner) : 0;
+  const total   = propios + self;
+  const pctProp = total > 0 ? (propios / total) * 100 : 0;
+
+  // La meta es MENSUAL: en semanal/diario el último período no es un mes, así que
+  // el % de cumplimiento no aplica (mismo criterio que Metas y Rendimiento).
+  const mensual = STATE.curMode === "mensual";
+  const pctMeta = Math.min(100, (propios / META) * 100);
+  const col = !mensual ? "#64748b" : propios >= META ? "#10b981" : propios >= META * 0.5 ? "#f59e0b" : "#FF0000";
+  const delta = pPropios > 0 ? ((propios - pPropios) / pPropios) * 100 : null;
+  const mi = p2ModeInfo();
+
+  // Evolución: últimos 6 períodos, para que se vea la tendencia y no un dato suelto.
+  const ultimos = dates.slice(-6);
+  const evo = ultimos.map(d => {
+    const v = sumOn(d, r => r.newPartner);
+    const h = Math.max(3, Math.round((v / Math.max(META, ...ultimos.map(x => sumOn(x, r => r.newPartner)))) * 90));
+    const okD = mensual && v >= META;
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+      <div style="font-size:.68rem;font-weight:700;color:#334155">${fmt(v)}</div>
+      <div style="width:100%;height:90px;display:flex;align-items:flex-end">
+        <div style="width:100%;height:${h}px;background:${okD ? "#10b981" : "#f59e0b"};border-radius:4px 4px 0 0"></div>
+      </div>
+      <div style="font-size:.6rem;color:#94a3b8">${escapeHTML(String(d))}</div>
+    </div>`;
+  }).join("");
+
+  const card = (label, val, sub, color) => `
+    <div style="flex:1;background:#fff;border:1px solid #e2e8f0;border-top:3px solid ${color};border-radius:10px;padding:14px 16px">
+      <div style="font-size:.72rem;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.03em">${label}</div>
+      <div style="font-size:1.9rem;font-weight:800;color:${color};margin-top:4px">${val}</div>
+      <div style="font-size:.68rem;color:#94a3b8;margin-top:2px">${sub}</div>
+    </div>`;
+
+  return `
+    <div style="padding:8px 4px">
+      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:4px">
+        <div style="font-size:1.35rem;font-weight:800;color:#0f172a">🛺 ${es ? "Criterios del mes" : "Monthly criteria"}</div>
+        <div style="color:#94a3b8;font-size:.8rem">${escapeHTML(partner)} · ${escapeHTML(String(last || ""))}</div>
+      </div>
+      <div style="color:#64748b;font-size:.82rem;margin-bottom:14px">
+        ${es ? "Conductores nuevos traídos por el partner. No contempla self-registration."
+             : "New drivers brought in by the partner. Self-registration does not count."}
+      </div>
+
+      <div style="display:flex;gap:12px;margin-bottom:16px">
+        ${card(es ? "Nuevos propios" : "Own acquisition", fmt(propios),
+               (mensual ? (es ? "meta " : "target ") + META : (es ? "meta mensual — este período no es un mes" : "monthly target — this period is not a month")), col)}
+        ${card(es ? "Self-registration" : "Self-registration", fmt(self),
+               es ? "no cuenta para la meta" : "does not count", "#94a3b8")}
+        ${card(es ? "% adquisición propia" : "% own acquisition", pctProp.toFixed(1) + "%",
+               es ? "propios / total nuevos" : "own / total new", "#0891b2")}
+        ${card(es ? "vs período anterior" : "vs previous period",
+               delta === null ? "—" : (delta >= 0 ? "+" : "") + delta.toFixed(1) + "%",
+               delta === null ? (es ? "sin base previa" : "no prior base") : mi.pop,
+               delta === null ? "#94a3b8" : delta >= 0 ? "#10b981" : "#FF0000")}
+      </div>
+
+      ${mensual ? `
+      <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;font-size:.75rem;font-weight:700;color:#334155;margin-bottom:6px">
+          <span>${es ? "Avance vs meta" : "Progress vs target"}</span><span>${fmt(propios)} / ${META}</span>
+        </div>
+        <div style="background:#eef2f7;height:14px;border-radius:7px;overflow:hidden">
+          <div style="width:${pctMeta}%;height:100%;background:${col}"></div>
+        </div>
+      </div>` : `
+      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:.78rem;color:#92400e">
+        ⚠️ ${es ? `La meta de ${META} es <strong>mensual</strong>. En escala ${escapeHTML(STATE.curMode)} el último período no es un mes, así que el % de cumplimiento no es comparable.`
+                : `The ${META} target is <strong>monthly</strong>. In ${escapeHTML(STATE.curMode)} scale the last period is not a month, so completion % is not comparable.`}
+      </div>`}
+
+      <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px">
+        <div style="font-size:.75rem;font-weight:700;color:#334155;margin-bottom:10px">
+          ${es ? "Evolución · nuevos propios" : "Trend · own acquisition"}
+        </div>
+        <div style="display:flex;gap:8px;align-items:flex-end">${evo || `<div style="color:#94a3b8;font-size:.8rem">${es ? "Sin datos" : "No data"}</div>`}</div>
+      </div>
     </div>`;
 }
 
