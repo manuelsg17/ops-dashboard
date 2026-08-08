@@ -794,11 +794,15 @@ export function buildPartnerCards(apd, lastDate, prevDate, partners, sel) {
 
 // ── KPIs DE LÍNEA (Fleet / TukTuk) — Fase 2 ───────────────────────────────────
 // Tarjeta KPI simple con badge WoW/MoM (reusa .mcard). val/prev ya agregados.
-export function _rendKpiCard(label, icon, val, prev, color, fmtFn) {
+// subLabel es opcional y por defecto dice "snapshot último período" porque casi
+// todos los KPIs de esta vista lo son. Los de FLUJO (nuevos conductores) acumulan
+// sobre el rango y tienen que decirlo — si no, se leen como si fueran del último
+// período y el número parece inflado sin motivo.
+export function _rendKpiCard(label, icon, val, prev, color, fmtFn, subLabel) {
   return `
     <div class="mcard" style="border-top:3px solid ${color}">
       <div class="mcard-label">${icon} ${label}</div>
-      <div class="mcard-sub-label">snapshot último período</div>
+      <div class="mcard-sub-label">${subLabel || "snapshot último período"}</div>
       <div class="mcard-val">${fmtFn(val)}</div>
       <div class="agy-style-257">${bdgMode(val, prev)}
         <span class="agy-style-258">vs ${STATE.curMode === 'mensual' ? 'mes' : 'sem.'} anterior</span>
@@ -1091,7 +1095,84 @@ export function _rendTkKPIs(lastRows, prevRows) {
     `<div class="section"><div class="metric-row">
       ${_rendKpiCard("Brandeados",  "🏷️", c.branded, p.branded, "#7e22ce", fmt)}
       ${_rendKpiCard("Active Cars", "🚗", c.actCars, p.actCars, "#0891b2", fmt)}
-    </div></div>`;
+    </div></div>` +
+    _rendTkAdquisicion(lastRows, prevRows);
+}
+
+// ── TukTuk · Adquisición propia (criterio "Las 6 metas del mes") ──────────────
+// Meta del criterio: 100 conductores nuevos al mes de ADQUISICIÓN PROPIA. La
+// letra chica importa y define la métrica: "no contempla self-registration", que
+// es exactamente la distinción entre las dos columnas de la fuente:
+//   new_from_partner  → los trae el partner   (cuentan)
+//   new_from_service  → self-registration     (NO cuentan)
+// Por eso la tarjeta de self-registration se muestra al lado: deja la definición
+// a la vista y auditable, en vez de que el número salga de una caja negra.
+export const TK_META_NUEVOS_MES = 100;
+
+// OJO CON LA VENTANA: la meta es de 100 al MES, así que esta sección mide el
+// ÚLTIMO PERÍODO, no el acumulado del rango. Con el acumulado, un rango de 3
+// meses daba 97,2 contra una meta de 100 y parecía "casi cumplida" cuando en
+// realidad el mes cerró en 36 — el mismo error de escala que ya obligó a poner
+// un aviso en Metas. Comparar contra el período anterior, no contra el rango.
+export function _rendTkAdquisicion(lastRows, prevRows) {
+  const sum = (rows, get) => rows.reduce((a, r) => a + (get(r) || 0), 0);
+  const propios  = sum(lastRows, r => r.newPartner);
+  const self     = sum(lastRows, r => r.newService);
+  const pPropios = sum(prevRows, r => r.newPartner);
+  const pSelf    = sum(prevRows, r => r.newService);
+  const total    = propios + self;
+  const pTotal   = pPropios + pSelf;
+  const pct      = total  > 0 ? (propios  / total)  * 100 : 0;
+  const pPct     = pTotal > 0 ? (pPropios / pTotal) * 100 : 0;
+
+  // Por partner: lo accionable es a quién llamar, no el total país.
+  const byPartner = new Map();
+  lastRows.forEach(r => {
+    byPartner.set(r.partner, (byPartner.get(r.partner) || 0) + (r.newPartner || 0));
+  });
+  const filas = [...byPartner.entries()].sort((a, b) => b[1] - a[1]);
+
+  // La meta es MENSUAL. En semanal/diario el "último período" es una semana o un
+  // día, así que compararlo contra 100 daría un incumplimiento falso → el
+  // semáforo queda en gris (mismo criterio que el aviso de escala de Metas).
+  const mensual = STATE.curMode === "mensual";
+  const rangoTxt = mensual ? "último mes" : "último período (no es un mes)";
+
+  const filasHTML = filas.length ? filas.map(([partner, n]) => {
+    const ok  = n >= TK_META_NUEVOS_MES;
+    const col = !mensual ? "#64748b" : ok ? "#10b981" : n >= TK_META_NUEVOS_MES * 0.5 ? "#f59e0b" : "#FF0000";
+    const pctMeta = Math.min(100, (n / TK_META_NUEVOS_MES) * 100);
+    return `<tr>
+      <td style="padding:8px 12px">${escapeHTML(partner)}</td>
+      <td style="padding:8px 12px;text-align:right;font-weight:700;color:${col}">${fmt(n)}</td>
+      <td style="padding:8px 12px;width:40%">
+        <div style="background:#eee;height:8px;border-radius:4px;overflow:hidden">
+          <div style="width:${pctMeta}%;height:100%;background:${col}"></div>
+        </div>
+      </td>
+    </tr>`;
+  }).join("") : `<tr><td colspan="3" style="padding:12px;color:#888">Sin conductores nuevos en el rango.</td></tr>`;
+
+  return secH("🎯", "#e11d48", "TukTuk · Adquisición propia",
+      `Conductores nuevos traídos por el partner (excluye self-registration) · meta ${TK_META_NUEVOS_MES}/mes`, "") +
+    `<div class="section">
+      <div class="metric-row">
+        ${_rendKpiCard("Nuevos propios", "🎯", propios, pPropios, "#e11d48", fmt, rangoTxt)}
+        ${_rendKpiCard("Self-registration", "🔁", self, pSelf, "#94a3b8", fmt, "no cuenta para la meta")}
+        ${_rendKpiCard("% adquisición propia", "📈", pct, pPct, "#0891b2", v => v.toFixed(1) + "%", "propios / total nuevos")}
+      </div>
+      ${!mensual ? `<div class="agy-style-213" style="margin:10px 0">
+        ⚠️ La meta de ${TK_META_NUEVOS_MES} es <strong>mensual</strong>. En escala ${STATE.curMode} el último período es ${STATE.curMode === "diario" ? "un día" : "una semana"}, así que no es comparable contra ella y el semáforo por partner queda en gris. Cambiá a <strong>Mensual</strong> para evaluar cumplimiento.
+      </div>` : ""}
+      <table style="width:100%;border-collapse:collapse;font-size:.85rem">
+        <thead><tr style="background:#f8fafc;text-align:left">
+          <th style="padding:8px 12px">PARTNER</th>
+          <th style="padding:8px 12px;text-align:right">NUEVOS PROPIOS</th>
+          <th style="padding:8px 12px">vs META ${TK_META_NUEVOS_MES}</th>
+        </tr></thead>
+        <tbody>${filasHTML}</tbody>
+      </table>
+    </div>`;
 }
 
 // ── SECTION HEADER ─────────────────────────────────────────────────────────────
