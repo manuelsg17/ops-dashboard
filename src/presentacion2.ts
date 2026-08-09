@@ -383,37 +383,52 @@ export function buildSlide2SectionCover(partner, ds) {
 export function buildSlide2TkCriterios(partner, idx) {
   const es = PRESENT2_STATE.lang === "es";
   const META = 100;                       // = TK_META_NUEVOS_MES (criterios del mes)
-  const dates = p2AllDates();
   const rows  = p2RawDataset().filter(r => r.partner === partner);
-  const last  = dates[dates.length - 1], prev = dates[dates.length - 2];
 
-  const sumOn = (d, get) => rows.reduce((a, r) => a + (r.date === d ? (get(r) || 0) : 0), 0);
-  const propios = sumOn(last, r => r.newPartner);
-  const self    = sumOn(last, r => r.newService);
-  const pPropios = prev ? sumOn(prev, r => r.newPartner) : 0;
+  // SIEMPRE POR MES, sea cual sea la escala en la que esté navegando el KAM.
+  // El criterio es "100 al mes": en semanal el último período son 7 días, y la
+  // primera version mostraba "3 / 100" con un disclaimer. Como la escala por
+  // defecto es Semanal, el partner recibía ese slide casi siempre — el numero
+  // grande contradecía el mensaje. Ahora se agrega por MES DE REPORTE (p2ReportYM,
+  // el mismo bucketing que usa Avance vs Meta: en semanal la semana cuenta en el
+  // mes de su jueves), así que en semanal suma sus ~4 semanas y da el mes real.
+  const porMes = new Map();
+  rows.forEach(r => {
+    const { y, m } = p2ReportYM(r.date);
+    if (!y) return;
+    const k = `${y}-${String(m).padStart(2, "0")}`;
+    let e = porMes.get(k);
+    if (!e) { e = { propios: 0, self: 0 }; porMes.set(k, e); }
+    e.propios += r.newPartner  || 0;
+    e.self    += r.newService  || 0;
+  });
+  const meses = [...porMes.keys()].sort();
+  const last = meses[meses.length - 1], prev = meses[meses.length - 2];
+  const cur  = porMes.get(last) || { propios: 0, self: 0 };
+  const propios  = cur.propios, self = cur.self;
+  const pPropios = prev ? (porMes.get(prev).propios) : 0;
   const total   = propios + self;
   const pctProp = total > 0 ? (propios / total) * 100 : 0;
 
-  // La meta es MENSUAL: en semanal/diario el último período no es un mes, así que
-  // el % de cumplimiento no aplica (mismo criterio que Metas y Rendimiento).
-  const mensual = STATE.curMode === "mensual";
+  // Ya no hay caso "no comparable": la cifra es mensual por construcción.
   const pctMeta = Math.min(100, (propios / META) * 100);
-  const col = !mensual ? "#64748b" : propios >= META ? "#10b981" : propios >= META * 0.5 ? "#f59e0b" : "#FF0000";
+  const col = propios >= META ? "#10b981" : propios >= META * 0.5 ? "#f59e0b" : "#FF0000";
   const delta = pPropios > 0 ? ((propios - pPropios) / pPropios) * 100 : null;
-  const mi = p2ModeInfo();
+  // El mes es cerrado sólo si hay uno posterior; si es el último, va MTD.
+  const parcial = meses.length < 2 || last === meses[meses.length - 1] && STATE.curMode !== "mensual";
 
-  // Evolución: últimos 6 períodos, para que se vea la tendencia y no un dato suelto.
-  const ultimos = dates.slice(-6);
-  const evo = ultimos.map(d => {
-    const v = sumOn(d, r => r.newPartner);
-    const h = Math.max(3, Math.round((v / Math.max(META, ...ultimos.map(x => sumOn(x, r => r.newPartner)))) * 90));
-    const okD = mensual && v >= META;
+  // Evolución: últimos 6 MESES, para que se vea la tendencia y no un dato suelto.
+  const ultimos = meses.slice(-6);
+  const maxEvo = Math.max(META, ...ultimos.map(k => porMes.get(k).propios));
+  const evo = ultimos.map(k => {
+    const v = porMes.get(k).propios;
+    const h = Math.max(3, Math.round((v / maxEvo) * 90));
     return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
       <div style="font-size:.68rem;font-weight:700;color:#334155">${fmt(v)}</div>
       <div style="width:100%;height:90px;display:flex;align-items:flex-end">
-        <div style="width:100%;height:${h}px;background:${okD ? "#10b981" : "#f59e0b"};border-radius:4px 4px 0 0"></div>
+        <div style="width:100%;height:${h}px;background:${v >= META ? "#10b981" : "#f59e0b"};border-radius:4px 4px 0 0"></div>
       </div>
-      <div style="font-size:.6rem;color:#94a3b8">${escapeHTML(String(d))}</div>
+      <div style="font-size:.6rem;color:#94a3b8">${escapeHTML(String(k))}</div>
     </div>`;
   }).join("");
 
@@ -437,18 +452,17 @@ export function buildSlide2TkCriterios(partner, idx) {
 
       <div style="display:flex;gap:12px;margin-bottom:16px">
         ${card(es ? "Nuevos propios" : "Own acquisition", fmt(propios),
-               (mensual ? (es ? "meta " : "target ") + META : (es ? "meta mensual — este período no es un mes" : "monthly target — this period is not a month")), col)}
+               (es ? "meta " : "target ") + META + (parcial ? (es ? " · mes en curso" : " · month in progress") : ""), col)}
         ${card(es ? "Self-registration" : "Self-registration", fmt(self),
                es ? "no cuenta para la meta" : "does not count", "#94a3b8")}
         ${card(es ? "% adquisición propia" : "% own acquisition", pctProp.toFixed(1) + "%",
                es ? "propios / total nuevos" : "own / total new", "#0891b2")}
-        ${card(es ? "vs período anterior" : "vs previous period",
+        ${card(es ? "vs mes anterior" : "vs previous month",
                delta === null ? "—" : (delta >= 0 ? "+" : "") + delta.toFixed(1) + "%",
-               delta === null ? (es ? "sin base previa" : "no prior base") : mi.pop,
+               delta === null ? (es ? "sin base previa" : "no prior base") : "MoM",
                delta === null ? "#94a3b8" : delta >= 0 ? "#10b981" : "#FF0000")}
       </div>
 
-      ${mensual ? `
       <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;margin-bottom:14px">
         <div style="display:flex;justify-content:space-between;font-size:.75rem;font-weight:700;color:#334155;margin-bottom:6px">
           <span>${es ? "Avance vs meta" : "Progress vs target"}</span><span>${fmt(propios)} / ${META}</span>
@@ -456,11 +470,7 @@ export function buildSlide2TkCriterios(partner, idx) {
         <div style="background:#eef2f7;height:14px;border-radius:7px;overflow:hidden">
           <div style="width:${pctMeta}%;height:100%;background:${col}"></div>
         </div>
-      </div>` : `
-      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:.78rem;color:#92400e">
-        ⚠️ ${es ? `La meta de ${META} es <strong>mensual</strong>. En escala ${escapeHTML(STATE.curMode)} el último período no es un mes, así que el % de cumplimiento no es comparable.`
-                : `The ${META} target is <strong>monthly</strong>. In ${escapeHTML(STATE.curMode)} scale the last period is not a month, so completion % is not comparable.`}
-      </div>`}
+      </div>
 
       <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px">
         <div style="font-size:.75rem;font-weight:700;color:#334155;margin-bottom:10px">
