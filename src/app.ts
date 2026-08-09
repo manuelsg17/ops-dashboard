@@ -122,9 +122,16 @@ export function initApp() {
   // carga inicial terminó: bajar sus chunks mientras el navegador está libre es
   // gratis, y hace que cambiar de pestaña no tenga que esperar una descarga
   // (era buena parte de la sensación de "trabado / pantalla en blanco").
+  // ORDEN POR PESO REAL, no por frecuencia de uso (medido con el build de
+  // ago-2026, en gzip): present2 arrastra Chart.js como import estatico, asi que
+  // abrirla en frio son 24 kB del modulo + 71 kB de la libreria = 95 kB, contra
+  // 24 kB de partnerview o 13 kB de calculator. Iba TERCERA en la fila y la
+  // precarga es serial (una por callback de idle), asi que era justo la mas
+  // pesada la que casi nunca llegaba a tiempo — de ahi que "Presentacion 2.0"
+  // se sintiera la mas lenta al entrar. Ahora va primera.
   const _prefetch = () => {
     if (typeof window.prefetchViewModules === "function") {
-      window.prefetchViewModules(["partnerview", "calculator", "present2", "rawdata", "seguimiento"]);
+      window.prefetchViewModules(["present2", "partnerview", "calculator", "rawdata", "seguimiento"]);
     }
   };
   Promise.resolve(loadFromSupabase()).then(_prefetch, _prefetch);
