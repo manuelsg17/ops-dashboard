@@ -539,10 +539,24 @@ let _paintedFromCache = false;
 // Indicador discreto de "refrescando en segundo plano". NO es showLoad(): ese
 // tapa la pantalla, y el punto de todo esto es que el usuario pueda trabajar
 // mientras llega la data fresca.
-function _setRefreshing(on) {
+// `snapAt` = timestamp del snapshot que se está mostrando. Con la expiración en
+// 7 días (ver cache.js) el snapshot puede tener varios días, así que decir solo
+// "Actualizando…" ya no alcanza: la antigüedad se muestra en el propio texto en
+// cuanto pasa de medio día. Sin eso, alargar la expiración sería cambiar lentitud
+// por el riesgo de que alguien lea números viejos creyéndolos de hoy.
+function _setRefreshing(on, snapAt) {
   const el = document.getElementById("dataRefreshing");
-  if (el) el.style.display = on ? "" : "none";
+  if (!el) return;
+  el.style.display = on ? "" : "none";
+  if (!on) return;
+  const horas = snapAt ? (Date.now() - snapAt) / 3600000 : 0;
+  el.textContent = horas >= 12
+    ? `↻ Actualizando… (mostrando datos de hace ${Math.round(horas / 24) >= 1 ? `${Math.round(horas / 24)} día(s)` : `${Math.round(horas)} h`})`
+    : "↻ Actualizando…";
 }
+
+// Antigüedad del snapshot pintado, para que el indicador la muestre.
+let _snapAt = 0;
 
 async function _hydrateFromCache() {
   let snap = null;
@@ -556,6 +570,7 @@ async function _hydrateFromCache() {
     _indexCoreData();
     _renderActiveTabAfterLoad();
     _applyMetasProyectosSeguimiento(snap.metas, snap.proyectos, snap.seguimiento);
+    _snapAt = snap.at || 0;
     return true;
   } catch (e) {
     // Snapshot incompatible con el pipeline actual (ej. se agregó una columna
@@ -581,7 +596,7 @@ export async function loadFromSupabase(opts = {}) {
     _paintedFromCache = await _hydrateFromCache();
   }
 
-  if (_paintedFromCache) _setRefreshing(true);
+  if (_paintedFromCache) _setRefreshing(true, _snapAt);
   else showLoad(true, "Cargando datos desde Supabase...");
 
   try {

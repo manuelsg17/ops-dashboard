@@ -26,12 +26,26 @@
 
 const DB_NAME  = "yangoDash";
 const STORE    = "snapshots";
-const SCHEMA_V = 1;
+// v2 (ago-2026): cambió el juego de columnas del fetch eager (6 pasaron a
+// diferidas). Los snapshots v1 no rompen nada —traen columnas de más, que se
+// ignoran— pero la regla del proyecto es subir la versión ante un cambio de
+// columnas, y cuesta un solo arranque sin caché.
+const SCHEMA_V = 2;
 
-// Vida del snapshot. Más viejo que esto se descarta en vez de mostrarse: es
-// preferible el spinner de siempre a pintar con confianza números de la semana
-// pasada. La data fresca igual llega por detrás en cuestión de segundos.
-const MAX_AGE_MS = 24 * 60 * 60 * 1000;
+// Vida del snapshot.
+//
+// ERA 24 h, Y ESO ANULABA EL CACHÉ JUSTO PARA EL USO NORMAL: un KAM abre el
+// dashboard una vez por la mañana, así que entre sesión y sesión pasan 24 h y
+// pico y el snapshot SIEMPRE se descartaba. El caché servía solo a quien
+// recargaba dos veces el mismo día — es decir, casi nunca a quien lo necesita.
+//
+// El argumento original ("no pintar con confianza números de la semana pasada")
+// tiene respuesta propia y ya construida: se pinta con el indicador
+// `#dataRefreshing` visible y, desde ahora, con la ANTIGÜEDAD explícita cuando
+// pasa de medio día. El snapshot nunca se muestra solo: la revalidación sale
+// disparada en el mismo arranque. 7 días también acota cuánto tiempo quedan
+// datos de negocio en el disco, que es la otra razón de que exista este tope.
+const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 let _dbPromise = null;
 
