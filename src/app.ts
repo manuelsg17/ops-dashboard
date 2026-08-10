@@ -129,10 +129,34 @@ export function initApp() {
   // precarga es serial (una por callback de idle), asi que era justo la mas
   // pesada la que casi nunca llegaba a tiempo — de ahi que "Presentacion 2.0"
   // se sintiera la mas lenta al entrar. Ahora va primera.
+  //
+  // …PERO EL CHUNK NUNCA FUE LO MÁS CARO. Medido en ago-2026: abrir Presentación
+  // 2.0 en frío esperaba además a `ensureFullRendColumns()`, que switchTab AWAITEA
+  // antes de pintar — un fetch de las 26 columnas diferidas sobre la ventana
+  // entera. Por eso se sentía lenta "solo la primera vez" y rápida después: el
+  // chunk ya estaba precargado, la descarga de datos no. Lo mismo con mensual y
+  // diario, que hacen su propio lazy load al primer cambio de escala.
+  //
+  // Ahora la cadena de idle precarga DATOS, no solo módulos. El orden es por
+  // costo de espera percibido: primero lo que bloquea el render de una pestaña
+  // (columnas), después las escalas alternativas. Diario va último: es el dataset
+  // más grande y el que menos se abre.
+  const _prefetchData = async () => {
+    const idle = window.requestIdleCallback || (cb => setTimeout(cb, 800));
+    const paso = fn => new Promise(res => idle(() => Promise.resolve(fn()).then(res, res)));
+    // Fallo silencioso a propósito: es una optimización. Si algo no llega, la
+    // pestaña lo pide igual por el camino de siempre.
+    await paso(() => ensureFullRendColumns());
+    await paso(() => loadMensualIfNeeded(true));
+    await paso(() => ensureFullRendColumns("mensual"));
+    await paso(() => loadDiarioIfNeeded(true));
+    await paso(() => ensureFullRendColumns("diario"));
+  };
   const _prefetch = () => {
     if (typeof window.prefetchViewModules === "function") {
       window.prefetchViewModules(["present2", "partnerview", "calculator", "rawdata", "seguimiento"]);
     }
+    _prefetchData().catch(() => {});
   };
   Promise.resolve(loadFromSupabase()).then(_prefetch, _prefetch);
 }

@@ -61,9 +61,15 @@ export function _metasLine() {
   // 4 líneas funcionan en las 3 escalas.
   return STATE.metasLine || "comb";
 }
-export function setMetasLine(line) {
+export async function setMetasLine(line) {
   if ((STATE.metasLine || "comb") === line) return;
   STATE.metasLine = line;
+  // Ver el comentario gemelo en setRendLine: _metasFleetActuals pondera por
+  // acceptance_rate, que es una columna diferida.
+  if (line === "fleet" && typeof ensureFullRendColumns === "function") {
+    try { await ensureFullRendColumns(); } catch (e) { /* nunca bloquear el render */ }
+    if ((STATE.metasLine || "comb") !== line) return;
+  }
   if (STATE.curTab === "metas") renderMetas();
 }
 export function metasLineToggleHTML() {

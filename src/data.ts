@@ -322,8 +322,16 @@ const REND_CORE_COLS = [
 // TX_EAGER_COLS; si no, en TX_DEFERRED_COLS. Ponerla en la lista equivocada no
 // rompe nada visible de inmediato (queda en null hasta que se dispara la carga
 // diferida), asi que conviene verificarlo a conciencia -- ver CLAUDE.md.
-export const TX_EAGER_COLS = ["gmv", "new_drivers", "acceptance_rate", "completion_rate", "trips_per_hour", "money_per_hour", "bad_rated_trips_share", "fraud_trips_share", "driver_subsidies_by_gmv", "driver_support_requests_share", "active_cars", "branded_active_cars", "owned_fleet_active_cars", "internal_fleet_sh", "external_fleet_sh"];
-export const TX_DEFERRED_COLS = ["new_drivers_share", "new_from_partner_50t", "new_from_service_50t", "avg_driver_rating", "avg_fare_after_surge", "owned_fleet_branded_active_cars", "internal_fleet_sh_share", "internal_fleet_sh_per_active_car", "sh_per_active_car", "sh_per_active_driver", "supply_hours_share", "trips_share", "commission_share", "new_profiles", "new_profiles_partner", "new_profiles_partner_50t", "new_profiles_partner_reg1", "new_profiles_partner_reg10", "new_profiles_partner_reg50", "new_profiles_partner_reg100", "new_profiles_service", "new_profiles_service_50t", "new_profiles_service_reg1", "new_profiles_service_reg10", "new_profiles_service_reg50", "new_profiles_service_reg100"];
+export const TX_EAGER_COLS = ["gmv", "new_drivers", "trips_per_hour", "money_per_hour", "active_cars", "branded_active_cars", "owned_fleet_active_cars", "internal_fleet_sh", "external_fleet_sh"];
+// Las 6 primeras salieron de EAGER en ago-2026 tras verificar caso por caso quién
+// las lee: SOLO `_rendFleetAgg` (scorecard "Fleet · Calidad y Dependencia") y, en
+// el caso de acceptance_rate, además `_metasFleetActuals`. Las dos son la línea
+// FLEET, que no es la vista por defecto (esa es Combinado), así que viajaban en
+// cada arranque para una pantalla que la mayoría de las sesiones no abre.
+// Disparador: setRendLine("fleet") / setMetasLine("fleet") las esperan.
+// NO subir acá las de TukTuk (active_cars, branded_active_cars): las usa
+// `_rendTkKPIs`, y Combinado —la vista por defecto— entra por ese camino.
+export const TX_DEFERRED_COLS = ["acceptance_rate", "completion_rate", "bad_rated_trips_share", "fraud_trips_share", "driver_subsidies_by_gmv", "driver_support_requests_share", "new_drivers_share", "new_from_partner_50t", "new_from_service_50t", "avg_driver_rating", "avg_fare_after_surge", "owned_fleet_branded_active_cars", "internal_fleet_sh_share", "internal_fleet_sh_per_active_car", "sh_per_active_car", "sh_per_active_driver", "supply_hours_share", "trips_share", "commission_share", "new_profiles", "new_profiles_partner", "new_profiles_partner_50t", "new_profiles_partner_reg1", "new_profiles_partner_reg10", "new_profiles_partner_reg50", "new_profiles_partner_reg100", "new_profiles_service", "new_profiles_service_50t", "new_profiles_service_reg1", "new_profiles_service_reg10", "new_profiles_service_reg50", "new_profiles_service_reg100"];
 
 // Clave natural de una fila de rendimiento. Verificado contra la BD: (clid,
 // city, fecha, db_id) es UNICA en la ventana de carga -- sin esa garantia el
@@ -864,16 +872,34 @@ function _renderActiveTabAfterLoad() {
 // referencias de fila — rawDataFull es una copia superficial de rawData, y
 // rawDataTuktuk/rawDataFleet/_semanalData son `filter()` sobre esos mismos
 // objetos. Mutar la fila una vez se propaga a todos los slices sin recorrerlos.
-const _colsFull = { semanal: false, mensual: false, diario: false };
+//
+// EL FLAG GUARDA LA PROMESA EN VUELO, NO UN BOOLEANO. Con la precarga en idle
+// (app.ts) esto pasa a ser obligatorio: si el usuario abre Presentación 2.0
+// mientras la precarga está a mitad del fetch, un booleano ya marcado haría que
+// el `await` de switchTab volviera EN EL ACTO y la pantalla se pintara con las
+// columnas todavía en null — guiones y gráficas vacías, sin ningún error. Con la
+// promesa, el segundo llamador espera al primero en vez de adelantarse.
+const _colsFull = { semanal: null, mensual: null, diario: null };
 
-export async function ensureFullRendColumns() {
-  const mode = STATE.curMode || "semanal";
-  if (_colsFull[mode]) return;
+// `modeOverride` lo usa la precarga en idle: quiere completar las columnas de la
+// escala mensual mientras el usuario sigue parado en la semanal, así que no puede
+// leer STATE.curMode.
+export function ensureFullRendColumns(modeOverride) {
+  const mode = modeOverride || STATE.curMode || "semanal";
+  if (_colsFull[mode]) return _colsFull[mode];
   const rows = mode === "mensual" ? STATE.rawDataMensualFull
              : mode === "diario"  ? STATE.rawDataDiarioFull
              : STATE.rawDataFull;
-  if (!rows || !rows.length) return;
+  // Sin filas no hay nada que fusionar Y NO SE CACHEA: la precarga en idle puede
+  // adelantarse a que la escala esté cargada; si esto quedara marcado, la pestaña
+  // que sí las necesita nunca las pediría.
+  if (!rows || !rows.length) return Promise.resolve();
+  const p = _fetchFullRendColumns(mode, rows);
+  _colsFull[mode] = p;
+  return p;
+}
 
+async function _fetchFullRendColumns(mode, rows) {
   const dateCol = mode === "mensual" ? "mes" : mode === "diario" ? "date" : "fecha";
   const tabla   = mode === "mensual" ? "rendimiento_mensual"
                 : mode === "diario"  ? "rendimiento_diario" : "rendimiento";
@@ -881,9 +907,6 @@ export async function ensureFullRendColumns() {
   // columnas que ya tiene.
   const cols = ["clid", "city", "db_id", dateCol, ...TX_DEFERRED_COLS].join(",");
 
-  // Se marca ANTES de await: si el usuario abre dos pestañas pesadas seguidas,
-  // la segunda no dispara un segundo fetch de lo mismo.
-  _colsFull[mode] = true;
   try {
     // El "desde" se deriva de las filas YA cargadas, no de recalcular la ventana:
     // _daysAgoISO/_monthsAgoYYYYMM dependen de la fecha de hoy y, si la sesión
@@ -917,7 +940,7 @@ export async function ensureFullRendColumns() {
   } catch (err) {
     // Si falla, se deja reintentar: las columnas quedan en null y las vistas que
     // las usan muestran "—", pero nada se rompe.
-    _colsFull[mode] = false;
+    _colsFull[mode] = null;
     if (DEBUG) console.warn("ensureFullRendColumns falló:", err);
   }
 }
@@ -925,7 +948,7 @@ export async function ensureFullRendColumns() {
 // Un upload o un cambio de ventana reemplaza las filas: el merge anterior ya no
 // aplica sobre los objetos nuevos.
 export function resetFullRendColumns() {
-  _colsFull.semanal = _colsFull.mensual = _colsFull.diario = false;
+  _colsFull.semanal = _colsFull.mensual = _colsFull.diario = null;
 }
 
 // ¿El "Desde" que pide el usuario está fuera de la ventana cargada? (Fase A3)
@@ -936,10 +959,35 @@ export function needsWiderRange(from) {
             && STATE._loadedFrom && from < STATE._loadedFrom);
 }
 
-// ── LAZY LOAD MENSUAL ─────────────────────────────────────────────────────────
-export async function loadMensualIfNeeded() {
-  if (STATE._mensualLoaded) return; // ya cargado
-  showLoad(true, "Cargando datos mensuales...");
+// ── LAZY LOAD MENSUAL / DIARIO ────────────────────────────────────────────────
+// LAS PROMESAS EN VUELO NO SON UN LUJO: la precarga en idle (app.ts) puede estar
+// a mitad del fetch cuando el usuario cambia de escala. Sin esto, el flag
+// (_mensualLoaded / _diarioLoaded) recién se marca AL FINAL, así que el segundo
+// llamador arrancaba un fetch duplicado de la tabla entera y las dos respuestas
+// se pisaban al escribir STATE. Ahora el segundo espera al primero.
+//
+// `silent` apaga el spinner global: la precarga es invisible por diseño, no debe
+// tapar la pantalla que el usuario está leyendo.
+const _scaleInflight = { mensual: null, diario: null };
+
+export function loadMensualIfNeeded(silent) {
+  if (STATE._mensualLoaded) return Promise.resolve();
+  if (_scaleInflight.mensual) return _scaleInflight.mensual;
+  const p = _loadMensual(silent).finally(() => { _scaleInflight.mensual = null; });
+  _scaleInflight.mensual = p;
+  return p;
+}
+
+export function loadDiarioIfNeeded(silent) {
+  if (STATE._diarioLoaded) return Promise.resolve();
+  if (_scaleInflight.diario) return _scaleInflight.diario;
+  const p = _loadDiario(silent).finally(() => { _scaleInflight.diario = null; });
+  _scaleInflight.diario = p;
+  return p;
+}
+
+async function _loadMensual(silent) {
+  if (!silent) showLoad(true, "Cargando datos mensuales...");
   try {
     const rendM = await fetchAllPages("rendimiento_mensual", "mes", {
       columns: REND_COLS_MENSUAL,
@@ -991,13 +1039,11 @@ export async function loadMensualIfNeeded() {
   } catch(err) {
     showBanner(false, "Error al cargar mensual: " + err.message);
   }
-  showLoad(false);
+  if (!silent) showLoad(false);
 }
 
-// ── LAZY LOAD DIARIO ──────────────────────────────────────────────────────────
-export async function loadDiarioIfNeeded() {
-  if (STATE._diarioLoaded) return;
-  showLoad(true, "Cargando datos diarios...");
+async function _loadDiario(silent) {
+  if (!silent) showLoad(true, "Cargando datos diarios...");
   try {
     const rendD = await fetchAllPages("rendimiento_diario", "date", {
       columns: REND_COLS_DIARIO,
@@ -1053,7 +1099,7 @@ export async function loadDiarioIfNeeded() {
   } catch (err) {
     showBanner(false, "Error al cargar diario: " + err.message);
   }
-  showLoad(false);
+  if (!silent) showLoad(false);
 }
 
 // ── LAZY LOAD CONVERSION (funnel por CLID, nivel pais) ────────────────────────

@@ -131,9 +131,17 @@ export function rendLineToggleHTML() {
     : "";
   return `<div class="mode-toggle-row agy-style-214">${btns}${note}</div>`;
 }
-export function setRendLine(line) {
+export async function setRendLine(line) {
   if ((STATE.rendLine || "comb") === line) return;
   STATE.rendLine = line;
+  // El scorecard "Fleet · Calidad y Dependencia" lee 6 columnas que el arranque
+  // NO pide (ver TX_DEFERRED_COLS). Sin esperarlas, la tarjeta se pintaría con
+  // ceros — que no se distinguen de un negocio con 0% de fraude. La precarga en
+  // idle suele haberlas traído ya, así que en la práctica esto no espera nada.
+  if (line === "fleet" && typeof ensureFullRendColumns === "function") {
+    try { await ensureFullRendColumns(); } catch (e) { /* nunca bloquear el render */ }
+    if ((STATE.rendLine || "comb") !== line) return;   // el usuario ya cambió de línea
+  }
   renderRend();
 }
 
