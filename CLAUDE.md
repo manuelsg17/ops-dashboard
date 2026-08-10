@@ -14,6 +14,22 @@ Dashboard para KAMs (partner performance): modulos **TypeScript** bundleados con
 
 ## Estado actual
 
+### Sesión Agosto 2026 (cont.) — Velocidad de carga: medido, no supuesto
+
+Tres commits: `cd7965d` (login), `9e934ec` (precarga + payload), `1587eb8` (caché).
+
+- **El login se colgaba para siempre** (`cd7965d`): `createClient` sin opciones usa el Web Lock por defecto de supabase-js, **compartido entre todas las pestañas del dominio y sin timeout**. Una pestaña colgada retiene el lock y bloquea al resto indefinidamente — el servidor procesaba el login (`last_sign_in_at` se actualizaba) pero el cliente nunca resolvía. `_authLock` con 5s de timeout que sigue sin el lock. **Ojo con la detección**: `instanceof NavigatorLockAcquireTimeoutError` NO funciona — con `acquireTimeout > 0` la librería aborta un `AbortController`, así que llega un `AbortError`. Usar `isAcquireTimeout`. Medido: escapa en 5.002 ms con el lock retenido; 0-2 ms sin contención.
+- **Presentación 2.0 no era lenta por su chunk** (`9e934ec`): ya se precargaba. `switchTab` **awaitea** `ensureFullRendColumns()` antes de pintar. De ahí "lenta solo la primera vez". La cadena de idle ahora precarga DATOS (columnas diferidas → mensual → sus columnas → diario → las suyas). Verificado: 3 escalas al 100% a los 6 s de ocio; present2 10 ms, mensual 29, diario 50.
+- **TRAMPA que esto obliga a resolver**: los guards tienen que ser **promesas en vuelo, no booleanos**. Con un booleano marcado antes del `await`, abrir la pestaña a mitad de la precarga hacía que el `await` volviera EN EL ACTO y se pintara con las columnas en `null` — guiones, sin ningún error. `loadMensual/loadDiario` tenían la variante inversa (flag al final → fetch duplicado que se pisaba al escribir STATE).
+- **Payload −30,1%** medido contra producción (3.195 kB → 2.231 kB): 6 columnas a diferidas tras verificar quién las lee (solo `_rendFleetAgg` y `_metasFleetActuals` = línea Fleet, que no es la vista por defecto). Disparador en `setRendLine/setMetasLine("fleet")`. **NO mover `active_cars`/`branded_active_cars`** pese a parecer de flota: las usa `_rendTkKPIs` y Combinado —la vista por defecto— entra por ahí.
+- **La expiración del caché a 24h lo anulaba justo para el uso diario** (`1587eb8`): un KAM abre el dashboard una vez por la mañana → entre sesiones pasan 24h y pico → el snapshot SIEMPRE se descartaba. Servía solo a quien recargaba dos veces el mismo día. Ahora 7 días, con la ANTIGÜEDAD visible en `#dataRefreshing` cuando pasa de medio día (eso es lo que justifica alargarlo, no un número más grande a secas). Verificado con snapshot envejecido a 3 días: pinta en 27 ms.
+
+**Números para no volver a estimar**: TTFB de una query real a producción = **285-315 ms** (Cloudflare tiene borde en Lima, 10 ms; los 285 son Lima→us-east). `JSON.parse` de 2,4 MB = **6,5 ms** — el CPU del cliente NO es el cuello de botella, nunca lo fue. El arranque encadena ~3 round-trips.
+
+**São Paulo: recomendación RETIRADA.** Con el caché arreglado el arranque pinta en decenas de ms y la red revalida por detrás, así que migrar región solo mejora el primer login en un dispositivo nuevo. No paga un proyecto nuevo + migración manual de hashes de `auth.users`. (Además el plan gratuito no soporta cambio de región.)
+
+**Pendiente evaluado y no hecho**: la RPC `dashboard_dates` sigue en el camino crítico (el fetch de rendimiento espera `winStart`). Se podría derivar del calendario como hace diario y disparar ambas en paralelo — ~285 ms del primer arranque, a cambio de traer algún período de más. Con el caché arreglado no parece pagar el riesgo.
+
 ### Sesión Agosto 2026 — Entorno local con sesión real (Supabase en Docker)
 
 **Por qué**: era el hueco más viejo del proyecto. Media docena de secciones de este archivo terminan en "pendiente: verificación con sesión real" porque no había forma de ejercitar una vista autenticada sin tocar producción. El entorno local cierra eso. **Detalle completo en `docs/local-dev.md`** — acá va solo lo que hay que saber de entrada.
