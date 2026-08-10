@@ -10,13 +10,49 @@
 // `Object.assign(window, config, ...)` de vendor.js TODAVÍA no se ejecutó.
 // Depender de `supabase`/`SUPABASE_URL` como globales bare acá rompía el login
 // (createClient is not a function). Import directo = no depende del orden.
-import { createClient } from "@supabase/supabase-js";
+import { createClient, navigatorLock } from "@supabase/supabase-js";
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./core/config.js";
 import { registerActions } from "./shared/actions.js";
 import { snapshotClear } from "./data/cache.js";
 import { logAccess, resetAccessLogSession } from "./shared/accessLog.js";
 
-export const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// ── LOCK DE AUTH CON ESCAPE ──────────────────────────────────────────────────
+// supabase-js serializa las operaciones de auth con un Web Lock COMPARTIDO entre
+// todas las pestañas del dominio, y por defecto espera INDEFINIDAMENTE. Si una
+// pestaña queda colgada a mitad de una operación (o el navegador no libera el
+// lock al cerrarla mal), cualquier otra pestaña se bloquea para siempre.
+//
+// El sintoma es engañoso y costo dos incidentes: el boton se queda en
+// "Ingresando..." sin ningun error, PERO el servidor si proceso el login
+// (last_sign_in_at se actualiza). O sea la red anduvo y la sesion existe — lo
+// que nunca resuelve es la promesa del cliente, esperando el lock.
+//
+// Con timeout: si en 5s no se pudo tomar, seguimos SIN el lock. Lo unico que
+// protege es la coincidencia de dos pestañas refrescando el token a la vez, que
+// en el peor caso genera un refresh de mas; contra eso, quedarse trabado sin
+// poder entrar es muchisimo peor. Cualquier otro error se propaga tal cual.
+// OJO CON COMO SE DETECTA EL TIMEOUT: la primera version usaba
+// `e instanceof NavigatorLockAcquireTimeoutError` y NO funcionaba — con
+// acquireTimeout > 0 la libreria aborta un AbortController, asi que el rechazo
+// viene como AbortError (DOMException), no como su clase propia; ese tipo solo
+// se lanza en la rama acquireTimeout === 0. El propio auth-js lo advierte en su
+// fuente: "Use the isAcquireTimeout property instead of checking with instanceof".
+// Se detectaba en la prueba de lock retenido: escapaba con "signal is aborted
+// without reason" en vez de seguir.
+const _authLock = async (name, acquireTimeout, fn) => {
+  try {
+    return await navigatorLock(name, 5000, fn);
+  } catch (e) {
+    const esTimeout = !!(e && (e.isAcquireTimeout || e.name === "AbortError"
+                          || /abort/i.test(e.message || "")));
+    if (esTimeout) return await fn();   // seguimos sin el lock
+    throw e;
+  }
+};
+
+export const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { lock: _authLock }
+});
 // El resto del código (funciones, no top-level) sigue usando `STATE`, `showApp`,
 // etc. como globales bare vía window — eso sí es seguro, porque solo se
 // ejecuta cuando el usuario interactúa, mucho después del bootstrap inicial.
@@ -151,11 +187,33 @@ export async function handleLogin() {
   btn.textContent = "Ingresando...";
   btn.disabled    = true;
 
-  const { error } = await sb.auth.signInWithPassword({ email, password });
-  if (error) {
-    errEl.textContent = "Credenciales incorrectas. Intenta de nuevo.";
+  // El boton solo se restauraba ante error: si signInWithPassword NUNCA resolvia,
+  // quedaba en "Ingresando..." para siempre y sin ninguna pista de que pasaba.
+  // Este watchdog no arregla la causa (para eso esta _authLock), pero convierte
+  // un cuelgue mudo en un mensaje accionable — que es la diferencia entre "el
+  // dashboard no anda" y saber que hay que cerrar las otras pestañas.
+  const watchdog = setTimeout(() => {
+    if (!btn.disabled) return;                 // ya resolvio, no pisar nada
+    errEl.textContent = "El servidor tardó demasiado en responder. Cerrá las otras pestañas del dashboard y volvé a intentar.";
     btn.textContent   = "Ingresar";
     btn.disabled      = false;
+  }, 15000);
+
+  try {
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) {
+      errEl.textContent = "Credenciales incorrectas. Intenta de nuevo.";
+      btn.textContent   = "Ingresar";
+      btn.disabled      = false;
+    }
+    // En exito NO se restaura el boton a proposito: el handler de SIGNED_IN
+    // (showApp) oculta la pantalla de login entera.
+  } catch (e) {
+    errEl.textContent = "No se pudo completar el ingreso: " + ((e && e.message) || e);
+    btn.textContent   = "Ingresar";
+    btn.disabled      = false;
+  } finally {
+    clearTimeout(watchdog);
   }
 }
 
