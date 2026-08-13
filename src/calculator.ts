@@ -541,7 +541,7 @@ export function _kamGoalInput(metric, label, weight, val) {
     <div>
       <label class="agy-style-114">${escapeHTML(label)}${wtag}</label>
       <input type="number" step="1" min="0" value="${+val || 0}"
-        data-act-change="calcOnKamGoalChange" data-metric="${escapeHTML(metric)}"
+        data-act-change="calcOnKamGoalChange" data-act-input="calcOnKamGoalChange" data-metric="${escapeHTML(metric)}"
         class="sb-inp agy-style-115"/>
     </div>`;
 }
@@ -1251,10 +1251,15 @@ export async function calcSaveMetas() {
   const totAD = rows.reduce((s, r) => s + (+r.meta_active_drivers || 0), 0);
   const totSH = rows.reduce((s, r) => s + (+r.meta_supply_hours  || 0), 0);
   const totNR = rows.reduce((s, r) => s + (+r.meta_nr            || 0), 0);
-  if (!totAD && !totSH && !totNR) {
-    alert("No se guardó nada: las metas calculadas dan 0 en todo.\n\n" +
-          "Suele pasar si los datos mensuales todavía no terminaron de cargar. " +
-          "Espera a que el dashboard termine de cargar y vuelve a intentar.\n\n" +
+  // Se bloquea si CUALQUIERA de las tres da 0, no solo si dan 0 las tres: la meta
+  // se escribe con las 3 columnas siempre, así que guardar con SH vacío BORRA el
+  // SH que ya estaba, exactamente igual de destructivo que el caso completo.
+  const vacias = [["Active Drivers", totAD], ["Supply Hours", totSH], ["N+R", totNR]]
+    .filter(([, v]) => !v).map(([n]) => n);
+  if (vacias.length) {
+    alert(`No se guardó nada: la meta de ${vacias.join(" y ")} da 0.\n\n` +
+          "Causa habitual: no cargaste los objetivos del KAM arriba (arrancan en 0), " +
+          "o saliste del campo sin que se aplicara el valor.\n\n" +
           "Se frenó a propósito: guardar así BORRARÍA las metas que ya tienes de ese mes.");
     return;
   }
