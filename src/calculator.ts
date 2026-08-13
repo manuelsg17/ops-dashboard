@@ -1216,6 +1216,33 @@ export function calcExportExcel() {
 
 // Guarda las metas del KAM directo en Supabase (sin round-trip de Excel).
 // read-merge-write: preserva columnas de otras líneas que este guardado no tocó.
+// Reintenta UNA vez ante un fallo de RED (la promesa de fetch rechaza y postgrest
+// lo entrega como "TypeError: Failed to fetch"), nunca ante un error del servidor:
+// un 42501 de RLS o un conflicto de esquema no mejoran por insistir, y reintentar
+// un rechazo legítimo solo esconde el problema.
+//
+// Reintentar una ESCRITURA es seguro acá porque el upsert es idempotente: misma
+// clave (clid,city,mes) y mismo payload, así que aplicarlo dos veces deja
+// exactamente el mismo estado que aplicarlo una. No vale para cualquier escritura.
+//
+// Nació del incidente del 13-ago-2026: el guardado murió con "Failed to fetch" y
+// los logs de Supabase NO tienen rastro del request — nunca salió del navegador.
+// Sin evidencia del lado del cliente no se puede ir más lejos, pero un fallo de
+// red pasajero no debería costarle al usuario rehacer la carga.
+async function _conReintento(fn) {
+  const esDeRed = e => /failed to fetch|networkerror|network error|load failed/i
+    .test((e && e.message) || String(e || ""));
+  try {
+    const res = await fn();
+    if (res && res.error && esDeRed(res.error)) throw res.error;
+    return res;
+  } catch (e) {
+    if (!esDeRed(e)) throw e;
+    await new Promise(r => setTimeout(r, 900));
+    return await fn();
+  }
+}
+
 export async function calcSaveMetas() {
   if (!STATE.canWrite) { alert("Guardar metas requiere rol de KAM o administrador."); return; }
   if (CALC_STATE.kam === "all") { alert("Elige un KAM específico (no 'Todos los KAMs') para guardar sus metas."); return; }
@@ -1236,8 +1263,6 @@ export async function calcSaveMetas() {
     `⚠️ Esto REEMPLAZA las metas de ${mesName} ${mesYear} (no se suman ni acumulan a lo que ya\n` +
     `exista para ese mes). Si guardas otra vez para ${mesName}, se sobrescriben.\n\n` +
     `¿Confirmar y guardar en la base de datos?`;
-  if (!confirm(summary)) return;
-
   // FRENO ANTI-CEROS. El 13-ago-2026 un guardado escribió 14 filas de AGOSTO en
   // 0 y borró metas reales (AD 4.791 → 0); se recuperaron del audit_log. La causa
   // de fondo es que el dataset MENSUAL es de carga diferida: si el modelo se
@@ -1268,11 +1293,13 @@ export async function calcSaveMetas() {
     return;
   }
 
+  if (!confirm(summary)) return;
+
   showLoad(true, "Guardando metas...");
   try {
     const clids = [...new Set(rows.map(r => r.clid))];
-    const { data: existing, error: selErr } = await sb.from("metas")
-      .select("*").in("clid", clids).eq("mes", mesName);
+    const { data: existing, error: selErr } = await _conReintento(() => sb.from("metas")
+      .select("*").in("clid", clids).eq("mes", mesName));
     if (selErr) throw selErr;
     const exMap = new Map((existing || []).map(x => [`${x.clid}|||${normCity(x.city)}`, x]));
     // Payload homogéneo (mismas claves en todas las filas) → sin sorpresas de union en
@@ -1291,7 +1318,8 @@ export async function calcSaveMetas() {
       for (const c of COLS) o[c] = merged[c] !== undefined ? merged[c] : null;
       return o;
     });
-    const { error } = await sb.from("metas").upsert(payload, { onConflict: "clid,city,mes" });
+    const { error } = await _conReintento(() =>
+      sb.from("metas").upsert(payload, { onConflict: "clid,city,mes" }));
     if (error) throw error;
     await loadFromSupabase();
     showBanner(true, `Metas de ${CALC_STATE.kam} guardadas para ${mesName} ${mesYear} (${payload.length} filas)`);
@@ -1299,7 +1327,11 @@ export async function calcSaveMetas() {
     if (STATE.curTab === "metas" && typeof renderMetas === "function") renderMetas();
   } catch (err) {
     const msg = (err && err.message) || String(err);
-    if (/42501|row-level security|permission/i.test(msg)) {
+    if (/failed to fetch|networkerror|network error|load failed/i.test(msg)) {
+      alert("No se guardó nada: falló la conexión con la base de datos.\n\n" +
+            "Se reintentó una vez automáticamente. Revisa tu conexión y vuelve a " +
+            "intentar — como no llegó a escribirse, tus metas actuales están intactas.");
+    } else if (/42501|row-level security|permission/i.test(msg)) {
       alert("No tienes permisos para guardar metas (requiere admin).");
     } else {
       alert("Error al guardar metas: " + msg);
