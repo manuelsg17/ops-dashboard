@@ -1238,6 +1238,31 @@ export async function calcSaveMetas() {
     `¿Confirmar y guardar en la base de datos?`;
   if (!confirm(summary)) return;
 
+  // FRENO ANTI-CEROS. El 13-ago-2026 un guardado escribió 14 filas de AGOSTO en
+  // 0 y borró metas reales (AD 4.791 → 0); se recuperaron del audit_log. La causa
+  // de fondo es que el dataset MENSUAL es de carga diferida: si el modelo se
+  // computa antes de que esté listo, da 0 en todo — y acá se guardaba igual,
+  // sobrescribiendo. Un guardado destructivo no puede depender de que alguien
+  // mire la pantalla y lo note.
+  //
+  // Se mira el TOTAL, no fila por fila: una meta individual en 0 puede ser
+  // legítima (un partner que se para), pero que TODA la cartera del KAM dé 0 no
+  // lo es nunca.
+  const totAD = rows.reduce((s, r) => s + (+r.meta_active_drivers || 0), 0);
+  const totSH = rows.reduce((s, r) => s + (+r.meta_supply_hours  || 0), 0);
+  const totNR = rows.reduce((s, r) => s + (+r.meta_nr            || 0), 0);
+  if (!totAD && !totSH && !totNR) {
+    alert("No se guardó nada: las metas calculadas dan 0 en todo.\n\n" +
+          "Suele pasar si los datos mensuales todavía no terminaron de cargar. " +
+          "Espera a que el dashboard termine de cargar y vuelve a intentar.\n\n" +
+          "Se frenó a propósito: guardar así BORRARÍA las metas que ya tienes de ese mes.");
+    return;
+  }
+  if (!STATE._mensualLoaded) {
+    alert("Los datos mensuales aún se están cargando. Espera unos segundos y vuelve a intentar.");
+    return;
+  }
+
   showLoad(true, "Guardando metas...");
   try {
     const clids = [...new Set(rows.map(r => r.clid))];
