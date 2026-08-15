@@ -59,7 +59,7 @@ window.addEventListener("unhandledrejection", e => {
 // <script> inline con el snippet de window.si quedaría bloqueado. Gateado a
 // dominios *.vercel.app (o el propio, si algún día hay uno custom): en GitHub
 // Pages ese endpoint no existe, y no tiene sentido pedirlo ahí.
-if (/\.vercel\.app$/.test(location.hostname)) {
+if (location.hostname.endsWith(".vercel.app")) {
   window.si = window.si || function (...args) { (window.siq = window.siq || []).push(args); };
   const s = document.createElement("script");
   s.defer = true;

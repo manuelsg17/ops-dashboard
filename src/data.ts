@@ -23,8 +23,7 @@ import { projectFlow } from "./domain/metrics.js";
 // (Edge Function `ingest-taxiparks`). Aca solo se re-exporta y se le enchufa lo
 // que es propio del navegador: el aviso de parseo a STATE.parseWarnings.
 import {
-  _txNorm, TX_COL_BY_NORM, TX_COUNT_COLS, txConsolidate, _clidStr, _fleetroomCols,
-  normCityValue, parseTaxiparksWide, adaptarEsquema,
+  _txNorm, TX_COL_BY_NORM, TX_COUNT_COLS, txConsolidate, _clidStr, _fleetroomCols, parseTaxiparksWide, adaptarEsquema,
   toN as _toNPure, txExtract as _txExtractPure
 } from "./domain/taxiparks.js";
 export { _txNorm, TX_COL_BY_NORM, TX_COUNT_COLS, txConsolidate, _clidStr, _fleetroomCols, parseTaxiparksWide, adaptarEsquema };

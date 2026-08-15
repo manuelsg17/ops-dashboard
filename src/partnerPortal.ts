@@ -21,7 +21,7 @@ import { stampPDF } from "./shared/pdfmeta.js";
 import { ensurePdfLibs } from "./shared/lazyLibs.js";
 // Mismo núcleo de cálculo que Metas, Rendimiento y el deck: el partner tiene que
 // ver EXACTAMENTE los números que su KAM le presenta.
-import { snapshotValue, seriesByDate, projectSnapshot, projectFlow, ratio, weightedAvg } from "./domain/metrics.js";
+import { seriesByDate, projectSnapshot, projectFlow, ratio, weightedAvg } from "./domain/metrics.js";
 
 export const PORTAL_STATE = { city: "all", line: "comb" };
 

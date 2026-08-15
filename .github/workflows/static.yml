@@ -55,6 +55,11 @@ jobs:
         # el original y no corre `npm run sync:ingest`, la carga automática
         # empezaría a parsear distinto que la manual — en silencio.
         run: npm run sync:ingest -- --check
+      - name: Lint
+        # oxlint en vez de ESLint: typescript-eslint no soporta TypeScript 7
+        # (peer <6.1.0) y forzarlo con --legacy-peer-deps deja un arbol roto.
+        # oxlint parsea TS de forma nativa, sin depender del paquete typescript.
+        run: npm run lint
       - name: Typecheck
         run: npm run typecheck
       - name: Chequeos de deriva (acciones + columnas)

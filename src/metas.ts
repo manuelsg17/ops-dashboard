@@ -805,7 +805,6 @@ export function _renderMetasImpl() {
         mA: p.mA, mNR: p.mNR, mH: p.mH,
         ad: r.lastAD, nr: r.nr, sh: r.sh,
         projAD: projectSnapshot(r.adV),
-      adByDate: r.adByDate,
         adByDate: r.adByDate,
         projNR: projA(r.nrV, daysElapsed, daysRemaining),
         projSH: projA(r.shV, daysElapsed, daysRemaining) });
@@ -817,7 +816,6 @@ export function _renderMetasImpl() {
         mA: m.mA, mNR: m.mNR, mH: m.mH,
         ad: r.lastAD, nr: r.nr, sh: r.sh,
         projAD: projectSnapshot(r.adV),
-      adByDate: r.adByDate,
         adByDate: r.adByDate,
         projNR: projA(r.nrV, daysElapsed, daysRemaining),
         projSH: projA(r.shV, daysElapsed, daysRemaining) });

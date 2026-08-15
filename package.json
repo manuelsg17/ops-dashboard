@@ -12,7 +12,9 @@
     "sync:ingest": "node scripts/sync-ingest-parser.mjs",
     "local:session": "node scripts/local-session.mjs",
     "check:drift": "node scripts/check-drift.mjs",
-    "verify": "npm run typecheck && npm run check:drift && npm test"
+    "verify": "npm run lint && npm run typecheck && npm run check:drift && npm test",
+    "prepare": "husky",
+    "lint": "oxlint"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.45.4",
@@ -28,6 +30,9 @@
     "@types/html2canvas": "^0.5.35",
     "@types/jspdf": "^1.3.3",
     "@types/node": "^26.1.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.3.0",
+    "oxlint": "^1.78.0",
     "typescript": "^7.0.2",
     "vite": "^5.4.0",
     "vitest": "^2.1.9"

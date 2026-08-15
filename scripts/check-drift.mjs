@@ -105,7 +105,7 @@ function listarSrc(dir = "src") {
   for (const e of readdirSync(join(RAIZ, dir), { withFileTypes: true })) {
     const p = `${dir}/${e.name}`;
     if (e.isDirectory()) out.push(...listarSrc(p));
-    else if (/\.ts$/.test(e.name) && !/\.test\.ts$/.test(e.name)) out.push(p);
+    else if (e.name.endsWith(".ts") && !e.name.endsWith(".test.ts")) out.push(p);
   }
   return out;
 }

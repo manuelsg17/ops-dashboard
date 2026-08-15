@@ -1,0 +1,13 @@
+# Gate local antes de cada commit. Barato a propósito: lo que corre acá tarda
+# segundos y evita descubrir en CI (o en producción) algo que se ve al instante.
+#
+# - lint-staged: oxlint SOLO sobre lo staged. Falla el commit si hay un error.
+# - check:drift: es GLOBAL, no por archivo — un data-act nuevo en un archivo
+#   puede quedar sin handler en OTRO, así que mirar solo lo staged sería ciego.
+# - typecheck + test: idem, el impacto de un cambio no se limita a su archivo.
+#
+# Para saltearlo en una emergencia: git commit --no-verify (y arreglarlo después).
+npx lint-staged
+npm run check:drift
+npm run typecheck
+npm test

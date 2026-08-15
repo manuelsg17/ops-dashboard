@@ -1077,7 +1077,7 @@ export function exportReconCSV() {
   const lines = [header.join(",")];
   [...byKey.values()].sort((a, b) => (a.partner || a.clid).localeCompare(b.partner || b.clid) || b.agg.ad - a.agg.ad).forEach(g => {
     const a = g.agg, cl = _reconClasif(g.sample);
-    const clase = cl.label.replace(/[\uD83D\uDEFA\u26D4\uD83D\uDE97]/g, "").replace(/\s*\(omitido\)/, "").trim() || "Taxi";
+    const clase = cl.label.replace(/[\u{1F6FA}\u26D4\u{1F697}]/gu, "").replace(/\s*\(omitido\)/, "").trim() || "Taxi";
     const fleetShCar = a.ofcars > 0 ? (a.ifsh / a.ofcars) : "";
     const accept = a.accDen > 0 ? (a.accNum / a.accDen) : "";
     const row = [g.clid, g.db_id, g.name, g.partner, g.kam, clase, cl.omit ? "SI" : "",

@@ -29,7 +29,7 @@ window.Chart = Chart;
 // PARTNER, así que es justo donde menos puede haber una fórmula propia: si Metas
 // dice "proyectamos 210" y el deck dice 120 para el mismo partner y el mismo mes,
 // el problema no es cosmético, es de credibilidad delante del cliente.
-import { projectSnapshot, projectFlow, snapshotValue, retentionSeries } from "./domain/metrics.js";
+import { projectSnapshot, projectFlow, retentionSeries } from "./domain/metrics.js";
 import * as forecast from "./forecast.js";
 Object.assign(window, forecast);
 

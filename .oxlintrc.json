@@ -1,0 +1,25 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+
+  "ignorePatterns": ["dist/**", "node_modules/**"],
+
+  "categories": {
+    "correctness": "error"
+  },
+
+  "rules": {
+    "no-unused-vars": [
+      "warn",
+      {
+        "caughtErrors": "none",
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_"
+      }
+    ],
+    "no-dupe-keys": "error",
+    "no-misleading-character-class": "error",
+    "no-unused-expressions": "warn",
+    "no-self-compare": "error",
+    "no-template-curly-in-string": "warn"
+  }
+}

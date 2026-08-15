@@ -752,7 +752,7 @@ export function _pvExecutiveSummary(ctx) {
       body:   _t("nrZeroBody",   { period, prev: pNR }),
       action: _t("nrZeroAction")
     });
-  } else if (pNR > 0 && tNR / pNR < 0.4 && pNR >= 5) {
+  } else if (pNR >= 5 && tNR / pNR < 0.4) {
     findings.push({
       sev: "yellow", icon: "🟡",
       title:  _t("nrDropTitle",  { cur: tNR, prev: pNR }),

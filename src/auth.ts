@@ -260,7 +260,7 @@ export function _clearStateAndLocalStorage() {
   if (STATE.flotasMap) STATE.flotasMap = null;
   // Charts: destruir instancias para liberar memoria.
   if (STATE.charts) {
-    Object.values(STATE.charts).forEach(c => { try { c && c.destroy && c.destroy(); } catch {} });
+    Object.values(STATE.charts).forEach(c => { try { c?.destroy?.(); } catch {} });
     STATE.charts = {};
   }
   // Sensibles en localStorage. yangoSidebarCollapsed se queda (UI pref, no sensible).
