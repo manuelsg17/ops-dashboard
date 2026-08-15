@@ -10,7 +10,9 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "sync:ingest": "node scripts/sync-ingest-parser.mjs",
-    "local:session": "node scripts/local-session.mjs"
+    "local:session": "node scripts/local-session.mjs",
+    "check:drift": "node scripts/check-drift.mjs",
+    "verify": "npm run typecheck && npm run check:drift && npm test"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.45.4",

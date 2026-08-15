@@ -1,5 +1,6 @@
 //@ts-nocheck
 import { ensureHtml2Canvas } from "./shared/lazyLibs.js";
+import { validarMetas, mensajeMetasInvalidas } from "./domain/metasGuard";
 import { logAccess } from "./shared/accessLog.js";
 // calculator.js — Calculadora de Metas (flujo por PESTAÑAS de línea de negocio)
 // El KAM ingresa su meta TOTAL por línea y se reparte (disgrega) a cada partner+ciudad
@@ -1263,31 +1264,12 @@ export async function calcSaveMetas() {
     `⚠️ Esto REEMPLAZA las metas de ${mesName} ${mesYear} (no se suman ni acumulan a lo que ya\n` +
     `exista para ese mes). Si guardas otra vez para ${mesName}, se sobrescriben.\n\n` +
     `¿Confirmar y guardar en la base de datos?`;
-  // FRENO ANTI-CEROS. El 13-ago-2026 un guardado escribió 14 filas de AGOSTO en
-  // 0 y borró metas reales (AD 4.791 → 0); se recuperaron del audit_log. La causa
-  // de fondo es que el dataset MENSUAL es de carga diferida: si el modelo se
-  // computa antes de que esté listo, da 0 en todo — y acá se guardaba igual,
-  // sobrescribiendo. Un guardado destructivo no puede depender de que alguien
-  // mire la pantalla y lo note.
-  //
-  // Se mira el TOTAL, no fila por fila: una meta individual en 0 puede ser
-  // legítima (un partner que se para), pero que TODA la cartera del KAM dé 0 no
-  // lo es nunca.
-  const totAD = rows.reduce((s, r) => s + (+r.meta_active_drivers || 0), 0);
-  const totSH = rows.reduce((s, r) => s + (+r.meta_supply_hours  || 0), 0);
-  const totNR = rows.reduce((s, r) => s + (+r.meta_nr            || 0), 0);
-  // Se bloquea si CUALQUIERA de las tres da 0, no solo si dan 0 las tres: la meta
-  // se escribe con las 3 columnas siempre, así que guardar con SH vacío BORRA el
-  // SH que ya estaba, exactamente igual de destructivo que el caso completo.
-  const vacias = [["Active Drivers", totAD], ["Supply Hours", totSH], ["N+R", totNR]]
-    .filter(([, v]) => !v).map(([n]) => n);
-  if (vacias.length) {
-    alert(`No se guardó nada: la meta de ${vacias.join(" y ")} da 0.\n\n` +
-          "Causa habitual: no cargaste los objetivos del KAM arriba (arrancan en 0), " +
-          "o saliste del campo sin que se aplicara el valor.\n\n" +
-          "Se frenó a propósito: guardar así BORRARÍA las metas que ya tienes de ese mes.");
-    return;
-  }
+  // FRENO ANTI-CEROS. La lógica vive en domain/metasGuard.ts (pura y testeada
+  // con las filas reales del incidente del 13-ago-2026, cuando un guardado en
+  // cero borró las metas de AGOSTO). Acá solo se aplica.
+  const chk = validarMetas(rows);
+  if (!chk.ok) { alert(mensajeMetasInvalidas(chk.faltantes)); return; }
+
   if (!STATE._mensualLoaded) {
     alert("Los datos mensuales aún se están cargando. Espera unos segundos y vuelve a intentar.");
     return;
