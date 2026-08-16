@@ -1,5 +1,6 @@
 //@ts-nocheck
 import { ensureHtml2Canvas } from "./shared/lazyLibs.js";
+import { t } from "./core/i18n";
 import { validarMetas, mensajeMetasInvalidas } from "./domain/metasGuard";
 import { logAccess } from "./shared/accessLog.js";
 // calculator.js — Calculadora de Metas (flujo por PESTAÑAS de línea de negocio)
@@ -235,9 +236,9 @@ export function _calcComputeModel() {
 // si el KAM lo tiene. La pestaña TukTuk se retiró (ago 2026): TukTuk ya no tiene
 // meta propia, entra al reparto del agregador.
 export function _calcBuildTabs(m) {
-  const tabs = [{ key: "agg", label: "Agregador" }];
+  const tabs = [{ key: "agg", label: t("rend.linea.agg") }];
   if (m.hasFleet) tabs.push({ key: "fleet", label: "Fleet" });
-  tabs.push({ key: "review", label: "Revisar y compartir" });
+  tabs.push({ key: "review", label: t("calc.tabRevisar") });
   return tabs;
 }
 
@@ -310,7 +311,7 @@ export function _calcPill(label, body) {
 // Cuerpo de píldora por línea agregador/tuktuk: por métrica ✓ o el gap coloreado.
 export function _calcLinePillBody(line, defs) {
   const anyGoal = defs.some(([, k]) => line[k] && line[k].hasGoal);
-  if (!anyGoal) return `<span class="agy-style-89">sin metas</span>`;
+  if (!anyGoal) return `<span class="agy-style-89">${escapeHTML(t("calc.sinMetas"))}</span>`;
   return defs.map(([lbl, k]) => {
     const p = line[k];
     if (!p || !p.hasGoal) return `<span class="agy-style-90">${lbl} —</span>`;
@@ -322,11 +323,11 @@ export function _calcLinePillBody(line, defs) {
 }
 export function _calcStatusPills(status) {
   const pills = [];
-  pills.push(_calcPill("Agregador", _calcLinePillBody(status.agg, [["AD", "ad"], ["SH", "sh"], ["N+R", "nr"]])));
+  pills.push(_calcPill(t("rend.linea.agg"), _calcLinePillBody(status.agg, [["AD", "ad"], ["SH", "sh"], ["N+R", "nr"]])));
   if (status.hasFleet && status.fleet) {
     const f = status.fleet;
     const c = f.total === 0 ? "#aaa" : (f.filled >= f.total ? "#10b981" : "#f59e0b");
-    pills.push(_calcPill("Fleet", `<span style="color:${c};font-weight:700">${f.filled}/${f.total} con meta</span>`));
+    pills.push(_calcPill("Fleet", `<span style="color:${c};font-weight:700">${f.filled}/${f.total} ${escapeHTML(t("calc.conMeta"))}</span>`));
   }
   return pills.join("");
 }
@@ -355,21 +356,21 @@ export function _calcTabBar(tabs, active, status) {
 export function _calcHeader(m, allKAMs, status) {
   const nextM = _calcNextMonth(m.lastMonth || "");
   return `
-    ${_secH("🎯", "#FF0000", "Calculadora de metas", "Define las metas del próximo mes por línea de negocio · navega por pestañas")}
+    ${_secH("🎯", "#FF0000", t("calc.titulo"), t("calc.sub"))}
     <div class="section">
       <div class="agy-style-94">
         <div>
           <label class="agy-style-95">KAM</label>
           <select id="calcKamSel" class="sb-sel agy-style-96" data-act-change="calcOnKamChange">
-            <option value="all" ${CALC_STATE.kam === "all" ? "selected" : ""}>Todos los KAMs</option>
+            <option value="all" ${CALC_STATE.kam === "all" ? "selected" : ""}>${escapeHTML(t("calc.todosKam"))}</option>
             ${allKAMs.map(k => `<option value="${escapeHTML(k)}" ${CALC_STATE.kam === k ? "selected" : ""}>${escapeHTML(k)}</option>`).join("")}
           </select>
         </div>
         <div class="agy-style-97">
-          📅 Metas para <strong>${d2s(nextM)}</strong> · reparto según ${d2s(m.lastMonth || "")}
+          ${t("calc.metasPara", { m: `<strong>${d2s(nextM)}</strong>`, r: d2s(m.lastMonth || "") })}
         </div>
       </div>
-      <div class="agy-style-98">Estado (cuadre en vivo)</div>
+      <div class="agy-style-98">${escapeHTML(t("calc.estadoCuadre"))}</div>
       <div id="calcStatusBar" class="agy-style-99">${_calcStatusPills(status)}</div>
     </div>`;
 }
@@ -390,7 +391,7 @@ export function _calcRefreshStatus() {
   const tb = document.getElementById("calcTabBar");
   if (tb) tb.innerHTML = _calcTabBtns(_calcBuildTabs(m), CALC_STATE.tab, status);
   const rb = document.getElementById("calcRecalcBtn");
-  if (rb && !/pendiente/.test(rb.textContent)) rb.textContent = "↻ Recalcular distribución (pendiente)";
+  if (rb && !/pendiente|pending|ожида/i.test(rb.textContent)) rb.textContent = t("calc.recalcularPend");
 
   const g = CALC_STATE.kamGoals;
   if (document.getElementById("calcAggSumAD")) {
@@ -406,7 +407,7 @@ export function _calcRefreshStatus() {
 
 // Botón de recálculo (pestañas con metas → tabla): re-render de la pestaña.
 export function _calcRecalcBtn() {
-  return `<button id="calcRecalcBtn" class="agy-style-100" data-act="calcApplyChanges">↻ Recalcular distribución</button>`;
+  return `<button id="calcRecalcBtn" class="agy-style-100" data-act="calcApplyChanges">${escapeHTML(t("calc.recalcular"))}</button>`;
 }
 
 // ── RENDER PRINCIPAL ──────────────────────────────────────────────────────────
@@ -487,13 +488,18 @@ export function _calcTabAgg(m) {
 // tamaño real del denominador ANTES de escribir el goal: desde ago-2026 la base
 // incluye TukTuk, así que un goal pensado en taxi puro reparte de menos.
 export function _calcBaseRefHTML(m) {
-  const t = m.cartTot1 || {};
-  if (!(t.ad > 0)) return "";
+  // OJO: NO llamar a esta variable local `t` — tapa el `t` de i18n importado
+  // arriba y cualquier t("clave") de aca adentro llamaria a esto, no a la
+  // traduccion. Encontrado al barrer el DOM en ingles/ruso: esta era la unica
+  // seccion que seguia en espanol pese a que el resto de la pestana ya cambiaba.
+  const tot = m.cartTot1 || {};
+  if (!(tot.ad > 0)) return "";
   return `
     <div class="agy-style-111" style="margin-top:8px">
-      Base del reparto (${escapeHTML(m.lastMonth || "")}, Taxi + TukTuk):
-      <b>${fmt(t.ad)}</b> AD · <b>${fmt(Math.round(t.sh))}</b> SH · <b>${fmt(t.nr)}</b> N+R.
-      El goal que cargues tiene que estar en esta misma base.
+      ${t("calc.baseReparto", {
+        m: escapeHTML(m.lastMonth || ""),
+        ad: `<b>${fmt(tot.ad)}</b>`, sh: `<b>${fmt(Math.round(tot.sh))}</b>`, nr: `<b>${fmt(tot.nr)}</b>`
+      })}
     </div>`;
 }
 
@@ -503,21 +509,21 @@ export function _calcAggGoalsBlock(m) {
   return `
     <div class="agy-style-103">
       <div class="agy-style-104">
-        <div class="agy-style-105">📥 Metas totales · Agregador (Taxi + TukTuk)</div>
-        <span title="Solo estas metas (AD/SH/N+R) se exportan al CSV de metas" class="agy-style-106">VA AL CSV</span>
+        <div class="agy-style-105">${escapeHTML(t("calc.metasTotales"))}</div>
+        <span title="${escapeHTML(t("calc.vaAlCsvTip"))}" class="agy-style-106">${escapeHTML(t("calc.vaAlCsv"))}</span>
       </div>
       <div class="agy-style-107">
-        ${_kamGoalInput("ad", "Active Drivers",    KAM_WEIGHTS.ad, g.ad)}
-        ${_kamGoalInput("sh", "Supply Hours",      KAM_WEIGHTS.sh, g.sh)}
-        ${_kamGoalInput("nr", "New + Reactivated", KAM_WEIGHTS.nr, g.nr)}
+        ${_kamGoalInput("ad", t("calc.activeDrivers"), KAM_WEIGHTS.ad, g.ad)}
+        ${_kamGoalInput("sh", t("calc.supplyHours"), KAM_WEIGHTS.sh, g.sh)}
+        ${_kamGoalInput("nr", t("calc.newReact"), KAM_WEIGHTS.nr, g.nr)}
       </div>
       <details class="agy-style-108">
-        <summary class="agy-style-109">Metas % KAM (no se reparten por partner)</summary>
+        <summary class="agy-style-109">${escapeHTML(t("calc.metasPctKam"))}</summary>
         <div class="agy-style-110">
-          ${_kamGoalInput("otherProj", "Other Projects (%)",   KAM_WEIGHTS.otherProj, g.otherProj)}
-          ${_kamGoalInput("fleetA2",   "Fleet drivers A2 (%)", KAM_WEIGHTS.fleetA2,   g.fleetA2)}
+          ${_kamGoalInput("otherProj", t("calc.otherProj"), KAM_WEIGHTS.otherProj, g.otherProj)}
+          ${_kamGoalInput("fleetA2", t("calc.fleetA2"), KAM_WEIGHTS.fleetA2, g.fleetA2)}
         </div>
-        <div class="agy-style-111">Metas % a nivel KAM (referencia); no se distribuyen por partner ni van al CSV.</div>
+        <div class="agy-style-111">${escapeHTML(t("calc.metasPctKamSub"))}</div>
       </details>
       ${_calcBaseRefHTML(m)}
     </div>`;
@@ -584,7 +590,7 @@ export function _calcSec2_promedio3m(agg, months) {
               <th class="tn">New Yango</th><th class="tn">Reactivados</th>
             </tr>
           </thead>
-          <tbody>${rowsHtml || `<tr><td colspan="8" class="agy-style-120">Sin datos.</td></tr>`}</tbody>
+          <tbody>${rowsHtml || `<tr><td colspan="8" class="agy-style-120">${escapeHTML(t("calc.sinDatos"))}</td></tr>`}</tbody>
           <tfoot class="agy-style-121">
             <tr>
               <td colspan="2">Total ${CALC_STATE.kam === "all" ? "general" : "KAM"}</td>
@@ -609,7 +615,7 @@ export function _calcPctDetails(agg, cartTotals, cityTotals, metrics, monthLabel
   return `
     <details class="section agy-style-122">
       <summary class="agy-style-123">📊 Ver % Ciudad / Cartera · referencia · ${d2s(monthLabel || "")}</summary>
-      <div class="agy-style-124">% Ciudad = peso real de tu partner en la ciudad (todos los partners Yango) · % Cartera = peso en tu KAM (base del reparto)</div>
+      <div class="agy-style-124">${escapeHTML(t("calc.pesoLeyenda"))}</div>
       ${_calcPctTableHTML(agg, cartTotals, cityTotals, metrics)}
     </details>`;
 }
@@ -641,7 +647,7 @@ export function _calcPctTableHTML(agg, cartTotals, cityTotals, M) {
   }).join("");
 
   const topHead = M.map(mtr => `<th class="tn" colspan="3">${escapeHTML(mtr.label)}</th>`).join("");
-  const subHead = M.map(() => `<th class="tn" title="Valor real del último mes">Valor</th><th class="tn" title="Peso en la ciudad (todos los KAMs)">% Ciudad</th><th class="tn" title="Peso en tu cartera KAM">% Cartera</th>`).join("");
+  const subHead = M.map(() => `<th class="tn" title="${escapeHTML(t("calc.valorReal"))}">Valor</th><th class="tn" title="${escapeHTML(t("calc.pesoCiudad"))}">% Ciudad</th><th class="tn" title="${escapeHTML(t("calc.pesoCartera"))}">% Cartera</th>`).join("");
   const footCells = M.map(mtr => `<td class="tn">${_fmtV(mtr.key)(cartTotals[mtr.key] || 0)}</td><td class="tn agy-style-89">—</td><td class="tn">100%</td>`).join("");
   const nCols = 2 + M.length * 3;
 
@@ -708,33 +714,33 @@ export function _calcSec4_distribucion(agg, distTotals, monthLabel) {
 
   const noGoals = !(+g.ad || +g.sh || +g.nr);
   const hint = noGoals
-    ? `<div class="agy-style-134">⚠️ Ingresa tus metas totales arriba y presiona <strong>"↻ Recalcular distribución"</strong> para repartirlas aquí.</div>`
-    : (nManual ? `<div class="agy-style-135">⚠️ ${nManual} partner(s) sin actividad Taxi el último mes (marcados <strong>FIJAR MANUAL</strong>): ponles la meta a mano.</div>` : "");
+    ? t("calc.hintSinMetas")
+    : (nManual ? t("calc.hintManual", { n: nManual }) : "");
 
   return `
-    ${_secH("⚙️", "#8b5cf6", "Distribución por partner · " + d2s(monthLabel || ""), "Meta KAM × % Cartera (último mes) · editable · Fleet incluido en el reparto")}
+    ${_secH("⚙️", "#8b5cf6", t("calc.distribPartner", { m: d2s(monthLabel || "") }), t("calc.distribSub"))}
     <div class="section">
       ${hint}
       <div class="tbl-wrap agy-style-136">
         <table class="dtbl">
           <thead>
             <tr>
-              <th>Partner</th><th>Ciudad</th>
+              <th>${escapeHTML(t("calc.col.partner"))}</th><th>${escapeHTML(t("calc.col.ciudad"))}</th>
               <th class="tn">% AD</th><th class="tn">AD meta</th>
               <th class="tn">% SH</th><th class="tn">SH meta</th>
               <th class="tn">% N+R</th><th class="tn">N+R meta</th>
             </tr>
           </thead>
-          <tbody>${rowsHtml || `<tr><td colspan="8" class="agy-style-120">Sin datos.</td></tr>`}</tbody>
+          <tbody>${rowsHtml || `<tr><td colspan="8" class="agy-style-120">${escapeHTML(t("calc.sinDatos"))}</td></tr>`}</tbody>
           <tfoot class="agy-style-121">
             <tr>
-              <td colspan="2">Suma distribuida (incl. Fleet)</td>
+              <td colspan="2">${escapeHTML(t("calc.sumaDist"))}</td>
               <td></td><td class="tn" id="calcAggSumAD">${fmt(sumAD)}</td>
               <td></td><td class="tn" id="calcAggSumSH">${fmt(sumSH)}</td>
               <td></td><td class="tn" id="calcAggSumNR">${fmt(sumNR)}</td>
             </tr>
             <tr>
-              <td colspan="2" class="agy-style-137">Meta KAM · cuadre</td>
+              <td colspan="2" class="agy-style-137">${escapeHTML(t("calc.metaKamCuadre"))}</td>
               <td></td><td class="tn" id="calcAggCuadreAD">${_calcCuadre(sumAD, +g.ad || 0)}</td>
               <td></td><td class="tn" id="calcAggCuadreSH">${_calcCuadre(sumSH, +g.sh || 0)}</td>
               <td></td><td class="tn" id="calcAggCuadreNR">${_calcCuadre(sumNR, +g.nr || 0)}</td>
@@ -747,11 +753,11 @@ export function _calcSec4_distribucion(agg, distTotals, monthLabel) {
 
 // Compara la suma distribuida vs la meta KAM y devuelve el cuadre coloreado.
 export function _calcCuadre(sum, target) {
-  if (!target) return `<span class="agy-style-89">sin meta</span>`;
+  if (!target) return `<span class="agy-style-89">${escapeHTML(t("calc.sinMeta"))}</span>`;
   const gap = sum - target;
   const ok = Math.abs(gap) <= Math.max(1, target * 0.005);
   const c = ok ? "#10b981" : (gap > 0 ? "#f59e0b" : "#FF0000");
-  const tag = ok ? "✓ cuadra" : (gap > 0 ? `+${fmt(gap)}` : `${fmt(gap)}`);
+  const tag = ok ? t("calc.cuadra") : (gap > 0 ? `+${fmt(gap)}` : `${fmt(gap)}`);
   return `<div class="agy-style-138">${fmt(target)}<br><span style="color:${c};font-weight:800">${tag}</span></div>`;
 }
 
@@ -788,23 +794,23 @@ export function _calcSec4b_fleet(agg) {
   }).join("");
 
   return `
-    ${_secH("🚗", "#0891b2", "Metas Fleet (KPIs propios)", "Solo partners marcados Fleet · SH/Auto, Aceptación, Utilización · van a la tarjeta compartible")}
+    ${_secH("🚗", "#0891b2", t("calc.metasFleet"), t("calc.metasFleetSub"))}
     <div class="section">
       <div class="tbl-wrap agy-style-140">
         <table class="dtbl">
           <thead>
             <tr>
-              <th>Partner</th><th>Ciudad</th>
-              <th class="tn">SH/Auto (3m)</th><th class="tn">Meta SH/Auto</th>
-              <th class="tn">Aceptación (3m)</th><th class="tn">Meta Acept. %</th>
-              <th class="tn">Meta Utiliz. %</th>
+              <th>${escapeHTML(t("calc.col.partner"))}</th><th>${escapeHTML(t("calc.col.ciudad"))}</th>
+              <th class="tn">${escapeHTML(t("calc.shAuto3m"))}</th><th class="tn">${escapeHTML(t("calc.metaShAuto"))}</th>
+              <th class="tn">${escapeHTML(t("calc.aceptacion3m"))}</th><th class="tn">${escapeHTML(t("calc.metaAceptPct"))}</th>
+              <th class="tn">${escapeHTML(t("calc.metaUtilPct"))}</th>
             </tr>
           </thead>
-          <tbody>${rowsHtml || `<tr><td colspan="7" class="agy-style-120">No hay partners marcados como Fleet en este KAM.</td></tr>`}</tbody>
+          <tbody>${rowsHtml || `<tr><td colspan="7" class="agy-style-120">${escapeHTML(t("calc.sinFleet"))}</td></tr>`}</tbody>
         </table>
       </div>
       <div class="agy-style-141">
-        💡 Utilización viene pre-llenada en <strong>85%</strong> (active cars / total) — ajústala o bórrala donde no aplique. Estos KPIs aparecen en la tarjeta compartible (pestaña <strong>Revisar y compartir</strong>).
+        ${t("calc.utilPrellenada", { r: t("calc.tabRevisar") })}
       </div>
     </div>`;
 }
@@ -816,24 +822,22 @@ export function _calcSecActions() {
   const canSave = !!STATE.canWrite;
   const kamAll  = CALC_STATE.kam === "all";
   const saveBtn = !canSave
-    ? `<button disabled title="Requiere permisos de administrador" class="agy-style-144">💾 Actualizar metas (requiere admin)</button>`
-    : `<button class="agy-style-145" data-act="calcSaveMetas">💾 Actualizar metas (guardar en BD)</button>`;
+    ? `<button disabled title="${escapeHTML(t("calc.requiereAdmin"))}" class="agy-style-144">${escapeHTML(t("calc.btnGuardarAdmin"))}</button>`
+    : `<button class="agy-style-145" data-act="calcSaveMetas">${escapeHTML(t("calc.btnGuardar"))}</button>`;
   const kamNote = (canSave && kamAll)
-    ? `<div class="agy-style-146">⚠️ Para <strong>guardar</strong>, elige un KAM específico arriba (no "Todos los KAMs").</div>`
+    ? t("calc.kamNote")
     : "";
   return `
-    ${_secH("✅", "#10b981", "Actualizar y compartir", "Guarda las metas del KAM directo en la base de datos, descarga la plantilla o comparte la tarjeta")}
+    ${_secH("✅", "#10b981", t("calc.actualizarCompartir"), t("calc.actualizarCompartirSub"))}
     <div class="section">
       <div class="tbl-wrap">
         <div class="agy-style-147">
           ${saveBtn}
-          <button class="agy-style-148" data-act="calcExportExcel">📄 Descargar plantilla (CSV)</button>
-          <button class="agy-style-149" data-act="calcResetEdits">↺ Reset ediciones</button>
+          <button class="agy-style-148" data-act="calcExportExcel">${escapeHTML(t("calc.btnDescargarCsv"))}</button>
+          <button class="agy-style-149" data-act="calcResetEdits">${escapeHTML(t("calc.btnResetEdits"))}</button>
         </div>
         ${kamNote}
-        <div class="agy-style-150">
-          💡 <strong>Actualizar metas</strong> guarda Agregador (Taxi + TukTuk) + Fleet del KAM seleccionado para el próximo mes, directo en la BD (requiere admin). <strong>Reemplaza</strong> las metas de ese mes (no se acumulan): si vuelves a guardar el mismo mes, se sobrescriben. La <strong>plantilla CSV</strong> trae las mismas líneas por si prefieres subirla en Configuración → Metas.
-        </div>
+        <div class="agy-style-150">${t("calc.actualizarHint")}</div>
       </div>
     </div>`;
 }
@@ -922,8 +926,8 @@ export function _calcSec5_exportPartner(agg, totals, lastMonth) {
   const partners = [...new Set([...agg.values()].map(e => e.partner))].sort();
   if (!partners.length) {
     return `
-      ${_secH("📤", "#10b981", "Vista compartible por partner", "Sin partners en este filtro")}
-      <div class="section"><div class="agy-style-156">No hay partners en el KAM seleccionado con datos.</div></div>`;
+      ${_secH("📤", "#10b981", t("calc.vistaCompartible"), t("calc.sinPartnersFiltro"))}
+      <div class="section"><div class="agy-style-156">${escapeHTML(t("calc.sinPartnersKam"))}</div></div>`;
   }
   const sel = (CALC_STATE.selPartnerExport && partners.includes(CALC_STATE.selPartnerExport))
     ? CALC_STATE.selPartnerExport
@@ -1245,11 +1249,11 @@ async function _conReintento(fn) {
 }
 
 export async function calcSaveMetas() {
-  if (!STATE.canWrite) { alert("Guardar metas requiere rol de KAM o administrador."); return; }
-  if (CALC_STATE.kam === "all") { alert("Elige un KAM específico (no 'Todos los KAMs') para guardar sus metas."); return; }
+  if (!STATE.canWrite) { alert(t("calc.requiereKamAdmin")); return; }
+  if (CALC_STATE.kam === "all") { alert(t("calc.elegirKamEspecifico")); return; }
   const m = _calcComputeModel();
   const { rows, mesName, mesYear } = _calcBuildMetaRows(m);
-  if (!rows.length) { alert("No hay metas para guardar en este KAM."); return; }
+  if (!rows.length) { alert(t("calc.sinMetasParaGuardar")); return; }
 
   // Resumen antes de escribir.
   const g = CALC_STATE.kamGoals;
@@ -1277,7 +1281,7 @@ export async function calcSaveMetas() {
 
   if (!confirm(summary)) return;
 
-  showLoad(true, "Guardando metas...");
+  showLoad(true, t("calc.guardandoMetas"));
   try {
     const clids = [...new Set(rows.map(r => r.clid))];
     const { data: existing, error: selErr } = await _conReintento(() => sb.from("metas")
@@ -1310,13 +1314,11 @@ export async function calcSaveMetas() {
   } catch (err) {
     const msg = (err && err.message) || String(err);
     if (/failed to fetch|networkerror|network error|load failed/i.test(msg)) {
-      alert("No se guardó nada: falló la conexión con la base de datos.\n\n" +
-            "Se reintentó una vez automáticamente. Revisa tu conexión y vuelve a " +
-            "intentar — como no llegó a escribirse, tus metas actuales están intactas.");
+      alert(t("calc.errorRed"));
     } else if (/42501|row-level security|permission/i.test(msg)) {
-      alert("No tienes permisos para guardar metas (requiere admin).");
+      alert(t("calc.sinPermisosGuardar"));
     } else {
-      alert("Error al guardar metas: " + msg);
+      alert(t("calc.errorGuardarMetas") + msg);
     }
   } finally {
     showLoad(false);
@@ -1326,7 +1328,7 @@ export async function calcSaveMetas() {
 export async function calcDownloadPartnerImage() {
   const card = document.getElementById("calcExportCard");
   if (!card) return;
-  showLoad(true, "Generando imagen...");
+  showLoad(true, t("calc.generandoImagen"));
   try {
     await ensureHtml2Canvas();
     const canvas = await html2canvas(card, { scale: 2, useCORS: true, backgroundColor: "#fff" });
@@ -1337,9 +1339,9 @@ export async function calcDownloadPartnerImage() {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    showBanner(true, "Imagen descargada");
+    showBanner(true, t("calc.imagenDescargada"));
   } catch (err) {
-    alert("Error: " + err.message);
+    alert(t("calc.error") + err.message);
   } finally {
     showLoad(false);
   }
