@@ -111,8 +111,8 @@ export function renderRawData() {
   ).join("");
 
   // ── Build HTML ───────────────────────────────────────────────────────────
-  let html = secH("🗂️", "#6366f1", "Data Raw",
-    `Todos los registros cargados · ${fmt(src.length)} total · ${fmt(STATE.rawData.length)} en dashboard · ${fmt(src.length - STATE.rawData.length)} excluidos`, "");
+  let html = secH("🗂️", "#6366f1", t("raw.titulo"),
+    t("raw.sub", { t: fmt(src.length), d: fmt(STATE.rawData.length), e: fmt(src.length - STATE.rawData.length) }), "");
 
   // Toggle Data Raw / Flotas
   html += _rawViewToggle();
@@ -121,12 +121,12 @@ export function renderRawData() {
   html += `
     <div class="section agy-style-30">
       <div class="agy-style-197">
-        <input class="crud-input" id="rawSearchReg" placeholder="Buscar partner o KAM..."
+        <input class="crud-input" id="rawSearchReg" placeholder="${escapeHTML(t("raw.buscarPartnerKam"))}"
           value="${RAW_STATE.search.replace(/"/g, "&quot;")}"
           data-act-input="rawSearch" data-reset="1"
           class="agy-style-209"/>
         <select class="sb-sel" data-act-change="rawSetCity" data-reset="1">
-          <option value="all"${RAW_STATE.city === "all" ? " selected" : ""}>Todas las ciudades</option>
+          <option value="all"${RAW_STATE.city === "all" ? " selected" : ""}>${escapeHTML(t("raw.todasCiudades"))}</option>
           ${cityOpts}
         </select>
         <select class="sb-sel" data-act-change="rawSetDateFrom" data-reset="1">
@@ -138,10 +138,10 @@ export function renderRawData() {
         </select>
         <button class="crud-btn" data-act="exportRawCSV"
           class="agy-style-449">
-          ⬇ Exportar CSV
+          ${escapeHTML(t("raw.exportarCsv"))}
         </button>
       </div>
-      <div class="agy-style-450">${fmt(total)} registro(s) · ${fmt(totalPages)} página(s)</div>
+      <div class="agy-style-450">${t("raw.registrosPaginas", { n: fmt(total), p: fmt(totalPages) })}</div>
     </div>`;
 
   // Tabla
@@ -150,15 +150,15 @@ export function renderRawData() {
       <table class="dtbl">
         <thead>
           <tr>
-            ${thSort("Fecha", "date")}
-            ${thSort("Partner", "partner")}
-            ${thSort("KAM", "kam")}
-            ${thSort("Ciudad", "city")}
+            ${thSort(t("raw.col.fecha"), "date")}
+            ${thSort(t("calc.col.partner"), "partner")}
+            ${thSort(t("sidebar.kam"), "kam")}
+            ${thSort(t("calc.col.ciudad"), "city")}
             ${thSort("AD", "activeDrivers")}
             ${thSort("N+R", "nr")}
-            ${thSort("Horas", "supplyHours")}
-            ${thSort("Comisión", "commission")}
-            ${thSort("Viajes", "trips")}
+            ${thSort(t("metric.sh.short"), "supplyHours")}
+            ${thSort(t("raw.col.comision"), "commission")}
+            ${thSort(t("raw.col.viajes"), "trips")}
           </tr>
         </thead>
         <tbody>`;
@@ -185,7 +185,7 @@ export function renderRawData() {
   // Fila de totales (siempre visible, basada en el set filtrado completo)
   html += `
           <tr class="agy-style-454">
-            <td colspan="4" class="agy-style-455">TOTAL (${fmt(total)} filas)</td>
+            <td colspan="4" class="agy-style-455">${t("raw.total", { n: fmt(total) })}</td>
             <td class="tn agy-style-456">${fmt5(totAD)}</td>
             <td class="tn agy-style-456">${fmt5(totNR)}</td>
             <td class="tn agy-style-456">${fmt5(totSH)}</td>
@@ -201,10 +201,10 @@ export function renderRawData() {
     html += `
     <div class="agy-style-82">
       <button class="crud-btn" data-act="rawPagePrev"
-        ${RAW_STATE.page === 0 ? "disabled" : ""} class="agy-style-83">← Anterior</button>
-      <span>Página <strong>${RAW_STATE.page + 1}</strong> de <strong>${totalPages}</strong></span>
+        ${RAW_STATE.page === 0 ? "disabled" : ""} class="agy-style-83">${escapeHTML(t("raw.anterior"))}</button>
+      <span>${t("raw.pagina", { a: `<strong>${RAW_STATE.page + 1}</strong>`, b: `<strong>${totalPages}</strong>` })}</span>
       <button class="crud-btn" data-act="rawPageNext" data-total="${totalPages}"
-        ${RAW_STATE.page === totalPages - 1 ? "disabled" : ""} class="agy-style-83">Siguiente →</button>
+        ${RAW_STATE.page === totalPages - 1 ? "disabled" : ""} class="agy-style-83">${escapeHTML(t("raw.siguiente"))}</button>
     </div>`;
   }
 
@@ -277,9 +277,9 @@ export function _rawViewToggle() {
         border-radius:6px">${label}</button>`;
   return `
     <div class="agy-style-457">
-      ${btn("data",   "\uD83D\uDCCA Registros")}
-      ${btn("flotas", "\uD83D\uDE9A Flotas (CLID \u2192 Nombre)")}
-      ${btn("recon",  "\uD83E\uDDFE Conciliaci\u00F3n (CLID \u2192 db_id)")}
+      ${btn("data", t("raw.viewData"))}
+      ${btn("flotas", t("raw.viewFlotas"))}
+      ${btn("recon", t("raw.viewRecon"))}
     </div>`;
 }
 
@@ -395,40 +395,38 @@ export function _renderFlotasView() {
   const allCities = [...new Set([...STATE.rawDataFull.map(r => r.city), ...Object.values(flotasMap).map(f => f.ciudad)].filter(Boolean))].sort();
   const cityOpts = allCities.map(c => `<option value="${c}"${RAW_STATE.city===c?" selected":""}>${cityLabel(c)}</option>`).join("");
 
-  let html = secH("\uD83D\uDE9A", "#FF0000", "Vista Flotas",
-    `${fmt(rows.length)} CLID(s) \u00B7 ${fmt(conConfig)} configurados en partners \u00B7 ${fmt(sinConfig)} sin configurar \u00B7 ${fmt(inactivas)} inactiva(s)`, "");
+  let html = secH("\uD83D\uDE9A", "#FF0000", t("raw.vistaFlotas"),
+    t("raw.vistaFlotasSub", { n: fmt(rows.length), c: fmt(conConfig), s: fmt(sinConfig), i: fmt(inactivas) }), "");
 
   html += _rawViewToggle();
 
   html += `
     <div class="section agy-style-371">
       <div class="agy-style-458">
-        <strong>Fuente de verdad:</strong> Configuraci\u00F3n (tabla <code>partners</code>). El nombre y KAM que ves en el dashboard vienen de all\u00ED.
-        Esta vista permite <strong>marcar CLIDs como inactivos</strong> (para excluir flotas de otras unidades de negocio) y anotar la ciudad.
-        El "Nombre Excel" es informativo: sirve para detectar tuktuk/cargo/delivery/flotas antiguas. Si necesit\u00E1s cambiar nombre o KAM, hacelo en <strong>Configuraci\u00F3n</strong>.
-        <div class="agy-style-459">\uD83D\uDEFA Si un CLID trae <strong>fleetrooms</strong> (sub-flotas con <code>db_id</code>), se listan debajo y se marcan <strong>por fleetroom</strong>: <strong>Fleet</strong>, <strong>TukTuk</strong> o <strong>Excluir de Taxi</strong> (ej. delivery). As\u00ED solo esa sub-flota entra a TukTuk / sale de Taxi, sin afectar a las dem\u00E1s del mismo CLID.</div>
+        ${t("raw.fuenteVerdad")}
+        <div class="agy-style-459">${t("raw.fleetroomNota")}</div>
       </div>
       <div class="agy-style-460">
-        <input class="crud-input" id="rawSearchFlotas" placeholder="Buscar CLID, partner, KAM, ciudad..."
+        <input class="crud-input" id="rawSearchFlotas" placeholder="${escapeHTML(t("raw.buscarCPKC"))}"
           value="${(RAW_STATE.search || "").replace(/"/g, "&quot;")}"
           data-act-input="rawSearch"
           class="agy-style-461"/>
         <select class="sb-sel" data-act-change="rawSetCity">
-          <option value="all"${RAW_STATE.city==="all"?" selected":""}>Todas las ciudades</option>
+          <option value="all"${RAW_STATE.city==="all"?" selected":""}>${escapeHTML(t("raw.todasCiudades"))}</option>
           ${cityOpts}
         </select>
         <button class="crud-btn" data-act="exportFlotasCSV"
-          class="agy-style-449">\u2B07 Exportar CSV</button>
+          class="agy-style-449">${escapeHTML(t("raw.exportarCsv"))}</button>
       </div>
       <div class="agy-style-462">
-        <span class="agy-style-463">\uD83D\uDEFA Patrones TukTuk (sugerencia):</span>
+        <span class="agy-style-463">${escapeHTML(t("raw.patronesTuktuk"))}</span>
         ${(STATE.tuktukPatterns || []).map(w => `
           <span class="agy-style-464">
             ${escapeHTML(w)}
-            <button data-act="removeTuktukPattern" data-word="${escapeHTML(w)}" title="Quitar" class="agy-style-465">\u00D7</button>
+            <button data-act="removeTuktukPattern" data-word="${escapeHTML(w)}" title="${escapeHTML(t("raw.quitar"))}" class="agy-style-465">\u00D7</button>
           </span>`).join("")}
-        <input id="newTuktukPattern" class="crud-input" placeholder="ej. mototaxi" class="agy-style-466" data-act-keydown="addTuktukPatternEnter"/>
-        <button class="crud-btn" data-act="addTuktukPattern" class="agy-style-467">+ Agregar</button>
+        <input id="newTuktukPattern" class="crud-input" placeholder="${escapeHTML(t("raw.ejMototaxi"))}" class="agy-style-466" data-act-keydown="addTuktukPatternEnter"/>
+        <button class="crud-btn" data-act="addTuktukPattern" class="agy-style-467">${escapeHTML(t("raw.agregar"))}</button>
       </div>
     </div>
     <div class="tbl-wrap">
@@ -436,15 +434,15 @@ export function _renderFlotasView() {
         <thead>
           <tr>
             <th>CLID</th>
-            <th>Ciudad</th>
-            <th>Nombre Excel</th>
-            <th>Nombre <span class="agy-style-468">EFECTIVO</span></th>
-            <th>KAM <span class="agy-style-468">EFECTIVO</span></th>
+            <th>${escapeHTML(t("calc.col.ciudad"))}</th>
+            <th>${escapeHTML(t("raw.col.nombreExcel"))}</th>
+            <th>${escapeHTML(t("raw.col.nombreEfectivo"))} <span class="agy-style-468">${escapeHTML(t("raw.col.efectivo"))}</span></th>
+            <th>${escapeHTML(t("sidebar.kam"))} <span class="agy-style-468">${escapeHTML(t("raw.col.efectivo"))}</span></th>
             <th class="agy-style-469">Fleet</th>
             <th class="agy-style-470">TukTuk</th>
-            <th class="agy-style-471">Excluir<br>Taxi</th>
-            <th class="agy-style-27">Estado</th>
-            <th class="agy-style-472">Acci\u00F3n</th>
+            <th class="agy-style-471">${t("raw.col.excluirTaxi")}</th>
+            <th class="agy-style-27">${escapeHTML(t("raw.col.estado"))}</th>
+            <th class="agy-style-472">${escapeHTML(t("raw.col.accion"))}</th>
           </tr>
         </thead>
         <tbody>`;
@@ -464,7 +462,7 @@ export function _renderFlotasView() {
   // (badge + resalte) nunca auto-marca ni auto-guarda.
   function _flotaFlagCells(r, clidH, hasFleetrooms) {
     if (hasFleetrooms) {
-      const note = `<span class="agy-style-473">↓ fleetroom</span>`;
+      const note = `<span class="agy-style-473">${escapeHTML(t("raw.fleetroomAbbr"))}</span>`;
       return `
           <td class="agy-style-27">${note}</td>
           <td class="agy-style-27">${note}</td>
@@ -475,17 +473,17 @@ export function _renderFlotasView() {
     const suggested = !isTuktuk && _tuktukSuggested(r.nombre_excel);
     // escapeHTML (no escapeJSAttr): ahora van en data-attributes, no dentro de
     // un string JS de un handler inline — un solo contexto, un solo escape.
-    const pFall = escapeHTML(r.nombre_efectivo === "—" ? "" : r.nombre_efectivo);
-    const kFall = escapeHTML(r.kam_efectivo === "—" ? "" : r.kam_efectivo);
+    const pFall = escapeHTML(r.nombre_efectivo === "\u2014" ? "" : r.nombre_efectivo);
+    const kFall = escapeHTML(r.kam_efectivo === "\u2014" ? "" : r.kam_efectivo);
     return `
           <td class="agy-style-27">
-            <input type="checkbox" title="Fleet" data-act-change="flotaSetFlag" data-clid="${clidH}" data-key="is_fleet" data-pfall="${pFall}" data-kfall="${kFall}" ${isFleet ? "checked" : ""}/>
+            <input type="checkbox" title="${escapeHTML(t("raw.fleetTip"))}" data-act-change="flotaSetFlag" data-clid="${clidH}" data-key="is_fleet" data-pfall="${pFall}" data-kfall="${kFall}" ${isFleet ? "checked" : ""}/>
           </td>
           <td class="agy-style-27">
-            ${suggested ? `<div title="El Nombre Excel sugiere TukTuk" class="agy-style-474">\u{1F6FA}?</div>` : ""}
-            <input type="checkbox" title="TukTuk" data-act-change="flotaSetFlag" data-clid="${clidH}" data-key="is_tuktuk" data-pfall="${pFall}" data-kfall="${kFall}" ${isTuktuk ? "checked" : ""} style="${suggested ? "outline:2px solid #f59e0b" : ""}"/>
+            ${suggested ? `<div title="${escapeHTML(t("raw.nombreSugiereTuktukExcel"))}" class="agy-style-474">\u{1F6FA}?</div>` : ""}
+            <input type="checkbox" title="${escapeHTML(t("raw.tuktukTip"))}" data-act-change="flotaSetFlag" data-clid="${clidH}" data-key="is_tuktuk" data-pfall="${pFall}" data-kfall="${kFall}" ${isTuktuk ? "checked" : ""} style="${suggested ? "outline:2px solid #f59e0b" : ""}"/>
           </td>
-          <td class="agy-style-27"><span class="agy-style-90" title="Excluir de Taxi solo aplica por fleetroom">—</span></td>`;
+          <td class="agy-style-27"><span class="agy-style-90" title="${escapeHTML(t("raw.excluirTaxiTip"))}">\u2014</span></td>`;
   }
 
   // Sub-filas por fleetroom (una por db_id) debajo de la fila del CLID. Cada una
@@ -509,8 +507,8 @@ export function _renderFlotasView() {
         <tr class="agy-style-475">
           <td class="agy-style-476">↳</td>
           <td colspan="4" class="agy-style-477">
-            <span class="agy-style-478">${escapeHTML(name || "(sin nombre)")}</span>
-            ${sugg ? `<span title="El nombre sugiere TukTuk" class="agy-style-479">🛺?</span>` : ""}
+            <span class="agy-style-478">${escapeHTML(name || t("raw.sinNombreParen"))}</span>
+            ${sugg ? `<span title="${escapeHTML(t("raw.nombreSugiereTuktuk"))}" class="agy-style-479">🛺?</span>` : ""}
             <span class="agy-style-480" title="${escapeHTML(String(dbId))}">${dbShort}…</span>
           </td>
           <td class="agy-style-27" title="Fleet">${cb("is_fleet", isFleet)}</td>
@@ -532,23 +530,23 @@ export function _renderFlotasView() {
       const cityOpts = cityOptList.map(c =>
         `<option value="${c}"${r.ciudad===c?" selected":""}>${cityLabel(c)}</option>`).join("");
       const currentKamFlota = r.kam_flota || "";
-      const kamOpts  = `<option value="">\u2014 sin KAM \u2014</option>` +
+      const kamOpts  = `<option value="">${escapeHTML(t("raw.sinKamOpt"))}</option>` +
         kamOptList.map(k => `<option value="${escapeHTML(k)}"${currentKamFlota===k?" selected":""}>${escapeHTML(k)}</option>`).join("");
       const nombreWarning = r.enPartners
-        ? `<div class="agy-style-481">\u26A0 Este CLID est\u00E1 configurado en partners como <strong>${escapeHTML(r.nombre_partners)}</strong>. El valor de aqu\u00ED solo se usar\u00EDa si lo borr\u00E1s de Configuraci\u00F3n.</div>`
-        : `<div class="agy-style-482">\u2713 Este CLID NO est\u00E1 en partners \u2014 este nombre ser\u00E1 el que use el dashboard.</div>`;
+        ? `<div class="agy-style-481">${t("raw.avisoEnPartners", { n: escapeHTML(r.nombre_partners) })}</div>`
+        : `<div class="agy-style-482">${t("raw.avisoNoEnPartners")}</div>`;
       const kamWarning = r.kam_partners
-        ? `<div class="agy-style-481">\u26A0 KAM <strong>${escapeHTML(r.kam_partners)}</strong> configurado en partners. Este KAM solo se usar\u00EDa como fallback.</div>`
+        ? `<div class="agy-style-481">${t("raw.avisoKamPartners", { k: escapeHTML(r.kam_partners) })}</div>`
         : "";
       html += `
         <tr data-flota-clid="${clidH}" class="agy-style-483">
           <td class="agy-style-484">${clidH}</td>
           <td class="agy-style-485">
-            <select id="flEdCity_${clidH}" class="crud-input agy-style-486"><option value=""${r.ciudad?"":" selected"}>\u2014 sin ciudad \u2014</option>${cityOpts}</select>
+            <select id="flEdCity_${clidH}" class="crud-input agy-style-486"><option value=""${r.ciudad?"":" selected"}>${escapeHTML(t("raw.sinCiudad"))}</option>${cityOpts}</select>
           </td>
           <td class="agy-style-487">${escapeHTML(r.nombre_excel || "\u2014")}</td>
           <td class="agy-style-485">
-            <input id="flEdName_${clidH}" class="crud-input agy-style-488" value="${escapeHTML(r.nombre_flota || "")}" placeholder="opcional \u2014 fallback"/>
+            <input id="flEdName_${clidH}" class="crud-input agy-style-488" value="${escapeHTML(r.nombre_flota || "")}" placeholder="${escapeHTML(t("raw.opcionalFallback"))}"/>
             ${nombreWarning}
           </td>
           <td class="agy-style-485">
@@ -559,38 +557,38 @@ export function _renderFlotasView() {
           <td class="agy-style-489">
             <label class="agy-style-490">
               <input id="flEdActivo_${clidH}" type="checkbox"${r.activo?" checked":""}/>
-              <span>${r.activo?"Activa":"Inactiva"}</span>
+              <span>${r.activo?t("raw.activa"):t("raw.inactiva")}</span>
             </label>
           </td>
           <td class="agy-style-491">
-            <button data-act="flotaSaveEdit" data-clid="${clidH}" class="agy-style-492">\u2713 Guardar</button>
+            <button data-act="flotaSaveEdit" data-clid="${clidH}" class="agy-style-492">${escapeHTML(t("raw.guardar"))}</button>
             <button data-act="flotaCancelEdit"          class="agy-style-493">\u2715</button>
           </td>
         </tr>`;
     } else {
       // \u2500\u2500\u2500 FILA EN MODO LECTURA \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
       const badge = !r.activo
-        ? `<span class="agy-style-494">\uD83D\uDEAB Inactiva</span>`
+        ? `<span class="agy-style-494">${escapeHTML(t("raw.inactivaBadge"))}</span>`
         : !r.enPartners
-          ? `<span class="agy-style-495">Sin config</span>`
-          : `<span class="agy-style-496">\u2713 Activa</span>`;
+          ? `<span class="agy-style-495">${escapeHTML(t("raw.sinConfig"))}</span>`
+          : `<span class="agy-style-496">${escapeHTML(t("raw.activaBadge"))}</span>`;
       const cityCell = r.ciudad
         ? cityLabel(r.ciudad)
-        : `<span class="agy-style-497">\u2014 sin ciudad \u2014</span>`;
+        : `<span class="agy-style-497">${escapeHTML(t("raw.sinCiudad"))}</span>`;
       const nombreCell = r.enPartners
         ? `<span class="agy-style-498">${escapeHTML(r.nombre_partners)}</span>
-           <div class="agy-style-25">desde Configuraci\u00F3n</div>`
+           <div class="agy-style-25">${escapeHTML(t("raw.desdeConfig"))}</div>`
         : r.nombre_flota
           ? `<span class="agy-style-499">${escapeHTML(r.nombre_flota)}</span>
-             <div class="agy-style-500">fallback flotas</div>`
+             <div class="agy-style-500">${escapeHTML(t("raw.fallbackFlotas"))}</div>`
           : `<span class="agy-style-497">${escapeHTML(r.nombre_excel || "\u2014")}</span>
-             <div class="agy-style-500">solo Excel</div>`;
+             <div class="agy-style-500">${escapeHTML(t("raw.soloExcel"))}</div>`;
       const kamCell = r.kam_partners
         ? `<span class="agy-style-498">${escapeHTML(r.kam_partners)}</span>
-           <div class="agy-style-25">desde Configuraci\u00F3n</div>`
+           <div class="agy-style-25">${escapeHTML(t("raw.desdeConfig"))}</div>`
         : r.kam_flota
           ? `<span class="agy-style-499">${escapeHTML(r.kam_flota)}</span>
-             <div class="agy-style-500">fallback flotas</div>`
+             <div class="agy-style-500">${escapeHTML(t("raw.fallbackFlotas"))}</div>`
           : `<span class="agy-style-89">\u2014</span>`;
       html += `
         <tr>
@@ -602,19 +600,19 @@ export function _renderFlotasView() {
           ${_flotaFlagCells(r, clidH, hasFleetrooms)}
           <td class="agy-style-27">${badge}</td>
           <td class="agy-style-503">
-            <button data-act="flotaStartEdit" data-clid="${clidH}" title="Editar ciudad/activo/fallback" class="agy-style-504">\u270F\uFE0F</button>
+            <button data-act="flotaStartEdit" data-clid="${clidH}" title="${escapeHTML(t("raw.editarTip"))}" class="agy-style-504">\u270F\uFE0F</button>
             ${r.tieneFlota
-              ? `<button data-act="flotaToggleActivo" data-clid="${clidH}" data-activo="${!r.activo ? 1 : 0}" title="${r.activo?'Marcar inactiva':'Reactivar'}" style="padding:3px 8px;font-size:.7rem;background:${r.activo?'#fff5f5':'#f0fdf4'};border:1px solid ${r.activo?'#fecaca':'#86efac'};color:${r.activo?'#991b1b':'#166534'};border-radius:5px;cursor:pointer">${r.activo?'\uD83D\uDEAB':'\u2713'}</button>`
-              : `<button data-act="flotaToggleActivo" data-clid="${clidH}" data-activo="0" title="Marcar inactiva (crear flota)" class="agy-style-505">\uD83D\uDEAB</button>`}
+              ? `<button data-act="flotaToggleActivo" data-clid="${clidH}" data-activo="${!r.activo ? 1 : 0}" title="${r.activo?t("raw.marcarInactiva"):t("raw.reactivar")}" style="padding:3px 8px;font-size:.7rem;background:${r.activo?"#fff5f5":"#f0fdf4"};border:1px solid ${r.activo?"#fecaca":"#86efac"};color:${r.activo?"#991b1b":"#166534"};border-radius:5px;cursor:pointer">${r.activo?"\uD83D\uDEAB":"\u2713"}</button>`
+              : `<button data-act="flotaToggleActivo" data-clid="${clidH}" data-activo="0" title="${escapeHTML(t("raw.marcarInactivaCrear"))}" class="agy-style-505">\uD83D\uDEAB</button>`}
           </td>
         </tr>`;
-      // Sub-filas por fleetroom (solo lectura; el tagging es por db_id).
+      // Sub-filas por fleetroom (solo lectura; el tagging es por db_id// Sub-filas por fleetroom (solo lectura; el tagging es por db_id).
       if (hasFleetrooms) html += _fleetroomSubRows(r, clidH, froomMap);
     }
   });
 
   if (rows.length > 500) {
-    html += `<tr><td colspan="10" class="agy-style-212">Mostrando primeros 500 de ${fmt(rows.length)}. Us\u00E1 el buscador para filtrar.</td></tr>`;
+    html += `<tr><td colspan="10" class="agy-style-212">${t("raw.mostrandoPrimeros", { n: 500, t: fmt(rows.length) })}</td></tr>`;
   }
 
   html += `</tbody></table></div>`;
@@ -622,7 +620,7 @@ export function _renderFlotasView() {
   if (!Object.keys(flotasMap).length) {
     html += `
       <div class="agy-style-506">
-        \uD83D\uDCA1 A\u00FAn no subiste ninguna flota. Sub\u00ED un Excel con columnas <code>CLID | CIUDAD | NOMBRE_ASIGNADO | KAM | ACTIVO</code> desde <strong>Actualizar informaci\u00F3n \u2192 Flotas</strong>.
+        ${t("raw.sinFlotas", { r: t("raw.rutaFlotasUpload") })}
       </div>`;
   }
 
@@ -649,14 +647,14 @@ export async function flotaSaveEdit(clid) {
   const elName   = document.getElementById(`flEdName_${clid}`);
   const elKam    = document.getElementById(`flEdKam_${clid}`);
   const elActivo = document.getElementById(`flEdActivo_${clid}`);
-  if (!elActivo) { showBanner(false, "No se pudo leer la fila editada."); return; }
+  if (!elActivo) { showBanner(false, t("raw.errFilaEditada")); return; }
 
   const ciudad          = elCity ? elCity.value : "";
   const nombre_asignado = (elName && elName.value || "").trim();
   const kam             = elKam ? elKam.value : "";
   const activo          = elActivo.checked;
 
-  showLoad(true, "Guardando...");
+  showLoad(true, t("raw.guardando"));
   try {
     const yaExiste = !!(STATE.flotasMap && STATE.flotasMap[clid]);
     const payload = { ciudad, nombre_asignado, kam, activo };
@@ -666,11 +664,11 @@ export async function flotaSaveEdit(clid) {
       await createFlota(clid, payload);
     }
     RAW_STATE.editingClid = null;
-    showBanner(true, "Flota actualizada ✓");
+    showBanner(true, t("raw.flotaActualizada"));
     await loadFromSupabase();
     renderRawData();
   } catch (err) {
-    showBanner(false, "Error al guardar: " + err.message);
+    showBanner(false, t("raw.errorGuardar") + err.message);
     console.error(err);
   } finally {
     showLoad(false);
@@ -681,7 +679,7 @@ export async function flotaSaveEdit(clid) {
 // Si el CLID no tiene registro en `flotas`, lo crea con activo=false (o lo
 // reactiva eliminando el registro, segun el caso).
 export async function flotaToggleActivo(clid, nuevoEstado) {
-  showLoad(true, nuevoEstado ? "Reactivando..." : "Marcando inactiva...");
+  showLoad(true, nuevoEstado ? t("raw.reactivando") : t("raw.marcandoInactiva"));
   try {
     const yaExiste = !!(STATE.flotasMap && STATE.flotasMap[clid]);
     if (yaExiste) {
@@ -691,11 +689,11 @@ export async function flotaToggleActivo(clid, nuevoEstado) {
       const existing = STATE.CLID_MAP[clid] || "";
       await createFlota(clid, { activo: nuevoEstado, nombre_asignado: existing });
     }
-    showBanner(true, nuevoEstado ? "Flota reactivada ✓" : "Flota marcada inactiva ✓");
+    showBanner(true, nuevoEstado ? t("raw.flotaReactivada") : t("raw.flotaInactiva"));
     await loadFromSupabase();
     renderRawData();
   } catch (err) {
-    showBanner(false, "Error: " + err.message);
+    showBanner(false, t("raw.error") + err.message);
     console.error(err);
   } finally {
     showLoad(false);
@@ -707,14 +705,14 @@ export async function flotaToggleActivo(clid, nuevoEstado) {
 // kamFallback = nombre/KAM EFECTIVOS ya resueltos para esta fila (si el CLID aun
 // no esta en `partners`, evita perder el nombre en el primer upsert).
 export async function flotaSetFlag(clid, key, checked, partnerFallback, kamFallback) {
-  showLoad(true, "Guardando...");
+  showLoad(true, t("raw.guardando"));
   try {
     await setPartnerFlag(clid, key, checked, partnerFallback, kamFallback);
-    showBanner(true, "Actualizado ✓");
+    showBanner(true, t("raw.actualizado"));
     await loadFromSupabase();
     renderRawData();
   } catch (err) {
-    showBanner(false, "Error: " + err.message);
+    showBanner(false, t("raw.error") + err.message);
     console.error(err);
   } finally {
     showLoad(false);
@@ -726,14 +724,14 @@ export async function flotaSetFlag(clid, key, checked, partnerFallback, kamFallb
 // (para el primer upsert si el fleetroom aun no tiene fila). Preserva los otros
 // dos flags dentro de setFleetroomFlag.
 export async function fleetroomSetFlag(dbId, key, checked, name, clid, kam, city) {
-  showLoad(true, "Guardando...");
+  showLoad(true, t("raw.guardando"));
   try {
     await setFleetroomFlag(dbId, key, checked, { clid, name, kam, city });
-    showBanner(true, "Actualizado ✓");
+    showBanner(true, t("raw.actualizado"));
     await loadFromSupabase();
     renderRawData();
   } catch (err) {
-    showBanner(false, "Error: " + err.message);
+    showBanner(false, t("raw.error") + err.message);
     console.error(err);
   } finally {
     showLoad(false);
@@ -754,17 +752,17 @@ export function addTuktukPattern() {
   const input = document.getElementById("newTuktukPattern");
   const word  = (input?.value || "").trim().toLowerCase();
   if (!word) return;
-  if (STATE.tuktukPatterns.includes(word)) { showBanner(false, `"${word}" ya está en la lista.`); return; }
+  if (STATE.tuktukPatterns.includes(word)) { showBanner(false, t("raw.yaEnLista", { w: word })); return; }
   STATE.tuktukPatterns.push(word);
   lsSet("yangoTuktukPatterns", JSON.stringify(STATE.tuktukPatterns));
   renderRawData();
-  showBanner(true, `"${word}" agregado a patrones TukTuk ✓`);
+  showBanner(true, t("raw.agregadoTuktuk", { w: word }));
 }
 export function removeTuktukPattern(word) {
   STATE.tuktukPatterns = STATE.tuktukPatterns.filter(w => w !== word);
   lsSet("yangoTuktukPatterns", JSON.stringify(STATE.tuktukPatterns));
   renderRawData();
-  showBanner(true, `"${word}" eliminado de patrones TukTuk ✓`);
+  showBanner(true, t("raw.eliminadoTuktuk", { w: word }));
 }
 
 export function exportFlotasCSV() {
@@ -860,7 +858,7 @@ export function _renderReconView() {
              : STATE.curMode === "diario"  ? STATE.rawDataDiarioFull
              :                              STATE.rawDataFull;
   if (!src0 || !src0.length) {
-    return secH("\uD83E\uDDFE", "#0ea5e9", "Conciliaci\u00F3n (CLID \u2192 db_id)", "Sin datos cargados.", "") + _rawViewToggle();
+    return secH("\uD83E\uDDFE", "#0ea5e9", t("raw.recon"), t("raw.sinDatosCargados"), "") + _rawViewToggle();
   }
   // FULL ya viene deduplicado; reaplicar es idempotente y garantiza no doble conteo.
   const src = (typeof dropLegacyAggregateRows === "function") ? dropLegacyAggregateRows(src0) : src0;
@@ -916,29 +914,29 @@ export function _renderReconView() {
   const cityOpts     = allCities.map(c => `<option value="${c}"${RAW_STATE.city === c ? " selected" : ""}>${cityLabel(c)}</option>`).join("");
   const singlePeriod = RAW_STATE.dateFrom === RAW_STATE.dateTo;
 
-  let html = secH("\uD83E\uDDFE", "#0ea5e9", "Conciliaci\u00F3n (CLID \u2192 db_id)",
-    `${fmt(clids.length)} CLID(s) \u00B7 ${fmt(omitCount)} sub-flota(s) omitida(s) del dashboard \u00B7 clic en un CLID para desglosar`, "");
+  let html = secH("\uD83E\uDDFE", "#0ea5e9", t("raw.recon"),
+    t("raw.reconSub", { n: fmt(clids.length), o: fmt(omitCount) }), "");
   html += _rawViewToggle();
 
   html += `
     <div class="section agy-style-371">
       <div class="agy-style-507">
-        Resumen por <strong>CLID</strong> con desglose por <strong>db_id</strong> (fleetroom). N\u00FAmeros con <strong>K/M y 2 decimales</strong> \u2014 el valor exacto est\u00E1 en el <em>hover</em> y en el CSV. Las sub-flotas <strong>\uD83D\uDEFA TukTuk</strong> y <strong>\u26D4 Excluidas</strong> NO entran al dashboard (Taxi) y van resaltadas; <strong>\uD83D\uDE97 Fleet</strong> s\u00ED entra (es subconjunto de Taxi).
-        ${singlePeriod ? "" : `<div class="agy-style-508"><strong>Ojo:</strong> ten\u00E9s un rango de varios per\u00EDodos \u2014 AD y autos se <strong>suman</strong> entre ellos. Para cuadrar contra un Excel de un per\u00EDodo, pon\u00E9 el mismo per\u00EDodo en "Desde" y "Hasta".</div>`}
+        ${t("raw.reconResumen")}
+        ${singlePeriod ? "" : `<div class="agy-style-508">${t("raw.reconAviso")}</div>`}
       </div>
       <div class="agy-style-197">
-        <input class="crud-input" id="rawSearchRecon" placeholder="Buscar CLID, partner o KAM..."
+        <input class="crud-input" id="rawSearchRecon" placeholder="${escapeHTML(t("raw.buscarCPK"))}"
           value="${(RAW_STATE.search || "").replace(/"/g, "&quot;")}" data-act-input="rawSearch"
           class="agy-style-56"/>
         <select class="sb-sel" data-act-change="rawSetCity">
-          <option value="all"${RAW_STATE.city === "all" ? " selected" : ""}>Todas las ciudades</option>${cityOpts}
+          <option value="all"${RAW_STATE.city === "all" ? " selected" : ""}>${escapeHTML(t("raw.todasCiudades"))}</option>${cityOpts}
         </select>
         <select class="sb-sel" data-act-change="rawSetDateFrom">${dateFromOpts}</select>
         <span class="agy-style-54">\u2192</span>
         <select class="sb-sel" data-act-change="rawSetDateTo">${dateToOpts}</select>
-        <button class="crud-btn" data-act="reconExpandAll" data-open="1" class="agy-style-83">Expandir todo</button>
-        <button class="crud-btn" data-act="reconExpandAll" data-open="0" class="agy-style-83">Colapsar</button>
-        <button class="crud-btn" data-act="exportReconCSV" class="agy-style-449">\u2B07 Exportar CSV</button>
+        <button class="crud-btn" data-act="reconExpandAll" data-open="1" class="agy-style-83">${escapeHTML(t("raw.expandirTodo"))}</button>
+        <button class="crud-btn" data-act="reconExpandAll" data-open="0" class="agy-style-83">${escapeHTML(t("raw.colapsar"))}</button>
+        <button class="crud-btn" data-act="exportReconCSV" class="agy-style-449">${escapeHTML(t("raw.exportarCsv"))}</button>
       </div>
     </div>`;
 
@@ -962,9 +960,9 @@ export function _renderReconView() {
       <table class="dtbl">
         <thead><tr>
           <th class="agy-style-509"></th>
-          ${th("CLID / Flota")}
-          ${th("AD")}${th("Horas")}${th("Nuevos")}${th("React")}${th("N+R")}${th("Viajes")}${th("GMV")}${th("Comisi\u00F3n")}
-          ${th("SH/auto<br>fleet")}${th("Acept.")}${th("Autos<br>fleet")}${th("Estado")}
+          ${th(escapeHTML(t("raw.col.clidFlota")))}
+          ${th("AD")}${th(escapeHTML(t("metric.sh.short")))}${th(escapeHTML(t("raw.col.nuevos")))}${th(escapeHTML(t("raw.col.react")))}${th("N+R")}${th(escapeHTML(t("raw.col.viajes")))}${th("GMV")}${th(escapeHTML(t("raw.col.comision")))}
+          ${th(t("raw.col.shAutoFleet"))}${th(escapeHTML(t("raw.col.acept")))}${th(t("raw.col.autosFleet"))}${th(escapeHTML(t("raw.col.estado")))}
         </tr></thead>
         <tbody>`;
 
@@ -977,7 +975,7 @@ export function _renderReconView() {
     froomArr.forEach(f => { const cl = _reconClasif(f.sample); if (cl.omit) { omitAd += f.agg.ad; omitN++; } });
     const cityStr = [...c.cities].map(cityLabel).join(", ");
     const omitBadge = omitN
-      ? `<span title="${omitN} sub-flota(s) fuera del dashboard \u00B7 AD omitido: ${fmt5(omitAd)}" class="agy-style-510">omite ${omitN} \u00B7 ${_fmtKM2(omitAd)} AD</span>`
+      ? `<span title="${t("raw.omiteTip", { n: omitN, ad: fmt5(omitAd) })}" class="agy-style-510">${t("raw.omite", { n: omitN, ad: _fmtKM2(omitAd) })}</span>`
       : `<span class="agy-style-511">\u2014</span>`;
 
     html += `
@@ -985,8 +983,8 @@ export function _renderReconView() {
         <td class="agy-style-513">${froomArr.length > 1 || (froomArr[0] && froomArr[0].db_id) ? (open ? "\u25BE" : "\u25B8") : ""}</td>
         <td>
           <span class="agy-style-514">${escapeHTML(c.clid)}</span>
-          <span class="agy-style-515">${escapeHTML(c.partner || "(sin nombre)")}</span>
-          <div class="agy-style-516">${escapeHTML(c.kam || "sin KAM")}${cityStr ? " \u00B7 " + escapeHTML(cityStr) : ""} \u00B7 ${froomArr.length} fleetroom(s)</div>
+          <span class="agy-style-515">${escapeHTML(c.partner || t("raw.sinNombreParen"))}</span>
+          <div class="agy-style-516">${escapeHTML(c.kam || t("raw.sinKamParen"))}${cityStr ? " \u00B7 " + escapeHTML(cityStr) : ""} \u00B7 ${t("raw.fleetroomsCount", { n: froomArr.length })}</div>
         </td>
         ${numCells(c.agg)}
         <td class="agy-style-27">${omitBadge}</td>
@@ -995,7 +993,7 @@ export function _renderReconView() {
     if (open) {
       froomArr.sort((a, b) => b.agg.ad - a.agg.ad).forEach(f => {
         const cl = _reconClasif(f.sample);
-        const dbShort = f.db_id ? escapeHTML(f.db_id.slice(0, 12)) + "\u2026" : "(legacy s/ db_id)";
+        const dbShort = f.db_id ? escapeHTML(f.db_id.slice(0, 12)) + "\u2026" : t("raw.legacySinDbId");
         html += `
       <tr style="background:${cl.bg || "#fff"};${cl.omit ? "opacity:.92" : ""}">
         <td></td>
@@ -1099,6 +1097,7 @@ export function exportReconCSV() {
 // Cada entrada mapea un data-act/data-act-* del HTML a su función. El dispatcher
 // (shared/actions.js) las invoca con (dataset, elemento, evento).
 import { registerActions } from "./shared/actions.js";
+import { t } from "./core/i18n";
 import { logAccess } from "./shared/accessLog.js";
 
 registerActions({
