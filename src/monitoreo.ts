@@ -27,6 +27,7 @@
 // La UI los muestra en secciones separadas justamente para que no se confundan.
 
 import { registerActions } from "./shared/actions.js";
+import { t } from "./core/i18n";
 import { sb } from "./auth.js";
 
 export const MON_STATE = {
@@ -58,18 +59,18 @@ function _fmtWhen(iso) {
 // "hace 3 días" — el dato accionable es la ANTIGÜEDAD, no la fecha exacta:
 // "hace 45 días" salta a la vista, "12/06/2026" hay que calcularlo mentalmente.
 function _hace(iso) {
-  if (!iso) return { txt: "nunca", dias: Infinity };
+  if (!iso) return { txt: t("mon.nunca"), dias: Infinity };
   const ms = Date.now() - new Date(iso).getTime();
   if (isNaN(ms)) return { txt: "—", dias: Infinity };
   const dias = Math.floor(ms / 86400000);
   if (dias <= 0) {
     const hs = Math.floor(ms / 3600000);
-    return { txt: hs <= 0 ? "hace minutos" : `hace ${hs} h`, dias: 0 };
+    return { txt: hs <= 0 ? t("mon.haceMinutos") : t("mon.haceHoras", { n: hs }), dias: 0 };
   }
-  if (dias === 1) return { txt: "ayer", dias };
-  if (dias < 30)  return { txt: `hace ${dias} días`, dias };
+  if (dias === 1) return { txt: t("mon.ayer"), dias };
+  if (dias < 30)  return { txt: t("mon.haceDias", { n: dias }), dias };
   const meses = Math.floor(dias / 30);
-  return { txt: `hace ${meses} ${meses === 1 ? "mes" : "meses"}`, dias };
+  return { txt: meses === 1 ? t("mon.haceMes", { n: meses }) : t("mon.haceMeses", { n: meses }), dias };
 }
 
 function _staleColor(dias) {
@@ -104,8 +105,8 @@ export async function monLoad() {
       if (!detalle) {
         try { detalle = (await err?.context?.json?.())?.error; } catch (_) {}
       }
-      MON_STATE.error = "No se pudo leer la lista de cuentas: " +
-        (detalle || (err && err.message) || "motivo desconocido");
+      MON_STATE.error = t("mon.errCargarCuentas") +
+        (detalle || (err && err.message) || t("mon.motivoDesconocido"));
     }
     MON_STATE.audit = aRes.status === "fulfilled" ? aRes.value : [];
     MON_STATE.uso   = sRes.status === "fulfilled" ? sRes.value : [];
@@ -165,18 +166,16 @@ export function renderMonitoreo() {
 
   if (MON_STATE.users == null && !MON_STATE.loading) {
     box.innerHTML = `
-      <button class="apply-btn" data-act="monLoad">📡 Cargar monitoreo</button>
-      <span style="font-size:.75rem;color:#888;margin-left:10px">
-        Lee los accesos de las cuentas y el registro de cambios. No se carga solo para no pegarle a la Edge Function en cada render.
-      </span>`;
+      <button class="apply-btn" data-act="monLoad">${escapeHTML(t("mon.cargarBtn"))}</button>
+      <span style="font-size:.75rem;color:#888;margin-left:10px">${t("mon.cargarHint")}</span>`;
     return;
   }
   if (MON_STATE.loading) {
-    box.innerHTML = `<div style="padding:24px 0;color:#888;font-size:.85rem">Cargando monitoreo…</div>`;
+    box.innerHTML = `<div style="padding:24px 0;color:#888;font-size:.85rem">${escapeHTML(t("mon.cargando"))}</div>`;
     return;
   }
 
-  let html = `<button class="apply-btn" data-act="monLoad" style="margin-bottom:14px">🔄 Actualizar</button>`;
+  let html = `<button class="apply-btn" data-act="monLoad" style="margin-bottom:14px">${escapeHTML(t("mon.actualizar"))}</button>`;
   if (MON_STATE.error) {
     html += `<div style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;padding:10px 12px;border-radius:8px;font-size:.78rem;margin-bottom:14px">${escapeHTML(MON_STATE.error)}</div>`;
   }
@@ -218,28 +217,30 @@ function _renderAccesos() {
       </tr>`).join("");
     return `<div style="font-weight:700;font-size:.78rem;margin:14px 0 6px">${titulo} (${list.length})</div>
       <div class="tbl-wrap"><table class="dtbl">
-        <thead><tr><th>Cuenta</th><th>Rol</th><th>Último acceso</th><th>Fecha exacta</th><th>Creada</th></tr></thead>
+        <thead><tr><th>${escapeHTML(t("mon.col.cuenta"))}</th><th>${escapeHTML(t("mon.col.rol"))}</th><th>${escapeHTML(t("mon.col.ultimoAcceso"))}</th><th>${escapeHTML(t("mon.col.fechaExacta"))}</th><th>${escapeHTML(t("mon.col.creada"))}</th></tr></thead>
         <tbody>${rows}</tbody></table></div>`;
   };
 
-  return secH("🔑", "#0ea5e9", "Accesos", "Quién entró y cuándo · el color marca la antigüedad del último acceso", "") +
+  return secH("🔑", "#0ea5e9", t("mon.accesosTitulo"), t("mon.accesosSub"), "") +
     `<div class="section">
       <div class="metric-row">
-        ${kpi("👥 Cuentas", users.length, "#6366f1", "Total de cuentas creadas")}
-        ${kpi("✅ Activas (7 días)", activos7, "#10b981", "Entraron en los últimos 7 días")}
-        ${kpi("🤝 Partners", partners.length, "#0891b2", "Cuentas con rol partner")}
-        ${kpi("🚫 Nunca entraron", nunca, nunca ? "#ef4444" : "#9ca3af", "Invitadas pero sin ningún acceso — probablemente no recibieron o no abrieron la invitación")}
+        ${kpi(t("mon.kpiCuentas"), users.length, "#6366f1", t("mon.kpiCuentasTip"))}
+        ${kpi(t("mon.kpiActivas7"), activos7, "#10b981", t("mon.kpiActivas7Tip"))}
+        ${kpi(t("mon.kpiPartners"), partners.length, "#0891b2", t("mon.kpiPartnersTip"))}
+        ${kpi(t("mon.kpiNuncaEntraron"), nunca, nunca ? "#ef4444" : "#9ca3af", t("mon.kpiNuncaEntraronTip"))}
       </div>
-      ${tabla("🤝 Partners", partners)}
-      ${tabla("🏢 Equipo interno", internos)}
+      ${tabla(t("mon.tablaPartners"), partners)}
+      ${tabla(t("mon.tablaEquipo"), internos)}
     </div>`;
 }
 
 function _renderAuditoria() {
   const rows = MON_STATE.audit || [];
+  // OJO: `tabla` (no `t`) como parametro del map — `t` shadowearia el `t` de
+  // i18n usado mas abajo en esta misma funcion (mismo bug que en calculator.ts).
   const sel = `<select class="sb-sel" style="max-width:240px" data-act-change="monSetAuditTable">
-      <option value="all"${MON_STATE.auditTable === "all" ? " selected" : ""}>Todas las tablas</option>
-      ${AUDIT_TABLES.map(t => `<option value="${t}"${MON_STATE.auditTable === t ? " selected" : ""}>${t}</option>`).join("")}
+      <option value="all"${MON_STATE.auditTable === "all" ? " selected" : ""}>${escapeHTML(t("mon.todasTablas"))}</option>
+      ${AUDIT_TABLES.map(tabla => `<option value="${tabla}"${MON_STATE.auditTable === tabla ? " selected" : ""}>${tabla}</option>`).join("")}
     </select>`;
 
   const body = rows.length
@@ -253,14 +254,14 @@ function _renderAuditoria() {
           <td class="agy-style-90">${escapeHTML(r.row_key || "")}</td>
         </tr>`;
       }).join("")
-    : `<tr><td colspan="5" style="text-align:center;color:#888;padding:18px">Sin movimientos registrados para este filtro.</td></tr>`;
+    : `<tr><td colspan="5" style="text-align:center;color:#888;padding:18px">${escapeHTML(t("mon.sinMovimientos"))}</td></tr>`;
 
-  return secH("🧾", "#8b5cf6", "Registro de cambios",
-      `Últimos ${MON_STATE.auditLimit} movimientos · lo escriben triggers de Postgres, no el navegador: no se puede alterar desde la app`, "") +
+  return secH("🧾", "#8b5cf6", t("mon.auditTitulo"),
+      t("mon.auditSub", { n: MON_STATE.auditLimit }), "") +
     `<div class="section">
       <div style="margin-bottom:10px">${sel}</div>
       <div class="tbl-wrap"><table class="dtbl">
-        <thead><tr><th>Cuándo</th><th>Quién</th><th>Acción</th><th>Tabla</th><th>Registro</th></tr></thead>
+        <thead><tr><th>${escapeHTML(t("mon.col.cuando"))}</th><th>${escapeHTML(t("mon.col.quien"))}</th><th>${escapeHTML(t("mon.col.accion"))}</th><th>${escapeHTML(t("mon.col.tabla"))}</th><th>${escapeHTML(t("mon.col.registro"))}</th></tr></thead>
         <tbody>${body}</tbody></table></div>
     </div>`;
 }
@@ -278,12 +279,8 @@ function _renderIngestas() {
   if (items == null) return "";
 
   if (!items.length) {
-    return secH("🔄", "#0891b2", "Ingesta automática de taxiparks", "Carga de la tarea \"Dashboard OPS\"", "") +
-      `<div class="section"><div class="agy-style-224">
-        Todavía no hubo ninguna ingesta automática. Mientras tanto la carga sigue
-        siendo manual (Actualizar información → Rendimiento).
-        Ver <code>docs/ingest-taxiparks.md</code> para conectarla.
-      </div></div>`;
+    return secH("🔄", "#0891b2", t("mon.ingestaTitulo"), t("mon.ingestaCarga"), "") +
+      `<div class="section"><div class="agy-style-224">${t("mon.sinIngestasAun")}</div></div>`;
   }
 
   // Estado por escala: cuando entro por ultima vez cada una. Es la pregunta
@@ -302,7 +299,7 @@ function _renderIngestas() {
       <div class="mcard-label">${nombre}</div>
       <div class="mcard-val" style="color:${col};font-size:1.05rem">${escapeHTML(h.txt)}</div>
       <div class="agy-style-90" style="font-size:.68rem">
-        ${ult ? `${fmt(ult.filas_escritas || 0)} filas · ${(ult.periodos || []).length} período(s)` : "sin ingestas"}
+        ${ult ? t("mon.filasPeriodos", { f: fmt(ult.filas_escritas || 0), p: (ult.periodos || []).length }) : t("mon.sinIngestas")}
       </div>
     </div>`;
   };
@@ -311,7 +308,7 @@ function _renderIngestas() {
     const col = i.status === "ok" ? "#10b981" : i.status === "rechazado" ? "#f59e0b" : "#ef4444";
     const falt = (i.kpis_faltantes || []).length;
     const kpiTxt = i.kpis_ok == null ? "—"
-      : `${i.kpis_ok}${falt ? ` <span style="color:#f59e0b" title="Faltaron: ${escapeHTML((i.kpis_faltantes || []).slice(0, 12).join(", "))}">(−${falt})</span>` : ""}`;
+      : `${i.kpis_ok}${falt ? ` <span style="color:#f59e0b" title="${escapeHTML(t("mon.faltaron", { l: (i.kpis_faltantes || []).slice(0, 12).join(", ") }))}">(−${falt})</span>` : ""}`;
     const per = (i.periodos || []);
     const perTxt = !per.length ? "—"
       : per.length <= 2 ? per.join(", ")
@@ -332,19 +329,18 @@ function _renderIngestas() {
   const ultOk = items.find(i => i.status === "ok");
   const alerta = ultOk && (ultOk.kpis_faltantes || []).length
     ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 12px;font-size:.76rem;color:#92400e;margin-bottom:12px">
-         ⚠️ En la última ingesta faltaron <strong>${(ultOk.kpis_faltantes || []).length} de ${(ultOk.kpis_faltantes || []).length + (ultOk.kpis_ok || 0)}</strong> KPIs.
-         Entran como 0 y las gráficas se ven planas sin avisar. Suele ser una measure renombrada en DataLens.
+         ${t("mon.avisoKpisFaltantes", { n: (ultOk.kpis_faltantes || []).length, t: (ultOk.kpis_faltantes || []).length + (ultOk.kpis_ok || 0) })}
          <div style="margin-top:4px;font-family:monospace;font-size:.7rem">${escapeHTML((ultOk.kpis_faltantes || []).slice(0, 15).join(", "))}</div>
        </div>` : "";
 
-  return secH("🔄", "#0891b2", "Ingesta automática de taxiparks",
-      "Última carga por escala · KPIs recibidos · errores", "") +
+  return secH("🔄", "#0891b2", t("mon.ingestaTitulo"),
+      t("mon.ultimaCarga"), "") +
     `<div class="section">
       ${alerta}
       <div class="metric-row">${porEscala.map(tarjeta).join("")}</div>
       <div class="tbl-wrap" style="margin-top:14px"><table class="dtbl">
-        <thead><tr><th>Cuándo</th><th>Estado</th><th>Escala</th><th class="tn">Filas</th>
-          <th class="tn" title="KPIs con datos (y cuántos faltaron)">KPIs</th><th>Períodos</th><th>Detalle</th></tr></thead>
+        <thead><tr><th>${escapeHTML(t("mon.col.cuando"))}</th><th>${escapeHTML(t("raw.col.estado"))}</th><th>${escapeHTML(t("sidebar.escala"))}</th><th class="tn">${escapeHTML(t("mon.col.filas"))}</th>
+          <th class="tn" title="${escapeHTML(t("mon.col.kpisTip"))}">${escapeHTML(t("mon.col.kpis"))}</th><th>${escapeHTML(t("mon.col.periodos"))}</th><th>${escapeHTML(t("mon.col.detalle"))}</th></tr></thead>
         <tbody>${filas}</tbody></table></div>
     </div>`;
 }
@@ -353,12 +349,8 @@ function _renderUso() {
   const evs = MON_STATE.uso;
   if (evs == null) return "";
   if (!evs.length) {
-    return secH("📈", "#f59e0b", "Uso del dashboard", "Últimos 30 días", "") +
-      `<div class="section"><div class="agy-style-224">
-        Todavía no hay eventos registrados. Se empiezan a acumular a medida que
-        el equipo y los partners usen el dashboard — los eventos anteriores a la
-        activación del registro no existen.
-      </div></div>`;
+    return secH("📈", "#f59e0b", t("mon.usoTitulo"), t("mon.ultimos30d"), "") +
+      `<div class="section"><div class="agy-style-224">${t("mon.sinEventosAun")}</div></div>`;
   }
 
   const logins    = evs.filter(e => e.event === "login").length;
@@ -395,23 +387,23 @@ function _renderUso() {
             <div style="height:100%;width:${(n / maxTab * 100).toFixed(1)}%;background:${color}"></div>
           </div>
         </div>`).join("")
-    : `<div class="agy-style-90" style="font-size:.76rem">Sin datos</div>`;
+    : `<div class="agy-style-90" style="font-size:.76rem">${escapeHTML(t("mon.sinDatos"))}</div>`;
 
-  return secH("📈", "#f59e0b", "Uso del dashboard",
-      "Últimos 30 días · lo registra el navegador, es telemetría de uso (no auditoría)", "") +
+  return secH("📈", "#f59e0b", t("mon.usoTitulo"),
+      t("mon.ultimos30dSub"), "") +
     `<div class="section">
       <div class="metric-row">
-        ${kpi("🔓 Ingresos", logins, "#0ea5e9", "Eventos de login en los últimos 30 días")}
-        ${kpi("🙋 Personas activas", personas, "#10b981", "Cuentas distintas con algún evento")}
-        ${kpi("⬇️ Descargas", descargas, "#8b5cf6", "PDFs y CSVs exportados")}
+        ${kpi(t("mon.kpiIngresos"), logins, "#0ea5e9", t("mon.kpiIngresosTip"))}
+        ${kpi(t("mon.kpiPersonas"), personas, "#10b981", t("mon.kpiPersonasTip"))}
+        ${kpi(t("mon.kpiDescargas"), descargas, "#8b5cf6", t("mon.kpiDescargasTip"))}
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;margin-top:14px">
         <div>
-          <div style="font-weight:700;font-size:.78rem;margin-bottom:8px">Secciones más abiertas</div>
-          <div title="Cuenta la PRIMERA visita de cada sesión a cada sección, no cada click">${barras(tabs, "#0ea5e9")}</div>
+          <div style="font-weight:700;font-size:.78rem;margin-bottom:8px">${escapeHTML(t("mon.seccionesMasAbiertas"))}</div>
+          <div title="${escapeHTML(t("mon.seccionesTip"))}">${barras(tabs, "#0ea5e9")}</div>
         </div>
         <div>
-          <div style="font-weight:700;font-size:.78rem;margin-bottom:8px">Qué se descarga</div>
+          <div style="font-weight:700;font-size:.78rem;margin-bottom:8px">${escapeHTML(t("mon.queDescarga"))}</div>
           ${barras(descs, "#8b5cf6")}
         </div>
       </div>

@@ -22,6 +22,7 @@
 // un panel CRUD simple. Ver CLAUDE.md.
 
 import { registerActions } from "./shared/actions.js";
+import { t } from "./core/i18n";
 
 export const ADMIN_USERS_STATE = {
   users: [],        // [{id,email,role,lastSignInAt}]
@@ -33,14 +34,14 @@ export const ADMIN_USERS_STATE = {
 };
 
 // Permisos que se pueden otorgar (espejo de la taxonomía de la migración B2).
-export const AU_PERMISOS = [
-  ["write:performance", "Subir rendimiento"],
-  ["write:metas",       "Editar metas"],
-  ["write:config",      "Editar configuración"],
-  ["write:seguimiento", "Editar seguimiento"],
-  ["delete:data",       "Borrado masivo"],
-  ["manage:users",      "Gestionar usuarios"]
-];
+export function AU_PERMISOS_LIST() { return [
+  ["write:performance", t("au.permWritePerf")],
+  ["write:metas",       t("au.permWriteMetas")],
+  ["write:config",      t("au.permWriteConfig")],
+  ["write:seguimiento", t("au.permWriteSeg")],
+  ["delete:data",       t("au.permDeleteData")],
+  ["manage:users",      t("au.permManageUsers")]
+]; }
 
 export const AU_ROLES = ["admin", "kam", "viewer", "partner"];
 
@@ -56,14 +57,14 @@ export async function auLoadUsers() {
       sb.from("user_permissions").select("*"),
       sb.from("partner_users").select("*")
     ]);
-    if (fn.error) throw new Error(await _edgeErrMsg(fn.error, "No se pudo listar usuarios (¿Edge Function desplegada?)."));
+    if (fn.error) throw new Error(await _edgeErrMsg(fn.error, t("au.errListarUsuarios")));
     if (fn.data && fn.data.error) throw new Error(String(fn.data.error));
     ADMIN_USERS_STATE.users    = fn.data?.users || [];
     ADMIN_USERS_STATE.perms    = permsRes.data  || [];
     ADMIN_USERS_STATE.mappings = mapRes.data    || [];
     ADMIN_USERS_STATE.loaded   = true;
   } catch (e) {
-    ADMIN_USERS_STATE.error = e.message || "Error al cargar usuarios.";
+    ADMIN_USERS_STATE.error = e.message || t("au.errCargarUsuarios");
   } finally {
     ADMIN_USERS_STATE.loading = false;
     renderAdminUsers();
@@ -95,7 +96,7 @@ async function _edgeErrMsg(err, fallback) {
 
 async function _fn(action, body) {
   const r = await sb.functions.invoke("admin-users", { body: { action, ...body } });
-  if (r.error) throw new Error(await _edgeErrMsg(r.error, "La operación fue rechazada."));
+  if (r.error) throw new Error(await _edgeErrMsg(r.error, t("au.errOperacionRechazada")));
   // La función también puede responder 200 con {error} en algunos caminos.
   if (r.data && r.data.error) throw new Error(String(r.data.error));
   return r.data;
@@ -103,16 +104,15 @@ async function _fn(action, body) {
 
 export async function auSetRole(userId, role) {
   const u = ADMIN_USERS_STATE.users.find(x => x.id === userId);
-  if (!confirm(`¿Cambiar el rol de ${u?.email || userId} a "${role}"?\n\n` +
-               `El rol viaja dentro del token de sesión: recién aplica cuando esa persona vuelve a iniciar sesión.`)) {
+  if (!confirm(t("au.confirmCambiarRol", { e: u?.email || userId, r: role }))) {
     renderAdminUsers();   // revertir el <select> a su valor real
     return;
   }
-  showLoad(true, "Cambiando rol...");
+  showLoad(true, t("au.cambiandoRol"));
   try {
     await _fn("setRole", { userId, role });
     await auLoadUsers();
-    showBanner(true, `Rol actualizado a ${role} ✓ — debe volver a iniciar sesión para que aplique.`);
+    showBanner(true, t("au.rolActualizado", { r: role }));
   } catch (e) {
     showBanner(false, e.message);
     renderAdminUsers();
@@ -122,13 +122,13 @@ export async function auSetRole(userId, role) {
 export async function auInvite() {
   const email = (document.getElementById("auInviteEmail")?.value || "").trim();
   const role  = document.getElementById("auInviteRole")?.value || "viewer";
-  if (!email) { showBanner(false, "Ingresá un email para invitar."); return; }
-  showLoad(true, "Enviando invitación...");
+  if (!email) { showBanner(false, t("au.ingresaEmail")); return; }
+  showLoad(true, t("au.enviandoInvitacion"));
   try {
     await _fn("invite", { email, role });
     const el = document.getElementById("auInviteEmail"); if (el) el.value = "";
     await auLoadUsers();
-    showBanner(true, `Invitación enviada a ${email} (rol ${role}) ✓`);
+    showBanner(true, t("au.invitacionEnviada", { e: email, r: role }));
   } catch (e) {
     showBanner(false, e.message);
   } finally { showLoad(false); }
@@ -148,28 +148,28 @@ export async function auDeleteUser(userId) {
   try {
     await _fn("deleteUser", { userId });
     AU_UI.confirmDelete = null;
-    showBanner(true, `Usuario ${u?.email || ""} eliminado`);
+    showBanner(true, t("au.usuarioEliminado", { e: u?.email || "" }));
     await auLoadUsers();
   } catch (e) {
     AU_UI.confirmDelete = null;
-    showBanner(false, "No se pudo eliminar: " + (e.message || e));
+    showBanner(false, t("au.noSePudoEliminar") + (e.message || e));
     renderAdminUsers();
   }
 }
 
 export async function auForceSignOut(userId) {
   const u = ADMIN_USERS_STATE.users.find(x => x.id === userId);
-  if (!confirm(`¿Cerrar todas las sesiones de ${u?.email || userId}?\n\nSe usa para que un cambio de rol aplique de inmediato.`)) return;
-  showLoad(true, "Cerrando sesiones...");
+  if (!confirm(t("au.confirmCerrarSesiones", { e: u?.email || userId }))) return;
+  showLoad(true, t("au.cerrandoSesiones"));
   try {
     await _fn("signOut", { userId });
-    showBanner(true, "Sesiones cerradas ✓");
+    showBanner(true, t("au.sesionesCerradas"));
   } catch (e) { showBanner(false, e.message); }
   finally { showLoad(false); }
 }
 
 export async function auTogglePerm(userId, permission, on) {
-  showLoad(true, "Guardando permiso...");
+  showLoad(true, t("au.guardandoPermiso"));
   try {
     if (on) {
       const { data: { user } } = await sb.auth.getUser();
@@ -182,9 +182,9 @@ export async function auTogglePerm(userId, permission, on) {
       if (error) throw error;
     }
     await auLoadUsers();
-    showBanner(true, `Permiso ${on ? "otorgado" : "revocado"} ✓`);
+    showBanner(true, t("au.permisoResultado", { s: on ? t("au.permisoOtorgado") : t("au.permisoRevocado") }));
   } catch (e) {
-    showBanner(false, "Error: " + (e.message || e));
+    showBanner(false, t("au.error") + (e.message || e));
     renderAdminUsers();
   } finally { showLoad(false); }
 }
@@ -194,10 +194,10 @@ export async function auAddClid(userId) {
   const clid = (inp?.value || "").trim();
   if (!clid) return;
   if (!STATE.CLID_MAP[clid]) {
-    showBanner(false, `El CLID ${clid} no existe en Configuración → Partners.`);
+    showBanner(false, t("au.clidNoExiste", { c: clid }));
     return;
   }
-  showLoad(true, "Asignando CLID...");
+  showLoad(true, t("au.asignandoClid"));
   try {
     const { data: { user } } = await sb.auth.getUser();
     const { error } = await sb.from("partner_users")
@@ -205,20 +205,20 @@ export async function auAddClid(userId) {
     if (error) throw error;
     if (inp) inp.value = "";
     await auLoadUsers();
-    showBanner(true, `CLID ${clid} asignado ✓`);
+    showBanner(true, t("au.clidAsignado", { c: clid }));
   } catch (e) {
-    showBanner(false, "Error: " + (e.message || e));
+    showBanner(false, t("au.error") + (e.message || e));
   } finally { showLoad(false); }
 }
 
 export async function auRemoveClid(mappingId) {
-  showLoad(true, "Quitando CLID...");
+  showLoad(true, t("au.quitandoClid"));
   try {
     const { error } = await sb.from("partner_users").delete().eq("id", mappingId);
     if (error) throw error;
     await auLoadUsers();
-    showBanner(true, "CLID desasignado ✓");
-  } catch (e) { showBanner(false, "Error: " + (e.message || e)); }
+    showBanner(true, t("au.clidDesasignado"));
+  } catch (e) { showBanner(false, t("au.error") + (e.message || e)); }
   finally { showLoad(false); }
 }
 
@@ -228,14 +228,22 @@ export async function auRemoveClid(mappingId) {
 // re-render: el panel se repinta entero tras cada acción.
 export const AU_UI = { q: "", rol: "todos", confirmDelete: null };
 
-const AU_ROLE_META = {
-  admin:   { emoji: "🛡️", label: "Admin",   color: "#dc2626", bg: "#fef2f2", desc: "Todo, incluido borrar datos y gestionar usuarios" },
-  kam:     { emoji: "👤", label: "KAM",     color: "#0891b2", bg: "#ecfeff", desc: "Sube datos y metas · no borra" },
-  viewer:  { emoji: "👁️", label: "Viewer",  color: "#6b7280", bg: "#f9fafb", desc: "Solo lectura" },
-  partner: { emoji: "🤝", label: "Partner", color: "#7e22ce", bg: "#faf5ff", desc: "Solo SUS CLIDs · portal externo" }
-};
-function _roleMeta(r) { return AU_ROLE_META[r] || AU_ROLE_META.viewer; }
+function _roleMeta(r) {
+  const M = {
+    admin:   { emoji: "🛡️", label: t("au.rol.adminLabel"),   color: "#dc2626", bg: "#fef2f2", desc: t("au.rol.adminDesc") },
+    kam:     { emoji: "👤", label: t("au.rol.kamLabel"),     color: "#0891b2", bg: "#ecfeff", desc: t("au.rol.kamDesc") },
+    viewer:  { emoji: "👁️", label: t("au.rol.viewerLabel"),  color: "#6b7280", bg: "#f9fafb", desc: t("au.rol.viewerDesc") },
+    partner: { emoji: "🤝", label: t("au.rol.partnerLabel"), color: "#7e22ce", bg: "#faf5ff", desc: t("au.rol.partnerDesc") }
+  };
+  return M[r] || M.viewer;
+}
 
+// "es-PE" fijo A PROPOSITO, igual que el timestamp de "Datos cargados" en
+// data.ts: son fechas de negocio (Peru), no texto de interfaz — no siguen el
+// idioma de la UI. Con la interfaz en ruso esto muestra "11 ago. 2026", no
+// "11 авг. 2026". Detectado probando esta pantalla en ruso; se documenta en vez
+// de traducirlo para no introducir ambiguedad de formato de fecha (DD/MM vs
+// MM/DD) en una fecha que el equipo lee como referencia local de Peru.
 function _fechaCorta(iso) {
   if (!iso) return null;
   const d = new Date(iso);
@@ -245,15 +253,15 @@ function _fechaCorta(iso) {
 // Antigüedad del último acceso: el dato accionable de un panel de usuarios es
 // "hace cuánto", no la fecha exacta.
 function _hace(iso) {
-  if (!iso) return { txt: "nunca ingresó", color: "#9ca3af", frio: true };
+  if (!iso) return { txt: t("au.nuncaIngreso"), color: "#9ca3af", frio: true };
   const dias = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
   if (isNaN(dias)) return { txt: "—", color: "#9ca3af", frio: true };
-  if (dias <= 0)  return { txt: "hoy",            color: "#10b981" };
-  if (dias === 1) return { txt: "ayer",           color: "#10b981" };
-  if (dias < 7)   return { txt: `hace ${dias} d`, color: "#10b981" };
-  if (dias < 30)  return { txt: `hace ${dias} d`, color: "#f59e0b" };
+  if (dias <= 0)  return { txt: t("au.hoy"),  color: "#10b981" };
+  if (dias === 1) return { txt: t("au.ayer"), color: "#10b981" };
+  if (dias < 7)   return { txt: t("au.haceDias", { n: dias }), color: "#10b981" };
+  if (dias < 30)  return { txt: t("au.haceDias", { n: dias }), color: "#f59e0b" };
   const m = Math.floor(dias / 30);
-  return { txt: `hace ${m} ${m === 1 ? "mes" : "meses"}`, color: "#ef4444" };
+  return { txt: m === 1 ? t("au.haceMes", { n: m }) : t("au.haceMeses", { n: m }), color: "#ef4444" };
 }
 
 export function renderAdminUsers() {
@@ -267,21 +275,21 @@ export function renderAdminUsers() {
     box.innerHTML = `
       <div class="au-empty">
         <div class="au-empty-ico">👥</div>
-        <div class="au-empty-txt">Los usuarios se consultan al servidor solo cuando los pedís.</div>
-        <button class="au-btn au-btn-primary" data-act="auLoad">Cargar usuarios</button>
+        <div class="au-empty-txt">${escapeHTML(t("au.consultanServidor"))}</div>
+        <button class="au-btn au-btn-primary" data-act="auLoad">${escapeHTML(t("au.cargarUsuarios"))}</button>
       </div>`;
     return;
   }
   if (S.loading) {
-    box.innerHTML = `<div class="au-empty"><div class="au-spinner"></div><div class="au-empty-txt">Cargando usuarios…</div></div>`;
+    box.innerHTML = `<div class="au-empty"><div class="au-spinner"></div><div class="au-empty-txt">${escapeHTML(t("au.cargandoUsuarios"))}</div></div>`;
     return;
   }
   if (S.error) {
     box.innerHTML = `
       <div class="au-alert">
-        <strong>No se pudo cargar</strong>
+        <strong>${escapeHTML(t("au.noSePudoCargar"))}</strong>
         <div>${escapeHTML(S.error)}</div>
-        <button class="au-btn" data-act="auLoad">Reintentar</button>
+        <button class="au-btn" data-act="auLoad">${escapeHTML(t("au.reintentar"))}</button>
       </div>`;
     return;
   }
@@ -307,11 +315,11 @@ export function renderAdminUsers() {
 
   let html = `
     <div class="au-toolbar">
-      <input class="au-search" type="search" placeholder="Buscar por email…" value="${escapeHTML(AU_UI.q)}"
+      <input class="au-search" type="search" placeholder="${escapeHTML(t("au.buscarPorEmail"))}" value="${escapeHTML(AU_UI.q)}"
              data-act-input="auSearch" autocomplete="off"/>
       <div class="au-chips">
         <button class="au-chip${AU_UI.rol === "todos" ? " on" : ""}" data-act="auFilterRol" data-rol="todos">
-          Todos <b>${S.users.length}</b>
+          ${escapeHTML(t("au.todos"))} <b>${S.users.length}</b>
         </button>
         ${AU_ROLES.map(r => {
           const m = _roleMeta(r), n = conteo(r);
@@ -320,26 +328,23 @@ export function renderAdminUsers() {
                     ${m.emoji} ${m.label} <b>${n}</b></button>`;
         }).join("")}
       </div>
-      <button class="au-btn au-icon-btn" data-act="auLoad" title="Refrescar">↻</button>
+      <button class="au-btn au-icon-btn" data-act="auLoad" title="${escapeHTML(t("au.refrescar"))}">↻</button>
     </div>
 
     <details class="au-invite">
-      <summary><span class="au-invite-plus">＋</span> Invitar usuario</summary>
+      <summary><span class="au-invite-plus">＋</span> ${escapeHTML(t("au.invitarUsuario").replace("＋ ",""))}</summary>
       <div class="au-invite-body">
-        <input class="au-input" id="auInviteEmail" type="email" placeholder="email@dominio.com"/>
+        <input class="au-input" id="auInviteEmail" type="email" placeholder="${escapeHTML(t("au.emailDominio"))}"/>
         <select class="au-input au-input-sm" id="auInviteRole">
           ${AU_ROLES.map(r => `<option value="${r}"${r === "viewer" ? " selected" : ""}>${_roleMeta(r).emoji} ${_roleMeta(r).label}</option>`).join("")}
         </select>
-        <button class="au-btn au-btn-primary" data-act="auInvite">Enviar invitación</button>
-        <p class="au-hint">
-          Recibe un mail para <strong>fijar su propia contraseña</strong>. Si elegís <strong>Partner</strong>,
-          acordate de asignarle sus CLIDs después: sin CLIDs no ve ningún dato.
-        </p>
+        <button class="au-btn au-btn-primary" data-act="auInvite">${escapeHTML(t("au.enviarInvitacion"))}</button>
+        <p class="au-hint">${t("au.invitarHint")}</p>
       </div>
     </details>`;
 
   if (!visibles.length) {
-    html += `<div class="au-empty"><div class="au-empty-txt">Ningún usuario coincide con el filtro.</div></div>`;
+    html += `<div class="au-empty"><div class="au-empty-txt">${escapeHTML(t("au.ningunoCoincide"))}</div></div>`;
     box.innerHTML = html + _auFooterHTML();
     return;
   }
@@ -358,8 +363,8 @@ export function renderAdminUsers() {
     const pidiendoBorrar = AU_UI.confirmDelete === u.id;
 
     const permChips = esAdmin
-      ? `<span class="au-perm-implicit">Un admin ya tiene todos los permisos</span>`
-      : AU_PERMISOS.map(([key, label]) => {
+      ? `<span class="au-perm-implicit">${escapeHTML(t("au.adminTienePermisos"))}</span>`
+      : AU_PERMISOS_LIST().map(([key, label]) => {
           const on = misP.has(key);
           return `<label class="au-perm${on ? " on" : ""}">
             <input type="checkbox" data-act-change="auTogglePerm" data-uid="${uid}" data-perm="${escapeHTML(key)}" ${on ? "checked" : ""}/>
@@ -368,18 +373,18 @@ export function renderAdminUsers() {
 
     const clidBlock = esPartner ? `
       <div class="au-field">
-        <div class="au-field-label">CLIDs asignados</div>
+        <div class="au-field-label">${escapeHTML(t("au.clidsAsignados"))}</div>
         ${misC.length
           ? `<div class="au-clids">${misC.map(m => `
               <span class="au-clid">
                 <b>${escapeHTML(m.clid)}</b>
                 ${STATE.CLID_MAP[m.clid] ? `<i>${escapeHTML(STATE.CLID_MAP[m.clid])}</i>` : ""}
-                <button data-act="auRemoveClid" data-mid="${escapeHTML(m.id)}" title="Quitar">×</button>
+                <button data-act="auRemoveClid" data-mid="${escapeHTML(m.id)}" title="${escapeHTML(t("au.quitar"))}">×</button>
               </span>`).join("")}</div>`
-          : `<div class="au-warn">⚠ Sin CLIDs: esta cuenta no ve ningún dato</div>`}
+          : `<div class="au-warn">${escapeHTML(t("au.sinClidsWarn"))}</div>`}
         <div class="au-clid-add">
           <input class="au-input au-input-sm" id="auClid_${uid}" placeholder="CLID"/>
-          <button class="au-btn" data-act="auAddClid" data-uid="${uid}">Asignar</button>
+          <button class="au-btn" data-act="auAddClid" data-uid="${uid}">${escapeHTML(t("au.asignar"))}</button>
         </div>
       </div>` : "";
 
@@ -388,14 +393,10 @@ export function renderAdminUsers() {
     // navegador que tapa la pantalla y se acepta por reflejo.
     const zonaPeligro = pidiendoBorrar ? `
       <div class="au-danger">
-        <div class="au-danger-txt">
-          Se elimina <strong>${escapeHTML(u.email || "")}</strong> de forma permanente,
-          junto con sus permisos y CLIDs. <strong>No se puede deshacer.</strong>
-          El historial de cambios que haya hecho se conserva.
-        </div>
+        <div class="au-danger-txt">${t("au.eliminarPermanente", { e: escapeHTML(u.email || "") })}</div>
         <div class="au-danger-actions">
-          <button class="au-btn" data-act="auCancelDelete">Cancelar</button>
-          <button class="au-btn au-btn-danger" data-act="auDelete" data-uid="${uid}">Sí, eliminar</button>
+          <button class="au-btn" data-act="auCancelDelete">${escapeHTML(t("cfg.cancelar"))}</button>
+          <button class="au-btn au-btn-danger" data-act="auDelete" data-uid="${uid}">${escapeHTML(t("au.siEliminar"))}</button>
         </div>
       </div>` : "";
 
@@ -404,23 +405,23 @@ export function renderAdminUsers() {
         <div class="au-card-head">
           <div class="au-avatar" style="background:${rm.bg};color:${rm.color}">${rm.emoji}</div>
           <div class="au-ident">
-            <div class="au-email">${escapeHTML(u.email || "—")}${soyYo ? `<span class="au-you">vos</span>` : ""}</div>
+            <div class="au-email">${escapeHTML(u.email || "—")}${soyYo ? `<span class="au-you">${escapeHTML(t("au.vos"))}</span>` : ""}</div>
             <div class="au-meta">
               <span style="color:${acceso.color}">● ${escapeHTML(acceso.txt)}</span>
-              ${_fechaCorta(u.createdAt) ? `<span>· alta ${escapeHTML(_fechaCorta(u.createdAt))}</span>` : ""}
+              ${_fechaCorta(u.createdAt) ? `<span>· ${escapeHTML(t("au.alta", { f: _fechaCorta(u.createdAt) }))}</span>` : ""}
             </div>
           </div>
           <div class="au-actions">
             <button class="au-btn au-icon-btn" data-act="auForceSignOut" data-uid="${uid}"
-                    title="Cierra sus sesiones para que un cambio de rol aplique ya">⎋</button>
+                    title="${escapeHTML(t("au.cerrarSesionesTip"))}">⎋</button>
             <button class="au-btn au-icon-btn au-icon-danger" data-act="auAskDelete" data-uid="${uid}"
-                    title="${soyYo ? "No podés eliminar tu propia cuenta" : "Eliminar usuario"}"
+                    title="${soyYo ? escapeHTML(t("au.noPodesEliminarte")) : escapeHTML(t("au.eliminarUsuario"))}"
                     ${soyYo ? "disabled" : ""}>🗑</button>
           </div>
         </div>
 
         <div class="au-field">
-          <div class="au-field-label">Rol <span class="au-field-hint">${escapeHTML(rm.desc)}</span></div>
+          <div class="au-field-label">${escapeHTML(t("au.rolLabel"))} <span class="au-field-hint">${escapeHTML(rm.desc)}</span></div>
           <div class="au-roles">
             ${AU_ROLES.map(r => {
               const m = _roleMeta(r), on = r === u.role;
@@ -432,7 +433,7 @@ export function renderAdminUsers() {
         </div>
 
         <div class="au-field">
-          <div class="au-field-label">Permisos extra</div>
+          <div class="au-field-label">${escapeHTML(t("au.permisosExtra"))}</div>
           <div class="au-perms">${permChips}</div>
         </div>
 
@@ -446,10 +447,7 @@ export function renderAdminUsers() {
 }
 
 function _auFooterHTML() {
-  return `<p class="au-hint au-footnote">
-    El rol viaja dentro del token de sesión: un cambio recién aplica cuando la persona vuelve a entrar
-    (o si le cerrás la sesión con <b>⎋</b>). Los permisos extra y los CLIDs, en cambio, aplican al instante.
-  </p>`;
+  return `<p class="au-hint au-footnote">${t("au.footerHint")}</p>`;
 }
 
 registerActions({

@@ -802,10 +802,10 @@ export function modeToggleHTML() {
 function _configSectionToggleHTML() {
   const sec = CONFIG_STATE.section;
   const defs = [
-    { k: "partners",      emoji: "👥", label: "Partners",           adminOnly: false },
-    { k: "usuarios",      emoji: "🔐", label: "Usuarios y Accesos",  adminOnly: true },
-    { k: "monitoreo",     emoji: "📡", label: "Monitoreo",          adminOnly: true },
-    { k: "mantenimiento", emoji: "🛠️", label: "Mantenimiento",       adminOnly: true }
+    { k: "partners",      emoji: "👥", label: t("cfg.secPartners"),      adminOnly: false },
+    { k: "usuarios",      emoji: "🔐", label: t("cfg.secUsuarios"),      adminOnly: true },
+    { k: "monitoreo",     emoji: "📡", label: t("cfg.secMonitoreo"),     adminOnly: true },
+    { k: "mantenimiento", emoji: "🛠️", label: t("cfg.secMantenimiento"), adminOnly: true }
   ].filter(d => !d.adminOnly || STATE.isAdmin);
   const btns = defs.map(d => `
     <button class="mode-btn${sec===d.k?" active":""}" data-act="cfgSetSection" data-section="${d.k}">
@@ -820,8 +820,8 @@ export function renderConfig() {
   if (!Object.keys(STATE.CLID_MAP).length) {
     content.innerHTML = `
       <div class="empty">
-        <p>Carga el archivo <strong>Partners</strong> para configurar CLIDs</p>
-        <p class="empty-sub">Hoja DATOS con columnas: CLID | KAM | PARTNER</p>
+        <p>${t("cfg.cargaPartners")}</p>
+        <p class="empty-sub">${escapeHTML(t("cfg.cargaPartnersSub"))}</p>
       </div>`;
     return;
   }
@@ -829,8 +829,8 @@ export function renderConfig() {
   // parado en una de ellas (ej. cambio de sesión) se cae a "partners".
   if (CONFIG_STATE.section !== "partners" && !STATE.isAdmin) CONFIG_STATE.section = "partners";
 
-  let html = secH("⚙️", "#10b981", "Configuración",
-    "Partners, usuarios y mantenimiento del dashboard", "");
+  let html = secH("⚙️", "#10b981", t("cfg.titulo"),
+    t("cfg.sub"), "");
   html += _configSectionToggleHTML();
 
   if (CONFIG_STATE.section === "usuarios" && STATE.isAdmin) {
@@ -857,12 +857,8 @@ export function renderConfig() {
 function _renderConfigMonitoreo() {
   return `
     <div class="section agy-style-30">
-      <div class="agy-style-46">📡 Monitoreo de uso</div>
-      <div class="agy-style-47">
-        Quién entra al dashboard y cuándo (con foco en las cuentas de partner), y el registro
-        de cambios sobre los datos — lo escriben triggers de Postgres, así que no se puede
-        alterar desde la aplicación.
-      </div>
+      <div class="agy-style-46">${escapeHTML(t("cfg.monitoreoTitulo"))}</div>
+      <div class="agy-style-47">${t("cfg.monitoreoSub")}</div>
       <div id="monitoreoBox"></div>
     </div>`;
 }
@@ -874,11 +870,8 @@ function _renderConfigMonitoreo() {
 function _renderConfigUsuarios() {
   return `
     <div class="section agy-style-30">
-      <div class="agy-style-46">👥 Usuarios y Accesos</div>
-      <div class="agy-style-47">
-        Roles (admin / kam / viewer / partner), permisos extra por usuario y —para partners— qué CLIDs puede ver cada uno.
-        Un partner sin CLIDs asignados no ve ningún dato: es el comportamiento seguro por defecto.
-      </div>
+      <div class="agy-style-46">${escapeHTML(t("cfg.usuariosTitulo"))}</div>
+      <div class="agy-style-47">${t("cfg.usuariosSub")}</div>
       <div id="adminUsersBox"></div>
     </div>`;
 }
@@ -888,28 +881,27 @@ function _renderConfigUsuarios() {
 // Agrupadas aparte de "Partners" y "Usuarios" porque son acciones operativas, no
 // gestión de datos maestros — mezcladas antes en una sola página larga.
 function _renderConfigMantenimiento() {
-  const metricLabel = { activeDrivers: "Conductores Activos", supplyHours: "Horas de Conexión", nr: "Nuevos + Reactivados" };
+  const metricLabel = { activeDrivers: t("metric.ad.label"), supplyHours: t("metric.sh.label"), nr: t("metric.nr.label") };
   let html = `
     <div class="section agy-style-30">
-      <div class="agy-style-31">🔔 Alerta de Declive Consecutivo</div>
+      <div class="agy-style-31">${escapeHTML(t("cfg.declineTitulo"))}</div>
       <div class="agy-style-32">
         <div>
-          <label class="agy-style-33">Métrica</label>
+          <label class="agy-style-33">${escapeHTML(t("cfg.metrica"))}</label>
           <select class="sb-sel" id="declineMetricSel" data-act-change="updateDeclineSettings" class="agy-style-34">
-            <option value="activeDrivers"${STATE.declineMetric==="activeDrivers"?" selected":""}>Conductores Activos</option>
-            <option value="supplyHours"${STATE.declineMetric==="supplyHours"?" selected":""}>Horas de Conexión</option>
-            <option value="nr"${STATE.declineMetric==="nr"?" selected":""}>Nuevos + Reactivados</option>
+            <option value="activeDrivers"${STATE.declineMetric==="activeDrivers"?" selected":""}>${escapeHTML(t("metric.ad.label"))}</option>
+            <option value="supplyHours"${STATE.declineMetric==="supplyHours"?" selected":""}>${escapeHTML(t("metric.sh.label"))}</option>
+            <option value="nr"${STATE.declineMetric==="nr"?" selected":""}>${escapeHTML(t("metric.nr.label"))}</option>
           </select>
         </div>
         <div>
-          <label class="agy-style-33">Semanas consecutivas</label>
+          <label class="agy-style-33">${escapeHTML(t("cfg.semanasConsec"))}</label>
           <select class="sb-sel" id="declineThresholdSel" data-act-change="updateDeclineSettings" class="agy-style-10">
-            ${[2,3,4,5].map(n => `<option value="${n}"${STATE.declineThreshold===n?" selected":""}>${n} semanas</option>`).join("")}
+            ${[2,3,4,5].map(n => `<option value="${n}"${STATE.declineThreshold===n?" selected":""}>${escapeHTML(t("cfg.nSemanas", { n }))}</option>`).join("")}
           </select>
         </div>
         <div class="agy-style-35">
-          Se mostrará el badge <span class="decline-badge agy-style-36">⚠</span> en la tabla cuando un partner tenga
-          <strong>${STATE.declineThreshold}</strong> períodos seguidos de baja en <strong>${metricLabel[STATE.declineMetric]}</strong>.
+          ${t("cfg.declineAviso", { b: '<span class="decline-badge agy-style-36">⚠</span>', n: STATE.declineThreshold, m: metricLabel[STATE.declineMetric] })}
         </div>
       </div>
     </div>`;
@@ -918,29 +910,26 @@ function _renderConfigMantenimiento() {
   // desde DevTools, la query DELETE falla con 401/PGRST.
   html += `
     <div class="section agy-style-37">
-      <div class="agy-style-38">🗑️ Eliminar Datos</div>
-      <div class="agy-style-39">
-        Borra registros de la base de datos. Útil cuando subiste un Excel con error y quieres re-subir.
-        Si dejas el mes vacío, borra <strong>TODA</strong> la tabla. <strong class="agy-style-40">Acción irreversible.</strong>
-      </div>
+      <div class="agy-style-38">${escapeHTML(t("cfg.eliminarTitulo"))}</div>
+      <div class="agy-style-39">${t("cfg.eliminarSub")}</div>
       <div class="agy-style-8">
         <div class="agy-style-41">
-          <label class="agy-style-42">Tabla</label>
+          <label class="agy-style-42">${escapeHTML(t("cfg.tabla"))}</label>
           <select class="crud-input" id="delTableSel" class="agy-style-43">
-            <option value="rendimiento">Rendimiento Semanal</option>
-            <option value="rendimiento_mensual">Rendimiento Mensual</option>
-            <option value="rendimiento_diario">Rendimiento Diario</option>
-            <option value="metas">Metas</option>
+            <option value="rendimiento">${escapeHTML(t("mode.semanal"))}</option>
+            <option value="rendimiento_mensual">${escapeHTML(t("mode.mensual"))}</option>
+            <option value="rendimiento_diario">${escapeHTML(t("mode.diario"))}</option>
+            <option value="metas">${escapeHTML(t("metas.titulo"))}</option>
           </select>
         </div>
         <div class="agy-style-41">
-          <label class="agy-style-42">Mes (opcional)</label>
-          <input class="crud-input" id="delMonthInput" placeholder="2026-04 o vacío"
+          <label class="agy-style-42">${escapeHTML(t("cfg.mesOpcional"))}</label>
+          <input class="crud-input" id="delMonthInput" placeholder="${escapeHTML(t("cfg.mesVacio"))}"
             class="agy-style-44" maxlength="7"/>
         </div>
         <button class="crud-btn crud-btn-del" data-act="deleteDashboardData"
           class="agy-style-45">
-          🗑️ Eliminar
+          ${escapeHTML(t("cfg.btnEliminar"))}
         </button>
       </div>
     </div>`;
@@ -952,14 +941,11 @@ function _renderConfigMantenimiento() {
   // credencial de solo-lectura vive como Secret de GitHub, nunca acá.
   html += `
     <div class="section agy-style-37">
-      <div class="agy-style-38">🔄 Fleet Externo — Sincronización</div>
-      <div class="agy-style-39">
-        Copia semanal (lunes) de las tablas de flota externa hacia <code>fleetext_*</code> en este proyecto.
-        Corre en GitHub Actions, no en el navegador — este botón solo la adelanta.
-      </div>
+      <div class="agy-style-38">${escapeHTML(t("cfg.fleetExtTitulo"))}</div>
+      <div class="agy-style-39">${t("cfg.fleetExtSub")}</div>
       <div class="agy-style-8">
         <button class="crud-btn" id="fleetSyncBtn" data-act="triggerFleetSync">
-          🔄 Sincronizar ahora
+          ${escapeHTML(t("cfg.sincronizarAhora"))}
         </button>
         <span id="fleetSyncMsg" class="agy-style-54"></span>
       </div>
@@ -971,17 +957,17 @@ function _renderConfigMantenimiento() {
 export async function triggerFleetSync() {
   const btn = document.getElementById("fleetSyncBtn");
   const msg = document.getElementById("fleetSyncMsg");
-  if (btn) { btn.disabled = true; btn.textContent = "Disparando..."; }
+  if (btn) { btn.disabled = true; btn.textContent = t("cfg.disparando"); }
   if (msg) { msg.textContent = ""; }
   try {
     const { data, error } = await sb.functions.invoke("trigger-fleet-sync", { method: "POST" });
     if (error) throw error;
     if (data?.error) throw new Error(data.error);
-    showBanner(true, data?.message || "Sincronización disparada ✓");
+    showBanner(true, data?.message || t("cfg.syncDisparada"));
   } catch (e) {
-    showBanner(false, "Error al disparar la sincronización: " + e.message);
+    showBanner(false, t("cfg.errorSync") + e.message);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = "🔄 Sincronizar ahora"; }
+    if (btn) { btn.disabled = false; btn.textContent = t("cfg.sincronizarAhora"); }
   }
 }
 
@@ -1002,7 +988,7 @@ function _renderConfigPartners() {
           ${escapeHTML(kam)}
         </div>
         <div class="mcard-val">${count}</div>
-        <div class="agy-style-54">CLIDs asignados</div>
+        <div class="agy-style-54">${escapeHTML(t("cfg.clidsAsignados"))}</div>
       </div>`;
   });
   html += `</div>`;
@@ -1013,12 +999,12 @@ function _renderConfigPartners() {
   const cfgKamF   = CONFIG_STATE.kamFilter;
   const kamFilterOpts = kams.map(k => `<option value="${escapeHTML(k)}"${cfgKamF===k?" selected":""}>${escapeHTML(k)}</option>`).join("");
   html += `
-    <div class="agy-style-69">👥 Partners &amp; CLIDs</div>
+    <div class="agy-style-69">${escapeHTML(t("cfg.partnersClids"))}</div>
     <div class="agy-style-70">
-      <input class="crud-input" id="configSearch" placeholder="Buscar CLID, partner o KAM..." value="${CONFIG_STATE.search.replace(/"/g,'&quot;')}"
+      <input class="crud-input" id="configSearch" placeholder="${escapeHTML(t("cfg.buscarCPK"))}" value="${CONFIG_STATE.search.replace(/"/g,'&quot;')}"
         data-act-input="cfgSearch" class="agy-style-71"/>
       <select class="crud-input" id="configKamFilter" data-act-change="cfgKamFilter" class="agy-style-10">
-        <option value="all"${cfgKamF==="all"?" selected":""}>Todos los KAMs</option>
+        <option value="all"${cfgKamF==="all"?" selected":""}>${escapeHTML(t("calc.todosKam"))}</option>
         ${kamFilterOpts}
       </select>
       <span id="configCount" class="agy-style-54"></span>
@@ -1047,17 +1033,17 @@ export function renderConfigResults() {
   if (CONFIG_STATE.page >= totalPages) CONFIG_STATE.page = 0;
   const pageRows  = allRows.slice(CONFIG_STATE.page * CONFIG_STATE.PAGE_SIZE, (CONFIG_STATE.page + 1) * CONFIG_STATE.PAGE_SIZE);
   const cnt = document.getElementById("configCount");
-  if (cnt) cnt.textContent = `${allRows.length} resultado${allRows.length!==1?"s":""}`;
+  if (cnt) cnt.textContent = t("cfg.resultados", { n: allRows.length, s: allRows.length!==1?"s":"" });
 
   let html = `
     <div class="tbl-wrap">
       <table class="dtbl" id="crudTable">
         <thead>
           <tr>
-            <th>CLID</th><th>Partner</th><th>KAM</th>
+            <th>CLID</th><th>${escapeHTML(t("calc.col.partner"))}</th><th>${escapeHTML(t("sidebar.kam"))}</th>
             <th class="agy-style-72">Fleet</th>
             <th class="agy-style-73">TukTuk</th>
-            <th class="agy-style-74">Acciones</th>
+            <th class="agy-style-74">${escapeHTML(t("cfg.col.acciones"))}</th>
           </tr>
         </thead>
         <tbody>`;
@@ -1087,8 +1073,8 @@ export function renderConfigResults() {
           <td class="agy-style-27">${isFleet ? `<span class="agy-style-76">🚗 Fleet</span>` : `<span class="agy-style-77">—</span>`}</td>
           <td class="agy-style-27">${isTuktuk ? `<span class="agy-style-78">🛺 TukTuk</span>` : `<span class="agy-style-77">—</span>`}</td>
           <td class="agy-style-27">
-            <button class="crud-btn crud-btn-edit" data-act="kamMakeEditable" data-clid="${clidH}">Editar</button>
-            <button class="crud-btn crud-btn-del"  data-act="kamCrudDelete" data-clid="${clidH}">Eliminar</button>
+            <button class="crud-btn crud-btn-edit" data-act="kamMakeEditable" data-clid="${clidH}">${escapeHTML(t("cfg.editar"))}</button>
+            <button class="crud-btn crud-btn-del"  data-act="kamCrudDelete" data-clid="${clidH}">${escapeHTML(t("cfg.eliminarBtn"))}</button>
           </td>
         </tr>`;
     });
@@ -1098,18 +1084,18 @@ export function renderConfigResults() {
   html += `
         <tr id="newClidRow" class="agy-style-79">
           <td><input class="crud-input" id="newClid"    placeholder="CLID"/></td>
-          <td><input class="crud-input" id="newPartner" placeholder="Nombre del partner"/></td>
+          <td><input class="crud-input" id="newPartner" placeholder="${escapeHTML(t("cfg.nombrePartner"))}"/></td>
           <td>
             <select class="crud-input" id="newKam" data-act-change="kamNewKamChange" class="agy-style-80">
               ${kamOpts}
-              <option value="__new__">+ Añadir nuevo KAM...</option>
+              <option value="__new__">${escapeHTML(t("cfg.addKam"))}</option>
             </select>
-            <input class="crud-input" id="newKamCustom" placeholder="Nuevo nombre de KAM" class="agy-style-81"/>
+            <input class="crud-input" id="newKamCustom" placeholder="${escapeHTML(t("cfg.nuevoKam"))}" class="agy-style-81"/>
           </td>
           <td class="agy-style-27"><input type="checkbox" id="newFleet" title="Fleet"/></td>
           <td class="agy-style-27"><input type="checkbox" id="newTuktuk" title="TukTuk"/></td>
           <td class="agy-style-27">
-            <button class="crud-btn crud-btn-add" data-act="kamCrudAdd">+ Agregar</button>
+            <button class="crud-btn crud-btn-add" data-act="kamCrudAdd">${escapeHTML(t("cfg.agregar"))}</button>
           </td>
         </tr>
       </tbody></table>
@@ -1117,10 +1103,10 @@ export function renderConfigResults() {
     ${totalPages > 1 ? `
     <div class="agy-style-82">
       <button class="crud-btn" data-act="cfgPagePrev"
-        ${CONFIG_STATE.page===0?"disabled":""} class="agy-style-83">← Anterior</button>
-      <span>Página <strong>${CONFIG_STATE.page+1}</strong> de <strong>${totalPages}</strong></span>
+        ${CONFIG_STATE.page===0?"disabled":""} class="agy-style-83">${escapeHTML(t("raw.anterior"))}</button>
+      <span>${t("raw.pagina", { a: `<strong>${CONFIG_STATE.page+1}</strong>`, b: `<strong>${totalPages}</strong>` })}</span>
       <button class="crud-btn" data-act="cfgPageNext" data-total="${totalPages}"
-        ${CONFIG_STATE.page===totalPages-1?"disabled":""} class="agy-style-83">Siguiente →</button>
+        ${CONFIG_STATE.page===totalPages-1?"disabled":""} class="agy-style-83">${escapeHTML(t("raw.siguiente"))}</button>
     </div>` : ""}`;
   box.innerHTML = html;
 }
@@ -1145,15 +1131,15 @@ export function kamMakeEditable(clid) {
     <td>
       <select class="crud-input" id="edit_kam_${clidH}" data-act-change="kamEditKamChange" data-clid="${clidH}" class="agy-style-80">
         ${editKamOpts}
-        <option value="__new__">+ Añadir nuevo KAM...</option>
+        <option value="__new__">${escapeHTML(t("cfg.addKam"))}</option>
       </select>
-      <input class="crud-input" id="edit_kam_custom_${clidH}" placeholder="Nuevo nombre de KAM" class="agy-style-81"/>
+      <input class="crud-input" id="edit_kam_custom_${clidH}" placeholder="${escapeHTML(t("cfg.nuevoKam"))}" class="agy-style-81"/>
     </td>
     <td class="agy-style-27"><input type="checkbox" id="edit_fleet_${clidH}" ${isFleet ? "checked" : ""} title="Fleet"/></td>
     <td class="agy-style-27"><input type="checkbox" id="edit_tuktuk_${clidH}" ${isTuktuk ? "checked" : ""} title="TukTuk"/></td>
     <td class="agy-style-27">
-      <button class="crud-btn crud-btn-save"   data-act="kamCrudEdit" data-clid="${clidH}">Guardar</button>
-      <button class="crud-btn crud-btn-cancel" data-act="renderConfig">Cancelar</button>
+      <button class="crud-btn crud-btn-save"   data-act="kamCrudEdit" data-clid="${clidH}">${escapeHTML(t("cfg.guardar"))}</button>
+      <button class="crud-btn crud-btn-cancel" data-act="renderConfig">${escapeHTML(t("cfg.cancelar"))}</button>
     </td>`;
 }
 
@@ -1176,17 +1162,17 @@ export async function kamCrudEdit(clid) {
   const kam      = kamRaw === "__new__"
     ? (document.getElementById(`edit_kam_custom_${clid}`)?.value.trim() || "")
     : (kamRaw || "").trim();
-  if (!partner || !kam) { showBanner(false, "Completa nombre y KAM antes de guardar."); return; }
+  if (!partner || !kam) { showBanner(false, t("cfg.completaNombreKam")); return; }
   const isFleet  = document.getElementById(`edit_fleet_${clid}`)?.checked || false;
   const isTuktuk = document.getElementById(`edit_tuktuk_${clid}`)?.checked || false;
-  showLoad(true, "Guardando...");
+  showLoad(true, t("cfg.guardando"));
   const { error } = await sb.from("partners")
     .upsert([{ clid, partner, kam, activo: true, is_fleet: isFleet, is_tuktuk: isTuktuk }], { onConflict: "clid" });
   showLoad(false);
-  if (error) { showBanner(false, "Error al guardar: " + error.message); return; }
+  if (error) { showBanner(false, t("cfg.errorGuardar") + error.message); return; }
   await loadFromSupabase();
   renderConfig();
-  showBanner(true, "Guardado correctamente ✓");
+  showBanner(true, t("cfg.guardadoOk"));
 }
 
 export async function kamCrudAdd() {
@@ -1197,33 +1183,33 @@ export async function kamCrudAdd() {
   const kam     = kamRaw === "__new__"
     ? (document.getElementById("newKamCustom")?.value.trim() || "")
     : (kamRaw || "").trim();
-  if (!clid || !partner || !kam) { showBanner(false, "Completa CLID, partner y KAM para agregar."); return; }
+  if (!clid || !partner || !kam) { showBanner(false, t("cfg.completaClidKam")); return; }
   if (STATE.CLID_MAP[clid]) {
     const existing = `${STATE.CLID_MAP[clid]} (KAM: ${STATE.KAM_MAP[clid]})`;
-    if (!confirm(`El CLID "${clid}" ya existe: ${existing}.\n¿Deseas actualizarlo con los nuevos datos?`)) return;
+    if (!confirm(t("cfg.clidYaExiste", { c: clid, e: existing }))) return;
   }
   const isFleet  = document.getElementById("newFleet")?.checked || false;
   const isTuktuk = document.getElementById("newTuktuk")?.checked || false;
-  showLoad(true, "Guardando...");
+  showLoad(true, t("cfg.guardando"));
   const { error } = await sb.from("partners")
     .upsert([{ clid, partner, kam, activo: true, is_fleet: isFleet, is_tuktuk: isTuktuk }], { onConflict: "clid" });
   showLoad(false);
-  if (error) { showBanner(false, "Error al agregar: " + error.message); return; }
+  if (error) { showBanner(false, t("cfg.errorAgregar") + error.message); return; }
   await loadFromSupabase();
   renderConfig();
-  showBanner(true, "CLID agregado correctamente ✓");
+  showBanner(true, t("cfg.clidAgregado"));
 }
 
 export async function kamCrudDelete(clid) {
   const partner = STATE.CLID_MAP[clid] || clid;
-  if (!confirm(`¿Eliminar "${partner}" (CLID: ${clid})?\nEsta acción no se puede deshacer.`)) return;
-  showLoad(true, "Eliminando...");
+  if (!confirm(t("cfg.confirmEliminarClid", { p: partner, c: clid }))) return;
+  showLoad(true, t("cfg.eliminando"));
   const { error } = await sb.from("partners").delete().eq("clid", clid);
   showLoad(false);
-  if (error) { showBanner(false, "Error al eliminar: " + error.message); return; }
+  if (error) { showBanner(false, t("cfg.errorEliminar") + error.message); return; }
   await loadFromSupabase();
   renderConfig();
-  showBanner(true, `"${partner}" eliminado correctamente ✓`);
+  showBanner(true, t("cfg.eliminadoOk", { p: partner }));
 }
 
 // ── UI HELPERS ────────────────────────────────────────────────────────────────
@@ -1266,7 +1252,7 @@ export async function deleteDashboardData() {
 
   // Guard defensivo. El enforcement real esta en RLS (is_admin()).
   if (!STATE.isAdmin) {
-    showBanner(false, "Operacion bloqueada: requiere rol admin.");
+    showBanner(false, t("cfg.operacionBloqueada"));
     return;
   }
 
@@ -1274,25 +1260,22 @@ export async function deleteDashboardData() {
   const mes   = monthInp.value.trim();
 
   const labels = {
-    rendimiento:         "Rendimiento Semanal",
-    rendimiento_mensual: "Rendimiento Mensual",
-    rendimiento_diario:  "Rendimiento Diario",
-    metas:               "Metas"
+    rendimiento:         t("mode.semanal"),
+    rendimiento_mensual: t("mode.mensual"),
+    rendimiento_diario:  t("mode.diario"),
+    metas:               t("metas.titulo")
   };
 
   // Validar formato del mes si se proporciono
   if (mes && !/^\d{4}-\d{2}$/.test(mes)) {
-    alert("Formato de mes invalido. Debe ser YYYY-MM (ej: 2026-04).");
+    alert(t("cfg.formatoMesInvalido"));
     return;
   }
 
-  const scope = mes ? `del mes ${mes}` : "TODA la tabla";
-  if (!confirm(
-    `¿Confirmas borrar ${scope} de ${labels[table]}?\n\n` +
-    `Esta accion NO se puede deshacer.`
-  )) return;
+  const scope = mes ? t("cfg.delMes", { m: mes }) : t("cfg.delTodaTabla");
+  if (!confirm(t("cfg.confirmarBorrado", { s: scope, t: labels[table] }))) return;
 
-  showLoad(true, `Eliminando ${labels[table]}...`);
+  showLoad(true, t("cfg.eliminandoTabla", { t: labels[table] }));
 
   try {
     let query = sb.from(table).delete();
@@ -1320,7 +1303,7 @@ export async function deleteDashboardData() {
     const { error } = await query;
     if (error) throw error;
 
-    showBanner(true, `Eliminado: ${labels[table]} ${mes ? `(${mes})` : "(todo)"}`);
+    showBanner(true, t("cfg.eliminadoTabla", { t: labels[table], m: mes ? `(${mes})` : t("cfg.todo") }));
 
     // Resetear flags de lazy-load para forzar recarga del dataset modificado
     if (table === "rendimiento_mensual") STATE._mensualLoaded = false;
@@ -1330,7 +1313,7 @@ export async function deleteDashboardData() {
     monthInp.value = "";
     await loadFromSupabase();
   } catch (err) {
-    showBanner(false, `Error al eliminar: ${err.message}`);
+    showBanner(false, t("cfg.errorEliminar") + err.message);
     console.error(err);
   } finally {
     showLoad(false);
