@@ -1,5 +1,6 @@
 //@ts-nocheck
 import { ensurePdfLibs } from "./shared/lazyLibs.js";
+import { t, mesLabel } from "./core/i18n";
 import { logAccess } from "./shared/accessLog.js";
 // Núcleo de cálculo compartido (snapshot vs flujo, proyecciones, ponderados).
 // Import explícito y no global: es el módulo que define QUÉ significa cada
@@ -76,10 +77,10 @@ export function metasLineToggleHTML() {
   const line   = _metasLine();
   const diario = false;   // las 4 líneas ya funcionan en las 3 escalas
   const defs = [
-    { k: "comb",  emoji: "🔀", label: "Combinado", tip: "Taxi + TukTuk sumados vs meta combinada — avance total del partner" },
-    { k: "agg",   emoji: "📊", label: "Agregador", tip: "Metas Taxi (AD, N+R, Horas)" },
-    { k: "fleet", emoji: "🚗", label: "Fleet",     tip: "Metas de flota (SH/auto, aceptación, utilización)" },
-    { k: "tk",    emoji: "🛺", label: "TukTuk",    tip: "Metas TukTuk (AD, N+R, Brandeados)" }
+    { k: "comb",  emoji: "🔀", label: t("rend.linea.comb"), tip: t("metas.linea.combTip") },
+    { k: "agg",   emoji: "📊", label: t("rend.linea.agg"),  tip: t("metas.linea.aggTip") },
+    { k: "fleet", emoji: "🚗", label: "Fleet",              tip: t("metas.linea.fleetTip") },
+    { k: "tk",    emoji: "🛺", label: "TukTuk",             tip: t("metas.linea.tkTip") }
   ];
   const btns = defs.map(d => {
     const on  = line === d.k;
@@ -250,7 +251,7 @@ export function _metaLineRow(label, actual, meta, fmtFn, metaOnlyNote) {
         </span>
       </div>
       <div class="agy-style-223">
-        Fact: <strong>${fmtFn(actual)}</strong> / Meta: <strong>${fmtFn(meta)}</strong>
+        ${escapeHTML(t("metas.fact"))}: <strong>${fmtFn(actual)}</strong> / ${escapeHTML(t("metas.meta"))}: <strong>${fmtFn(meta)}</strong>
       </div>
       ${barProj(pV, pV)}
     </div>`;
@@ -288,7 +289,13 @@ function _metasAggKpi(kpi, units) {
   if (kpi.weight) {
     const aw = [], mw = [];
     units.forEach(u => {
-      const w  = kpi.weight(u.a) || 0;
+      // u.a puede ser null (hay META cargada pero NINGUN actual en el rango:
+      // un partner que dejo de operar, o un filtro de fechas que lo deja fuera).
+      // La linea de abajo ya lo contemplaba con el ternario, esta no: llamaba
+      // kpi.weight(null) y `a.owned` reventaba la pestana ENTERA con un
+      // TypeError. Encontrado al sembrar metas Fleet en local para poder
+      // verificar la traduccion.
+      const w  = u.a ? (kpi.weight(u.a) || 0) : 0;
       const av = u.a ? kpi.act(u.a)  : null;
       const mv = u.m ? kpi.meta(u.m) : null;
       if (av != null) aw.push([av, w]);
@@ -350,17 +357,16 @@ function _metasEscalaAviso() {
   const m = STATE.curMode;
   if (m === "mensual") return "";
   const esDiario = m === "diario";
-  const unidad   = esDiario ? "un día" : "una semana";
+  const unidad   = esDiario ? t("metas.aviso.unDia") : t("metas.aviso.unaSemana");
+  // El cuerpo lleva <strong> DENTRO de la traduccion (no se escapa) porque el
+  // enfasis cae en palabras distintas segun el idioma. Son cadenas nuestras, no
+  // entrada del usuario: no hay superficie de XSS.
   return `<div class="metas-escala-aviso">
     <span class="mea-ico">${esDiario ? "📅" : "🗓️"}</span>
     <div>
-      <strong>Los % de cumplimiento no son comparables en esta escala.</strong>
-      La meta del mes se compara contra <strong>Conductores Activos de ${unidad}</strong>:
-      un conductor que maneja varios días cuenta una sola vez en el mes, pero acá se lo
-      mide en un período mucho más corto. El porcentaje va a verse bajo aunque el mes
-      vaya bien.
-      <span class="mea-hint">Nuevos+Reactivados y Horas sí acumulan, así que esos avanzan
-      normal. Para leer el cumplimiento real, cambiá la escala a <strong>Mensual</strong>.</span>
+      <strong>${escapeHTML(t("metas.aviso.titulo"))}</strong>
+      ${t("metas.aviso.cuerpo", { u: unidad })}
+      <span class="mea-hint">${t("metas.aviso.hint")}</span>
     </div>
   </div>`;
 }
@@ -373,9 +379,9 @@ function _metasControlsHTML(mesName, mesesDisponibles) {
   // Selector de mes (solo si hay 2+ meses cargados)
   const mesSelectorHTML = mesesDisponibles.length > 1
     ? `<div class="agy-style-231">
-         <label class="agy-style-232">Mes:</label>
+         <label class="agy-style-232">${escapeHTML(t("metas.mesLabel"))}</label>
          <select data-act-change="setMetasMes" class="agy-style-233">
-           ${mesesDisponibles.map(m => `<option value="${escapeHTML(m)}" ${m === mesName ? "selected" : ""}>${escapeHTML(m)}</option>`).join("")}
+           ${mesesDisponibles.map(m => `<option value="${escapeHTML(m)}" ${m === mesName ? "selected" : ""}>${escapeHTML(mesLabel(m))}</option>`).join("")}
          </select>
        </div>`
     : "";
@@ -393,7 +399,7 @@ function _metasControlsHTML(mesName, mesesDisponibles) {
     ${mesSelectorHTML}
     <div class="agy-style-236">
       ${delBtnHTML}
-      <button class="apply-btn agy-style-237" id="metasPdfBtn" data-act="downloadMetasPDF">⬇ Descargar PDF</button>
+      <button class="apply-btn agy-style-237" id="metasPdfBtn" data-act="downloadMetasPDF">${escapeHTML(t("metas.descargarPDF"))}</button>
     </div>
   </div>`;
 }
@@ -410,7 +416,7 @@ function _renderMetasLineView(cfg) {
   let html = metasLineToggleHTML();
   html += _metasControlsHTML(mesName, cfg.mesesDisponibles || []);
   html += _metasEscalaAviso();
-  html += secH(icon, color, title + " — " + mesName, sub, "Peru");
+  html += secH(icon, color, t("metas.secMes", { t: title, m: mesLabel(mesName) }), sub, "Peru");
 
   if (!metaRows.length) {
     html += `<div class="section"><div class="agy-style-224">${emptyHint}</div></div>`;
@@ -440,7 +446,7 @@ function _renderMetasLineView(cfg) {
     byCity.get(c).push(u);
   });
   if (byCity.size) {
-    html += secH("🏙️", "#06b6d4", title + " por Ciudad", "Progreso y proyección", "");
+    html += secH("🏙️", "#06b6d4", t("metas.secCiudad", { t: title }), t("metas.sub.progProy"), "");
     html += `<div class="section"><div class="city-grid">`;
     // Orden: CITIES primero (orden canónico del dashboard), después cualquier
     // ciudad que aparezca en metas y no esté en esa lista — que existan es un
@@ -477,7 +483,7 @@ function _renderMetasLineView(cfg) {
     byKam.get(k).push(u);
   });
   if (byKam.size) {
-    html += secH("👤", "#f59e0b", title + " por KAM", "Progreso total por responsable", "");
+    html += secH("👤", "#f59e0b", t("metas.secKam", { t: title }), t("metas.sub.progResp"), "");
     html += `<div class="section"><div class="agy-style-239">`;
     [...byKam.keys()].sort().forEach(kam => {
       const us  = byKam.get(kam) || [];
@@ -502,7 +508,7 @@ function _renderMetasLineView(cfg) {
   }
 
   // ── 4. Por Partner ────────────────────────────────────────────────────────
-  html += secH("🃏", color, title + " por Partner", "Meta vs actual individual", "");
+  html += secH("🃏", color, t("metas.secPartner", { t: title }), t("metas.sub.metaVsAct"), "");
   html += `<div class="section"><div class="partner-grid">`;
   units.forEach(u => {
     const m      = u.m;
@@ -550,25 +556,25 @@ function _metasLineRows(mesName, hasLineMeta, selSet, cityFilter, kamFilter) {
 // del mes por ritmo lineal no significa nada (una tasa no se acumula).
 export function _renderMetasFleet(mesName, from, to, selSet, cityFilter, kamFilter, mesesDisponibles) {
   return _renderMetasLineView({
-    mesName, mesesDisponibles, icon: "🚗", color: "#0891b2", title: "Metas Fleet", badge: "Fleet",
-    sub: "Meta de flota vs actual del rango · SH/auto (interno), aceptación, utilización · las tasas se ponderan por autos/viajes al agrupar",
+    mesName, mesesDisponibles, icon: "🚗", color: "#0891b2", title: t("metas.tit.fleet"), badge: "Fleet",
+    sub: t("metas.fleetSub"),
     act: _metasFleetActuals(from, to, selSet, cityFilter),
     metaRows: _metasLineRows(mesName,
       m => m.mSHcar != null || m.mAcc != null || m.mUtil != null,
       selSet, cityFilter, kamFilter),
     kpis: [
-      { label: "SH / Auto (interno)", sub: "ponderado",
+      { label: t("metas.kpi.shAuto"), sub: t("metas.pond"),
         meta: m => m.mSHcar, act: a => a.shCar, proj: null,
         weight: a => a.owned, fmtFn: v => fmt(v) },
-      { label: "Aceptación", sub: "ponderado por viajes",
+      { label: t("metas.kpi.aceptacion"), sub: t("metas.pondViajes"),
         meta: m => m.mAcc, act: a => a.accept, proj: null,
         weight: a => a.trips, fmtFn: v => fmt(v) + "%" },
-      { label: "Utilización", sub: "solo meta",
+      { label: t("metas.kpi.utilizacion"), sub: t("metas.soloMeta"),
         meta: m => m.mUtil, act: () => null, proj: null,
-        weight: a => a.owned, fmtFn: v => fmt(v) + "%", note: "sin actual medible" }
+        weight: a => a.owned, fmtFn: v => fmt(v) + "%", note: t("metas.sinActual") }
     ],
     partnerFoot: (m, a) => a
-      ? `<div class="agy-style-230">Autos propios (último período): <strong>${fmt(a.ownedNow || 0)}</strong> · brandeados ${fmt(a.branded || 0)}</div>`
+      ? `<div class="agy-style-230">${escapeHTML(t("metas.autosPropios", { n: fmt(a.ownedNow || 0), b: fmt(a.branded || 0) }))}</div>`
       : "",
     emptyHint: `No hay metas <strong>Fleet</strong> cargadas para ${escapeHTML(mesName)}.<br>
       Genéralas desde la <strong>Calculadora → Fleet</strong> y guárdalas, o ajusta el filtro.`
@@ -578,24 +584,24 @@ export function _renderMetasFleet(mesName, from, to, selSet, cityFilter, kamFilt
 // Vista Metas TukTuk: KPIs aditivos (AD/N+R/Brandeados/Horas).
 export function _renderMetasTk(mesName, from, to, selSet, cityFilter, kamFilter, mesesDisponibles) {
   return _renderMetasLineView({
-    mesName, mesesDisponibles, icon: "🛺", color: "#7e22ce", title: "Metas TukTuk", badge: "TukTuk",
-    sub: "Meta TukTuk vs actual del rango · Active Drivers, N+R, Brandeados, Horas de Conexión",
+    mesName, mesesDisponibles, icon: "🛺", color: "#7e22ce", title: t("metas.tit.tuktuk"), badge: "TukTuk",
+    sub: t("metas.tkSub"),
     act: _metasTkActuals(from, to, selSet, cityFilter),
     metaRows: _metasLineRows(mesName,
       m => m.mtkAD != null || m.mtkNR != null || m.mtkCars != null || m.mtkSH != null,
       selSet, cityFilter, kamFilter),
     kpis: [
-      { label: "Active Drivers", sub: "último período", color: "#7e22ce",
+      { label: t("metas.activeDrivers"), sub: t("metas.ultimoPeriodo"), color: "#7e22ce",
         meta: m => m.mtkAD, act: a => a.ad, proj: a => a.projAd,
         snapSeries: a => a.adByDate, fmtFn: v => fmt(v) },
-      { label: "Nuevos + React", sub: "acumulado", color: "#f97316",
+      { label: t("metas.nuevosReact"), sub: t("metas.acumulado"), color: "#f97316",
         meta: m => m.mtkNR, act: a => a.nr, proj: a => a.projNr, fmtFn: v => fmt(v) },
-      { label: "Brandeados", sub: "último período", color: "#0891b2",
+      { label: t("metas.brandeados"), sub: t("metas.ultimoPeriodo"), color: "#0891b2",
         // Brandeados NO lleva snapSeries: su proyección es PLANA (= nivel
         // actual), no máx × 1.4 — el factor 1.4 es una regla específica de
         // Active Drivers, no de cualquier snapshot.
         meta: m => m.mtkCars, act: a => a.cars, proj: a => a.cars, fmtFn: v => fmt(v) },
-      { label: "Horas Conexión", sub: "acumulado", color: "#8b5cf6",
+      { label: t("metas.horasConexion"), sub: t("metas.acumulado"), color: "#8b5cf6",
         meta: m => m.mtkSH, act: a => a.sh, proj: a => a.projSh, fmtFn: v => fmtSmart(v) }
     ],
     emptyHint: `No hay metas <strong>TukTuk</strong> cargadas para ${escapeHTML(mesName)}.<br>
@@ -613,20 +619,20 @@ export function _renderMetasComb(mesName, from, to, selSet, cityFilter, kamFilte
   // no tiene ese KPI cargado).
   const sumMeta = (taxi, tk) => (taxi == null && tk == null) ? null : (taxi || 0) + (tk || 0);
   return _renderMetasLineView({
-    mesName, mesesDisponibles, icon: "🔀", color: "#8b5cf6", title: "Metas Combinado", badge: "Combinado",
-    sub: "Actual del RANGO seleccionado (ambas líneas sumadas) vs meta combinada · si el partner empuja TukTuk también avanza su meta · para % reales usa el preset del mes de la meta",
+    mesName, mesesDisponibles, icon: "🔀", color: "#8b5cf6", title: t("metas.tit.comb"), badge: t("rend.linea.comb"),
+    sub: t("metas.combSub"),
     act: _metasCombActuals(from, to, selSet, cityFilter),
     metaRows: _metasLineRows(mesName,
       m => (m.mA || 0) > 0 || (m.mNR || 0) > 0 || (m.mH || 0) > 0 ||
            m.mtkAD != null || m.mtkNR != null || m.mtkSH != null,
       selSet, cityFilter, kamFilter),
     kpis: [
-      { label: "Active Drivers", sub: "último período", color: "#8b5cf6",
+      { label: t("metas.activeDrivers"), sub: t("metas.ultimoPeriodo"), color: "#8b5cf6",
         meta: m => sumMeta(m.mA || null, m.mtkAD), act: a => a.ad, proj: a => a.projAd,
         snapSeries: a => a.adByDate, fmtFn: v => fmt(v) },
-      { label: "Nuevos + React", sub: "acumulado", color: "#f97316",
+      { label: t("metas.nuevosReact"), sub: t("metas.acumulado"), color: "#f97316",
         meta: m => sumMeta(m.mNR || null, m.mtkNR), act: a => a.nr, proj: a => a.projNr, fmtFn: v => fmt(v) },
-      { label: "Horas Conexión", sub: "acumulado", color: "#0891b2",
+      { label: t("metas.horasConexion"), sub: t("metas.acumulado"), color: "#0891b2",
         meta: m => sumMeta(m.mH || null, m.mtkSH), act: a => a.sh, proj: a => a.projSh, fmtFn: v => fmtSmart(v) }
     ],
     partnerFoot: m => {
@@ -837,7 +843,7 @@ export function _renderMetasImpl() {
     combos.push({
       partner: p,
       kam: partnerKam,
-      city: cityFilter === "all" ? "Sin Plan" : cityFilter,
+      city: cityFilter === "all" ? t("metas.sinPlan") : cityFilter,
       mA: 0, mNR: 0, mH: 0,
       ad: r.lastAD, nr: r.nr, sh: r.sh,
       projAD: projectSnapshot(r.adV),
@@ -888,15 +894,15 @@ export function _renderMetasImpl() {
          Su FACT suma al total pero el % de cumplimiento puede verse alto.
        </div>`
     : "";
-  html += secH("🎯","#8b5cf6","Cumplimiento de Metas - "+mesName,"Progreso actual vs meta del mes","Peru");
+  html += secH("🎯","#8b5cf6",t("metas.secMes",{ t: t("metas.cumplimiento"), m: mesLabel(mesName) }),t("metas.sub.progMes"),"Peru");
   html += `<div class="section">${noMetaBanner}<div class="metric-row">
-    ${metaResCard(METRICS.ad.label, "última semana",  tAD, tMA,  tPAD, "#8b5cf6")}
-    ${metaResCard(METRICS.nr.label, "acumulado mes",  tNR, tMNR, tPNR, "#f97316")}
-    ${metaResCard(METRICS.sh.label, "acumulado mes",  tSH, tMH,  tPSH, "#06b6d4")}
+    ${metaResCard(t("metric.ad.label"), t("rend.per.ultimaSemana"),  tAD, tMA,  tPAD, "#8b5cf6")}
+    ${metaResCard(t("metric.nr.label"), t("metas.acumMesSub"),  tNR, tMNR, tPNR, "#f97316")}
+    ${metaResCard(t("metric.sh.label"), t("metas.acumMesSub"),  tSH, tMH,  tPSH, "#06b6d4")}
   </div></div>`;
 
   // ── 2. Por Ciudad ─────────────────────────────────────────────────────────
-  html += secH("🏙️","#06b6d4","Metas por Ciudad","Progreso y proyección","");
+  html += secH("🏙️","#06b6d4",t("metas.secCiudad",{ t: t("metas.titulo") }),t("metas.sub.progProy"),"");
   html += `<div class="section"><div class="city-grid">`;
   CITIES.forEach(city => {
     // Use all metas for this city (ignore cityFilter here to always show all cities)
@@ -958,9 +964,9 @@ export function _renderMetasImpl() {
           <span style="width:10px;height:10px;border-radius:50%;background:${col};display:inline-block"></span>
           ${escapeHTML(cityLabel(city))}
         </div>
-        ${miniBar("Cond. Activos",  crAD, cmA,  cpAD)}
-        ${miniBar("Nuevos+React",   crNR, cmNR, cpNR)}
-        ${miniBar("Hs. Conexión",   crSH, cmH,  cpSH)}
+        ${miniBar(t("metric.ad.short"),  crAD, cmA,  cpAD)}
+        ${miniBar(t("metric.nr.short"),   crNR, cmNR, cpNR)}
+        ${miniBar(t("metric.sh.short"),   crSH, cmH,  cpSH)}
       </div>`;
   });
   html += `</div></div>`;
@@ -968,7 +974,7 @@ export function _renderMetasImpl() {
   // ── 3. Por KAM ────────────────────────────────────────────────────────────
   // Partners sin meta ya estan dentro de combos con noMeta=true,
   // suman al FACT del KAM pero no al plan.
-  html += secH("👤","#f59e0b","Metas por KAM","Progreso total por responsable","");
+  html += secH("👤","#f59e0b",t("metas.secKam",{ t: t("metas.titulo") }),t("metas.sub.progResp"),"");
   html += `<div class="section"><div class="agy-style-239">`;
   const allKAMs = [...new Set([
     ...combos.map(c => c.kam),
@@ -1012,15 +1018,15 @@ export function _renderMetasImpl() {
           <span class="agy-style-244">(${totalAccounts} cuentas)</span>
         </div>
         ${alertHtml}
-        ${miniBar("Cond. Activos", krAD, kmA,  kpAD)}
-        ${miniBar("Nuevos+React",  krNR, kmNR, kpNR)}
-        ${miniBar("Hs. Conexión",  krSH, kmH,  kpSH)}
+        ${miniBar(t("metric.ad.short"), krAD, kmA,  kpAD)}
+        ${miniBar(t("metric.nr.short"),  krNR, kmNR, kpNR)}
+        ${miniBar(t("metric.sh.short"),  krSH, kmH,  kpSH)}
       </div>`;
   });
   html += `</div></div>`;
 
   // ── 4. Por Partner ────────────────────────────────────────────────────────
-  html += secH("🃏","#FF0000","Metas por Partner","Progreso individual con proyección","");
+  html += secH("🃏","#FF0000",t("metas.secPartner",{ t: t("metas.titulo") }),t("metas.sub.progInd"),"");
   html += `<div class="section"><div class="partner-grid">`;
   // Ordenar: primero partners con meta, luego sin meta
   const sortedCombos = [...combos].sort((a, b) =>
@@ -1036,20 +1042,20 @@ export function _renderMetasImpl() {
           <div class="pcard-name">
             <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${col};margin-right:5px"></span>
             ${escapeHTML(c.partner)}
-            <span class="agy-style-245">Sin Plan</span>
+            <span class="agy-style-245">${escapeHTML(t("metas.sinPlan"))}</span>
           </div>
           <div class="pcard-sub">
             <span style="width:7px;height:7px;border-radius:50%;background:${kcolor};display:inline-block;margin-right:3px"></span>
             ${escapeHTML(c.kam)} &nbsp;·&nbsp; ${escapeHTML(c.city)}
           </div>
           <div class="agy-style-246">
-            <span>Cond. Activos</span><strong>${fmt(c.ad)}</strong>
+            <span>${escapeHTML(t("metric.ad.short"))}</span><strong>${fmt(c.ad)}</strong>
           </div>
           <div class="agy-style-247">
-            <span>Nuevos+React</span><strong>${fmt(c.nr)}</strong>
+            <span>${escapeHTML(t("metric.nr.short"))}</span><strong>${fmt(c.nr)}</strong>
           </div>
           <div class="agy-style-247">
-            <span>Hs. Conexión</span><strong>${fmt(c.sh)}</strong>
+            <span>${escapeHTML(t("metric.sh.short"))}</span><strong>${fmt(c.sh)}</strong>
           </div>
           <div class="agy-style-248">
             * Suma al total del KAM y país aunque no tenga meta.
@@ -1066,9 +1072,9 @@ export function _renderMetasImpl() {
             <span style="width:7px;height:7px;border-radius:50%;background:${kcolor};display:inline-block;margin-right:3px"></span>
             ${escapeHTML(c.kam)} &nbsp;·&nbsp; ${escapeHTML(c.city)}
           </div>
-          ${miniBarFull("Cond. Activos", c.ad, c.mA,  c.projAD)}
-          ${miniBarFull("Nuevos+React",  c.nr, c.mNR, c.projNR)}
-          ${miniBarFull("Hs. Conexión",  c.sh, c.mH,  c.projSH)}
+          ${miniBarFull(t("metric.ad.short"), c.ad, c.mA,  c.projAD)}
+          ${miniBarFull(t("metric.nr.short"),  c.nr, c.mNR, c.projNR)}
+          ${miniBarFull(t("metric.sh.short"),  c.sh, c.mH,  c.projSH)}
         </div>`;
     }
   });
@@ -1096,8 +1102,8 @@ export function metaResCard(label, sub, real, meta, proj, color, fmtFn) {
         <div class="mcard-label">${label}</div>
         <div class="mcard-sub-label">${sub}</div>
         <div class="mcard-val">${F(real || 0)}</div>
-        <div class="agy-style-250"><span class="agy-style-251">sin meta cargada para este mes</span></div>
-        ${proj == null ? "" : `<div style="font-size:.72rem;color:#888;margin-top:4px">Proyección: <strong>${F(proj)}</strong></div>`}
+        <div class="agy-style-250"><span class="agy-style-251">${escapeHTML(t("metas.sinMetaMes"))}</span></div>
+        ${proj == null ? "" : `<div style="font-size:.72rem;color:#888;margin-top:4px">${escapeHTML(t("metas.proyeccion"))}: <strong>${F(proj)}</strong></div>`}
       </div>`;
   }
   if (real == null) {
@@ -1106,7 +1112,7 @@ export function metaResCard(label, sub, real, meta, proj, color, fmtFn) {
         <div class="mcard-label">${label}</div>
         <div class="mcard-sub-label">${sub}</div>
         <div class="mcard-val" style="color:${color}">${F(meta || 0)}</div>
-        <div class="agy-style-250"><span class="agy-style-251">meta · sin actual medible</span></div>
+        <div class="agy-style-250"><span class="agy-style-251">${escapeHTML(t("metas.metaSinActual"))}</span></div>
       </div>`;
   }
   const p   = meta > 0 ? (real / meta) * 100 : 0;
@@ -1114,9 +1120,9 @@ export function metaResCard(label, sub, real, meta, proj, color, fmtFn) {
   const pV  = Math.min(p,  100); // visual bar width
   const ppV = Math.min(pp, 100);
   const overBadge = p > 100
-    ? `<span class="agy-style-249" title="Superas el plan (>100%)">🏆 Overachievement</span>`
+    ? `<span class="agy-style-249" title="${escapeHTML(t("metas.superasPlan"))}">${escapeHTML(t("metas.overachievement"))}</span>`
     : "";
-  const cumplTip = `Cumplimiento = Fact / Plan × 100. Fact: ${F(real)} de Plan: ${F(meta)}`;
+  const cumplTip = t("metas.cumplTip", { f: F(real), p: F(meta) });
   // Dos reglas distintas y a propósito: los FLUJOS (N+R, horas) se extrapolan
   // por ritmo del mes; los SNAPSHOTS (Active Drivers) usan el máximo del rango
   // × 1.4. Ver domain/metrics.ts.
@@ -1133,11 +1139,11 @@ export function metaResCard(label, sub, real, meta, proj, color, fmtFn) {
         <span style="font-size:.85rem;font-weight:700;color:${pColor(p)}">${p.toFixed(1)}% </span>
         <span class="sem ${semCls(p)}"></span>
         ${overBadge}
-        <span class="agy-style-251"> de plan ${F(meta)}</span>
+        <span class="agy-style-251">${escapeHTML(t("metas.dePlan", { n: F(meta) }))}</span>
       </div>
       <div class="agy-style-252">${barProj(pV, proj == null ? pV : ppV)}</div>
       ${proj == null ? "" : `<div style="font-size:.72rem;color:${pColor(pp)};margin-top:4px" title="${projTip}">
-        Proyección: <strong>${F(proj)}</strong> (${pp.toFixed(1)}%)
+        ${escapeHTML(t("metas.proyeccion"))}: <strong>${F(proj)}</strong> (${pp.toFixed(1)}%)
       </div>`}
     </div>`;
 }
@@ -1150,7 +1156,7 @@ export function miniBar(label, real, meta, proj, fmtFn) {
         <span class="agy-style-255">${label}</span>
         <span class="agy-style-222"><strong>${F(real || 0)}</strong></span>
       </div>
-      <div class="agy-style-256">sin meta cargada</div>
+      <div class="agy-style-256">${escapeHTML(t("metas.sinMetaCargada"))}</div>
     </div>`;
   }
   if (real == null) {   // solo meta — ver la nota en metaResCard
@@ -1159,7 +1165,7 @@ export function miniBar(label, real, meta, proj, fmtFn) {
         <span class="agy-style-255">${label}</span>
         <span class="agy-style-222"><strong>${F(meta || 0)}</strong></span>
       </div>
-      <div class="agy-style-256">meta · sin actual medible</div>
+      <div class="agy-style-256">${escapeHTML(t("metas.metaSinActual"))}</div>
     </div>`;
   }
   const p   = meta > 0 ? (real / meta) * 100 : 0;
@@ -1181,8 +1187,8 @@ export function miniBar(label, real, meta, proj, fmtFn) {
       </div>
       ${barProj(pV, proj == null ? pV : ppV)}
       <div class="agy-style-256">
-        Fact: ${F(real)} / Plan: ${F(meta)}${proj == null ? "" : ` /
-        Proy: <span style="color:${pColor(pp)};font-weight:700">${F(proj)}</span>`}
+        ${escapeHTML(t("metas.fact"))}: ${F(real)} / ${escapeHTML(t("metas.plan"))}: ${F(meta)}${proj == null ? "" : ` /
+        ${escapeHTML(t("metas.proy"))} <span style="color:${pColor(pp)};font-weight:700">${F(proj)}</span>`}
       </div>
     </div>`;
 }
@@ -1207,11 +1213,11 @@ export function miniBarFull(label, real, meta, proj, fmtFn) {
         </span>
       </div>
       <div class="agy-style-223">
-        Fact: <strong>${F(real)}</strong> / Plan: <strong>${F(meta)}</strong>
+        ${escapeHTML(t("metas.fact"))}: <strong>${F(real)}</strong> / ${escapeHTML(t("metas.plan"))}: <strong>${F(meta)}</strong>
       </div>
       ${barProj(pV, ppV)}
       <div style="font-size:.67rem;color:${pColor(pp)};margin-top:2px">
-        Proyección: <strong>${F(proj)}</strong> (${pp.toFixed(1)}%)
+        ${escapeHTML(t("metas.proyeccion"))}: <strong>${F(proj)}</strong> (${pp.toFixed(1)}%)
       </div>
     </div>`;
 }
@@ -1274,9 +1280,9 @@ export async function downloadMetasPDF() {
     stampPDF(pdf, `Metas — ${mes}`);
     pdf.save(`Metas_${mes}.pdf`);
   } catch(err) {
-    alert("Error al generar PDF: " + err.message);
+    alert(t("metas.err.pdf") + err.message);
   } finally {
-    if (btn) { btn.textContent = "⬇ Descargar PDF"; btn.disabled = false; }
+    if (btn) { btn.textContent = t("metas.descargarPDF"); btn.disabled = false; }
   }
 }
 
@@ -1287,7 +1293,7 @@ export async function downloadMetasPDF() {
 // UPPERCASE en cliente. Guard de admin defensivo; el enforcement real es RLS.
 export async function deleteMetasMes(mes) {
   if (!STATE.isAdmin) {
-    showBanner(false, "Operación bloqueada: requiere rol admin.");
+    showBanner(false, t("metas.err.admin"));
     return;
   }
   const mesU = (mes || "").trim();

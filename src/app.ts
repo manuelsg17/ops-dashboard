@@ -1371,6 +1371,14 @@ export function setUiLang(code) {
   if (typeof popSidebarUI === "function") popSidebarUI();
   if (typeof _renderActiveTabAfterLoad === "function") _renderActiveTabAfterLoad();
   else if (STATE.curTab && typeof switchTab === "function") switchTab(STATE.curTab);
+  // _renderActiveTabAfterLoad NO cubre Metas ni Seguimiento A PROPOSITO: cuando
+  // corre tras la carga inicial, metas/proyectos/seguimiento todavia pueden estar
+  // en vuelo. Para un cambio de IDIOMA ese motivo no aplica —los datos ya estan—
+  // y sin esto la pestana Metas se quedaba en el idioma anterior o directamente
+  // vacia (se veia como "largo: 93" al probar la vista Combinado en ingles).
+  if (STATE.curTab === "metas" && STATE.metasData?.length && typeof renderMetas === "function") renderMetas();
+  if (STATE.curTab === "seguimiento" && typeof renderSeguimiento === "function") renderSeguimiento();
+  if (STATE.curTab === "config" && typeof renderConfig === "function") renderConfig();
 }
 
 registerActions({

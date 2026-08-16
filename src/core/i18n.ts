@@ -220,6 +220,120 @@ export const I18N: Record<string, Record<string, string>> = {
   "rend.fleet.brandDonut": { es: "Brandeados vs No Brandeados", en: "Branded vs Non-Branded", ru: "Брендированные и небрендированные" },
   "rend.fleet.noBrand":    { es: "No brandeados", en: "Non-branded", ru: "Небрендированные" },
 
+
+  // ── Metas (fase 2) ─────────────────────────────────────────────────────
+  // Los titulos de seccion se armaban concatenando (`title + " por Ciudad"`).
+  // Eso no se puede traducir: el orden de las palabras cambia por idioma y en
+  // ruso ademas hay que declinar. Por eso van como plantilla con {t}.
+  "metas.secCiudad":  { es: "{t} por Ciudad",  en: "{t} by City",    ru: "{t} по городам" },
+  "metas.secKam":     { es: "{t} por KAM",     en: "{t} by KAM",     ru: "{t} по KAM" },
+  "metas.secPartner": { es: "{t} por Partner", en: "{t} by Partner", ru: "{t} по партнёрам" },
+  "metas.secMes":     { es: "{t} — {m}",       en: "{t} — {m}",      ru: "{t} — {m}" },
+
+  "metas.sub.progProy":   { es: "Progreso y proyección",        en: "Progress and projection",   ru: "Прогресс и прогноз" },
+  "metas.sub.progResp":   { es: "Progreso total por responsable", en: "Total progress by owner", ru: "Общий прогресс по ответственному" },
+  "metas.sub.metaVsAct":  { es: "Meta vs actual individual",    en: "Goal vs actual, per partner", ru: "Цель и факт по партнёру" },
+  "metas.sub.progInd":    { es: "Progreso individual con proyección", en: "Individual progress with projection", ru: "Индивидуальный прогресс с прогнозом" },
+  "metas.sub.progMes":    { es: "Progreso actual vs meta del mes", en: "Current progress vs monthly goal", ru: "Текущий прогресс к цели месяца" },
+  "metas.cumplimiento":   { es: "Cumplimiento de Metas",        en: "Goal Attainment",           ru: "Выполнение целей" },
+  "metas.titulo":         { es: "Metas",                        en: "Goals",                     ru: "Цели" },
+  "metas.tit.fleet":      { es: "Metas Fleet",     en: "Fleet Goals",     ru: "Цели Fleet" },
+  "metas.tit.tuktuk":     { es: "Metas TukTuk",    en: "TukTuk Goals",    ru: "Цели ТукТук" },
+  "metas.tit.comb":       { es: "Metas Combinado", en: "Combined Goals",  ru: "Общие цели" },
+  "metas.metaSinActual":  { es: "meta · sin actual medible", en: "goal · no measurable actual", ru: "цель · нет измеримого факта" },
+  // "Fact" y "Plan" son el vocabulario que ya usa el equipo en los reportes;
+  // se traducen igual porque en la UI conviven con texto traducido.
+  "metas.fact":           { es: "Fact",  en: "Actual", ru: "Факт" },
+  "metas.meta":           { es: "Meta",  en: "Goal",   ru: "Цель" },
+  "metas.plan":           { es: "Plan",  en: "Plan",   ru: "План" },
+  "metas.proy":           { es: "Proy.", en: "Proj.",  ru: "Прогноз" },
+  "metas.proyeccion":     { es: "Proyección", en: "Projection", ru: "Прогноз" },
+  "metas.dePlan":         { es: " de plan {n}", en: " of plan {n}", ru: " от плана {n}" },
+  "metas.ultimoPeriodo":  { es: "último período", en: "last period", ru: "последний период" },
+  "metas.acumulado":      { es: "acumulado", en: "accumulated", ru: "накоплено" },
+  "metas.acumMesSub":     { es: "acumulado mes", en: "month to date", ru: "накоплено за месяц" },
+  "metas.sinMetaCargada": { es: "sin meta cargada", en: "no goal loaded", ru: "цель не загружена" },
+  "metas.sinMetaMes":     { es: "sin meta cargada para este mes", en: "no goal loaded for this month", ru: "цель на этот месяц не загружена" },
+  "metas.fleetSub":       { es: "Meta de flota vs actual del rango · SH/auto (interno), aceptación, utilización · las tasas se ponderan por autos/viajes al agrupar",
+                            en: "Fleet goal vs actual over the range · SH/car (internal), acceptance, utilization · rates are weighted by cars/trips when grouped",
+                            ru: "Цель автопарка против факта за период · часы/авто (внутр.), принятие, загрузка · при группировке ставки взвешиваются по авто/поездкам" },
+  "metas.tkSub":          { es: "Meta TukTuk vs actual del rango · Active Drivers, N+R, Brandeados, Horas de Conexión",
+                            en: "TukTuk goal vs actual over the range · Active Drivers, N+R, Branded, Supply Hours",
+                            ru: "Цель ТукТук против факта за период · активные водители, N+R, брендированные, часы на линии" },
+  "metas.horasConexion":  { es: "Horas Conexión", en: "Supply Hours", ru: "Часы на линии" },
+  "metas.nuevosReact":    { es: "Nuevos + React", en: "New + React", ru: "Новые + реакт." },
+  "metas.activeDrivers":  { es: "Active Drivers", en: "Active Drivers", ru: "Активные водители" },
+  "metas.brandeados":     { es: "Brandeados", en: "Branded", ru: "Брендированные" },
+  "metas.overachievement":{ es: "🏆 Overachievement", en: "🏆 Overachievement", ru: "🏆 Перевыполнение" },
+  "metas.superasPlan":    { es: "Superas el plan (>100%)", en: "Above plan (>100%)", ru: "Выше плана (>100%)" },
+  "metas.combSub":        { es: "Actual del RANGO seleccionado (ambas líneas sumadas) vs meta combinada · si el partner empuja TukTuk también avanza su meta · para % reales usa el preset del mes de la meta",
+                            en: "Actual over the selected RANGE (both lines summed) vs the combined goal · if the partner pushes TukTuk their goal advances too · for real % use the goal month preset",
+                            ru: "Факт за выбранный ПЕРИОД (обе линии вместе) против общей цели · если партнёр развивает ТукТук, цель тоже растёт · для реальных % используйте пресет месяца цели" },
+  "metas.cumplTip":       { es: "Cumplimiento = Fact / Plan × 100. Fact: {f} de Plan: {p}",
+                            en: "Attainment = Actual / Plan × 100. Actual: {f} of Plan: {p}",
+                            ru: "Выполнение = Факт / План × 100. Факт: {f} из плана: {p}" },
+
+  // Lineas
+  "metas.linea.combTip":  { es: "Taxi + TukTuk sumados vs meta combinada — avance total del partner",
+                            en: "Taxi + TukTuk combined vs the combined goal — the partner's total progress",
+                            ru: "Такси + ТукТук против общей цели — суммарный результат партнёра" },
+  "metas.linea.aggTip":   { es: "Metas Taxi (AD, N+R, Horas)", en: "Taxi goals (AD, N+R, Hours)", ru: "Цели по такси (AD, N+R, часы)" },
+  "metas.linea.fleetTip": { es: "Metas de flota (SH/auto, aceptación, utilización)",
+                            en: "Fleet goals (SH/car, acceptance, utilization)",
+                            ru: "Цели автопарка (часы/авто, принятие, загрузка)" },
+  "metas.linea.tkTip":    { es: "Metas TukTuk (AD, N+R, Brandeados)", en: "TukTuk goals (AD, N+R, Branded)", ru: "Цели ТукТук (AD, N+R, брендированные)" },
+
+  // KPIs Fleet
+  "metas.kpi.shAuto":     { es: "SH / Auto (interno)", en: "SH / Car (internal)", ru: "Часы / авто (внутр.)" },
+  "metas.kpi.aceptacion": { es: "Aceptación",          en: "Acceptance",          ru: "Принятие" },
+  "metas.kpi.utilizacion":{ es: "Utilización",         en: "Utilization",         ru: "Загрузка" },
+  "metas.pond":           { es: "ponderado",           en: "weighted",            ru: "взвешенно" },
+  "metas.pondViajes":     { es: "ponderado por viajes", en: "weighted by trips",  ru: "взвешенно по поездкам" },
+  "metas.soloMeta":       { es: "solo meta",           en: "goal only",           ru: "только цель" },
+  "metas.sinActual":      { es: "sin actual medible",  en: "no measurable actual", ru: "нет измеримого факта" },
+  "metas.sinPlan":        { es: "Sin Plan",            en: "No Plan",             ru: "Нет плана" },
+  "metas.sinKam":         { es: "Sin KAM",             en: "No KAM",              ru: "Без KAM" },
+  "metas.todas":          { es: "Todas",               en: "All",                 ru: "Все" },
+  "metas.acumMes":        { es: "acumulado mes",       en: "month to date",       ru: "накоплено за месяц" },
+  "metas.autosPropios":   { es: "Autos propios (último período): {n} · brandeados {b}",
+                            en: "Owned cars (last period): {n} · branded {b}",
+                            ru: "Собственные авто (посл. период): {n} · брендированных {b}" },
+
+  // Aviso de escala
+  "metas.aviso.titulo":  { es: "Los % de cumplimiento no son comparables en esta escala.",
+                           en: "Attainment % are not comparable at this scale.",
+                           ru: "Проценты выполнения несопоставимы в этом масштабе." },
+  "metas.aviso.cuerpo":  { es: "La meta del mes se compara contra <strong>Conductores Activos de {u}</strong>: un conductor que maneja varios días cuenta una sola vez en el mes, pero acá se lo mide en un período mucho más corto. El porcentaje va a verse bajo aunque el mes vaya bien.",
+                           en: "The monthly goal is compared against <strong>Active Drivers over {u}</strong>: a driver working several days counts once in the month, but here they are measured over a much shorter period. The percentage will look low even if the month is going well.",
+                           ru: "Цель месяца сравнивается с <strong>активными водителями за {u}</strong>: водитель, работавший несколько дней, в месяце считается один раз, а здесь измеряется за куда более короткий период. Процент будет выглядеть низким, даже если месяц идёт хорошо." },
+  "metas.aviso.hint":    { es: "Nuevos+Reactivados y Horas sí acumulan, así que esos avanzan normal. Para leer el cumplimiento real, cambiá la escala a <strong>Mensual</strong>.",
+                           en: "New+Reactivated and Hours do accumulate, so those progress normally. To read real attainment, switch the scale to <strong>Monthly</strong>.",
+                           ru: "Новые+реактивированные и часы накапливаются, поэтому они растут нормально. Чтобы увидеть реальное выполнение, переключите масштаб на <strong>Ежемесячно</strong>." },
+  "metas.aviso.unDia":     { es: "un día",     en: "one day",  ru: "один день" },
+  "metas.aviso.unaSemana": { es: "una semana", en: "one week", ru: "одну неделю" },
+
+  "metas.err.admin":  { es: "Operación bloqueada: requiere rol admin.", en: "Blocked: admin role required.", ru: "Операция заблокирована: нужна роль admin." },
+  "metas.err.pdf":    { es: "Error al generar PDF: ", en: "Error generating PDF: ", ru: "Ошибка при создании PDF: " },
+
+  // Meses. metas.mes viene de la BD como NOMBRE en espanol y en mayusculas
+  // ("JULIO"), asi que sin esto el titulo quedaba "Combined Goals — JULIO".
+  // mesLabel() hace la traduccion y deja pasar cualquier valor que no reconozca.
+  "mes.enero": { es: "Enero", en: "January", ru: "Январь" },
+  "mes.febrero": { es: "Febrero", en: "February", ru: "Февраль" },
+  "mes.marzo": { es: "Marzo", en: "March", ru: "Март" },
+  "mes.abril": { es: "Abril", en: "April", ru: "Апрель" },
+  "mes.mayo": { es: "Mayo", en: "May", ru: "Май" },
+  "mes.junio": { es: "Junio", en: "June", ru: "Июнь" },
+  "mes.julio": { es: "Julio", en: "July", ru: "Июль" },
+  "mes.agosto": { es: "Agosto", en: "August", ru: "Август" },
+  "mes.septiembre": { es: "Septiembre", en: "September", ru: "Сентябрь" },
+  "mes.octubre": { es: "Octubre", en: "October", ru: "Октябрь" },
+  "mes.noviembre": { es: "Noviembre", en: "November", ru: "Ноябрь" },
+  "mes.diciembre": { es: "Diciembre", en: "December", ru: "Декабрь" },
+  "metas.mesLabel": { es: "Mes:", en: "Month:", ru: "Месяц:" },
+  "metas.descargarPDF": { es: "⬇ Descargar PDF", en: "⬇ Download PDF", ru: "⬇ Скачать PDF" },
+  "metas.generandoPDF": { es: "Generando...", en: "Generating...", ru: "Создание…" },
+
   // ── Estados comunes ────────────────────────────────────────────────────
   "estado.cargando": { es: "Cargando…", en: "Loading…", ru: "Загрузка…" },
   "estado.datosCargados": { es: "Datos cargados", en: "Data loaded", ru: "Данные загружены" },
@@ -284,4 +398,15 @@ export function selectorIdiomaHTML(): string {
     IDIOMAS.map(i =>
       `<button class="lang-btn${i.code === _lang ? " active" : ""}" data-act="setUiLang" data-lang="${i.code}" title="${i.label}">${i.flag}</button>`
     ).join("") + `</div>`;
+}
+
+/**
+ * Traduce un nombre de mes que viene de la BD ("JULIO", "julio", "Julio").
+ * Si no lo reconoce devuelve el valor tal cual — un mes raro se muestra crudo,
+ * que es mucho mejor que perderlo.
+ */
+export function mesLabel(mes: string): string {
+  if (!mes) return mes;
+  const k = "mes." + String(mes).toLowerCase().trim();
+  return I18N[k] ? t(k) : mes;
 }
