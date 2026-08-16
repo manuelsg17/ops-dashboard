@@ -617,7 +617,7 @@ export function rerenderSidebarPresets() {
 export function popKAM() {
   const kams = [...new Set(Object.values(STATE.KAM_MAP))].sort();
   document.getElementById("kamFilter").innerHTML =
-    `<option value="all">Todos</option>` +
+    `<option value="all">${escapeHTML(t("sidebar.todos"))}</option>` +
     kams.map(k => `<option value="${escapeHTML(k)}">${escapeHTML(k)}</option>`).join("");
 }
 
@@ -1358,7 +1358,19 @@ export function setUiLang(code) {
   const cont = document.getElementById("langSwitch");
   if (cont) cont.innerHTML = selectorIdiomaHTML();
   aplicarI18nEstatico();
-  if (STATE.curTab && typeof switchTab === "function") switchTab(STATE.curTab, true);
+  // Re-render de la pestana activa: casi todo el texto se genera con template
+  // literals, asi que repintar solo los data-i18n deja el contenido en el idioma
+  // anterior. OJO: aca habia `switchTab(STATE.curTab, true)` — switchTab recibe
+  // UN solo parametro y ademas corta si el tab no cambia, asi que no repintaba
+  // nada; los tres idiomas mostraban el mismo texto. Se usa la primitiva que ya
+  // existe para esto.
+  // El sidebar NO es parte del panel de la pestana: presets y selects se
+  // regeneran por su cuenta, asi que hay que repintarlos aparte (si no, quedan
+  // en el idioma anterior — se veia en la captura).
+  if (typeof rerenderSidebarPresets === "function") rerenderSidebarPresets();
+  if (typeof popSidebarUI === "function") popSidebarUI();
+  if (typeof _renderActiveTabAfterLoad === "function") _renderActiveTabAfterLoad();
+  else if (STATE.curTab && typeof switchTab === "function") switchTab(STATE.curTab);
 }
 
 registerActions({

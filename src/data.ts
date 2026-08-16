@@ -14,6 +14,7 @@
 // que muchas cosas estén listas, y no vale la pena que dependa del espejado a
 // window de vendor.js.
 import { snapshotLoad, snapshotSave, snapshotClear } from "./data/cache.js";
+import { t } from "./core/i18n";
 // Formulas de proyeccion: una sola definicion para todo el dashboard.
 import { projectFlow } from "./domain/metrics.js";
 
@@ -77,9 +78,9 @@ export function applyFlotasOverride(rows) {
 // Badge HTML
 export function bdg(c, p, cls = "mcard-badge") {
   // Tooltip: contexto del modo para que el usuario sepa contra que se compara
-  const compLabel = STATE.curMode === "mensual" ? "mes anterior"
-                  : STATE.curMode === "diario"  ? "dia anterior"
-                  : "sem. anterior";
+  const compLabel = STATE.curMode === "mensual" ? t("rend.cmp.mesAnterior")
+                  : STATE.curMode === "diario"  ? t("rend.cmp.diaAnterior")
+                  : t("rend.cmp.semAnterior");
   if (p === null || p === undefined)
     return `<span class="${cls} b-neu" title="Sin dato previo (N/A)">N/A</span>`;
   if (p === 0)
@@ -673,7 +674,7 @@ export async function loadFromSupabase(opts = {}) {
 
     const warnSuffix = STATE.parseWarnings.size
       ? ` · ⚠ ${STATE.parseWarnings.size} campo(s) inválido(s)` : "";
-    showBanner(true, "Datos cargados · " + new Date().toLocaleTimeString("es-PE") + warnSuffix);
+    showBanner(true, t("estado.datosCargados") + " · " + new Date().toLocaleTimeString("es-PE") + warnSuffix);
     _renderActiveTabAfterLoad();
 
     // metas/proyectos/seguimiento: se pidieron en paralelo desde el arranque de
@@ -856,7 +857,7 @@ function _indexCoreData() {
     STATE._suppressRestoreRender = false;
 }
 
-function _renderActiveTabAfterLoad() {
+export function _renderActiveTabAfterLoad() {
     // Render solo el tab activo (mismo patron que applyFilters/switchMode).
     // Antes se llamaba renderRend()+renderMetas() incondicional: trabajo
     // desperdiciado si el usuario estaba en otro tab al terminar el upload,
