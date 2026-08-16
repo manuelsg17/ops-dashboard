@@ -99,6 +99,61 @@ function chequearColumnas() {
   }
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. Claves de i18n usadas  vs  declaradas en core/i18n.ts
+//
+// Sin esto, una clave mal escrita o no declarada se muestra CRUDA en pantalla
+// ("preset.hoy" en vez de "Hoy") y solo se descubre mirando esa pestana en ese
+// idioma. Paso exactamente eso al armar la fase 1: un reemplazo fallo en
+// silencio y los presets de diario/mensual quedaron sin clave.
+//
+// Tambien exige que cada clave tenga los 3 idiomas: el fallback a ingles/espanol
+// evita el texto crudo, pero una clave a medio traducir no deberia pasar
+// desapercibida.
+// ─────────────────────────────────────────────────────────────────────────────
+function chequearI18n() {
+  const src = leer("src/core/i18n.ts");
+  const dict = recortarBloque(src, src.indexOf("{", src.indexOf("export const I18N")));
+  const declaradas = new Map();
+  for (const entrada of entradasDeObjeto(dict)) {
+    const m = /^"([^"]+)"\s*:\s*(\{[\s\S]*)$/.exec(entrada.trim());
+    if (!m) continue;
+    const idiomas = new Set([...m[2].matchAll(/\b(es|en|ru)\s*:/g)].map(x => x[1]));
+    declaradas.set(m[1], idiomas);
+  }
+  if (!declaradas.size) { fallo("i18n", "no pude leer I18N — el chequeo quedo ciego."); return; }
+
+  const usadas = new Map();
+  for (const f of ["index.html", ...listarSrc()]) {
+    // Sin comentarios: este mismo archivo documenta el uso con
+    // data-i18n="clave" como EJEMPLO, y eso se reportaba como clave inexistente.
+    const txt = sinComentarios(leer(f));
+    for (const m of txt.matchAll(/data-i18n(?:-title|-ph)?="([a-zA-Z0-9_.]+)"/g))
+      if (!usadas.has(m[1])) usadas.set(m[1], f);
+    // t("clave") — solo literales; los dinamicos no se pueden verificar estatico.
+    for (const m of txt.matchAll(/[^a-zA-Z0-9_]t\(\s*"([a-zA-Z0-9_]+\.[a-zA-Z0-9_.]+)"/g))
+      if (!usadas.has(m[1])) usadas.set(m[1], f);
+  }
+
+  for (const [k, f] of usadas)
+    if (!declaradas.has(k))
+      fallo("i18n", `la clave "${k}" (${f}) NO esta en core/i18n.ts — se veria cruda en pantalla.`);
+
+  for (const [k, idiomas] of declaradas) {
+    const faltan = ["es", "en", "ru"].filter(l => !idiomas.has(l));
+    if (faltan.length) fallo("i18n", `la clave "${k}" no tiene: ${faltan.join(", ")}`);
+  }
+}
+
+/** Quita comentarios //, /* *\/ y <!-- --> para no escanear texto de ejemplo. */
+function sinComentarios(txt) {
+  return txt
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:"'`\\])\/\/[^\n]*/g, "$1");
+}
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 function listarSrc(dir = "src") {
   const out = [];
@@ -178,10 +233,11 @@ function mapaTaxiparks() {
 // ── main ─────────────────────────────────────────────────────────────────────
 chequearAcciones();
 chequearColumnas();
+chequearI18n();
 
 if (problemas.length) {
   console.error(`\n✗ ${problemas.length} problema(s) de deriva:\n`);
   for (const p of problemas) console.error(`  [${p.chequeo}] ${p.msg}\n`);
   process.exit(1);
 }
-console.log("✓ deriva: acciones y columnas consistentes");
+console.log("✓ deriva: acciones, columnas e i18n consistentes");

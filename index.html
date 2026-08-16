@@ -69,14 +69,14 @@
       </svg>
     </div>
     <h1 class="login-title">YANGO <span>Dashboard</span></h1>
-    <p class="login-sub">Partner Performance Analytics</p>
+    <p class="login-sub" data-i18n="login.sub">Partner Performance Analytics</p>
     <form id="loginForm" data-act-submit="handleLoginSubmit">
-      <input id="loginEmail"    type="email"    class="login-input" placeholder="Email" autocomplete="username"/>
-      <input id="loginPassword" type="password" class="login-input" placeholder="Contraseña" autocomplete="current-password"/>
+      <input id="loginEmail"    type="email"    class="login-input" placeholder="Email" data-i18n-ph="login.email" autocomplete="username"/>
+      <input id="loginPassword" type="password" class="login-input" placeholder="Contraseña" data-i18n-ph="login.password" autocomplete="current-password"/>
       <p id="loginError" class="login-error"></p>
-      <button id="loginBtn" type="submit" class="login-btn">Ingresar</button>
+      <button id="loginBtn" type="submit" class="login-btn" data-i18n="login.submit">Ingresar</button>
     </form>
-    <p class="login-footer">Acceso restringido · Uso interno Yango Peru</p>
+    <p class="login-footer" data-i18n="login.footer">Acceso restringido · Uso interno Yango Peru</p>
   </div>
 </div>
 
@@ -98,25 +98,25 @@
       <nav class="nav-tabs">
   <div class="nav-dropdown-wrap" id="navAnalisisWrap">
     <button class="nav-tab nav-tab-dropdown active" id="navAnalisis" data-act="toggleAnalisisMenu">
-      Análisis
+      <span data-i18n="nav.analisis">Análisis</span>
       <svg class="nav-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
         <polyline points="6 9 12 15 18 9"/>
       </svg>
     </button>
     <div class="nav-dropdown-menu" id="analisisMenu">
       <!-- Orden: análisis de uso frecuente primero; herramientas al final tras el divisor. -->
-      <button class="nav-dd-item active" data-tab="rend" data-act="switchTabFromMenu">Rendimiento</button>
-      <button class="nav-dd-item"        data-tab="metas" data-act="switchTabFromMenu">Metas</button>
-      <button class="nav-dd-item"        data-tab="calculator" data-act="switchTabFromMenu">🎯 Calculadora</button>
-      <button class="nav-dd-item"        data-tab="partnerview" data-act="switchTabFromMenu">📊 Vista Partner</button>
+      <button class="nav-dd-item active" data-tab="rend" data-act="switchTabFromMenu" data-i18n="nav.rendimiento">Rendimiento</button>
+      <button class="nav-dd-item"        data-tab="metas" data-act="switchTabFromMenu" data-i18n="nav.metas">Metas</button>
+      <button class="nav-dd-item"        data-tab="calculator" data-act="switchTabFromMenu" data-i18n="nav.calculadoraE">🎯 Calculadora</button>
+      <button class="nav-dd-item"        data-tab="partnerview" data-act="switchTabFromMenu" data-i18n="nav.vistaPartnerE">📊 Vista Partner</button>
       <div class="agy-style-601"></div>
-      <button class="nav-dd-item"        data-tab="seguimiento" data-act="switchTabFromMenu">📋 Seguimiento</button>
-      <button class="nav-dd-item"        data-tab="rawdata" data-act="switchTabFromMenu">Data Raw</button>
+      <button class="nav-dd-item"        data-tab="seguimiento" data-act="switchTabFromMenu" data-i18n="nav.seguimientoE">📋 Seguimiento</button>
+      <button class="nav-dd-item"        data-tab="rawdata" data-act="switchTabFromMenu" data-i18n="nav.dataRaw">Data Raw</button>
       <!-- Fleet Externo fuera del menú hasta tener datos reales (scaffold pausado; tab-panel y script se conservan). -->
     </div>
   </div>
-  <button class="nav-tab" data-tab="present2" data-act="switchTab">Presentación 2.0</button>
-  <button class="nav-tab" data-tab="config"   data-act="switchTab">Configuración</button>
+  <button class="nav-tab" data-tab="present2" data-act="switchTab" data-i18n="nav.present2">Presentación 2.0</button>
+  <button class="nav-tab" data-tab="config"   data-act="switchTab" data-i18n="nav.config">Configuración</button>
 </nav>
     </div>
     <div class="topbar-right">
@@ -181,7 +181,8 @@
            no convertir a clase CSS elementos toggleados desde JS). -->
       <span id="dataRefreshing" class="data-refreshing" style="display:none" title="Mostrando los últimos datos guardados mientras se descargan los actuales">↻ Actualizando…</span>
       <span id="userBadge" class="user-badge"></span>
-      <button class="logout-btn" data-act="handleLogout">Salir →</button>
+      <span id="langSwitch"></span>
+      <button class="logout-btn" data-act="handleLogout" data-i18n="top.logout">Salir →</button>
     </div>
   </div>
 
@@ -193,44 +194,44 @@
     <div class="sidebar" id="mainSidebar">
       <div id="dsBanner" style="display:none"></div>
 
-      <div class="sb-label">Escala</div>
+      <div class="sb-label" data-i18n="sidebar.escala">Escala</div>
       <div class="mode-toggle-row">
-        <button class="mode-btn" data-mode="diario" data-act="switchMode">Diario</button>
-        <button class="mode-btn active" data-mode="semanal" data-act="switchMode">Semanal</button>
-        <button class="mode-btn" data-mode="mensual" data-act="switchMode">Mensual</button>
+        <button class="mode-btn" data-mode="diario" data-act="switchMode" data-i18n="mode.diario">Diario</button>
+        <button class="mode-btn active" data-mode="semanal" data-act="switchMode" data-i18n="mode.semanal">Semanal</button>
+        <button class="mode-btn" data-mode="mensual" data-act="switchMode" data-i18n="mode.mensual">Mensual</button>
       </div>
 
-      <div class="sb-label">Rango de Fechas</div>
+      <div class="sb-label" data-i18n="sidebar.rango">Rango de Fechas</div>
       <div class="date-grid">
-        <div><label>Desde</label><select class="sb-sel" id="dateFrom"></select></div>
-        <div><label>Hasta</label><select class="sb-sel"  id="dateTo"></select></div>
+        <div><label data-i18n="filtro.desde">Desde</label><select class="sb-sel" id="dateFrom"></select></div>
+        <div><label data-i18n="filtro.hasta">Hasta</label><select class="sb-sel"  id="dateTo"></select></div>
       </div>
       <div id="datePresets" class="agy-style-603">
-        <button class="preset-btn" data-act="setDatePreset" data-preset="week">Esta semana</button>
-        <button class="preset-btn" data-act="setDatePreset" data-preset="fortnight">Quincena</button>
-        <button class="preset-btn" data-act="setDatePreset" data-preset="month">Este mes</button>
+        <button class="preset-btn" data-act="setDatePreset" data-preset="week" data-i18n="preset.week">Esta semana</button>
+        <button class="preset-btn" data-act="setDatePreset" data-preset="fortnight" data-i18n="preset.fortnight">Quincena</button>
+        <button class="preset-btn" data-act="setDatePreset" data-preset="month" data-i18n="preset.month">Este mes</button>
       </div>
 
-      <div class="sb-label">Ciudad</div>
+      <div class="sb-label" data-i18n="sidebar.ciudad">Ciudad</div>
       <select class="sb-sel" id="cityFilter">
-        <option value="all">Total Peru</option>
+        <option value="all" data-i18n="sidebar.totalPeru">Total Peru</option>
         <option value="LIMA">Lima</option>
         <option value="TRUJILLO">Trujillo</option>
         <option value="AREQUIPA">Arequipa</option>
       </select>
 
-      <div class="sb-label">KAM</div>
+      <div class="sb-label" data-i18n="sidebar.kam">KAM</div>
       <select class="sb-sel" id="kamFilter" data-act-change="onKAMChange">
         <option value="all">Todos</option>
       </select>
 
-      <div class="sb-label">Buscar Partner</div>
-      <input class="sb-inp" id="partnerSearch" type="text" placeholder="Filtrar..."/>
+      <div class="sb-label" data-i18n="sidebar.buscar">Buscar Partner</div>
+      <input class="sb-inp" id="partnerSearch" type="text" placeholder="Filtrar..." data-i18n-ph="sidebar.filtrar"/>
 
-      <div class="sb-label">Partners</div>
+      <div class="sb-label" data-i18n="sidebar.partners">Partners</div>
       <div class="sb-row">
-        <button data-act="selectAll">Todos</button>
-        <button data-act="deselectAll">Ninguno</button>
+        <button data-act="selectAll" data-i18n="sidebar.todos">Todos</button>
+        <button data-act="deselectAll" data-i18n="sidebar.ninguno">Ninguno</button>
       </div>
       <div class="plist" id="pList"></div>
     </div>

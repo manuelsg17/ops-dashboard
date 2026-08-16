@@ -595,13 +595,16 @@ export function setDatePreset(type) {
 
 // ── PRESETS DINÁMICOS POR ESCALA ─────────────────────────────────────────────
 export function getPresetButtonsHTML() {
+  // Los presets se REGENERAN desde acá por escala, asi que el data-i18n del HTML
+  // estatico se pisaba y estos botones quedaban en espanol con la UI en ruso
+  // (encontrado probandolo en el navegador, no leyendo el codigo).
   const defs = {
-    diario:  [["today","Hoy"],["7d","7 días"],["14d","14 días"],["30d","30 días"],["90d","90 días"]],
-    semanal: [["week","Esta semana"],["fortnight","Quincena"],["month","Este mes"]],
-    mensual: [["month","Este mes"],["3m","Últ. 3 meses"],["6m","Últ. 6 meses"]]
+    diario:  [["today","preset.hoy"],["7d","preset.d7"],["14d","preset.d14"],["30d","preset.d30"],["90d","preset.d90"]],
+    semanal: [["week","preset.week"],["fortnight","preset.fortnight"],["month","preset.month"]],
+    mensual: [["month","preset.month"],["3m","preset.m3"],["6m","preset.m6"]]
   };
   return (defs[STATE.curMode] || defs.semanal)
-    .map(([k, l]) => `<button class="preset-btn" data-act="setDatePreset" data-preset="${escapeHTML(k)}">${l}</button>`)
+    .map(([k, l]) => `<button class="preset-btn" data-act="setDatePreset" data-preset="${escapeHTML(k)}">${escapeHTML(t(l))}</button>`)
     .join("");
 }
 
@@ -1336,9 +1339,30 @@ export async function deleteDashboardData() {
 
 // ── ACCIONES DELEGADAS (Fase A2) ─────────────────────────────────────────────
 import { registerActions } from "./shared/actions.js";
+import { t, setLang, aplicarI18nEstatico, selectorIdiomaHTML } from "./core/i18n";
 import { logAccess } from "./shared/accessLog.js";
 
+// ── i18n de la interfaz ──────────────────────────────────────────────────────
+// Se aplica al arrancar (el login tambien esta traducido, no solo la app ya
+// logueada) y en cada cambio de idioma. Ademas del HTML estatico hay que
+// RE-RENDERIZAR la pestana activa: casi todo el texto se genera desde JS con
+// template literals, asi que no basta con repintar los data-i18n.
+export function _initUiLang() {
+  const cont = document.getElementById("langSwitch");
+  if (cont) cont.innerHTML = selectorIdiomaHTML();
+  aplicarI18nEstatico();
+}
+
+export function setUiLang(code) {
+  if (!setLang(code)) return;
+  const cont = document.getElementById("langSwitch");
+  if (cont) cont.innerHTML = selectorIdiomaHTML();
+  aplicarI18nEstatico();
+  if (STATE.curTab && typeof switchTab === "function") switchTab(STATE.curTab, true);
+}
+
 registerActions({
+  setUiLang: d => setUiLang(d.lang),
   // sidebar / filtros
   setDatePreset: d => setDatePreset(d.preset),
   onKAMChange, selectAll, deselectAll, toggleSidebar,
@@ -1370,3 +1394,7 @@ registerActions({
   kamEditKamChange: d => kamEditKamChange(d.clid),
   renderConfig
 });
+
+// Arranca el idioma apenas carga el modulo: la pantalla de LOGIN tambien se
+// traduce, no solo la app ya autenticada.
+_initUiLang();
