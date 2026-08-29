@@ -260,6 +260,41 @@ export async function fetchAllPeriods(scale) {
   } catch (_) { return []; }
 }
 
+// Última carga exitosa de la ingesta automática (RPC get_last_ingest_at,
+// SECURITY DEFINER — expone SOLO ese timestamp, ingest_log en sí sigue
+// admin-only). Pinta el badge #dbLastUpdate del topbar. Fire-and-forget desde
+// initApp(); nunca bloquea nada si falla.
+export async function fetchAndRenderLastIngest() {
+  const el = document.getElementById("dbLastUpdate");
+  if (!el) return;
+  try {
+    const token = await _authToken();
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_last_ingest_at`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: "{}"
+    });
+    if (!res.ok) return;
+    const iso = await res.json();
+    if (!iso) return;
+    const ms = Date.now() - new Date(iso).getTime();
+    const min = Math.round(ms / 60000);
+    let label;
+    if (min < 1)        label = t("estado.justoAhora");
+    else if (min < 60)  label = t("estado.haceMin",   { n: min });
+    else if (min < 1440) label = t("estado.haceHoras", { n: Math.round(min / 60) });
+    else                 label = t("estado.haceDias",  { n: Math.round(min / 1440) });
+    el.textContent = t("estado.bdActualizada", { t: label });
+    el.title = new Date(iso).toLocaleString("es-PE");
+    el.classList.toggle("stale", min > 60 * 24 * 8); // >8 días: la ingesta semanal dejó de correr
+    el.style.display = "";
+  } catch (_) { /* indicador informativo, nunca debe tumbar el arranque */ }
+}
+
 // Desde qué período cargar datos. Toma los últimos LOAD_WINDOW períodos, pero
 // respeta `wantFrom` si el usuario tenía guardado un rango más viejo (así no se
 // le "corta" su vista al recargar). Siempre suma UN período extra hacia atrás:

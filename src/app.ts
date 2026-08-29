@@ -159,6 +159,10 @@ export function initApp() {
     _prefetchData().catch(() => {});
   };
   Promise.resolve(loadFromSupabase()).then(_prefetch, _prefetch);
+
+  // Indicador "BD actualizada hace X" del topbar — informativo, nunca bloquea
+  // el arranque (ver comentario en data.js junto a fetchAndRenderLastIngest).
+  if (typeof fetchAndRenderLastIngest === "function") fetchAndRenderLastIngest();
 }
 
 export function toggleUploadMenu(e) {

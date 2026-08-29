@@ -180,6 +180,10 @@
            lo muestra/oculta con .style.display (ver la nota de CLAUDE.md sobre
            no convertir a clase CSS elementos toggleados desde JS). -->
       <span id="dataRefreshing" class="data-refreshing" style="display:none" title="Mostrando los últimos datos guardados mientras se descargan los actuales">↻ Actualizando…</span>
+      <!-- Última carga exitosa en la BD (no confundir con "cuándo pintó tu
+           navegador" — eso lo indica #dataRefreshing/banner de arriba). Vacío
+           hasta que resuelve el RPC get_last_ingest_at (data.js). -->
+      <span id="dbLastUpdate" class="db-last-update" style="display:none"></span>
       <span id="userBadge" class="user-badge"></span>
       <span id="langSwitch"></span>
       <button class="logout-btn" data-act="handleLogout" data-i18n="top.logout">Salir →</button>

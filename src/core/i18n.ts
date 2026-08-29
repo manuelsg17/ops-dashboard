@@ -850,7 +850,12 @@ export const I18N: Record<string, Record<string, string>> = {
   // ── Estados comunes ────────────────────────────────────────────────────
   "estado.cargando": { es: "Cargando…", en: "Loading…", ru: "Загрузка…" },
   "estado.datosCargados": { es: "Datos cargados", en: "Data loaded", ru: "Данные загружены" },
-  "estado.sinDatos": { es: "Sin datos", en: "No data",  ru: "Нет данных" }
+  "estado.sinDatos": { es: "Sin datos", en: "No data",  ru: "Нет данных" },
+  "estado.bdActualizada": { es: "BD actualizada {t}", en: "DB updated {t}", ru: "БД обновлена {t}" },
+  "estado.haceMin":   { es: "hace {n} min", en: "{n} min ago", ru: "{n} мин назад" },
+  "estado.haceHoras": { es: "hace {n} h",   en: "{n}h ago",    ru: "{n} ч назад" },
+  "estado.haceDias":  { es: "hace {n} día(s)", en: "{n} day(s) ago", ru: "{n} дн. назад" },
+  "estado.justoAhora": { es: "recién",     en: "just now",    ru: "только что" }
 };
 
 let _lang = "es";

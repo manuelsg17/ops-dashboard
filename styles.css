@@ -159,6 +159,15 @@ input[type="file"]  { display: none; }
   .data-refreshing { animation: dataRefreshPulse 1.4s ease-in-out infinite; }
 }
 @keyframes dataRefreshPulse { 0%, 100% { opacity: 1 } 50% { opacity: .55 } }
+
+/* Última carga exitosa en la BD (get_last_ingest_at) — informativo, no
+   pulsa ni alarma; distinto a propósito de .data-refreshing. */
+.db-last-update {
+  font-size: .7rem; color: #6b7280;
+  background: #f3f4f6; padding: 4px 9px; border-radius: 20px;
+  white-space: nowrap;
+}
+.db-last-update.stale { color: #b45309; background: #fef3c7; }
 .logout-btn {
   padding: 7px 14px; border-radius: 6px;
   font-size: .8rem; font-weight: 600; cursor: pointer;
