@@ -812,6 +812,14 @@ export function p2Chart(canvasId, dates, partnerVals, cityVals, cohortLines, col
       // al revisar un PDF real).
       devicePixelRatio: P2_EXPORT_SCALE,
       responsive: true, maintainAspectRatio: false, animation: false,
+      // Aire ARRIBA para las etiquetas de variacion (+11.3%, +1.9%...): van
+      // ancladas al punto con align "top", asi que un punto cerca del techo del
+      // area dejaba la etiqueta cortada por el borde de la tarjeta — se veia en
+      // las capturas de Manuel en Peru/Lima. Dos medidas complementarias:
+      //   · layout.padding.top reserva pixeles DENTRO del canvas;
+      //   · scales.y.grace estira el eje un 15% mas alla del maximo, para que
+      //     la linea no toque el techo (mismo recurso que ya usa Vista Partner).
+      layout: { padding: { top: 14, right: 4, left: 2, bottom: 0 } },
       plugins: {
         legend: { display: false },
         tooltip: { callbacks: { label: ctx => {
@@ -819,7 +827,15 @@ export function p2Chart(canvasId, dates, partnerVals, cityVals, cohortLines, col
           return `${ctx.dataset.label}: ${fmtV(raw)}`;
         } } },
         datalabels: {
-          display: ctx => ctx.datasetIndex === 0 && ctx.dataIndex > 0 && pWoWLabel[ctx.dataIndex] != null,
+          // "auto" (no true): con 6+ periodos en una tarjeta angosta las
+          // etiquetas se superponian y quedaban ilegibles ("+2.9%+2.1%"). Con
+          // "auto" el plugin dibuja las que caben y descarta las que chocarian
+          // con otra ya dibujada — la ultima variacion, que es la que se mira,
+          // siempre entra porque se dibujan en orden.
+          display: ctx => (ctx.datasetIndex === 0 && ctx.dataIndex > 0 && pWoWLabel[ctx.dataIndex] != null) ? "auto" : false,
+          // Margen entre etiquetas para que "auto" no las pegue una contra otra.
+          padding: { top: 1, bottom: 1, left: 2, right: 2 },
+          clamp: true,
           formatter: (_, ctx) => { const w = pWoWLabel[ctx.dataIndex]; return (w >= 0 ? "+" : "") + w.toFixed(1) + (isPct ? "pp" : "%"); },
           color: ctx => wowColor(pWoW[ctx.dataIndex]),
           font: { size: 7, weight: "bold" }, anchor: "end", align: "top", offset: 3
@@ -828,7 +844,8 @@ export function p2Chart(canvasId, dates, partnerVals, cityVals, cohortLines, col
       scales: {
         x: { ticks: { font: { size: 7 }, maxRotation: 0, color: "#9ca3af" }, grid: { display: false },
              border: { color: "#e5e7eb" } },
-        y: { beginAtZero: false, ticks: { font: { size: 7 }, color: "#9ca3af", maxTicksLimit: 5,
+        y: { beginAtZero: false, grace: "15%",
+             ticks: { font: { size: 7 }, color: "#9ca3af", maxTicksLimit: 5,
              callback: v => fmtV(v) },
              grid: { color: "#f3f4f6", lineWidth: 0.5 }, border: { display: false } }
       }
@@ -1973,6 +1990,28 @@ export function renderSlide2() {
   const dates = p2SelectedDates(from, to, STATE.curMode);   // dataset-aware: TukTuk usa sus fechas
   const renderId = ++PRESENT2_STATE._renderId;
   const s = entry.def;
+
+  // ALTURA DE LA HOJA SEGUN DENSIDAD (ago 2026). El contenedor es 16:9 fijo, y
+  // la slide "KPIs por Nivel" apila un renglon por nivel (Peru + cada ciudad):
+  // con 4 niveles x 4 KPIs, cada grafica quedaba tan baja que las etiquetas de
+  // variacion no entraban ni con el headroom del eje. A partir de 3 niveles la
+  // hoja se alarga; con 1-2 se mantiene el 16:9 clasico.
+  //
+  // Se aplica al CONTENEDOR (no al inner) porque es el que define la caja, y se
+  // limpia en cada render para que una slide densa no deje alta a la siguiente.
+  const cont = document.getElementById("slide2Container");
+  if (cont) {
+    // Identificada por su etiqueta `es` de P2_SLIDES. NO por
+    // `s.build === buildSlide2Matrix`: el deck envuelve cada build en una
+    // lambda `(p,d,i) => buildSlide2Matrix(...)`, asi que la comparacion de
+    // identidad nunca da true (probado: el aspect-ratio no se aplicaba).
+    const esMatriz = s.es === "KPIs por Nivel";
+    const nNiveles = esMatriz ? p2Levels(partner).length : 0;
+    cont.style.aspectRatio = nNiveles >= 4 ? "16 / 13"
+                           : nNiveles === 3 ? "16 / 11"
+                           : "";           // "" = vuelve al 16/9 del CSS
+  }
+
   inner.innerHTML = s.build(partner, dates, PRESENT2_STATE.slide);
   if (s.charts && s.chartFn) {
     setTimeout(() => {
