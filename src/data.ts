@@ -151,16 +151,29 @@ export function projA(vals, daysElapsed, daysRemaining) {
   return projectFlow(total, daysElapsed, daysRemaining);
 }
 
-// Proyección de un SNAPSHOT (Active Drivers) al cierre del período. Mismo gate
-// que projA(): en escala MENSUAL el mes ya está cerrado, no se proyecta — la
-// "proyección" es el propio valor actual. Sin este guard, projectSnapshot()
-// (máx del rango × 1.4) se aplicaba TAMBIÉN sobre meses ya cerrados, mostrando
-// hasta 140% del máximo del rango donde el tooltip de la UI afirmaba
-// literalmente "Proyección = valor actual (mes ya cerrado)" — falso para AD.
-// `actual` es el snapshot ya calculado en el caller (r.lastAD, e.ad, etc.) —
-// se reutiliza en vez de recalcularlo para no tener una segunda fuente.
-export function projAD(serie, actual) {
-  if (STATE.curMode === "mensual") return actual;
+// Proyección de un SNAPSHOT (Active Drivers): máximo de la serie × 1.4, la
+// regla de negocio definida por Manuel. Punto único para las ~9 llamadas del
+// dashboard, para que Metas, el deck y el portal no puedan divergir.
+//
+// NO lleva gate por escala, y esto es deliberado — se intentó y se revirtió el
+// 29-ago-2026. El intento fue: "en escala mensual el período está cerrado, no
+// se proyecta", copiando el gate que projA() sí tiene para los FLUJOS. Está mal
+// por tres motivos:
+//
+//   1. `curMode === "mensual"` NO significa "el período cerró": significa que
+//      los datos están agrupados por mes. El último mes puede estar EN CURSO, y
+//      es justo cuando más hace falta proyectar.
+//   2. Ata una regla de negocio al estado de la UI: la misma pregunta ("¿dónde
+//      cierra este partner?") devolvía 210 parado en semanal y 120 en mensual,
+//      para la MISMA serie [100,150,120].
+//   3. Con proyección = valor actual, la marca de proyección deja de moverse en
+//      las barras — exactamente el bug que ya se había corregido en la slide
+//      "Avance vs Meta Combinado" (ver CLAUDE.md, fase 4 de jul 2026).
+//
+// Lo que sí estaba mal era el TOOLTIP de metaResCard, que afirmaba "Proyección
+// = valor actual (mes ya cerrado)" para TODAS las métricas cuando eso solo vale
+// para los flujos. Corregido allá, no acá.
+export function projAD(serie) {
   return projectSnapshot(serie);
 }
 

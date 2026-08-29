@@ -1150,7 +1150,7 @@ export function p2ProjMTD(act, lastDate) {
   // y el mismo mes. La regla vive ahora en UN solo lugar; si hay que discutirla,
   // se discute allá, no se bifurca acá.
   return {
-    ad: projAD(act.adV || [], act.lastAD),
+    ad: projAD(act.adV || []),
     nr: projectFlow(act.nr, daysElapsed, daysRemaining),
     sh: projectFlow(act.sh, daysElapsed, daysRemaining)
   };
@@ -1376,7 +1376,7 @@ export function buildSlide2AvanceCombinado(partner, idx) {
   const _combAdByDate = new Map();
   taxiDates.forEach((d, i) => _combAdByDate.set(d, (_combAdByDate.get(d) || 0) + (taxiAct.adV[i] || 0)));
   tkDates.forEach((d, i)   => _combAdByDate.set(d, (_combAdByDate.get(d) || 0) + (tkAct.adV[i]   || 0)));
-  const _combProjAD = projAD([..._combAdByDate.keys()].sort().map(d => _combAdByDate.get(d)), taxiAct.lastAD + tkAct.lastAD);
+  const _combProjAD = projAD([..._combAdByDate.keys()].sort().map(d => _combAdByDate.get(d)));
 
   const defs = [
     { label: es ? "Conductores Activos" : "Active Drivers",

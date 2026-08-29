@@ -229,7 +229,7 @@ function _finishSeries(e) {
   const adS = seriesByDate(e._ad);
   e.ad     = snapshotValue(adS);
   e.cars   = e._cars ? snapshotValue(seriesByDate(e._cars)) : 0;
-  e.projAd = projAD(adS, e.ad);
+  e.projAd = projAD(adS);
   e.projNr = projectFlow(e.nr, daysElapsed, daysRemaining);
   e.projSh = projectFlow(e.sh, daysElapsed, daysRemaining);
   // La serie por fecha SE CONSERVA (no se borra) porque la proyección de un
@@ -359,7 +359,7 @@ function _metasAggKpi(kpi, units) {
     const pv = (u.a && kpi.proj) ? kpi.proj(u.a) : null;
     if (pv != null) { p += pv; hasP = true; }
   });
-  if (serieAgregada && hasP) p = projAD(seriesByDate(serieAgregada), a);
+  if (serieAgregada && hasP) p = projAD(seriesByDate(serieAgregada));
   return {
     actual: hasA ? a : null,
     meta:   hasM ? m : null,
@@ -845,7 +845,7 @@ export function _renderMetasImpl() {
       combos.push({ partner: p.partner, kam: p.kam, city: "Todas",
         mA: p.mA, mNR: p.mNR, mH: p.mH,
         ad: r.lastAD, nr: r.nr, sh: r.sh,
-        projAD: projAD(r.adV, r.lastAD),
+        projAD: projAD(r.adV),
         adByDate: r.adByDate,
         projNR: projA(r.nrV, daysElapsed, daysRemaining),
         projSH: projA(r.shV, daysElapsed, daysRemaining) });
@@ -856,7 +856,7 @@ export function _renderMetasImpl() {
       combos.push({ partner: m.partner, kam: m.kam, city: m.city,
         mA: m.mA, mNR: m.mNR, mH: m.mH,
         ad: r.lastAD, nr: r.nr, sh: r.sh,
-        projAD: projAD(r.adV, r.lastAD),
+        projAD: projAD(r.adV),
         adByDate: r.adByDate,
         projNR: projA(r.nrV, daysElapsed, daysRemaining),
         projSH: projA(r.shV, daysElapsed, daysRemaining) });
@@ -881,7 +881,7 @@ export function _renderMetasImpl() {
       city: cityFilter === "all" ? t("metas.sinPlan") : cityFilter,
       mA: 0, mNR: 0, mH: 0,
       ad: r.lastAD, nr: r.nr, sh: r.sh,
-      projAD: projAD(r.adV, r.lastAD),
+      projAD: projAD(r.adV),
       adByDate: r.adByDate,
       projNR: projA(r.nrV, daysElapsed, daysRemaining),
       projSH: projA(r.shV, daysElapsed, daysRemaining),
@@ -906,7 +906,7 @@ export function _renderMetasImpl() {
       const m = c.adByDate || {};
       Object.keys(m).forEach(d => { merged[d] = (merged[d] || 0) + m[d]; });
     });
-    return projAD(seriesByDate(merged), arr.reduce((s2, c) => s2 + c.ad, 0));
+    return projAD(seriesByDate(merged));
   };
   const tPAD= _projADde(combos);
   const tPNR= combos.reduce((s, c) => s + c.projNR, 0);
@@ -985,7 +985,7 @@ export function _renderMetasImpl() {
     const crSH = sorted.reduce((s, v) => s + v.sh, 0);
     const nrV = sorted.map(v => v.nr);
     const shV = sorted.map(v => v.sh);
-    const cpAD = projAD(sorted.map(v => v.ad), lastAD);
+    const cpAD = projAD(sorted.map(v => v.ad));
     const cpNR = projA(nrV, daysElapsed, daysRemaining);
     const cpSH = projA(shV, daysElapsed, daysRemaining);
 
@@ -1161,8 +1161,15 @@ export function metaResCard(label, sub, real, meta, proj, color, fmtFn) {
   // Dos reglas distintas y a propósito: los FLUJOS (N+R, horas) se extrapolan
   // por ritmo del mes; los SNAPSHOTS (Active Drivers) usan el máximo del rango
   // × 1.4. Ver domain/metrics.ts.
+  // El tooltip anterior decía "Proyección = valor actual (mes ya cerrado)" para
+  // TODA la tarjeta cuando la escala es mensual. Eso solo es cierto para los
+  // FLUJOS (projA no extrapola en mensual); Active Drivers SIEMPRE usa máx × 1.4,
+  // en cualquier escala. Esa imprecisión llevó a "corregir" el cálculo de AD
+  // para que coincidiera con el texto — al revés de lo que correspondía (ver la
+  // nota larga en projAD, data.ts). Ahora el texto dice lo que el código hace.
   const projTip = STATE.curMode === "mensual"
-    ? `Proyección = valor actual (mes ya cerrado)`
+    ? `Flujos (N+R, horas): no se extrapolan, el período mensual ya viene completo. `
+      + `Active Drivers: período de mayor AD del rango × 1.4.`
     : `Flujos (N+R, horas): total acumulado × días del mes / días transcurridos. `
       + `Active Drivers: período de mayor AD del rango × 1.4.`;
   return `
