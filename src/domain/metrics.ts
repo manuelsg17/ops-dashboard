@@ -131,7 +131,13 @@ export function retentionSeries(ad: Serie, nuevos: Serie, react: Serie): Array<n
     if (i === 0) return null;
     const prev = ad[i - 1];
     if (!prev) return null;
-    return ((ad[i] || 0) - (nuevos[i] || 0) - (react[i] || 0)) / prev;
+    // Un hueco en el AD ACTUAL (no el previo, ya cubierto arriba) no es "cero
+    // conductores" — es que ese período no tiene dato. `(ad[i] || 0)` lo
+    // trataba como 0 y fabricaba una retención muy negativa (churn severo
+    // falso) por un dato faltante, no por una caída real.
+    const cur = ad[i];
+    if (cur == null || Number.isNaN(cur)) return null;
+    return (cur - (nuevos[i] || 0) - (react[i] || 0)) / prev;
   });
 }
 

@@ -411,7 +411,19 @@ export function buildSlide2TkCriterios(partner, idx) {
   const col = propios >= META ? "#10b981" : propios >= META * 0.5 ? "#f59e0b" : "#FF0000";
   const delta = pPropios > 0 ? ((propios - pPropios) / pPropios) * 100 : null;
   // El mes es cerrado sólo si hay uno posterior; si es el último, va MTD.
-  const parcial = meses.length < 2 || last === meses[meses.length - 1] && STATE.curMode !== "mensual";
+  //
+  // BUG REAL (auditoría ago 2026): `last === meses[meses.length-1]` es
+  // trivialmente cierto por construcción (así se definió `last` una línea
+  // arriba) — por precedencia de operadores la condición quedaba
+  // `meses.length<2 || curMode!=="mensual"`, así que en mensual con ≥2 meses
+  // NUNCA marcaba "mes en curso" (aunque el último mes estuviera a medias) y
+  // en semanal/diario SIEMPRE lo marcaba (aunque el mes ya estuviera cerrado
+  // hace tiempo). Solo afecta la etiqueta "parcial"/MTD, no el número. Fix:
+  // comparar contra el mes calendario REAL — cerrado si `last` quedó en el
+  // pasado, en curso si `last` es el mes actual.
+  const _hoy = new Date();
+  const _mesActual = `${_hoy.getFullYear()}-${String(_hoy.getMonth() + 1).padStart(2, "0")}`;
+  const parcial = meses.length < 1 || last === _mesActual;
 
   // Evolución: últimos 6 MESES, para que se vea la tendencia y no un dato suelto.
   const ultimos = meses.slice(-6);

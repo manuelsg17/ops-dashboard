@@ -153,6 +153,16 @@ describe("retención", () => {
     // escondería justo el caso que hay que mirar.
     expect(retentionSeries([100, 50], [0, 60], [0, 0])![1]).toBeLessThan(0);
   });
+
+  it("un hueco en el AD actual da null, no fabrica churn", () => {
+    // ad[1] = null (ese período no tiene dato, no es "cero conductores").
+    // Antes (ad[i]||0) lo trataba como 0 → (0-10-0)/100 = -0.10, un "churn
+    // severo" falso por un dato faltante.
+    const r = retentionSeries([100, null as any, 90], [0, 5, 3], [0, 0, 1]);
+    expect(r[1]).toBeNull();
+    // prev de i=2 es ad[1]=null → también indefinida (no se puede tomar % de un hueco)
+    expect(r[2]).toBeNull();
+  });
 });
 
 describe("rollups", () => {

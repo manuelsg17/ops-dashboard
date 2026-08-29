@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toN, parseTaxiparksWide, parseTaxiparksLong, coberturaKpis, adaptarEsquema, detectarTasasEnPorcentaje, _txNorm, TX_COL_BY_NORM } from "./taxiparks.js";
+import { toN, parseTaxiparksWide, parseTaxiparksLong, coberturaKpis, adaptarEsquema, detectarTasasEnPorcentaje, _txNorm, TX_COL_BY_NORM, _clidStr } from "./taxiparks.js";
 
 // Estos tests fijan el CONTRATO del reporte de taxiparks. Importan más que de
 // costumbre porque el mismo parser corre en dos lugares (navegador y Edge
@@ -250,5 +250,29 @@ describe("porcentajes (bug de la carga automática, jul 2026)", () => {
   it("no se alarma por un dato raro aislado", () => {
     const lote = Array.from({ length: 20 }, (_, i) => ({ acceptance_rate: i === 0 ? 3 : 0.9 }));
     expect(detectarTasasEnPorcentaje(lote)).toEqual([]);
+  });
+});
+
+describe("_clidStr — CLID en notación científica (auditoría ago 2026)", () => {
+  it("parsea un CLID en notación científica en vez de descartarlo", () => {
+    // Antes devolvía null en silencio: la clave del agregado quedaba
+    // "null|||CIUDAD|||...", el clid de la fila salía null y el partner
+    // desaparecía de todo join con `partners` sin ningún aviso.
+    expect(_clidStr("4.00011321576e11")).toBe("400011321576");
+    expect(_clidStr("4.0001132e11")).toBe("400011320000");
+  });
+
+  it("avisa (no lanza) si no puede parsear la notación científica", () => {
+    const avisos: string[] = [];
+    // Un exponente absurdo no da un entero seguro — debe avisar y degradar a
+    // "" (no null: el resto del pipeline ya trata "" como CLID ausente).
+    const r = _clidStr("1.5e999", (l) => avisos.push(l));
+    expect(r).toBe("");
+    expect(avisos.length).toBe(1);
+  });
+
+  it("un CLID normal no se toca", () => {
+    expect(_clidStr("400001264902")).toBe("400001264902");
+    expect(_clidStr(400001264902)).toBe("400001264902");
   });
 });

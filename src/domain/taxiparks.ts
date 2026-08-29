@@ -210,7 +210,7 @@ export function txConsolidate(target, m) {
   }
 }
 
-export function _clidStr(v) {
+export function _clidStr(v, onWarn?: (l: string) => void) {
   if (v == null || v === "") return "";
   if (typeof v === "number") {
     if (!Number.isFinite(v)) return "";
@@ -219,7 +219,17 @@ export function _clidStr(v) {
   const s = String(v).trim();
   if (/^-?\d+$/.test(s)) return s;
   if (/^-?\d+\.\d+$/.test(s)) return s.split(".")[0];
-  if (/^-?\d+(\.\d+)?[eE][+-]?\d+$/.test(s)) return null; // degradado
+  if (/^-?\d+(\.\d+)?[eE][+-]?\d+$/.test(s)) {
+    // BUG REAL (auditoria ago 2026): esto devolvia null sin avisar. La clave
+    // del agregado quedaba "null|||CIUDAD|||...", el partner se escribia con
+    // clid null y desaparecia de todo join con `partners` sin ningun warning.
+    // Un CLID (~12 digitos) entra sin perdida de precision en un Number JS
+    // (double, seguro hasta 2^53) — parsearlo de verdad en vez de descartarlo.
+    const n = Number(s);
+    if (Number.isFinite(n) && Number.isInteger(n)) return String(n);
+    if (typeof onWarn === "function") onWarn(`CLID en notación científica no parseable: "${s}"`);
+    return "";
+  }
   return s;
 }
 
@@ -287,7 +297,7 @@ export function parseTaxiparksWide(rows: any[], opts: {
 
   const agg = {};
   rows.forEach(row => {
-    const clid = _clidStr(row["CLID"] || row["clid"] || "");
+    const clid = _clidStr(row["CLID"] || row["clid"] || "", onWarn);
     // El partner se guarda TAL CUAL viene del reporte; la resolucion al nombre
     // configurado en `partners` se hace al leer desde la BD, no al escribir.
     const partner = String(row["Partner"] || row["partner"] || "").trim() || clid || "Unknown";
@@ -361,7 +371,7 @@ export function parseTaxiparksLong(records: any[], opts: {
   records.forEach(rec => {
     const fecha = _fechaISO(rec.date ?? rec.fecha ?? rec.mes ?? rec.periodo ?? rec.Date);
     if (!fecha) { sinFecha++; return; }
-    const clid  = _clidStr(rec.clid ?? rec.CLID ?? "");
+    const clid  = _clidStr(rec.clid ?? rec.CLID ?? "", onWarn);
     const city  = normCityValue(rec.city ?? rec.City ?? rec.Ciudad);
     const db_id = String(rec.db_id ?? rec.dbId ?? rec["db id"] ?? "").trim();
     const partner = String(rec.partner ?? rec.Partner ?? "").trim() || clid || "Unknown";

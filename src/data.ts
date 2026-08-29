@@ -475,7 +475,25 @@ export async function fetchAllPages(table, orderCol, opts = {}) {
     method: "HEAD",
     headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, Prefer: "count=exact" }
   });
-  if (!countRes.ok) return (await firstPagePromise) || [];
+  if (!countRes.ok) {
+    // BUG REAL (auditoría ago 2026): un 5xx/timeout transitorio SOLO en el HEAD
+    // (la página 0 sí funcionó) truncaba el dataset a como máximo 1000 filas
+    // en SILENCIO — con rendimiento semanal (~1.1k+ filas en ventana) o diario
+    // (~5.5k) eso es una pérdida real de filas sin ningún aviso visible. Un
+    // solo reintento antes de rendirse; si sigue fallando, lanzar (todos los
+    // callers ya tienen try/catch con showBanner de error — mejor un error
+    // visible que un total bajo sin explicación).
+    const retryRes = await fetch(`${SUPABASE_URL}/rest/v1/${table}${query}`, {
+      method: "HEAD",
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, Prefer: "count=exact" }
+    });
+    if (!retryRes.ok) throw new Error(`Error ${retryRes.status} al contar filas de ${table}`);
+    return _fetchAllPagesWithCount(table, query, PAGE, retryRes, firstPagePromise);
+  }
+  return _fetchAllPagesWithCount(table, query, PAGE, countRes, firstPagePromise);
+}
+
+async function _fetchAllPagesWithCount(table, query, PAGE, countRes, firstPagePromise) {
   const range = countRes.headers.get("content-range") || "";
   const count = +(range.split("/")[1] || 0);
   if (!count) return [];
@@ -808,10 +826,10 @@ function _applyCoreData(partners, rend, frooms, flotas, opts = {}) {
     STATE.rawData = (rend || []).map(r => ({
       clid:          (r.clid || "").trim(),
       // Nombre efectivo: Configuracion (partners) gana, sino el que vino de la BD
-      partner:       STATE.CLID_MAP[r.clid] || r.partner,
+      partner:       STATE.CLID_MAP[(r.clid || "").trim()] || r.partner,
       // Nombre original del Excel: lo que esta en la BD (siempre lo crudo del upload)
       _partnerExcel: r.partner || "",
-      kam:           STATE.KAM_MAP[r.clid] || r.kam || "",
+      kam:           STATE.KAM_MAP[(r.clid || "").trim()] || r.kam || "",
       city:          normCity(r.city),
       date:          r.fecha,
       // Fleetroom (sub-flota): db_id estable + nombre (tagging table gana sobre
@@ -925,7 +943,9 @@ function _indexCoreData() {
     STATE._suppressRestoreRender = false;
 }
 
-export function _renderActiveTabAfterLoad() {
+const _NEED_FULL_COLS_LOAD = new Set(["partnerview", "rawdata", "calculator"]);
+
+export async function _renderActiveTabAfterLoad() {
     // Render solo el tab activo (mismo patron que applyFilters/switchMode).
     // Antes se llamaba renderRend()+renderMetas() incondicional: trabajo
     // desperdiciado si el usuario estaba en otro tab al terminar el upload,
@@ -934,6 +954,17 @@ export function _renderActiveTabAfterLoad() {
     // acá — esos datos todavía pueden estar en vuelo (`deferred`), se renderizan
     // en _applyMetasProyectosSeguimiento() apenas lleguen.
     if (STATE.rawData.length) {
+      // BUG REAL (auditoría ago 2026): esta función re-renderizaba
+      // partnerview/calculator/rawdata directo, sin pasar por switchTab (que
+      // es quien awaitea ensureFullRendColumns). Si el caché pintaba con las
+      // columnas diferidas ya mergeadas y LUEGO llegaba la data fresca de red
+      // (resetFullRendColumns las vuelve a poner en null porque son objetos
+      // nuevos), este render corría sobre filas con esas columnas en null —
+      // KPIs/funnel en "—" en silencio hasta que el usuario cambiara de tab
+      // y volviera. Mismo await que switchTab, solo para el tab activo.
+      if (_NEED_FULL_COLS_LOAD.has(STATE.curTab) && typeof ensureFullRendColumns === "function") {
+        try { await ensureFullRendColumns(); } catch (e) { /* nunca bloquear el render */ }
+      }
       // Partner externo: su unica vista es el portal (Track C2).
       if (STATE.userRole === "partner" && typeof renderPartnerPortal === "function") {
         renderPartnerPortal();
@@ -977,12 +1008,15 @@ export function ensureFullRendColumns(modeOverride) {
   // adelantarse a que la escala esté cargada; si esto quedara marcado, la pestaña
   // que sí las necesita nunca las pediría.
   if (!rows || !rows.length) return Promise.resolve();
-  const p = _fetchFullRendColumns(mode, rows);
+  // getSelf() para que el catch de abajo pueda distinguir "sigo siendo la
+  // promesa vigente" de "ya me reemplazaron" — ver el comentario ahí.
+  let p;
+  p = _fetchFullRendColumns(mode, rows, () => p);
   _colsFull[mode] = p;
   return p;
 }
 
-async function _fetchFullRendColumns(mode, rows) {
+async function _fetchFullRendColumns(mode, rows, getSelf) {
   const dateCol = mode === "mensual" ? "mes" : mode === "diario" ? "date" : "fecha";
   const tabla   = mode === "mensual" ? "rendimiento_mensual"
                 : mode === "diario"  ? "rendimiento_diario" : "rendimiento";
@@ -1023,7 +1057,14 @@ async function _fetchFullRendColumns(mode, rows) {
   } catch (err) {
     // Si falla, se deja reintentar: las columnas quedan en null y las vistas que
     // las usan muestran "—", pero nada se rompe.
-    _colsFull[mode] = null;
+    //
+    // OJO: solo limpiar si `_colsFull[mode]` sigue siendo ESTA promesa. Si entre
+    // que arrancó este fetch y que falló hubo un resetFullRendColumns() + un
+    // ensureFullRendColumns() nuevo (refresh de fondo + cambio de tab), este
+    // catch viejo anularía la promesa NUEVA en vuelo — un tercer caller
+    // lanzaría un fetch duplicado en paralelo. Inofensivo en los datos (merge
+    // keyed e idempotente) pero red duplicada.
+    if (_colsFull[mode] === getSelf()) _colsFull[mode] = null;
     if (DEBUG) console.warn("ensureFullRendColumns falló:", err);
   }
 }
@@ -1078,9 +1119,9 @@ async function _loadMensual(silent) {
     });
     STATE.rawDataMensual = rendM.map(r => ({
       clid:          (r.clid || "").trim(),
-      partner:       STATE.CLID_MAP[r.clid] || r.partner,
+      partner:       STATE.CLID_MAP[(r.clid || "").trim()] || r.partner,
       _partnerExcel: r.partner || "",
-      kam:           STATE.KAM_MAP[r.clid]  || r.kam || "",
+      kam:           STATE.KAM_MAP[(r.clid || "").trim()]  || r.kam || "",
       city:          normCity(r.city),
       date:          r.mes,
       db_id:         (r.db_id || "").trim(),
@@ -1095,13 +1136,21 @@ async function _loadMensual(silent) {
       ...txRowExtra(r)
     }));
     STATE.rawDataMensual = dropLegacyAggregateRows(STATE.rawDataMensual);
+    // BUG REAL (auditoría ago 2026): el override de `flotas` (excluye
+    // activo=false + renombra) corría DESPUÉS de capturar Full acá — Full
+    // quedaba con las filas de flotas inactivas y sin los renombres, mientras
+    // el semanal ya aplicaba el override ANTES de armar su Full. Data Raw lee
+    // exactamente estos *Full: las flotas inactivas no aparecían en semanal
+    // pero SÍ en mensual/diario para el mismo CLID. Mismo orden que semanal
+    // ahora: override PRIMERO, Full se captura ya consistente.
+    STATE.rawDataMensual = applyFlotasOverride(STATE.rawDataMensual);
     STATE.rawDataMensualFull = [...STATE.rawDataMensual];
 
     // Slice TukTuk MENSUAL: separar ANTES del filtro exclude_from_taxi, desde el
-    // Full (aún incluye tuktuk). Espejo del semanal (loadFromSupabase ~648-657).
-    // Lo usa la Calculadora para armar metas TukTuk (Fase 7). applyFlotasOverride
-    // para paridad de nombres con el resto del mensual.
-    STATE.rawDataMensualTuktuk = applyFlotasOverride(STATE.rawDataMensualFull.filter(r => rowIsTuktuk(r)));
+    // Full (aún incluye tuktuk, ya con el override de flotas aplicado arriba).
+    // Espejo del semanal (loadFromSupabase ~648-657). Lo usa la Calculadora
+    // para armar metas TukTuk (Fase 7).
+    STATE.rawDataMensualTuktuk = STATE.rawDataMensualFull.filter(r => rowIsTuktuk(r));
     STATE._tuktukMensualByCityDate = new Map();
     STATE.rawDataMensualTuktuk.forEach(r => {
       const k = `${r.city}|||${r.date}`;
@@ -1114,8 +1163,6 @@ async function _loadMensual(silent) {
 
     // Excluir tuktuk/exclude_from_taxi por fleetroom (o CLID legacy).
     STATE.rawDataMensual = STATE.rawDataMensual.filter(r => !rowExcludedFromTaxi(r));
-    // Aplicar mapeo de flotas tambien al dataset mensual
-    STATE.rawDataMensual = applyFlotasOverride(STATE.rawDataMensual);
     // Slice Fleet mensual (Fase 2): espejo del semanal (Fleet ⊂ Agregador).
     STATE.rawDataMensualFleet = STATE.rawDataMensual.filter(r => rowIsFleet(r));
     STATE._mensualLoaded = true;
@@ -1134,9 +1181,9 @@ async function _loadDiario(silent) {
     });
     STATE.rawDataDiario = rendD.map(r => ({
       clid:          (r.clid || "").trim(),
-      partner:       STATE.CLID_MAP[r.clid] || r.partner || r.clid,
+      partner:       STATE.CLID_MAP[(r.clid || "").trim()] || r.partner || r.clid,
       _partnerExcel: r.partner || "",
-      kam:           STATE.KAM_MAP[r.clid]  || r.kam || "",
+      kam:           STATE.KAM_MAP[(r.clid || "").trim()]  || r.kam || "",
       city:          normCity(r.city),
       date:          r.date,
       db_id:         (r.db_id || "").trim(),
@@ -1151,6 +1198,10 @@ async function _loadDiario(silent) {
       ...txRowExtra(r)
     }));
     STATE.rawDataDiario = dropLegacyAggregateRows(STATE.rawDataDiario);
+    // Mismo orden que semanal/mensual (ver comentario en _loadMensual): el
+    // override de `flotas` corre ANTES de capturar Full, así las flotas
+    // inactivas quedan excluidas de Full en las 3 escalas por igual.
+    STATE.rawDataDiario = applyFlotasOverride(STATE.rawDataDiario);
     STATE.rawDataDiarioFull = [...STATE.rawDataDiario];
 
     // Slices TukTuk y Fleet DIARIOS — espejo exacto del mensual y del semanal.
@@ -1161,7 +1212,7 @@ async function _loadDiario(silent) {
     // filas de la ventana diaria TIENEN db_id, y el tagging separa bien
     // (7.943 de N+R en Taxi vs 1.009 en TukTuk sobre julio). Con los slices
     // construidos, las 4 líneas funcionan en diario sin lógica nueva.
-    STATE.rawDataDiarioTuktuk = applyFlotasOverride(STATE.rawDataDiarioFull.filter(r => rowIsTuktuk(r)));
+    STATE.rawDataDiarioTuktuk = STATE.rawDataDiarioFull.filter(r => rowIsTuktuk(r));
     STATE._tuktukDiarioByCityDate = new Map();
     STATE.rawDataDiarioTuktuk.forEach(r => {
       const k = `${r.city}|||${r.date}`;
@@ -1174,8 +1225,6 @@ async function _loadDiario(silent) {
 
     // Excluir tuktuk/exclude_from_taxi por fleetroom (o CLID legacy).
     STATE.rawDataDiario = STATE.rawDataDiario.filter(r => !rowExcludedFromTaxi(r));
-    // Aplicar mapeo de flotas tambien al dataset diario
-    STATE.rawDataDiario = applyFlotasOverride(STATE.rawDataDiario);
     // Fleet ⊂ Agregador: se filtra del agregador YA deduplicado, sin re-fetch.
     STATE.rawDataDiarioFleet = STATE.rawDataDiario.filter(r => rowIsFleet(r));
     STATE._diarioLoaded = true;
@@ -1910,7 +1959,15 @@ export function updateIndexes() {
   // SIEMPRE → al elegir un solo partner en las líneas TukTuk/Combinado, los
   // totales seguían sumando los solo-TukTuk de todos los demás. Se veía como
   // "Perú 145" cuando el partner elegido tenía 77.
-  const _tkOnly = (STATE.rawDataTuktuk || [])
+  // BUG REAL (auditoría ago 2026): esto usaba SIEMPRE el slice tuktuk semanal,
+  // aunque STATE.curMode fuera mensual/diario. Un partner solo-TukTuk presente
+  // en la ventana mensual/diaria pero ausente de la ventana semanal (o al
+  // revés) no entraba al sidebar en esa escala → reaparece la misma clase del
+  // bug PIAGGIO, pero solo al mirar mensual/diario.
+  const _tkSliceEscala = STATE.curMode === "mensual" ? STATE.rawDataMensualTuktuk
+                        : STATE.curMode === "diario"  ? STATE.rawDataDiarioTuktuk
+                        : STATE.rawDataTuktuk;
+  const _tkOnly = (_tkSliceEscala || [])
     .map(r => r.partner)
     .filter(p => p && !STATE.allPartners.includes(p));
   STATE.sidebarPartners = [...new Set([...STATE.allPartners, ..._tkOnly])].sort();
