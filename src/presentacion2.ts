@@ -765,10 +765,18 @@ export function p2Chart(canvasId, dates, partnerVals, cityVals, cohortLines, col
   const fmtV = v => isPct ? (v == null ? "" : (v * 100).toFixed(1) + "%") : fmt(v);
   // Marca Yango: la línea del partner SIEMPRE en rojo Yango; el color del KPI
   // (`color`) se usa como acento sutil en el relleno del área.
+  // GROSORES (ago 2026): la matriz muestra hasta 4 niveles × 4 KPIs = 16
+  // gráficas chicas en una misma slide. Con línea de 2.5px y puntos de 3.5 el
+  // conjunto se veía tosco y las etiquetas de variación se encimaban — Manuel
+  // pidió afinarlo. Los valores de abajo son para ESA densidad; el relleno
+  // también se aclara (18 -> 10 en alfa) para que la línea no compita con su
+  // propia área.
   const datasets = [{
-    label: "Partner", data: partnerVals, borderColor: "#FF0000", backgroundColor: color + "18",
-    borderWidth: 2.5, pointRadius: 3.5, pointBackgroundColor: pWoW.map(w => wowColor(w)),
-    pointBorderColor: pWoW.map(w => wowColor(w)), tension: 0.3, fill: true, spanGaps: true
+    label: "Partner", data: partnerVals, borderColor: "#FF0000", backgroundColor: color + "10",
+    borderWidth: 1.6, pointRadius: 2.2, pointHoverRadius: 4,
+    pointBackgroundColor: pWoW.map(w => wowColor(w)),
+    pointBorderColor: pWoW.map(w => wowColor(w)), pointBorderWidth: 0,
+    tension: 0.3, fill: true, spanGaps: true
   }];
   if (PRESENT2_STATE.cmpCity && cityVals) {
     // Normaliza la tendencia de ciudad a la escala del partner para que se vea la FORMA.
@@ -777,8 +785,8 @@ export function p2Chart(canvasId, dates, partnerVals, cityVals, cohortLines, col
     const cNorm = cityVals.map(v => v == null ? null : (v / cMax) * pMax);
     datasets.push({
       label: PRESENT2_STATE.lang === "es" ? "Ciudad" : "City", data: cNorm,
-      borderColor: "#bbb", borderWidth: 1.5, borderDash: [4, 4], pointRadius: 2,
-      tension: 0.3, fill: false, spanGaps: true, _raw: cityVals
+      borderColor: "#c4c4c4", borderWidth: 1, borderDash: [3, 3], pointRadius: 1.5,
+      pointBorderWidth: 0, tension: 0.3, fill: false, spanGaps: true, _raw: cityVals
     });
   }
   (cohortLines || []).forEach(l => {
@@ -786,8 +794,9 @@ export function p2Chart(canvasId, dates, partnerVals, cityVals, cohortLines, col
     const pMax = Math.max(1, ...partnerVals.filter(v => v != null));
     const norm = l.data.map(v => v == null ? null : (v / cMax) * pMax);
     datasets.push({
-      label: l.label, data: norm, borderColor: l.color, borderWidth: 1.5,
-      borderDash: [6, 3], pointRadius: 2, tension: 0.3, fill: false, spanGaps: true, _raw: l.data
+      label: l.label, data: norm, borderColor: l.color, borderWidth: 1,
+      borderDash: [5, 3], pointRadius: 1.5, pointBorderWidth: 0, tension: 0.3,
+      fill: false, spanGaps: true, _raw: l.data
     });
   });
   const chart = new Chart(canvas, {
@@ -813,12 +822,15 @@ export function p2Chart(canvasId, dates, partnerVals, cityVals, cohortLines, col
           display: ctx => ctx.datasetIndex === 0 && ctx.dataIndex > 0 && pWoWLabel[ctx.dataIndex] != null,
           formatter: (_, ctx) => { const w = pWoWLabel[ctx.dataIndex]; return (w >= 0 ? "+" : "") + w.toFixed(1) + (isPct ? "pp" : "%"); },
           color: ctx => wowColor(pWoW[ctx.dataIndex]),
-          font: { size: 8, weight: "bold" }, anchor: "end", align: "top", offset: 2
+          font: { size: 7, weight: "bold" }, anchor: "end", align: "top", offset: 3
         }
       },
       scales: {
-        x: { ticks: { font: { size: 8 }, maxRotation: 0 }, grid: { display: false } },
-        y: { beginAtZero: false, ticks: { font: { size: 8 }, callback: v => fmtV(v) }, grid: { color: "#f5f5f5" } }
+        x: { ticks: { font: { size: 7 }, maxRotation: 0, color: "#9ca3af" }, grid: { display: false },
+             border: { color: "#e5e7eb" } },
+        y: { beginAtZero: false, ticks: { font: { size: 7 }, color: "#9ca3af", maxTicksLimit: 5,
+             callback: v => fmtV(v) },
+             grid: { color: "#f3f4f6", lineWidth: 0.5 }, border: { display: false } }
       }
     }
   });

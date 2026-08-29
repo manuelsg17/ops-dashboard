@@ -191,9 +191,16 @@
            no convertir a clase CSS elementos toggleados desde JS). -->
       <span id="dataRefreshing" class="data-refreshing" style="display:none" title="Mostrando los últimos datos guardados mientras se descargan los actuales">↻ Actualizando…</span>
       <!-- (#dbLastUpdate se movió al sidebar, junto a "Datos cargados".) -->
-      <span id="userBadge" class="user-badge"></span>
       <span id="langSwitch"></span>
-      <button class="logout-btn" data-act="handleLogout" data-i18n="top.logout">Salir →</button>
+      <!-- El email es el disparador del menú de sesión: "Salir" era un botón
+           suelto que ocupaba ancho permanente para una acción que se usa una
+           vez por día. Mismo patrón que el desplegable de "Análisis". -->
+      <div class="user-menu-wrap" id="userMenuWrap">
+        <button id="userBadge" class="user-badge" data-act="toggleUserMenu"></button>
+        <div class="user-menu" id="userMenu">
+          <button class="user-menu-item" data-act="handleLogout" data-i18n="top.logout">Salir →</button>
+        </div>
+      </div>
     </div>
   </div>
 

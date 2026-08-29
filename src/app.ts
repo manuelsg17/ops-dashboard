@@ -75,7 +75,7 @@ export function initApp() {
   // eso el guard explícito: si el click fue sobre un botón que abre un menú, no
   // cerramos nada — de lo contrario el menú se abriría y cerraría en el mismo
   // click y no se abriría nunca.
-  const _MENU_TOGGLES = '[data-act="toggleUploadMenu"],[data-act="toggleAnalisisMenu"]';
+  const _MENU_TOGGLES = '[data-act="toggleUploadMenu"],[data-act="toggleAnalisisMenu"],[data-act="toggleUserMenu"]';
   document.addEventListener("click", e => {
     if (e.target.closest(_MENU_TOGGLES)) return;
     const m = document.getElementById("uploadMenu");
@@ -86,6 +86,8 @@ export function initApp() {
       const w = document.getElementById("navAnalisisWrap");
       if (w) w.classList.remove("menu-open");
     }
+    const u = document.getElementById("userMenu");
+    if (u) u.classList.remove("open");
   });
 
   // Cerrar dropdown al seleccionar un archivo
@@ -163,6 +165,15 @@ export function initApp() {
   // Indicador "BD actualizada hace X" del topbar — informativo, nunca bloquea
   // el arranque (ver comentario en data.js junto a fetchAndRenderLastIngest).
   if (typeof fetchAndRenderLastIngest === "function") fetchAndRenderLastIngest();
+}
+
+// Menu de sesion: el email es el disparador y "Salir" vive adentro. Antes
+// "Salir" era un boton permanente en la barra para una accion que se usa una
+// vez por dia.
+export function toggleUserMenu(e) {
+  e.stopPropagation();
+  const m = document.getElementById("userMenu");
+  if (m) m.classList.toggle("open");
 }
 
 export function toggleUploadMenu(e) {
@@ -1397,6 +1408,7 @@ registerActions({
   switchTab:       d => switchTab(d.tab),
   switchTabFromMenu: d => switchTabFromMenu(d.tab),
   toggleUploadMenu:  (d, el, e) => toggleUploadMenu(e),
+  toggleUserMenu:    (d, el, e) => toggleUserMenu(e),
   toggleAnalisisMenu:(d, el, e) => toggleAnalisisMenu(e),
   // Botón del estado de error de un chunk que no cargó (ver switchTab). Limpia
   // el guard para que el recovery de vendor.js pueda volver a intentar.

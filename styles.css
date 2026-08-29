@@ -1248,3 +1248,36 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 .up-btn        { padding: 7px 9px; }        /* ícono solo: sin ancho de texto */
 .logout-btn    { padding: 6px 12px; font-size: .78rem; }
 .user-badge    { font-size: .72rem; padding: 4px 9px; }
+
+/* ── MENÚ DE SESIÓN (email → Salir) ────────────────────────────────────────
+   "Salir" era un botón permanente en la barra para una acción que se usa una
+   vez por día. Ahora el email es el disparador y la acción vive adentro,
+   mismo patrón que el desplegable de "Análisis". */
+.user-menu-wrap { position: relative; }
+.user-menu-wrap .user-badge {
+  border: 1px solid #e5e5e5;
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px;
+  transition: border-color .15s, color .15s;
+}
+.user-menu-wrap .user-badge::after {
+  content: "▾"; font-size: .7rem; color: #bbb; flex: 0 0 auto;
+}
+.user-menu-wrap .user-badge:hover { border-color: #FF0000; color: #FF0000; }
+.user-menu {
+  display: none;
+  position: absolute; top: calc(100% + 6px); right: 0;
+  background: #fff;
+  border: 1px solid #e5e5e5; border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0,0,0,.10);
+  min-width: 150px; padding: 4px; z-index: 300;
+}
+.user-menu.open { display: block; }
+.user-menu-item {
+  display: block; width: 100%;
+  padding: 9px 14px; border-radius: 7px;
+  font-size: .82rem; font-weight: 600;
+  border: none; background: none; cursor: pointer; color: #555;
+  text-align: left;
+}
+.user-menu-item:hover { background: #fff5f5; color: #FF0000; }
