@@ -45,24 +45,31 @@ export function flowValue(serie: Serie): number {
 
 // ── Proyecciones ────────────────────────────────────────────────────────────
 
-// Factor de proyección de Active Drivers, definido por el equipo comercial:
-// se toma el período de MAYOR AD del rango (el techo demostrado del partner,
-// no el último dato que puede ser un valle puntual) y se lo multiplica por
-// este factor para estimar el cierre.
+// Proyección de Active Drivers: PLANA (= último período con dato).
 //
-// OJO — es una regla de NEGOCIO, no una fórmula estadística: no la cambies por
-// "parecer baja o alta" sin confirmarlo con Manuel. Vive acá, en un solo lugar,
-// justamente para que no haya tres versiones distintas dando vueltas.
+// Historia de la regla, para que nadie la "mejore" de memoria:
+// - jul 2026: Manuel pidió máx del rango × 1.4 (AD_PROJECTION_FACTOR).
+// - ago 2026: se BACKTESTEÓ contra la serie real de producción (ene–ago 2026,
+//   Perú total y top-8 partners, 64 casos partner-mes): el ×1.4 sobreestimaba
+//   ~46% en promedio, TODOS los meses, sin excepción — la cartera es plana o
+//   declina suave y "el pico visto × 1.4" nunca ocurre. La proyección plana
+//   erró 3.4% (país) / 4.8% (partner), la mejor de los 4 métodos probados.
+//   Manuel decidió volver a plana con esos números a la vista.
+// El factor queda exportado por compatibilidad y para quien quiera dibujar una
+// línea de "potencial" (aspiracional, no proyección).
 export const AD_PROJECTION_FACTOR = 1.4;
 
 /**
  * Proyección de una métrica SNAPSHOT (Active Drivers y equivalentes):
- * máximo del rango × AD_PROJECTION_FACTOR.
+ * PLANA — el cierre estimado del mes es el nivel actual (último período con
+ * dato). Sobre una serie agregada, el último período agregado.
  */
-export function projectSnapshot(serie: Serie, factor: number = AD_PROJECTION_FACTOR): number {
-  let max = 0;
-  for (const v of serie) if (v != null && !isNaN(v) && v > max) max = v;
-  return max * factor;
+export function projectSnapshot(serie: Serie): number {
+  for (let i = serie.length - 1; i >= 0; i--) {
+    const v = serie[i];
+    if (v != null && !isNaN(v)) return v;
+  }
+  return 0;
 }
 
 /**

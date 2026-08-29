@@ -151,9 +151,10 @@ export function projA(vals, daysElapsed, daysRemaining) {
   return projectFlow(total, daysElapsed, daysRemaining);
 }
 
-// Proyección de un SNAPSHOT (Active Drivers): máximo de la serie × 1.4, la
-// regla de negocio definida por Manuel. Punto único para las ~9 llamadas del
-// dashboard, para que Metas, el deck y el portal no puedan divergir.
+// Proyección de un SNAPSHOT (Active Drivers): PLANA (= último período), la
+// regla vigente desde ago 2026 — historial y backtest en domain/metrics.ts.
+// Punto único para las ~9 llamadas del dashboard, para que Metas, el deck y el
+// portal no puedan divergir.
 //
 // NO lleva gate por escala, y esto es deliberado — se intentó y se revirtió el
 // 29-ago-2026. El intento fue: "en escala mensual el período está cerrado, no
@@ -166,9 +167,9 @@ export function projA(vals, daysElapsed, daysRemaining) {
 //   2. Ata una regla de negocio al estado de la UI: la misma pregunta ("¿dónde
 //      cierra este partner?") devolvía 210 parado en semanal y 120 en mensual,
 //      para la MISMA serie [100,150,120].
-//   3. Con proyección = valor actual, la marca de proyección deja de moverse en
-//      las barras — exactamente el bug que ya se había corregido en la slide
-//      "Avance vs Meta Combinado" (ver CLAUDE.md, fase 4 de jul 2026).
+//   3. (Con la regla plana de ago 2026, proyección == FACT por definición y la
+//      marca coincide con el avance; el punto sigue documentado porque el gate
+//      por escala seguiría mal si la regla vuelve a cambiar.)
 //
 // Lo que sí estaba mal era el TOOLTIP de metaResCard, que afirmaba "Proyección
 // = valor actual (mes ya cerrado)" para TODAS las métricas cuando eso solo vale

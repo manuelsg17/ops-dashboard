@@ -28,11 +28,16 @@ describe("snapshot vs flujo", () => {
 });
 
 describe("proyección de Active Drivers", () => {
-  it("usa el MÁXIMO del rango × 1.4, no el último valor", () => {
-    // Regla de negocio explícita: el techo demostrado, no el último dato (que
-    // puede ser un valle puntual y subestimaría al partner).
-    expect(projectSnapshot([100, 150, 120])).toBeCloseTo(150 * 1.4, 10);
-    expect(AD_PROJECTION_FACTOR).toBe(1.4);
+  it("es PLANA: el último período con dato, no el máximo ni ×1.4", () => {
+    // Decisión de Manuel (ago 2026) tras backtest contra producción: el máx
+    // ×1.4 sobreestimaba ~46% todos los meses; la plana erró 3.4%. Ver el
+    // comentario largo en metrics.ts antes de volver a tocar esto.
+    expect(projectSnapshot([100, 150, 120])).toBe(120);
+    expect(AD_PROJECTION_FACTOR).toBe(1.4); // queda exportado como "potencial"
+  });
+
+  it("ignora nulls al final: proyecta el último dato REAL", () => {
+    expect(projectSnapshot([100, 150, null as any])).toBe(150);
   });
 
   it("una serie vacía o toda en cero proyecta 0, no NaN", () => {
@@ -68,7 +73,7 @@ describe("una sola regla por métrica (Metas, Rendimiento y el deck deben coinci
     const desdeMetas = projectSnapshot(serie);
     const desdeDeck  = projectSnapshot(serie);
     expect(desdeMetas).toBe(desdeDeck);
-    expect(desdeMetas).toBeCloseTo(210, 10);
+    expect(desdeMetas).toBe(120);
   });
 
   it("proyectar un flujo desde la serie o desde el total da lo mismo", () => {
@@ -80,34 +85,30 @@ describe("una sola regla por métrica (Metas, Rendimiento y el deck deben coinci
     expect(projectFlow(total, 10, 20)).toBeCloseTo(900, 10);
   });
 
-  it("la proyección de un snapshot NO se puede sumar hacia arriba", () => {
-    // Caso real (Lizzo, jul 2026): Lima picó 2490 en una semana y Arequipa 229
-    // en OTRA. Metas sumaba los máximos por ciudad → 2769 × 1.4 = 3876.6, un
-    // número que nunca ocurrió. El máximo de la serie TOTAL es 2762 → 3866.8,
-    // que sí es una semana real. La regla dice "la semana con el número más
-    // alto de AD", así que la única lectura fiel es la segunda.
+  it("con proyección PLANA, agregar por ciudad y proyectar da lo mismo", () => {
+    // Con el máx ×1.4 esto NO valía (caso Lizzo jul 2026: Lima picaba una
+    // semana y Arequipa otra → la suma de máximos era un número que nunca
+    // ocurrió; obligó a proyectar sobre la serie agregada vía snapSeries).
+    // Con la plana la propiedad se recupera: la suma de los últimos períodos
+    // por ciudad ES el último período del total. snapSeries queda inofensivo.
     const lima     = [2490, 2450, 2400];
     const arequipa = [222, 229, 219];
     const trujillo = [50, 39, 40];
     const total    = lima.map((_, i) => lima[i] + arequipa[i] + trujillo[i]);
 
-    const sumaDeMaximos = projectSnapshot(lima) + projectSnapshot(arequipa) + projectSnapshot(trujillo);
-    const maximoDelTotal = projectSnapshot(total);
-
-    expect(maximoDelTotal).toBeCloseTo(2762 * 1.4, 6);
-    expect(sumaDeMaximos).toBeCloseTo(2769 * 1.4, 6);
-    // Sumar hacia arriba SIEMPRE sobre-estima (o empata, si todo pica el mismo
-    // período). Nunca puede dar menos.
-    expect(sumaDeMaximos).toBeGreaterThan(maximoDelTotal);
+    const sumaDePlanas  = projectSnapshot(lima) + projectSnapshot(arequipa) + projectSnapshot(trujillo);
+    const planaDelTotal = projectSnapshot(total);
+    expect(sumaDePlanas).toBe(planaDelTotal);
+    expect(planaDelTotal).toBe(2659);
   });
 
-  it("el FACT de un snapshot es el último período, no el máximo", () => {
-    // Distinción deliberada: el FACT responde "¿cuántos hay hoy?" y la
-    // PROYECCIÓN responde "¿a cuánto puede llegar?". Colapsarlas fue el origen
-    // de la divergencia.
+  it("el FACT y la proyección PLANA de un snapshot coinciden a fin de mes", () => {
+    // Con la plana, "¿cuántos hay hoy?" y "¿en cuánto cerrará el mes?" dan el
+    // mismo número a propósito: el backtest mostró que el nivel actual es el
+    // mejor estimador del cierre en una cartera plana (error medio 3.4%).
     const serie = [100, 150, 120];
     expect(snapshotValue(serie)).toBe(120);
-    expect(projectSnapshot(serie)).toBeCloseTo(210, 10);
+    expect(projectSnapshot(serie)).toBe(120);
   });
 });
 

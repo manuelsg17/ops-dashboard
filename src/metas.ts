@@ -173,7 +173,7 @@ export function _metasFleetActuals(from, to, selSet, cityFilter) {
 }
 // Actuales TukTuk por (partner|||city): AD y Brandeados son SNAPSHOT (último
 // período); N+R y SH son FLUJO (Σ del rango). Se guardan también las SERIES por
-// período: sin ellas no se puede proyectar (la de AD alimenta el máx × 1.4 y las
+// período: sin ellas no se puede proyectar (la de AD alimenta la proyección plana y las
 // de flujo el ritmo lineal). Ver src/domain/metrics.ts.
 export function _metasTkActuals(from, to, selSet, cityFilter) {
   const by = new Map();
@@ -626,7 +626,7 @@ export function _renderMetasTk(mesName, from, to, selSet, cityFilter, kamFilter,
         meta: m => m.mtkNR, act: a => a.nr, proj: a => a.projNr, fmtFn: v => fmt(v) },
       { label: t("metas.brandeados"), sub: t("metas.ultimoPeriodo"), color: "#0891b2",
         // Brandeados NO lleva snapSeries: su proyección es PLANA (= nivel
-        // actual), no máx × 1.4 — el factor 1.4 es una regla específica de
+        // actual), igual que AD desde ago 2026 — la nota histórica del ×1.4 vive en
         // Active Drivers, no de cualquier snapshot.
         meta: m => m.mtkCars, act: a => a.cars, proj: a => a.cars, fmtFn: v => fmt(v) },
       { label: t("metas.horasConexion"), sub: t("metas.acumulado"), color: "#8b5cf6",
@@ -825,7 +825,7 @@ export function _renderMetasImpl() {
       lastAD: sorted[sorted.length - 1]?.ad || 0,
       nrV,
       shV,
-      adV,      // serie por periodo: alimenta projectSnapshot (max x 1.4)
+      adV,      // serie por periodo: alimenta projectSnapshot (proyeccion plana)
       adByDate  // misma serie keyed por fecha, para re-agregar por nivel
     };
   }
@@ -975,9 +975,9 @@ export function _renderMetasImpl() {
     const sorted = cityDates.map(d => byDate[d]);
     // AD = SNAPSHOT: el FACT es el ÚLTIMO período (nivel actual), no el máx del
     // rango — así cuadra con la slide del deck y con KPIs por Nivel. La
-    // PROYECCIÓN sí usa el máx × 1.4 (regla de negocio, ver
-    // AD_PROJECTION_FACTOR en domain/metrics.ts): el techo demostrado del
-    // partner estima mejor el cierre que un último dato que puede ser un valle.
+    // PROYECCIÓN es PLANA desde ago 2026 (backtest en domain/metrics.ts), así
+    // que coincide con el FACT; el pipeline se conserva por si la regla vuelve
+    // a cambiar.
     // N+R/SH son flujos: se acumulan y se proyectan por ritmo lineal.
     const lastAD = sorted.length ? sorted[sorted.length - 1].ad : 0;
     const crAD = lastAD;
@@ -1159,19 +1159,17 @@ export function metaResCard(label, sub, real, meta, proj, color, fmtFn) {
     : "";
   const cumplTip = t("metas.cumplTip", { f: F(real), p: F(meta) });
   // Dos reglas distintas y a propósito: los FLUJOS (N+R, horas) se extrapolan
-  // por ritmo del mes; los SNAPSHOTS (Active Drivers) usan el máximo del rango
-  // × 1.4. Ver domain/metrics.ts.
-  // El tooltip anterior decía "Proyección = valor actual (mes ya cerrado)" para
-  // TODA la tarjeta cuando la escala es mensual. Eso solo es cierto para los
-  // FLUJOS (projA no extrapola en mensual); Active Drivers SIEMPRE usa máx × 1.4,
-  // en cualquier escala. Esa imprecisión llevó a "corregir" el cálculo de AD
-  // para que coincidiera con el texto — al revés de lo que correspondía (ver la
-  // nota larga en projAD, data.ts). Ahora el texto dice lo que el código hace.
+  // por ritmo del mes; los SNAPSHOTS (Active Drivers) proyectan PLANO (= nivel
+  // del último período). Ver el historial de la regla en domain/metrics.ts —
+  // el máx × 1.4 anterior se retiró tras backtestearlo contra producción.
+  // El texto del tooltip TIENE que decir lo que el código hace: una vez se
+  // "corrigió" el cálculo para que coincidiera con un tooltip impreciso, al
+  // revés de lo que correspondía.
   const projTip = STATE.curMode === "mensual"
     ? `Flujos (N+R, horas): no se extrapolan, el período mensual ya viene completo. `
-      + `Active Drivers: período de mayor AD del rango × 1.4.`
+      + `Active Drivers: nivel del último período (proyección plana).`
     : `Flujos (N+R, horas): total acumulado × días del mes / días transcurridos. `
-      + `Active Drivers: período de mayor AD del rango × 1.4.`;
+      + `Active Drivers: nivel del último período (proyección plana).`;
   return `
     <div class="meta-sum-card">
       <div class="mcard-label">${label}</div>

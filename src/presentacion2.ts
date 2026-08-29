@@ -1169,15 +1169,11 @@ export function p2ActualsMTD(partner, scopeCity, monthDates) {
 export function p2ProjMTD(act, lastDate) {
   const { daysElapsed, daysRemaining } = calcProjectionDays(lastDate);
   // AD es SNAPSHOT (nivel), no un flujo acumulado, así que NO se extrapola por
-  // días restantes como N+R y las horas. Su proyección es el período de MAYOR AD
-  // del rango × 1.4 (AD_PROJECTION_FACTOR en domain/metrics.ts) — regla de
-  // negocio definida por Manuel, la misma que usa la pestaña Metas.
-  //
-  // OJO: acá antes la proyección era plana (= último período) con un comentario
-  // que argumentaba explícitamente CONTRA el ×1.4. Eso convertía al deck y a
-  // Metas en dos respuestas distintas a la misma pregunta para el mismo partner
-  // y el mismo mes. La regla vive ahora en UN solo lugar; si hay que discutirla,
-  // se discute allá, no se bifurca acá.
+  // días restantes como N+R y las horas. Su proyección es PLANA (= último
+  // período) desde ago 2026 — decisión de Manuel tras backtest, historial en
+  // domain/metrics.ts. La regla vive en UN solo lugar (projectSnapshot); si hay
+  // que discutirla, se discute allá, no se bifurca acá — bifurcarla ya causó
+  // una vez que el deck y Metas dieran números distintos al mismo partner.
   return {
     ad: projAD(act.adV || []),
     nr: projectFlow(act.nr, daysElapsed, daysRemaining),
@@ -1397,11 +1393,11 @@ export function buildSlide2AvanceCombinado(partner, idx) {
   const noData = (!taxiDates.length && !tkDates.length) || !metasLoaded;
 
   // Proyección de AD COMBINADA: la serie taxi+tk se suma POR FECHA y se
-  // proyecta el máximo de ESA serie (×1.4) — sumar la proyección de cada
-  // línea (máx(taxi)+máx(tk)) sobre-estima siempre que cada línea picó en
-  // semanas distintas: es la regla "una proyección de snapshot no se suma
-  // hacia arriba" (caso Lizzo, jul 2026), la misma que ya aplica Metas
-  // Combinado — sin esto, deck y Metas daban números distintos.
+  // proyecta ESA serie (plana desde ago 2026 = último período del total). Con
+  // la regla plana sumar por línea daría lo mismo si las fechas alinean, pero
+  // se conserva el camino por la serie agregada: es el único robusto si la
+  // regla vuelve a cambiar (con el máx ×1.4 anterior, sumar por línea
+  // sobre-estimaba — caso Lizzo, jul 2026 — y deck y Metas divergían).
   const _combAdByDate = new Map();
   taxiDates.forEach((d, i) => _combAdByDate.set(d, (_combAdByDate.get(d) || 0) + (taxiAct.adV[i] || 0)));
   tkDates.forEach((d, i)   => _combAdByDate.set(d, (_combAdByDate.get(d) || 0) + (tkAct.adV[i]   || 0)));
