@@ -61,15 +61,25 @@ export const AD_PROJECTION_FACTOR = 1.4;
 
 /**
  * Proyección de una métrica SNAPSHOT (Active Drivers y equivalentes):
- * PLANA — el cierre estimado del mes es el nivel actual (último período con
- * dato). Sobre una serie agregada, el último período agregado.
+ * TENDENCIA del rango extrapolada `periodsRemaining` períodos hacia el fin
+ * de mes — nivel actual + pendiente media × períodos restantes, nunca < 0.
+ *
+ * Sin `periodsRemaining` (o mes cerrado) degrada a PLANA (= nivel actual).
+ * Ajuste de ago 2026 (2da vuelta): la plana pura era la más precisa del
+ * backtest (3.4%) pero proyección == avance en TODAS las tarjetas — Manuel
+ * la reportó como "no veo la proyección". La tendencia erró 4.2% en el mismo
+ * backtest (2do mejor método, y el mejor en meses de caída sostenida) y sí
+ * produce un cierre distinto del nivel actual. El ×1.4 sigue retirado
+ * (~46% de error, ver arriba).
  */
-export function projectSnapshot(serie: Serie): number {
-  for (let i = serie.length - 1; i >= 0; i--) {
-    const v = serie[i];
-    if (v != null && !isNaN(v)) return v;
-  }
-  return 0;
+export function projectSnapshot(serie: Serie, periodsRemaining: number = 0): number {
+  const vals: number[] = [];
+  for (const v of serie) if (v != null && !isNaN(v)) vals.push(v);
+  if (!vals.length) return 0;
+  const last = vals[vals.length - 1];
+  if (periodsRemaining <= 0 || vals.length < 2) return last;
+  const slope = (last - vals[0]) / (vals.length - 1);
+  return Math.max(0, last + slope * periodsRemaining);
 }
 
 /**

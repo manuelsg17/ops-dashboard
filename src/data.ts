@@ -151,31 +151,40 @@ export function projA(vals, daysElapsed, daysRemaining) {
   return projectFlow(total, daysElapsed, daysRemaining);
 }
 
-// Proyección de un SNAPSHOT (Active Drivers): PLANA (= último período), la
-// regla vigente desde ago 2026 — historial y backtest en domain/metrics.ts.
-// Punto único para las ~9 llamadas del dashboard, para que Metas, el deck y el
-// portal no puedan divergir.
+// Proyección de un SNAPSHOT (Active Drivers): TENDENCIA del rango extrapolada
+// al fin de mes — regla vigente desde ago 2026 (2da vuelta), historial y
+// backtest en domain/metrics.ts. Punto único para las ~9 llamadas del
+// dashboard, para que Metas, el deck y el portal no puedan divergir.
 //
-// NO lleva gate por escala, y esto es deliberado — se intentó y se revirtió el
-// 29-ago-2026. El intento fue: "en escala mensual el período está cerrado, no
-// se proyecta", copiando el gate que projA() sí tiene para los FLUJOS. Está mal
-// por tres motivos:
+// `lastDate` (opcional) es la fecha del ÚLTIMO período de la serie: con ella
+// se calculan los períodos que faltan del mes (escala-aware, vía
+// calcProjectionDays). Sin fecha no se inventa horizonte: degrada a plana.
 //
-//   1. `curMode === "mensual"` NO significa "el período cerró": significa que
-//      los datos están agrupados por mes. El último mes puede estar EN CURSO, y
-//      es justo cuando más hace falta proyectar.
-//   2. Ata una regla de negocio al estado de la UI: la misma pregunta ("¿dónde
-//      cierra este partner?") devolvía 210 parado en semanal y 120 en mensual,
-//      para la MISMA serie [100,150,120].
-//   3. (Con la regla plana de ago 2026, proyección == FACT por definición y la
-//      marca coincide con el avance; el punto sigue documentado porque el gate
-//      por escala seguiría mal si la regla vuelve a cambiar.)
-//
-// Lo que sí estaba mal era el TOOLTIP de metaResCard, que afirmaba "Proyección
-// = valor actual (mes ya cerrado)" para TODAS las métricas cuando eso solo vale
-// para los flujos. Corregido allá, no acá.
-export function projAD(serie) {
-  return projectSnapshot(serie);
+// OJO — el gate "en mensual no se proyecta" se intentó y se revirtió el
+// 29-ago-2026: `curMode === "mensual"` NO significa "el período cerró" (el
+// último mes puede estar EN CURSO), y ata una regla de negocio al estado de
+// la UI. El horizonte correcto sale del CALENDARIO (daysRemaining), que en un
+// mes cerrado da 0 y degrada a plana solo.
+export function projAD(serie, lastDate) {
+  // Redondeado: se proyectan CONDUCTORES; "2.768,57 conductores" resta seriedad.
+  return Math.round(projectSnapshot(serie, _periodsLeft(lastDate)));
+}
+
+// Períodos del mes que aún no ocurrieron, en la unidad de la escala activa.
+// Conveniencia para series como mapa fecha→valor (metas trabaja así): ordena
+// por fecha y usa la ÚLTIMA como ancla del horizonte de proyección.
+export function projADbyDate(map) {
+  const keys = Object.keys(map || {}).sort();
+  return projAD(keys.map(k => map[k]), keys[keys.length - 1]);
+}
+
+export function _periodsLeft(lastDate) {
+  if (!lastDate) return 0;
+  const { daysRemaining } = calcProjectionDays(lastDate);
+  if (!daysRemaining) return 0;
+  if (STATE.curMode === "diario") return daysRemaining;
+  if (STATE.curMode === "mensual") return 0;   // calcProjectionDays ya da 0, cinturón
+  return daysRemaining / 7;                    // semanal (puede ser fracción)
 }
 
 export function sumR(rows, fn) { return rows.reduce((s, r) => s + fn(r), 0); }

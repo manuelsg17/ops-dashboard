@@ -28,12 +28,23 @@ describe("snapshot vs flujo", () => {
 });
 
 describe("proyección de Active Drivers", () => {
-  it("es PLANA: el último período con dato, no el máximo ni ×1.4", () => {
+  it("sin horizonte es PLANA: el último período con dato, no el máximo ni ×1.4", () => {
     // Decisión de Manuel (ago 2026) tras backtest contra producción: el máx
-    // ×1.4 sobreestimaba ~46% todos los meses; la plana erró 3.4%. Ver el
-    // comentario largo en metrics.ts antes de volver a tocar esto.
+    // ×1.4 sobreestimaba ~46% todos los meses. Ver el comentario largo en
+    // metrics.ts antes de volver a tocar esto.
     expect(projectSnapshot([100, 150, 120])).toBe(120);
     expect(AD_PROJECTION_FACTOR).toBe(1.4); // queda exportado como "potencial"
+  });
+
+  it("con horizonte extrapola la TENDENCIA media del rango", () => {
+    // [100,110,120]: pendiente +10/período; faltan 2 → 140.
+    expect(projectSnapshot([100, 110, 120], 2)).toBe(140);
+    // en caída no se recorta la tendencia (el churn hay que verlo)…
+    expect(projectSnapshot([120, 110, 100], 2)).toBe(80);
+    // …pero nunca proyecta negativo.
+    expect(projectSnapshot([50, 10], 3)).toBe(0);
+    // un solo dato no tiene pendiente: plana.
+    expect(projectSnapshot([100], 3)).toBe(100);
   });
 
   it("ignora nulls al final: proyecta el último dato REAL", () => {

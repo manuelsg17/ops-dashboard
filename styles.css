@@ -1353,17 +1353,7 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
   text-transform: uppercase; color: #888; text-align: center;
   padding: 2px 4px 3px; border-bottom: 1px solid #e5e5e5;
 }
-.p2-grp-start { border-left: 2px solid #e5e5e5; }
-
-/* Encuadre de los slides "Avance": el contenido se centra verticalmente en la
-   hoja en vez de apilarse arriba dejando el tercio inferior vacío. */
-.agy-style-366 { justify-content: center; }
-.agy-style-397 { align-items: center; }   /* tarjetas compactas centradas, no estiradas hasta el pie */
-/* Data Raw del deck: tablas centradas verticalmente cuando sobra hoja.
-   "safe center" evita el clásico bug de center+overflow (con 3+ ciudades el
-   contenido desborda y un center a secas dejaría el tope inaccesible). */
-.agy-style-375 { display: flex; flex-direction: column; justify-content: safe center; gap: 10px; }
-/* Marca de proyección de las barras de Metas (mismo criterio que .p2-proj-tick) */
+.p2-grp-start { border-left: 2px solid #e5e5e5; }/* Marca de proyección de las barras de Metas (mismo criterio que .p2-proj-tick) */
 .bar-tick {
   position: absolute; top: 0; bottom: 0; width: 2px;
   background: #111; opacity: .5;

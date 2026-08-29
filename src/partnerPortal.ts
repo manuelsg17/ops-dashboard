@@ -247,7 +247,7 @@ function _portalMetas(line, rows) {
   return secH("🎯", "#8b5cf6", `Tus metas ${lbl} — ${escapeHTML(mes)}`.replace("  ", " "),
       "Avance del mes contra el objetivo acordado con tu KAM · la barra clara es la proyección al cierre", "") +
     `<div class="section">
-      ${_portalMetaRow("Conductores Activos", adAct, mA, projAD(adSerie), fmt)}
+      ${_portalMetaRow("Conductores Activos", adAct, mA, projAD(adSerie, last), fmt)}
       ${_portalMetaRow("Nuevos + Reactivados", nrAct, mNR, projectFlow(nrAct, daysElapsed, daysRemaining), fmt)}
       ${_portalMetaRow("Horas de Conexión", shAct, mH, projectFlow(shAct, daysElapsed, daysRemaining), fmtSmart)}
     </div>`;

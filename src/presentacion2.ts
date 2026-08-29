@@ -946,7 +946,7 @@ export function buildSlide2Matrix(partner, dates, idx) {
         </div>`;
     }).join("");
     return `
-      <div style="display:flex;gap:6px;flex:1 1 0;min-height:0;max-height:220px;border-left:3px solid ${lv.color};padding-left:6px">
+      <div style="display:flex;gap:6px;flex:1 1 0;min-height:0;max-height:270px;border-left:3px solid ${lv.color};padding-left:6px">
         <div class="agy-style-363"><span style="font-weight:800;font-size:.78rem;color:${lv.color};line-height:1.1">${escapeHTML(lv.label)}</span></div>
         <div class="agy-style-364">${cards}</div>
       </div>`;
@@ -1207,7 +1207,7 @@ export function p2ProjMTD(act, lastDate) {
   // que discutirla, se discute allá, no se bifurca acá — bifurcarla ya causó
   // una vez que el deck y Metas dieran números distintos al mismo partner.
   return {
-    ad: projAD(act.adV || []),
+    ad: projAD(act.adV || [], lastDate),
     nr: projectFlow(act.nr, daysElapsed, daysRemaining),
     sh: projectFlow(act.sh, daysElapsed, daysRemaining)
   };
@@ -1448,7 +1448,8 @@ export function buildSlide2AvanceCombinado(partner, idx) {
   const _combAdByDate = new Map();
   taxiDates.forEach((d, i) => _combAdByDate.set(d, (_combAdByDate.get(d) || 0) + (taxiAct.adV[i] || 0)));
   tkDates.forEach((d, i)   => _combAdByDate.set(d, (_combAdByDate.get(d) || 0) + (tkAct.adV[i]   || 0)));
-  const _combProjAD = projAD([..._combAdByDate.keys()].sort().map(d => _combAdByDate.get(d)));
+  const _combKeys = [..._combAdByDate.keys()].sort();
+  const _combProjAD = projAD(_combKeys.map(d => _combAdByDate.get(d)), _combKeys[_combKeys.length - 1]);
 
   const defs = [
     { label: es ? "Conductores Activos" : "Active Drivers",

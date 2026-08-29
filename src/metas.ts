@@ -229,7 +229,7 @@ function _finishSeries(e) {
   const adS = seriesByDate(e._ad);
   e.ad     = snapshotValue(adS);
   e.cars   = e._cars ? snapshotValue(seriesByDate(e._cars)) : 0;
-  e.projAd = projAD(adS);
+  e.projAd = projADbyDate(e._ad);
   e.projNr = projectFlow(e.nr, daysElapsed, daysRemaining);
   e.projSh = projectFlow(e.sh, daysElapsed, daysRemaining);
   // La serie por fecha SE CONSERVA (no se borra) porque la proyección de un
@@ -359,7 +359,7 @@ function _metasAggKpi(kpi, units) {
     const pv = (u.a && kpi.proj) ? kpi.proj(u.a) : null;
     if (pv != null) { p += pv; hasP = true; }
   });
-  if (serieAgregada && hasP) p = projAD(seriesByDate(serieAgregada));
+  if (serieAgregada && hasP) p = projADbyDate(serieAgregada);
   return {
     actual: hasA ? a : null,
     meta:   hasM ? m : null,
@@ -845,7 +845,7 @@ export function _renderMetasImpl() {
       combos.push({ partner: p.partner, kam: p.kam, city: "Todas",
         mA: p.mA, mNR: p.mNR, mH: p.mH,
         ad: r.lastAD, nr: r.nr, sh: r.sh,
-        projAD: projAD(r.adV),
+        projAD: projADbyDate(r.adByDate),
         adByDate: r.adByDate,
         projNR: projA(r.nrV, daysElapsed, daysRemaining),
         projSH: projA(r.shV, daysElapsed, daysRemaining) });
@@ -856,7 +856,7 @@ export function _renderMetasImpl() {
       combos.push({ partner: m.partner, kam: m.kam, city: m.city,
         mA: m.mA, mNR: m.mNR, mH: m.mH,
         ad: r.lastAD, nr: r.nr, sh: r.sh,
-        projAD: projAD(r.adV),
+        projAD: projADbyDate(r.adByDate),
         adByDate: r.adByDate,
         projNR: projA(r.nrV, daysElapsed, daysRemaining),
         projSH: projA(r.shV, daysElapsed, daysRemaining) });
@@ -881,7 +881,7 @@ export function _renderMetasImpl() {
       city: cityFilter === "all" ? t("metas.sinPlan") : cityFilter,
       mA: 0, mNR: 0, mH: 0,
       ad: r.lastAD, nr: r.nr, sh: r.sh,
-      projAD: projAD(r.adV),
+      projAD: projADbyDate(r.adByDate),
       adByDate: r.adByDate,
       projNR: projA(r.nrV, daysElapsed, daysRemaining),
       projSH: projA(r.shV, daysElapsed, daysRemaining),
@@ -906,7 +906,7 @@ export function _renderMetasImpl() {
       const m = c.adByDate || {};
       Object.keys(m).forEach(d => { merged[d] = (merged[d] || 0) + m[d]; });
     });
-    return projAD(seriesByDate(merged));
+    return projADbyDate(merged);
   };
   const tPAD= _projADde(combos);
   const tPNR= combos.reduce((s, c) => s + c.projNR, 0);
@@ -985,7 +985,7 @@ export function _renderMetasImpl() {
     const crSH = sorted.reduce((s, v) => s + v.sh, 0);
     const nrV = sorted.map(v => v.nr);
     const shV = sorted.map(v => v.sh);
-    const cpAD = projAD(sorted.map(v => v.ad));
+    const cpAD = projAD(sorted.map(v => v.ad), cityDates[cityDates.length - 1]);
     const cpNR = projA(nrV, daysElapsed, daysRemaining);
     const cpSH = projA(shV, daysElapsed, daysRemaining);
 
