@@ -377,12 +377,20 @@
 .agy-style-375 { flex:1;min-height:0;overflow:auto }
 .agy-style-376 { flex:1;min-width:0;background:#f0f9ff;border:1px dashed #bae6fd;border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:2px }
 .agy-style-377 { display:flex;justify-content:space-between;align-items:center;gap:4px }
-.agy-style-378 { font-size:.58rem;color:#0284c7;font-weight:700;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
+/* Titulos de KPI del deck (slides "Avance Combinado" y "Avance vs Meta").
+   Iban en una linea con ellipsis y se cortaban: "OWNED FLEET ACTIVE CA...",
+   "INTERNAL FLEET SH/AU...". En un deck que se le manda al partner y al equipo
+   internacional eso se lee mal. Ahora envuelven a 2 lineas.
+   El min-height de 2 lineas NO es decorativo: sin el, una tarjeta de titulo
+   corto deja su valor 10px mas arriba que la vecina y la fila se ve torcida.
+   Bajar el font-size en su lugar tampoco servia: con mas ciudades la tarjeta
+   se angosta y el corte vuelve. */
+.agy-style-378 { font-size:.58rem;color:#0284c7;font-weight:700;text-transform:uppercase;overflow:hidden;white-space:normal;line-height:1.15;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;min-height:2.3em }
 .agy-style-379 { font-weight:900;font-size:1rem;color:#111 }
 .agy-style-380 { font-size:.58rem;color:#0284c7;font-style:italic }
 .agy-style-381 { flex:1;min-width:0;background:#fafafa;border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:4px }
 .agy-style-382 { display:flex;justify-content:space-between;align-items:baseline;gap:4px }
-.agy-style-383 { font-size:.58rem;color:#aaa;font-weight:700;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
+.agy-style-383 { font-size:.58rem;color:#aaa;font-weight:700;text-transform:uppercase;overflow:hidden;white-space:normal;line-height:1.15;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;min-height:2.3em }
 .agy-style-384 { display:flex;align-items:baseline;gap:5px }
 .agy-style-385 { font-weight:900;font-size:1.05rem;color:#111 }
 .agy-style-386 { font-size:.62rem;color:#999 }
