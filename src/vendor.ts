@@ -78,6 +78,47 @@ window.addEventListener("unhandledrejection", e => {
   _avisarVersionNueva();
 });
 
+// ── DETECCIÓN PROACTIVA DE VERSIÓN NUEVA ────────────────────────────────────
+// El aviso de arriba es REACTIVO: solo salta cuando un import() falla. Pero
+// prefetchViewModules precarga todos los chunks al arrancar, así que para
+// cuando se publica un deploy el navegador ya los tiene en memoria y nunca
+// falla nada — el aviso no aparecía nunca (reportado por Manuel: "en la
+// versión de escritorio hasta ahora no aparece el mensaje para actualizar").
+//
+// Esto lo detecta ANTES de que rompa: Vite le pone un hash al bundle
+// (index-CpXbUpaA.js), así que basta comparar el src del <script> del
+// index.html publicado contra el que cargó esta pestaña.
+//
+// Condiciones para no molestar ni gastar de más:
+//   · solo con la pestaña VISIBLE (nadie necesita el aviso en una pestaña de
+//     fondo, y evita pedidos innecesarios con el equipo en suspensión);
+//   · cada 5 minutos, y además al volver a la pestaña;
+//   · cache: "no-store", si no el propio navegador devuelve el HTML viejo;
+//   · falla en silencio: es una comodidad, no una funcionalidad.
+const _VERSION_CHECK_MS = 5 * 60 * 1000;
+function _scriptSrcActual() {
+  const s = document.querySelector('script[type="module"][src]');
+  return s ? s.getAttribute("src") : null;
+}
+async function _chequearVersionNueva() {
+  if (document.visibilityState !== "visible") return;
+  if (document.getElementById("newVersionBar")) return;      // ya está avisado
+  const actual = _scriptSrcActual();
+  if (!actual || actual.includes("/src/")) return;           // dev server: sin hash, nada que comparar
+  try {
+    const res = await fetch(`${location.pathname}?_v=${Date.now()}`, { cache: "no-store" });
+    if (!res.ok) return;
+    const html = await res.text();
+    const m = html.match(/<script[^>]+type="module"[^>]+src="([^"]+)"/);
+    if (m && m[1] && m[1] !== actual) _avisarVersionNueva();
+  } catch (_) { /* sin red o CORS raro: no es asunto del usuario */ }
+}
+setInterval(_chequearVersionNueva, _VERSION_CHECK_MS);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") _chequearVersionNueva();
+});
+window._chequearVersionNueva = _chequearVersionNueva;   // para poder probarlo a mano
+
 // ── Vercel Speed Insights ──────────────────────────────────────────────────
 // Integración "Other framework" (no hay paquete Preact/vanilla dedicado): el
 // script lo sirve Vercel mismo en /_vercel/speed-insights/script.js, así que

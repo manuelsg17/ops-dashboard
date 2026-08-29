@@ -76,7 +76,12 @@ body {
   box-shadow: 0 2px 8px rgba(0,0,0,.06);
 }
 .topbar-left  { display: flex; align-items: center; gap: 14px; padding: 10px 0; }
-.topbar-right { display: flex; align-items: center; gap: 8px; padding: 10px 0; flex-wrap: wrap; }
+/* nowrap, NO wrap: con wrap, apenas faltaban unos píxeles el botón "Salir" se
+   caía a una segunda fila y la barra pasaba a ocupar el doble de alto — que es
+   como se veía en el iPad (1280px de ancho, donde el layout compacto de
+   <=1024px ni siquiera aplica). Lo que sobra se resuelve achicando piezas en
+   las media queries de abajo, no partiendo la barra. */
+.topbar-right { display: flex; align-items: center; gap: 8px; padding: 10px 0; flex-wrap: nowrap; }
 
 .logo {
   width: 36px; height: 36px;
@@ -1060,6 +1065,23 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
    ══════════════════════════════════════════════════════════════════════════ */
 /* Fuera de tablet el velo no existe: el sidebar empuja, no tapa. */
 .sb-veil { display: none; }
+
+/* ── FRANJA INTERMEDIA: 1025–1400px ────────────────────────────────────────
+   iPads grandes (el iPad Pro de Manuel reporta 1280 de ancho) y laptops
+   chicas. Acá NO hace falta el sidebar flotante —hay ancho de sobra— pero la
+   topbar sí queda al límite: con el email completo, las 3 banderas y el botón
+   de subir, "Salir" se caía a una segunda fila y la barra doblaba su alto.
+   Solo se compacta la barra; el layout de abajo sigue siendo el de escritorio. */
+@media (max-width: 1400px) {
+  .brand-sub    { display: none; }          /* "Partner Performance Analytics" */
+  .topbar       { padding: 0 14px; }
+  .topbar-left  { gap: 10px; }
+  .nav-tabs     { margin-left: 10px; }
+  .nav-tab      { padding: 8px 11px; font-size: .8rem; white-space: nowrap; }
+  .user-badge   { max-width: 120px; }
+  .up-btn       { padding: 7px 11px; }
+  #langSwitch button { padding: 4px 7px !important; }
+}
 
 @media (max-width: 1024px) {
   /* ── 1. Topbar en una sola fila ─────────────────────────────────────── */
