@@ -120,7 +120,7 @@
       <!-- Fleet Externo fuera del menú hasta tener datos reales (scaffold pausado; tab-panel y script se conservan). -->
     </div>
   </div>
-  <button class="nav-tab" data-tab="present2" data-act="switchTab" data-i18n="nav.present2">Presentación 2.0</button>
+  <button class="nav-tab" data-tab="present2" data-act="switchTab" data-i18n="nav.present2">Presentación</button>
   <button class="nav-tab" data-tab="config"   data-act="switchTab" data-i18n="nav.config">Configuración</button>
 </nav>
     </div>
@@ -133,7 +133,7 @@
             <polyline points="17 8 12 3 7 8"/>
             <line x1="12" y1="3" x2="12" y2="15"/>
           </svg>
-          <span data-i18n="top.upload">Actualizar información</span>
+          <span data-i18n="top.upload">Subir datos</span>
           <svg class="upload-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <polyline points="6 9 12 15 18 9"/>
           </svg>
@@ -185,10 +185,7 @@
            lo muestra/oculta con .style.display (ver la nota de CLAUDE.md sobre
            no convertir a clase CSS elementos toggleados desde JS). -->
       <span id="dataRefreshing" class="data-refreshing" style="display:none" title="Mostrando los últimos datos guardados mientras se descargan los actuales">↻ Actualizando…</span>
-      <!-- Última carga exitosa en la BD (no confundir con "cuándo pintó tu
-           navegador" — eso lo indica #dataRefreshing/banner de arriba). Vacío
-           hasta que resuelve el RPC get_last_ingest_at (data.js). -->
-      <span id="dbLastUpdate" class="db-last-update" style="display:none"></span>
+      <!-- (#dbLastUpdate se movió al sidebar, junto a "Datos cargados".) -->
       <span id="userBadge" class="user-badge"></span>
       <span id="langSwitch"></span>
       <button class="logout-btn" data-act="handleLogout" data-i18n="top.logout">Salir →</button>
@@ -202,6 +199,11 @@
     <div class="sidebar-wrap">
     <div class="sidebar" id="mainSidebar">
       <div id="dsBanner" style="display:none"></div>
+      <!-- Última carga en la BD. Vive ACÁ y no en la topbar (donde estaba) por
+           pedido de Manuel: es información del mismo tipo que "Datos cargados"
+           —el estado de los datos— y en la barra superior se comía el ancho
+           que necesitan la nav y el botón de subir. -->
+      <div id="dbLastUpdate" class="db-last-update" style="display:none"></div>
 
       <div class="sb-label" data-i18n="sidebar.escala">Escala</div>
       <div class="mode-toggle-row">

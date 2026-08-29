@@ -46,7 +46,11 @@ export const I18N: Record<string, Record<string, string>> = {
   "nav.vistaPartner":{ es: "Vista Partner",    en: "Partner View",  ru: "Обзор партнёра" },
   "nav.seguimiento": { es: "Seguimiento",      en: "Tracking",      ru: "Отслеживание" },
   "nav.dataRaw":     { es: "Data Raw",         en: "Raw Data",      ru: "Сырые данные" },
-  "nav.present2":    { es: "Presentación 2.0", en: "Presentation 2.0", ru: "Презентация 2.0" },
+  // "2.0" era para distinguirla de una "Presentación" anterior que ya no
+  // existe; hoy es la unica, asi que el numero solo confundia. La CLAVE sigue
+  // siendo present2 (la usan data-tab, el router y el chunk lazy) — se cambia
+  // el texto, no el identificador.
+  "nav.present2":    { es: "Presentación", en: "Presentation", ru: "Презентация" },
   "nav.config":      { es: "Configuración",    en: "Settings",      ru: "Настройки" },
   // Con emoji: el icono viaja DENTRO de la traduccion para que cada idioma pueda
   // moverlo o quitarlo si estorba.
@@ -55,7 +59,9 @@ export const I18N: Record<string, Record<string, string>> = {
   "nav.seguimientoE":  { es: "📋 Seguimiento",   en: "📋 Tracking",     ru: "📋 Отслеживание" },
 
   // ── Barra superior ─────────────────────────────────────────────────────
-  "top.upload":     { es: "Actualizar información", en: "Update data", ru: "Обновить данные" },
+  // "Actualizar información" ocupaba ~200px de una barra que ya iba justa. El
+  // ícono de subida + "Subir datos" dice lo mismo y el menú detalla qué se sube.
+  "top.upload":     { es: "Subir datos", en: "Upload data", ru: "Загрузить" },
   "top.logout":     { es: "Salir →",          en: "Sign out →",   ru: "Выйти →" },
   "top.refreshing": { es: "↻ Actualizando…",  en: "↻ Refreshing…", ru: "↻ Обновление…" },
   "top.langTitle":  { es: "Idioma de la interfaz", en: "Interface language", ru: "Язык интерфейса" },

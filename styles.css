@@ -143,9 +143,12 @@ body {
 .up-btn.metas-btn:hover { background: #f5f3ff; }
 input[type="file"]  { display: none; }
 
+/* El email completo (yango.hbexp@gmail.com) se comía ~180px de la barra. Se
+   trunca con ellipsis y el completo queda en el title (lo pone auth.ts). */
 .user-badge {
   font-size: .75rem; color: #888;
   background: #f5f5f5; padding: 5px 10px; border-radius: 20px;
+  max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* Refresco en segundo plano (ver data/cache.js): la vista ya es usable, esto
    solo avisa que los números pueden moverse en un instante. Discreto a
@@ -161,13 +164,15 @@ input[type="file"]  { display: none; }
 @keyframes dataRefreshPulse { 0%, 100% { opacity: 1 } 50% { opacity: .55 } }
 
 /* Última carga exitosa en la BD (get_last_ingest_at) — informativo, no
-   pulsa ni alarma; distinto a propósito de .data-refreshing. */
+   pulsa ni alarma; distinto a propósito de .data-refreshing. Vive en el
+   SIDEBAR, debajo de "Datos cargados": son dos caras del mismo dato (cuándo
+   pintó tu navegador vs cuándo entró el dato a la base). */
 .db-last-update {
   font-size: .7rem; color: #6b7280;
-  background: #f3f4f6; padding: 4px 9px; border-radius: 20px;
-  white-space: nowrap;
+  background: #f3f4f6; padding: 6px 10px; border-radius: 8px;
+  margin-bottom: 4px;
 }
-.db-last-update.stale { color: #b45309; background: #fef3c7; }
+.db-last-update.stale { color: #b45309; background: #fef3c7; font-weight: 600; }
 .logout-btn {
   padding: 7px 14px; border-radius: 6px;
   font-size: .8rem; font-weight: 600; cursor: pointer;
@@ -541,8 +546,17 @@ input[type="file"]  { display: none; }
   background: none;
   cursor: pointer;
   color: #999;
+  white-space: nowrap;
   transition: all .15s;
 }
+/* Selector de ESCALA del sidebar: los tres botones se reparten el ancho. Con
+   el padding fijo de arriba sumaban más que el sidebar y "Mensual" se salía de
+   la píldora. Acotado al sidebar a propósito: en el panel principal los
+   selectores de línea (Combinado/Agregador/Fleet/TukTuk) deben conservar su
+   ancho natural, no estirarse a toda la fila. */
+.sidebar .mode-toggle-row { width: 100%; }
+.sidebar .mode-btn { flex: 1 1 0; min-width: 0; padding: 6px 4px; text-align: center; }
+
 .mode-btn.active {
   background: #fff;
   color: #111;
@@ -1146,3 +1160,33 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
   /* Inputs de la calculadora: escribir metas con el dedo. */
   .calc-inp { min-height: 40px; font-size: .9rem; }
 }
+
+/* ── AVISO DE VERSIÓN NUEVA (ago 2026) ─────────────────────────────────────
+   Reemplaza al location.reload() automático que había ante un chunk 404 tras
+   un deploy. Recargar sin avisar tiraba filtros y rango de fechas, y si al
+   volver getSession() timeaba por el lock compartido entre pestañas terminaba
+   en el login — se veía como "el dashboard se actualizó solo y me cerró la
+   sesión". Ahora avisa y decide la persona. */
+.new-version-bar {
+  position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
+  z-index: 9000;
+  display: flex; align-items: center; gap: 12px;
+  max-width: min(560px, calc(100vw - 24px));
+  padding: 11px 14px;
+  background: #111; color: #fff;
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0,0,0,.28);
+  font-size: .8rem; line-height: 1.35;
+}
+.new-version-bar button {
+  flex: 0 0 auto;
+  padding: 7px 12px; border: none; border-radius: 7px;
+  background: #FF0000; color: #fff;
+  font-size: .78rem; font-weight: 700; cursor: pointer;
+}
+.new-version-bar button:hover { opacity: .88; }
+.new-version-bar .nvb-close {
+  background: transparent; color: #999;
+  padding: 4px 6px; font-size: .9rem; font-weight: 400;
+}
+.new-version-bar .nvb-close:hover { color: #fff; }

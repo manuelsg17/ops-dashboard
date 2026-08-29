@@ -162,7 +162,26 @@ export function _applyRoleGate() {
 }
 
 export async function initAuth() {
-  const { data: { session } } = await sb.auth.getSession();
+  // "No pude leer la sesión" NO es lo mismo que "no hay sesión". getSession()
+  // puede fallar o quedarse esperando el Web Lock que supabase-js comparte
+  // entre TODAS las pestañas del dominio (el motivo por el que existe
+  // _authLock con su timeout de 5s, ver core/config.ts). Si eso pasaba, la
+  // desestructuración tiraba o session venía undefined y se mandaba al usuario
+  // a la pantalla de login con la sesión intacta en localStorage — se veía
+  // como "me cerró la sesión sola", justo después de una recarga.
+  // Ahora: un fallo se reintenta una vez, y recién ahí se asume que no hay
+  // sesión.
+  let session = null;
+  for (let intento = 0; intento < 2; intento++) {
+    try {
+      const res = await sb.auth.getSession();
+      session = (res && res.data && res.data.session) || null;
+      break;
+    } catch (err) {
+      if (DEBUG) console.warn(`getSession() falló (intento ${intento + 1}):`, err);
+      if (intento === 0) await new Promise(r => setTimeout(r, 600));
+    }
+  }
   if (session) {
     showApp(session.user);
   } else {
@@ -294,7 +313,10 @@ export let _appInitialized = false;
 export function showApp(user) {
   document.getElementById("loginScreen").style.display  = "none";
   document.getElementById("appContainer").style.display = "flex";
+  // El badge se trunca por CSS (max-width + ellipsis) para no comerse la barra;
+  // el email completo queda accesible en el tooltip.
   document.getElementById("userBadge").textContent      = user.email;
+  document.getElementById("userBadge").title            = user.email;
   STATE.userEmail = user.email;   // firma de los PDFs exportados (shared/pdfmeta.js)
   STATE.userId    = user.id;      // clave del caché local (data/cache.js)
 

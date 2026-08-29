@@ -44,11 +44,38 @@ export function _isChunkError(err) {
   return /fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i.test(msg);
 }
 
+// AVISAR, NO RECARGAR (ago 2026). Antes esto llamaba a location.reload() solo.
+// Reportado por Manuel: "el dashboard comienza a actualizar de la nada y me
+// cierra la sesión". Era exactamente esto — cada deploy publica chunks con
+// hash nuevo, así que una pestaña abierta con el index.html viejo se recargaba
+// sola al tocar cualquier pestaña lazy. Encima el reload pasa por initAuth, y
+// si getSession() timea por el lock compartido entre pestañas, termina en la
+// pantalla de login: desde afuera se ve como "me cerró la sesión".
+//
+// Una recarga sorpresiva tira filtros, rango de fechas y lo que se estuviera
+// editando. Ahora se avisa y decide la persona.
+export function _avisarVersionNueva() {
+  if (document.getElementById("newVersionBar")) return;   // ya está a la vista
+  const bar = document.createElement("div");
+  bar.id = "newVersionBar";
+  bar.className = "new-version-bar";
+  const txt = document.createElement("span");
+  txt.textContent = "Hay una versión nueva del dashboard. Actualizá para que todas las pestañas carguen bien.";
+  const btn = document.createElement("button");
+  btn.textContent = "Actualizar ahora";
+  btn.onclick = () => { sessionStorage.removeItem("_chunkReloadOnce"); location.reload(); };
+  const cerrar = document.createElement("button");
+  cerrar.className = "nvb-close";
+  cerrar.textContent = "✕";
+  cerrar.title = "Seguir con esta versión";
+  cerrar.onclick = () => bar.remove();
+  bar.append(txt, btn, cerrar);
+  document.body.appendChild(bar);
+}
+
 window.addEventListener("unhandledrejection", e => {
   if (!_isChunkError(e.reason)) return;
-  if (sessionStorage.getItem("_chunkReloadOnce")) return;   // ya se intentó, no loopear
-  sessionStorage.setItem("_chunkReloadOnce", "1");
-  location.reload();
+  _avisarVersionNueva();
 });
 
 // ── Vercel Speed Insights ──────────────────────────────────────────────────
@@ -159,9 +186,10 @@ export async function loadViewModule(viewName) {
       // Calculadora recargaba todo y devolvía a la pantalla principal, tirando
       // a la basura los segundos de data ya cargada. Ahora:
       //   1. Un fallo de red pasajero se REINTENTA en el lugar (sin recargar).
-      //   2. Solo un fallo de CHUNK confirmado (index.html viejo cacheado tras
-      //      un deploy) justifica el reload — es el único caso que un reload
-      //      realmente arregla.
+      //   2. Un fallo de CHUNK confirmado (index.html viejo cacheado tras un
+      //      deploy) AVISA con una barra y deja que la persona decida cuándo
+      //      recargar — recargar solo le tira los filtros y, si getSession()
+      //      timea al volver, la manda al login (ver _avisarVersionNueva).
       //   3. Cualquier otro error se propaga: que se vea el error real en vez
       //      de esconderlo detrás de una recarga misteriosa.
       if (!_isChunkError(err)) throw err;
@@ -169,11 +197,7 @@ export async function loadViewModule(viewName) {
         await new Promise(r => setTimeout(r, 250));
         mod = await importer();
       } catch (err2) {
-        if (!sessionStorage.getItem("_chunkReloadOnce")) {
-          sessionStorage.setItem("_chunkReloadOnce", "1");
-          location.reload();
-          return null;
-        }
+        _avisarVersionNueva();
         throw err2;
       }
     } finally {
