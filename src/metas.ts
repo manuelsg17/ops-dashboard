@@ -1267,6 +1267,11 @@ export function barProj(pR, pP) {
   if (pP > pR)
     h += `<div class="bar-proj" style="width:${Math.min(pP,100)}%;background:${pColor(pP)}"></div>`;
   h += `<div class="bar-real" style="width:${pR}%;background:${pColor(pR)}"></div>`;
+  // Marca de proyección SIEMPRE visible: con la regla plana (ago 2026) la
+  // proyección de AD coincide con el avance, así que la extensión tenue de
+  // arriba nunca se dibuja y parecía que "no había proyección".
+  if (pP != null && !isNaN(pP))
+    h += `<div class="bar-tick" style="left:calc(${Math.min(Math.max(pP,0),100).toFixed(1)}% - 1px)"></div>`;
   return h + `</div>`;
 }
 

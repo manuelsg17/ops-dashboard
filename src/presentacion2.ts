@@ -991,19 +991,24 @@ export function buildSlide2MatrixCharts(partner, dates, root) {
 // Labels espejados al ES/EN de p2KpiDefs (matriz) y buildSlide2Avance — la MISMA métrica
 // debe llamarse igual en todo el deck. Antes solo "Retención" traducía; el resto quedaba en
 // inglés fijo aun con lang=es (inconsistente con KPIs por Nivel/Avance, que sí traducen).
+// `grp` agrupa las columnas bajo una cabecera de sección (Volumen / Eficiencia
+// / Flota) — misma información, pero la tabla deja de ser una tira de 15
+// columnas indistintas: el ojo encuentra primero el bloque y después el dato.
+// Pedido de Manuel (ago 2026): agrupar, NO recortar — el partner no tiene
+// acceso al CSV y esta tabla es su única fuente.
 export function p2RawCols(es) {
   return [
-    { key: "trips", label: es ? "Viajes" : "Trips",                 kind: "num" },
-    { key: "sh",    label: es ? "Horas de Conexión" : "Supply Hours", kind: "num" },
-    { key: "ad",    label: es ? "Conductores Activos" : "Active Drivers", kind: "num" },
-    { key: "newd",  label: es ? "Nuevos" : "New Drivers",           kind: "num" },
-    { key: "react", label: es ? "Reactivados" : "Reactivated",      kind: "num" },
-    { key: "comm",  label: es ? "Comisión Partner" : "Partner Commission", kind: "money" },
-    { key: "nr",    label: "N+R",              kind: "num" },
-    { key: "ret",   label: es ? "Retención" : "Retention", kind: "pct" },
-    { key: "tripsPerSh", label: "Trips/SH",    kind: "ratio" },
-    { key: "tripsPerAd", label: "Trips/AD",    kind: "ratio" },
-    { key: "shPerAd",    label: "SH/AD",       kind: "ratio" }
+    { key: "trips", label: es ? "Viajes" : "Trips",                 kind: "num", grp: "vol" },
+    { key: "sh",    label: es ? "Horas de Conexión" : "Supply Hours", kind: "num", grp: "vol" },
+    { key: "ad",    label: es ? "Conductores Activos" : "Active Drivers", kind: "num", grp: "vol" },
+    { key: "newd",  label: es ? "Nuevos" : "New Drivers",           kind: "num", grp: "vol" },
+    { key: "react", label: es ? "Reactivados" : "Reactivated",      kind: "num", grp: "vol" },
+    { key: "nr",    label: "N+R",              kind: "num", grp: "vol" },
+    { key: "comm",  label: es ? "Comisión Partner" : "Partner Commission", kind: "money", grp: "vol" },
+    { key: "ret",   label: es ? "Retención" : "Retention", kind: "pct", grp: "efi" },
+    { key: "tripsPerSh", label: "Trips/SH",    kind: "ratio", grp: "efi" },
+    { key: "tripsPerAd", label: "Trips/AD",    kind: "ratio", grp: "efi" },
+    { key: "shPerAd",    label: "SH/AD",       kind: "ratio", grp: "efi" }
   ];
 }
 // Fleet: TODAS las columnas de agregador (p2RawCols, sin quitar nada — incluye
@@ -1012,9 +1017,9 @@ export function p2RawCols(es) {
 export function p2RawColsFleet(es) {
   return [
     ...p2RawCols(es),
-    { key: "ownedFleetActiveCars", label: "Owned Fleet Active Cars", kind: "num" },
-    { key: "shCarInt",             label: es ? "Internal Fleet SH/Auto" : "Internal Fleet SH/Car",     kind: "ratio1" },
-    { key: "accept",               label: "Acceptance Rate", kind: "pct" }
+    { key: "ownedFleetActiveCars", label: "Owned Fleet Active Cars", kind: "num", grp: "fleet" },
+    { key: "shCarInt",             label: es ? "Internal Fleet SH/Auto" : "Internal Fleet SH/Car",     kind: "ratio1", grp: "fleet" },
+    { key: "accept",               label: "Acceptance Rate", kind: "pct", grp: "fleet" }
   ];
 }
 export function p2FmtRaw(kind, v) {
@@ -1041,13 +1046,26 @@ export function buildSlide2Raw(partner, dates, pct, idx) {
       : p2Metrics(partner, lv.city, dates);
     // Filas = semanas. En % arrancan desde la 2da semana (WoW).
     const idxs = pct ? dates.map((_, i) => i).slice(1) : dates.map((_, i) => i);
+    // Fila de GRUPOS encima de las columnas (Volumen / Eficiencia / Flota):
+    // colspan por grupo + borde izquierdo en la primera columna de cada uno.
+    const GRP_LBL = { vol: es ? "Volumen" : "Volume", efi: es ? "Eficiencia" : "Efficiency", fleet: es ? "Flota" : "Fleet" };
+    const grpStart = new Set();
+    let grpRow = `<th class="p2-grp-th" style="border-bottom:none"></th>`;
+    for (let gi = 0; gi < cols.length; ) {
+      const g = cols[gi].grp; let n = 0;
+      grpStart.add(gi);
+      while (gi + n < cols.length && cols[gi + n].grp === g) n++;
+      grpRow += `<th class="p2-grp-th p2-grp-start" colspan="${n}">${GRP_LBL[g] || ""}</th>`;
+      gi += n;
+    }
     const head = `<th class="agy-style-367">${p2ModeInfo().unit}</th>` +
-      cols.map(c => `<th class="agy-style-368">${escapeHTML(c.label)}</th>`).join("");
+      cols.map((c, ci) => `<th class="agy-style-368${grpStart.has(ci) ? " p2-grp-start" : ""}">${escapeHTML(c.label)}</th>`).join("");
     const body = idxs.map(i => {
-      const cells = cols.map(c => {
+      const cells = cols.map((c, ci) => {
         const cur = m[c.key][i];
+        const gs = grpStart.has(ci) ? " p2-grp-start" : "";
         if (!pct) {
-          return `<td class="agy-style-369">${p2FmtRaw(c.kind, cur)}</td>`;
+          return `<td class="agy-style-369${gs}">${p2FmtRaw(c.kind, cur)}</td>`;
         }
         // Variación WoW: para % (retención) diferencia en puntos; para el resto % relativo.
         const prev = m[c.key][i - 1];
@@ -1056,7 +1074,7 @@ export function buildSlide2Raw(partner, dates, pct, idx) {
           if (c.kind === "pct") { const d = (cur - prev) * 100; col = d >= 0 ? "#065f46" : "#7f1d1d"; bg = d >= 0 ? "#d1fae5" : "#fee2e2"; txt = (d >= 0 ? "+" : "") + d.toFixed(1) + "pp"; }
           else if (prev !== 0)  { const w = (cur - prev) / prev * 100; col = w >= 0 ? "#065f46" : "#7f1d1d"; bg = w >= 0 ? "#d1fae5" : "#fee2e2"; txt = (w >= 0 ? "+" : "") + w.toFixed(1) + "%"; }
         }
-        return `<td style="text-align:right;padding:3px 6px;font-size:.64rem;background:${bg};color:${col};font-weight:600;border-bottom:1px solid #fff">${txt}</td>`;
+        return `<td class="${gs.trim()}" style="text-align:right;padding:3px 6px;font-size:.64rem;background:${bg};color:${col};font-weight:600;border-bottom:1px solid #fff">${txt}</td>`;
       }).join("");
       return `<tr><td class="agy-style-370">${d2s(dates[i])}</td>${cells}</tr>`;
     }).join("");
@@ -1067,7 +1085,7 @@ export function buildSlide2Raw(partner, dates, pct, idx) {
           <span style="font-weight:800;font-size:.82rem;color:${lv.color}">${escapeHTML(lv.label)}</span>
         </div>
         <div class="agy-style-321"><table class="agy-style-373">
-          <thead><tr class="agy-style-374">${head}</tr></thead><tbody>${body}</tbody></table></div>
+          <thead><tr>${grpRow}</tr><tr class="agy-style-374">${head}</tr></thead><tbody>${body}</tbody></table></div>
       </div>`;
   }).join("");
   const _mi = p2ModeInfo();
@@ -1240,6 +1258,7 @@ export function _p2MetaCard(label, real, goal, projV, fmtN, es) {
     <div class="agy-style-387">
       ${ppct != null && ppct > pct ? `<div style="position:absolute;top:0;left:0;height:100%;width:${Math.min(Math.max(ppct, 0), 100).toFixed(1)}%;background:${p2AvanceColor(ppct)};opacity:.35;border-radius:5px"></div>` : ""}
       <div style="position:absolute;top:0;left:0;height:100%;width:${Math.min(pct, 100).toFixed(1)}%;background:${col};border-radius:5px"></div>
+      ${ppct != null ? `<div class="p2-proj-tick" style="left:calc(${Math.min(Math.max(ppct, 0), 100).toFixed(1)}% - 1px)"></div>` : ""}
     </div>
     ${ppct != null ? `<div class="agy-style-388">${es ? "proy" : "proj"} ${fmtN(projV)} (${ppct.toFixed(0)}%)</div>` : ""}
   </div>`;
@@ -1327,6 +1346,7 @@ export function buildSlide2Avance(partner, idx) {
         <div class="agy-style-387">
           ${ppct > pct ? `<div style="position:absolute;top:0;left:0;height:100%;width:${Math.min(Math.max(ppct, 0), 100).toFixed(1)}%;background:${p2AvanceColor(ppct)};opacity:.35;border-radius:5px"></div>` : ""}
           <div style="position:absolute;top:0;left:0;height:100%;width:${Math.min(pct, 100).toFixed(1)}%;background:${col};border-radius:5px"></div>
+          ${ppct != null ? `<div class="p2-proj-tick" style="left:calc(${Math.min(Math.max(ppct, 0), 100).toFixed(1)}% - 1px)"></div>` : ""}
         </div>
         <div class="agy-style-388">${es ? "proy" : "proj"} ${fmtN(projV)} (${_p2PctTxt(ppct)})</div>
       </div>`);
@@ -1370,8 +1390,8 @@ export function buildSlide2Avance(partner, idx) {
     ? (es ? "Avance vs Meta TukTuk" : "TukTuk Goal vs Target")
     : (es ? "Avance vs Meta del mes" : "Goal vs Target");
   const avSub = es
-    ? "Actual vs meta · barra = avance · barra tenue = proyección"
-    : "Actual vs goal · bar = progress · faded bar = projection";
+    ? "Actual vs meta · barra = avance · marca ▏= proyección"
+    : "Actual vs goal · bar = progress · ▏mark = projection";
   const noDataMsg = noMonthData
     ? (es ? `Sin datos de ${escapeHTML(mesName)} para comparar con la meta.` : `No data for ${escapeHTML(mesName)} to compare.`)
     : isTk
@@ -1454,8 +1474,8 @@ export function buildSlide2AvanceCombinado(partner, idx) {
 
   const title = es ? "Avance vs Meta Combinado" : "Combined Goal vs Target";
   const sub   = es
-    ? "Taxi + TukTuk sumados · barra = avance · barra tenue = proyección"
-    : "Taxi + TukTuk combined · bar = progress · faded bar = projection";
+    ? "Taxi + TukTuk sumados · barra = avance · marca ▏= proyección"
+    : "Taxi + TukTuk combined · bar = progress · ▏mark = projection";
   const noDataMsg = noMonthData
     ? (es ? `Sin datos de ${escapeHTML(mesName)} para comparar con la meta.` : `No data for ${escapeHTML(mesName)} to compare.`)
     : (es ? "Sin metas cargadas para este mes." : "No goals loaded for this month.");
