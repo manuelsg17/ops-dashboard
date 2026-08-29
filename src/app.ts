@@ -705,7 +705,7 @@ export function _pItem(p, selSet) {
   const pH  = escapeHTML(p);
   return `<div class="pi" data-p="${pH}" style="height:${VIRT_ITEM_H}px">
       <input type="checkbox" id="${id}" value="${pH}" ${chk}/>
-      <label for="${id}">
+      <label for="${id}" title="${pH}">
         <span class="pdot" style="background:${c}"></span>${pH}
       </label>
     </div>`;

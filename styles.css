@@ -233,18 +233,28 @@ input[type="file"]  { display: none; }
   border: 1px solid #e5e5e5; border-radius: 6px;
   padding: 5px; margin-top: 4px;
 }
+/* La lista es VIRTUALIZADA: la altura de fila es fija (VIRT_ITEM_H en app.ts) y
+   el cálculo del scroll depende de eso, así que la fila no puede crecer. Sin
+   truncar, un nombre largo ("CORPORACION DE TRANSPORTE MULTIMODAL AREQUIPA
+   SAC") ocupaba 43px dentro de una caja de 28 y se montaba sobre los vecinos.
+   El nombre completo queda en el title. */
 .pi {
   display: flex; align-items: center; gap: 6px;
   padding: 3px 2px; border-radius: 4px; cursor: pointer;
+  overflow: hidden;
 }
 .pi:hover { background: #f5f5f5; }
+/* display:block, NO flex: el nombre es un nodo de texto suelto al lado de
+   .pdot y text-overflow no aplica a texto anónimo dentro de un flex. */
 .pi label {
   font-size: .78rem; cursor: pointer;
-  display: flex; align-items: center; gap: 5px;
-  user-select: none;
+  display: block; user-select: none;
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.pi input[type="checkbox"] { accent-color: #FF0000; width: 13px; height: 13px; }
-.pdot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.pi input[type="checkbox"] { accent-color: #FF0000; width: 13px; height: 13px; flex: 0 0 auto; }
+.pdot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+        display: inline-block; vertical-align: middle; margin-right: 5px; }
 
 .sb-row { display: flex; gap: 5px; margin-bottom: 5px; }
 .sb-row button {
