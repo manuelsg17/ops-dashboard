@@ -250,7 +250,10 @@ export const PV_I18N = {
                     en: "Hides only the average lines' values (Top 5 / Top 6-10); your own data stays visible. To share without exposing cohort figures." },
   legendBtn:      { es: "Leyenda", en: "Legend" },
   legendHint:     { es: "Muestra quiénes integran cada cohorte y las cifras del promedio. Apagado por defecto: dejalo APAGADO al enviar el PDF a los partners.",
-                    en: "Shows who is in each cohort and the figures behind the average. Off by default: keep it OFF when sending the PDF to partners." }
+                    en: "Shows who is in each cohort and the figures behind the average. Off by default: keep it OFF when sending the PDF to partners." },
+  // Sub-label de las tarjetas de FLUJO (N+R, Horas) en la vista de línea: su
+  // número grande es el acumulado del rango, no el snapshot del último período.
+  acumRango:      { es: "acumulado del rango", en: "range total" }
 };
 
 // Resolver i18n: devuelve string en el lang actual.
@@ -414,7 +417,13 @@ export function setPvLine(line) {
 // + por ciudad. Reusa los helpers de rendimiento.js (mismas fórmulas — nunca
 // duplicar la agregación de Fleet en dos archivos distintos).
 export function _pvLineBody(partner, line, citiesOf, dates) {
-  const rows     = _pvLineDataset().filter(r => r.partner === partner);
+  // BUG REAL (auditoría ago 2026): faltaba el filtro por `dates` — `rows` traía
+  // TODAS las fechas del dataset cargado (la ventana entera, ~16 semanas), no
+  // el período que el usuario eligió. Los acumulados de abajo (tNR/tSH) sumaban
+  // esa ventana completa contra un badge que compara UN período → se veían
+  // saltos absurdos (+1017%) y el número no correspondía al rango en pantalla.
+  const _dset    = new Set(dates);
+  const rows     = _pvLineDataset().filter(r => r.partner === partner && _dset.has(r.date));
   const lastDate = dates[dates.length - 1];
   const prevDate = dates.length > 1 ? dates[dates.length - 2] : null;
   const lastRows = rows.filter(r => r.date === lastDate);
@@ -454,18 +463,29 @@ export function _pvLineBody(partner, line, citiesOf, dates) {
   if (line === "tk") return _rendTkKPIs(lastRows, prevRows);
 
   // comb: AD/NR/SH combinados (Taxi+TukTuk) — mismas cards que el Agregador.
-  const tAD = sumR(lastRows, r => r.activeDrivers);
-  const pAD = sumR(prevRows, r => r.activeDrivers);
-  const tNR = sumR(rows,     r => r.newPartner + r.newService + r.reactivated);
-  const pNR = sumR(prevRows, r => r.newPartner + r.newService + r.reactivated);
-  const tSH = sumR(rows,     r => r.supplyHours);
-  const pSH = sumR(prevRows, r => r.supplyHours);
+  // AD es SNAPSHOT (último período); N+R y Horas son FLUJO (acumulado del
+  // rango). El BADGE de los flujos compara último vs previo período — no el
+  // acumulado contra un solo período, que daba porcentajes disparatados.
+  const tAD  = sumR(lastRows, r => r.activeDrivers);
+  const pAD  = sumR(prevRows, r => r.activeDrivers);
+  const _nr  = r => r.newPartner + r.newService + r.reactivated;
+  const tNR  = sumR(rows,     _nr);   // acumulado del rango (el número grande)
+  const lNR  = sumR(lastRows, _nr);   // último período (para el badge)
+  const pNR  = sumR(prevRows, _nr);
+  const tSH  = sumR(rows,     r => r.supplyHours);
+  const lSH  = sumR(lastRows, r => r.supplyHours);
+  const pSH  = sumR(prevRows, r => r.supplyHours);
+  // _t (PV_I18N), NO el t() global: Vista Partner tiene su propio selector
+  // ES/EN para el PDF que se le manda al partner, independiente del idioma de
+  // la interfaz. Usar t() acá además revienta — no está importado en este
+  // archivo (fue el error que tiró "t is not defined" al probarlo en vivo).
+  const _subAcum = _t("acumRango");
   let html = secH("🔀", "#FF0000", "Combinado · Perú General",
     "Taxi + TukTuk sumados — avance total del partner", d2s(lastDate));
   html += `<div class="section"><div class="metric-row">
     ${_rendKpiCard("Conductores Activos",  "📊", tAD, pAD, "#FF0000", fmt)}
-    ${_rendKpiCard("Nuevos + Reactivados", "🆕", tNR, pNR, "#f97316", fmt)}
-    ${_rendKpiCard("Horas de Conexión",    "⏱️", tSH, pSH, "#8b5cf6", fmtSmart)}
+    ${_rendKpiCard("Nuevos + Reactivados", "🆕", tNR, pNR, "#f97316", fmt, _subAcum, lNR)}
+    ${_rendKpiCard("Horas de Conexión",    "⏱️", tSH, pSH, "#8b5cf6", fmtSmart, _subAcum, lSH)}
   </div></div>`;
   html += secH("🏙️", "#06b6d4", "Combinado por Ciudad", "", "");
   html += `<div class="section"><div class="city-grid">`;

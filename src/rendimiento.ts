@@ -838,13 +838,19 @@ export function buildPartnerCards(apd, lastDate, prevDate, partners, sel) {
 // todos los KPIs de esta vista lo son. Los de FLUJO (nuevos conductores) acumulan
 // sobre el rango y tienen que decirlo — si no, se leen como si fueran del último
 // período y el número parece inflado sin motivo.
-export function _rendKpiCard(label, icon, val, prev, color, fmtFn, subLabel) {
+// `badgeVal` separa lo que se MUESTRA de lo que se COMPARA: en una métrica de
+// flujo el número grande es el acumulado del rango, pero el badge tiene que
+// comparar último período vs previo — comparar el acumulado contra un solo
+// período da porcentajes disparatados. Sin `badgeVal` se compara `val`, que es
+// el comportamiento correcto para snapshots (el caso por defecto).
+export function _rendKpiCard(label, icon, val, prev, color, fmtFn, subLabel, badgeVal) {
+  const _bv = badgeVal === undefined ? val : badgeVal;
   return `
     <div class="mcard" style="border-top:3px solid ${color}">
       <div class="mcard-label">${icon} ${label}</div>
       <div class="mcard-sub-label">${subLabel || "snapshot último período"}</div>
       <div class="mcard-val">${fmtFn(val)}</div>
-      <div class="agy-style-257">${bdgMode(val, prev)}
+      <div class="agy-style-257">${bdgMode(_bv, prev)}
         <span class="agy-style-258">${escapeHTML(t("rend.cmp.vs", { p: STATE.curMode === "mensual" ? t("rend.cmp.mesAnterior") : STATE.curMode === "diario" ? t("rend.cmp.diaAnterior") : t("rend.cmp.semAnterior") }))}</span>
       </div>
     </div>`;
