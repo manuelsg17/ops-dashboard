@@ -16,7 +16,7 @@
 import { snapshotLoad, snapshotSave, snapshotClear } from "./data/cache.js";
 import { t } from "./core/i18n";
 // Formulas de proyeccion: una sola definicion para todo el dashboard.
-import { projectFlow } from "./domain/metrics.js";
+import { projectFlow, projectSnapshot } from "./domain/metrics.js";
 
 
 // ── PARSER DE TAXIPARKS ─────────────────────────────────────────────────────
@@ -149,6 +149,19 @@ export function projA(vals, daysElapsed, daysRemaining) {
   if (!total) return 0;
   if (STATE.curMode === "mensual") return total;
   return projectFlow(total, daysElapsed, daysRemaining);
+}
+
+// Proyección de un SNAPSHOT (Active Drivers) al cierre del período. Mismo gate
+// que projA(): en escala MENSUAL el mes ya está cerrado, no se proyecta — la
+// "proyección" es el propio valor actual. Sin este guard, projectSnapshot()
+// (máx del rango × 1.4) se aplicaba TAMBIÉN sobre meses ya cerrados, mostrando
+// hasta 140% del máximo del rango donde el tooltip de la UI afirmaba
+// literalmente "Proyección = valor actual (mes ya cerrado)" — falso para AD.
+// `actual` es el snapshot ya calculado en el caller (r.lastAD, e.ad, etc.) —
+// se reutiliza en vez de recalcularlo para no tener una segunda fuente.
+export function projAD(serie, actual) {
+  if (STATE.curMode === "mensual") return actual;
+  return projectSnapshot(serie);
 }
 
 export function sumR(rows, fn) { return rows.reduce((s, r) => s + fn(r), 0); }

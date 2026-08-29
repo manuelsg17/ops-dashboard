@@ -29,7 +29,8 @@ window.Chart = Chart;
 // PARTNER, así que es justo donde menos puede haber una fórmula propia: si Metas
 // dice "proyectamos 210" y el deck dice 120 para el mismo partner y el mismo mes,
 // el problema no es cosmético, es de credibilidad delante del cliente.
-import { projectSnapshot, projectFlow, retentionSeries } from "./domain/metrics.js";
+import { projectFlow, retentionSeries } from "./domain/metrics.js";
+import { reportYM, MES_NOMBRES } from "./shared/mesReporte.js";
 import * as forecast from "./forecast.js";
 Object.assign(window, forecast);
 
@@ -106,9 +107,10 @@ export let PRESENT2_STATE = {
   _renderId: 0
 };
 
-export const P2_MES_NOMBRES = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
-  "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
-
+// Re-exportados desde shared/mesReporte.js (única fuente de verdad — usada
+// también por partnerPortal.ts, que no puede importar de acá directo sin
+// arrastrar el chunk de Chart.js a su bundle).
+export const P2_MES_NOMBRES = MES_NOMBRES;
 // Mes de REPORTE al que pertenece una fecha (para "Avance vs Meta"). En SEMANAL, una
 // semana Lun–Dom pertenece al mes donde cae su JUEVES (inicio+3 = día mediano) — así la
 // semana que arranca el Lun 29-jun (Jun 29 → Dom 05-jul, 5 de 7 días en julio) cuenta como
@@ -116,13 +118,7 @@ export const P2_MES_NOMBRES = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JU
 // correcto y cuadran con "KPIs por Nivel" (que muestra la semana tal cual). En MENSUAL/DIARIO
 // el mes es el de la fecha misma. Devuelve { y: año, m: 1-12 }.
 export function p2ReportYM(dateStr) {
-  if (!dateStr) return { y: 0, m: 0 };
-  if (STATE.curMode === "semanal") {
-    const dt = parseLocalDate(dateStr);
-    dt.setDate(dt.getDate() + 3);   // jueves de la semana (mediana Lun–Dom)
-    return { y: dt.getFullYear(), m: dt.getMonth() + 1 };
-  }
-  return { y: parseInt(dateStr.slice(0, 4), 10), m: parseInt(dateStr.slice(5, 7), 10) };
+  return reportYM(dateStr, STATE.curMode, parseLocalDate);
 }
 
 // Resuelve si el partner se muestra con KPIs Fleet (SH/Auto Activo, Acceptance,
@@ -521,6 +517,21 @@ export function p2GetPartnerVals(partner, city, dates, fn) {
     return s;
   });
 }
+// ¿El partner tiene AL MENOS una fila esa fecha, en esa ciudad (o en alguna de
+// las suyas si scope=null)? Distinto de "el valor es 0" — un partner sin fila
+// ese período no reportó, no es que hizo cero. Usado por p2CohortAvg para no
+// contar ausentes como 0 (mismo criterio `_present` de Vista Partner,
+// _pvScopeSeries) — sin esto, un miembro del cohorte que no reportó un período
+// hundía el promedio "Prom. Top 5" del deck contra lo que muestra Vista
+// Partner para el mismo cohorte y período.
+function p2Present(partner, city, dates) {
+  const idx = p2CityDateIndex();
+  const cities = city ? [city] : p2PartnerCities(partner);
+  return dates.map(d => cities.some(c => {
+    const rows = (idx && idx.get(`${c}|||${d}`)) || [];
+    return rows.some(r => r.partner === partner);
+  }));
+}
 export function p2GetCityVals(city, dates, fn) {
   const idx = p2CityDateIndex();
   return dates.map(d => {
@@ -685,9 +696,19 @@ export function p2CohortAvg(members, scope, dates, kpiKey) {
     const fn = kpiKey === "nr" ? (r => r.newPartner + r.newService + r.reactivated) : P2_GET[kpiKey];
     arrs = members.map(p => p2Vals(p, scope, dates, fn));
   }
+  // Presencia por miembro/fecha — SOLO para kpiKey !== "ret": p2Vals nunca
+  // devuelve null (siempre 0 si no hay fila), así que sin esto un miembro
+  // ausente ese período contaba como 0 y hundía el promedio del cohorte
+  // (misma línea "Prom. Top 5" daba distinto en el deck vs Vista Partner,
+  // que sí excluye ausentes vía _present). "ret" ya excluye null por su
+  // propia regla de negocio (retentionSeries).
+  const presArrs = kpiKey === "ret" ? null : members.map(p => p2Present(p, scope, dates));
   return dates.map((_, i) => {
     let s = 0, n = 0;
-    arrs.forEach(a => { if (a[i] != null && !isNaN(a[i])) { s += a[i]; n++; } });
+    arrs.forEach((a, mi) => {
+      if (presArrs && !presArrs[mi][i]) return;   // ausente esa fecha: no cuenta
+      if (a[i] != null && !isNaN(a[i])) { s += a[i]; n++; }
+    });
     return n ? s / n : null;
   });
 }
@@ -1117,7 +1138,7 @@ export function p2ProjMTD(act, lastDate) {
   // y el mismo mes. La regla vive ahora en UN solo lugar; si hay que discutirla,
   // se discute allá, no se bifurca acá.
   return {
-    ad: projectSnapshot(act.adV || []),
+    ad: projAD(act.adV || [], act.lastAD),
     nr: projectFlow(act.nr, daysElapsed, daysRemaining),
     sh: projectFlow(act.sh, daysElapsed, daysRemaining)
   };
@@ -1343,7 +1364,7 @@ export function buildSlide2AvanceCombinado(partner, idx) {
   const _combAdByDate = new Map();
   taxiDates.forEach((d, i) => _combAdByDate.set(d, (_combAdByDate.get(d) || 0) + (taxiAct.adV[i] || 0)));
   tkDates.forEach((d, i)   => _combAdByDate.set(d, (_combAdByDate.get(d) || 0) + (tkAct.adV[i]   || 0)));
-  const _combProjAD = projectSnapshot([..._combAdByDate.keys()].sort().map(d => _combAdByDate.get(d)));
+  const _combProjAD = projAD([..._combAdByDate.keys()].sort().map(d => _combAdByDate.get(d)), taxiAct.lastAD + tkAct.lastAD);
 
   const defs = [
     { label: es ? "Conductores Activos" : "Active Drivers",

@@ -21,7 +21,8 @@ import { stampPDF } from "./shared/pdfmeta.js";
 import { ensurePdfLibs } from "./shared/lazyLibs.js";
 // Mismo núcleo de cálculo que Metas, Rendimiento y el deck: el partner tiene que
 // ver EXACTAMENTE los números que su KAM le presenta.
-import { seriesByDate, projectSnapshot, projectFlow, ratio, weightedAvg } from "./domain/metrics.js";
+import { seriesByDate, projectFlow, ratio, weightedAvg } from "./domain/metrics.js";
+import { reportYM, MES_NOMBRES } from "./shared/mesReporte.js";
 
 export const PORTAL_STATE = { city: "all", line: "comb" };
 
@@ -159,17 +160,43 @@ function _portalMetas(line, rows) {
   if (!metas.length) return "";
   const meses = [...new Set(metas.map(m => m.mes))].filter(Boolean)
     .sort((a, b) => _metasMesOrden(b) - _metasMesOrden(a));
-  const mes = meses[0];
-  if (!mes) return "";
+  if (!meses.length) return "";
+  // BUG REAL (auditoría ago 2026): antes se tomaba SIEMPRE el mes con meta más
+  // reciente cargada (meses[0]), ignorando qué rango está viendo el partner —
+  // si el admin ya cargó las metas del mes siguiente, el portal comparaba el
+  // rango visto contra la meta de OTRO mes, y el deck (que sí usa el mes del
+  // "Hasta", ver p2AvanceMes en presentacion2.ts) mostraba algo distinto para
+  // el mismo partner. Misma regla acá: mes del "Hasta" si tiene meta cargada,
+  // si no el más reciente disponible.
+  const dates = [...new Set(rows.map(r => r.date))].sort();
+  const lastAll = dates[dates.length - 1] || "";
+  let mes = meses[0];
+  if (lastAll) {
+    const mn = reportYM(lastAll, STATE.curMode, parseLocalDate).m;
+    const name = MES_NOMBRES[mn - 1];
+    if (name && meses.includes(name)) mes = name;
+  }
+  // Año del mes elegido (el más reciente si hay ambigüedad) — mismo criterio
+  // que metas.ts _metasMatchMes: una fila sin año conocido no se descarta.
+  const metaAños = metas.filter(m => m.mes === mes && m.mYear != null).map(m => m.mYear);
+  const mesYearSel = metaAños.length ? Math.max(...metaAños) : null;
   const delMes = metas.filter(m => m.mes === mes &&
+    (mesYearSel == null || m.mYear == null || m.mYear === mesYearSel) &&
     (PORTAL_STATE.city === "all" || m.city === PORTAL_STATE.city));
 
-  const dates = [...new Set(rows.map(r => r.date))].sort();
-  const last  = dates[dates.length - 1] || "";
-  const adAct = _sum(rows.filter(r => r.date === last), r => r.activeDrivers);
-  const nrAct = _sum(rows, r => r.newPartner + r.newService + r.reactivated);
-  const shAct = _sum(rows, r => r.supplyHours);
-  const adSerie = _portalSeries(rows, r => r.activeDrivers).values;
+  // Actuals recortados A ESE MES (MTD), no al rango completo del sidebar —
+  // antes nrAct/shAct sumaban TODO el rango elegido (puede cruzar 2+ meses)
+  // contra una meta mensual, inflando el % de cumplimiento.
+  const rowsMes = rows.filter(r => {
+    const rym = reportYM(r.date, STATE.curMode, parseLocalDate);
+    return MES_NOMBRES[rym.m - 1] === mes && (mesYearSel == null || rym.y === mesYearSel);
+  });
+  const datesMes = [...new Set(rowsMes.map(r => r.date))].sort();
+  const last  = datesMes[datesMes.length - 1] || "";
+  const adAct = _sum(rowsMes.filter(r => r.date === last), r => r.activeDrivers);
+  const nrAct = _sum(rowsMes, r => r.newPartner + r.newService + r.reactivated);
+  const shAct = _sum(rowsMes, r => r.supplyHours);
+  const adSerie = _portalSeries(rowsMes, r => r.activeDrivers).values;
   const { daysElapsed, daysRemaining } = calcProjectionDays(last);
 
   // Qué meta aplica según la línea. `null` = ese KPI no tiene meta cargada para
@@ -220,7 +247,7 @@ function _portalMetas(line, rows) {
   return secH("🎯", "#8b5cf6", `Tus metas ${lbl} — ${escapeHTML(mes)}`.replace("  ", " "),
       "Avance del mes contra el objetivo acordado con tu KAM · la barra clara es la proyección al cierre", "") +
     `<div class="section">
-      ${_portalMetaRow("Conductores Activos", adAct, mA, projectSnapshot(adSerie), fmt)}
+      ${_portalMetaRow("Conductores Activos", adAct, mA, projAD(adSerie, adAct), fmt)}
       ${_portalMetaRow("Nuevos + Reactivados", nrAct, mNR, projectFlow(nrAct, daysElapsed, daysRemaining), fmt)}
       ${_portalMetaRow("Horas de Conexión", shAct, mH, projectFlow(shAct, daysElapsed, daysRemaining), fmtSmart)}
     </div>`;

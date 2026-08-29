@@ -41,6 +41,30 @@ export function _metasMesOrden(mes) {
   return 0;
 }
 
+// BUG REAL (encontrado en auditoria ago 2026): metas.mes es NOMBRE sin año
+// ("AGOSTO") y aunque el loader ya expone mes_year (STATE.metasData[].mYear),
+// nada lo usaba — todo el matcheo era por nombre de mes a secas. Con metas de
+// AGOSTO 2025 (partner A) y AGOSTO 2026 (partner B) conviviendo en la tabla
+// (la UNIQUE es clid,city,mes — distinto clid/city sí coexiste cross-year),
+// el tab colapsaba ambos años en una sola opcion "AGOSTO" y SUMABA las metas
+// de los dos años. Mismo tipo de bug que ya se arreglo en Presentacion 2.0.
+//
+// Fix: la seleccion de "mes actual" ahora es (mes, año) compuesta. Legacy: una
+// fila con mYear null (uploads viejos sin año) matchea cualquier año — no hay
+// forma de saber a cual pertenece, y no vale la pena bloquear data vieja por
+// esto.
+export function _metasMesActualYear(mesName) {
+  const anios = STATE.metasData
+    .filter(m => m.mes === mesName && m.mYear != null)
+    .map(m => m.mYear);
+  return anios.length ? Math.max(...anios) : null;
+}
+export function _metasMatchMes(m, mesName, mesYearSel) {
+  if (m.mes !== mesName) return false;
+  if (mesYearSel == null || m.mYear == null) return true; // sin año conocido: no se puede descartar
+  return m.mYear === mesYearSel;
+}
+
 // Handler del selector de mes. Cambia el mes activo y re-renderiza.
 // Valida contra los meses realmente disponibles en STATE.metasData.
 export function setMetasMes(mes) {
@@ -205,7 +229,7 @@ function _finishSeries(e) {
   const adS = seriesByDate(e._ad);
   e.ad     = snapshotValue(adS);
   e.cars   = e._cars ? snapshotValue(seriesByDate(e._cars)) : 0;
-  e.projAd = projectSnapshot(adS);
+  e.projAd = projAD(adS, e.ad);
   e.projNr = projectFlow(e.nr, daysElapsed, daysRemaining);
   e.projSh = projectFlow(e.sh, daysElapsed, daysRemaining);
   // La serie por fecha SE CONSERVA (no se borra) porque la proyección de un
@@ -335,7 +359,7 @@ function _metasAggKpi(kpi, units) {
     const pv = (u.a && kpi.proj) ? kpi.proj(u.a) : null;
     if (pv != null) { p += pv; hasP = true; }
   });
-  if (serieAgregada && hasP) p = projectSnapshot(seriesByDate(serieAgregada));
+  if (serieAgregada && hasP) p = projAD(seriesByDate(serieAgregada), a);
   return {
     actual: hasA ? a : null,
     meta:   hasM ? m : null,
@@ -389,8 +413,11 @@ function _metasControlsHTML(mesName, mesesDisponibles) {
   // poder re-subir el Excel. El enforcement real es RLS (is_admin()); este gate
   // solo oculta el botón. data-html2canvas-ignore lo excluye del PDF descargable
   // (el partner no debe verlo).
+  // data-year: sin esto, borrar "AGOSTO" borraría TODOS los años con ese
+  // nombre de mes si algún día conviven (metas.mYear, ver _metasMatchMes).
+  const _delYear = _metasMesActualYear(mesName);
   const delBtnHTML = STATE.isAdmin
-    ? `<button class="apply-btn agy-style-234" data-html2canvas-ignore="true" data-act="deleteMetasMes" data-mes="${escapeHTML(mesName)}"
+    ? `<button class="apply-btn agy-style-234" data-html2canvas-ignore="true" data-act="deleteMetasMes" data-mes="${escapeHTML(mesName)}" data-year="${_delYear ?? ""}"
          title="Borra todas las metas de ${escapeHTML(mesName)} para re-subir el Excel">
          🗑️ Eliminar metas de ${escapeHTML(mesName)}
        </button>`
@@ -542,8 +569,9 @@ function _renderMetasLineView(cfg) {
 
 // Filtro común de filas de meta de una línea.
 function _metasLineRows(mesName, hasLineMeta, selSet, cityFilter, kamFilter) {
+  const mesYearSel = _metasMesActualYear(mesName);
   return STATE.metasData.filter(m =>
-    m.mes === mesName &&
+    _metasMatchMes(m, mesName, mesYearSel) &&
     hasLineMeta(m) &&
     (kamFilter === "all" || m.kam === kamFilter) &&
     (!selSet.size || _lineSelHas(selSet, new Set(STATE.sidebarPartners || STATE.allPartners), m.partner)) &&
@@ -681,6 +709,9 @@ export function _renderMetasImpl() {
   const mesName = STATE.metasMesSel && mesesDisponibles.includes(STATE.metasMesSel)
     ? STATE.metasMesSel
     : (mesesDisponibles[0] || "");
+  // Año del mes seleccionado (el más reciente si hay más de uno) — ver
+  // _metasMatchMes. Sin esto, AGOSTO-2025 y AGOSTO-2026 se sumaban juntos.
+  const mesYearSel = _metasMesActualYear(mesName);
 
   // Fase 3: líneas Fleet / TukTuk. Vista dedicada (meta vs actual de la línea) que
   // reemplaza el cuerpo de Metas. El agregador sigue con el flujo de abajo intacto.
@@ -696,7 +727,7 @@ export function _renderMetasImpl() {
   }
 
   const metas = STATE.metasData.filter(m => {
-    if (m.mes !== mesName)                        return false;
+    if (!_metasMatchMes(m, mesName, mesYearSel))    return false;
     if (kamFilter !== "all" && m.kam !== kamFilter) return false;
     // Mismo recorte de ciudad que el FACT: sin esto, con Ciudad=Arequipa los
     // totales de plan (Perú y por KAM) sumaban las metas de TODAS las ciudades
@@ -814,7 +845,7 @@ export function _renderMetasImpl() {
       combos.push({ partner: p.partner, kam: p.kam, city: "Todas",
         mA: p.mA, mNR: p.mNR, mH: p.mH,
         ad: r.lastAD, nr: r.nr, sh: r.sh,
-        projAD: projectSnapshot(r.adV),
+        projAD: projAD(r.adV, r.lastAD),
         adByDate: r.adByDate,
         projNR: projA(r.nrV, daysElapsed, daysRemaining),
         projSH: projA(r.shV, daysElapsed, daysRemaining) });
@@ -825,7 +856,7 @@ export function _renderMetasImpl() {
       combos.push({ partner: m.partner, kam: m.kam, city: m.city,
         mA: m.mA, mNR: m.mNR, mH: m.mH,
         ad: r.lastAD, nr: r.nr, sh: r.sh,
-        projAD: projectSnapshot(r.adV),
+        projAD: projAD(r.adV, r.lastAD),
         adByDate: r.adByDate,
         projNR: projA(r.nrV, daysElapsed, daysRemaining),
         projSH: projA(r.shV, daysElapsed, daysRemaining) });
@@ -850,7 +881,7 @@ export function _renderMetasImpl() {
       city: cityFilter === "all" ? t("metas.sinPlan") : cityFilter,
       mA: 0, mNR: 0, mH: 0,
       ad: r.lastAD, nr: r.nr, sh: r.sh,
-      projAD: projectSnapshot(r.adV),
+      projAD: projAD(r.adV, r.lastAD),
       adByDate: r.adByDate,
       projNR: projA(r.nrV, daysElapsed, daysRemaining),
       projSH: projA(r.shV, daysElapsed, daysRemaining),
@@ -875,7 +906,7 @@ export function _renderMetasImpl() {
       const m = c.adByDate || {};
       Object.keys(m).forEach(d => { merged[d] = (merged[d] || 0) + m[d]; });
     });
-    return projectSnapshot(seriesByDate(merged));
+    return projAD(seriesByDate(merged), arr.reduce((s2, c) => s2 + c.ad, 0));
   };
   const tPAD= _projADde(combos);
   const tPNR= combos.reduce((s, c) => s + c.projNR, 0);
@@ -911,7 +942,7 @@ export function _renderMetasImpl() {
   CITIES.forEach(city => {
     // Use all metas for this city (ignore cityFilter here to always show all cities)
     const cm = STATE.metasData.filter(m => {
-      if (m.mes !== mesName)                        return false;
+      if (!_metasMatchMes(m, mesName, mesYearSel))    return false;
       if (kamFilter !== "all" && m.kam !== kamFilter) return false;
       if (sel.length && !selSet.has(m.partner))     return false;
       return m.city === city;
@@ -954,7 +985,7 @@ export function _renderMetasImpl() {
     const crSH = sorted.reduce((s, v) => s + v.sh, 0);
     const nrV = sorted.map(v => v.nr);
     const shV = sorted.map(v => v.sh);
-    const cpAD = projectSnapshot(sorted.map(v => v.ad));
+    const cpAD = projAD(sorted.map(v => v.ad), lastAD);
     const cpNR = projA(nrV, daysElapsed, daysRemaining);
     const cpSH = projA(shV, daysElapsed, daysRemaining);
 
@@ -1295,23 +1326,34 @@ export async function downloadMetasPDF() {
 // Usa `ilike` sin comodines = igualdad case-insensitive, así cubre el casing
 // mixto de uploads viejos ("JUNIO"/"Junio"/"junio") que el loader normaliza a
 // UPPERCASE en cliente. Guard de admin defensivo; el enforcement real es RLS.
-export async function deleteMetasMes(mes) {
+export async function deleteMetasMes(mes, year) {
   if (!STATE.isAdmin) {
     showBanner(false, t("metas.err.admin"));
     return;
   }
   const mesU = (mes || "").trim();
   if (!mesU) return;
+  // año del mes que se está viendo — sin esto, borrar "AGOSTO" borraría TODOS
+  // los años con ese nombre si algún día conviven (metas.mYear).
+  const yearN = year !== undefined && year !== "" && year != null ? +year : null;
 
-  const n = STATE.metasData.filter(m => m.mes === mesU.toUpperCase()).length;
+  // Conteo estricto por año (no el "no se puede descartar" de _metasMatchMes):
+  // el DELETE de abajo con .eq("mes_year", yearN) tampoco matchea filas con
+  // mes_year NULL en Postgres — el conteo mostrado al confirmar debe coincidir
+  // con lo que realmente se va a borrar.
+  const n = STATE.metasData.filter(m =>
+    m.mes === mesU.toUpperCase() && (yearN == null || m.mYear === yearN)
+  ).length;
   if (!confirm(
-    `¿Confirmas borrar las metas de ${mesU} (${n} registro${n === 1 ? "" : "s"})?\n\n` +
+    `¿Confirmas borrar las metas de ${mesU}${yearN ? " " + yearN : ""} (${n} registro${n === 1 ? "" : "s"})?\n\n` +
     `Útil para re-subir el Excel corregido. Esta acción NO se puede deshacer.`
   )) return;
 
   showLoad(true, `Eliminando metas de ${mesU}...`);
   try {
-    const { error } = await sb.from("metas").delete().ilike("mes", mesU);
+    let q = sb.from("metas").delete().ilike("mes", mesU);
+    if (yearN != null) q = q.eq("mes_year", yearN);
+    const { error } = await q;
     if (error) throw error;
 
     // Si el mes borrado era la selección manual del selector, limpiarla para que
@@ -1346,6 +1388,6 @@ import { stampPDF } from "./shared/pdfmeta.js";
 registerActions({
   setMetasLine:    d => setMetasLine(d.line),
   setMetasMes:     (d, el) => setMetasMes(el.value),
-  deleteMetasMes:  d => deleteMetasMes(d.mes),
+  deleteMetasMes:  d => deleteMetasMes(d.mes, d.year),
   downloadMetasPDF
 });
