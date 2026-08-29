@@ -889,7 +889,7 @@ export function _calcSec4b_fleet(agg) {
   }).join("");
 
   return `
-    ${_secH("🚗", "#0891b2", t("calc.metasFleet"), t("calc.metasFleetSub"))}
+    ${_secH("🚗", "#0284c7", t("calc.metasFleet"), t("calc.metasFleetSub"))}
     <div class="section">
       <div class="tbl-wrap agy-style-140">
         <table class="dtbl">

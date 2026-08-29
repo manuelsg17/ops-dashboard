@@ -231,7 +231,7 @@ function _portalMetas(line, rows) {
     };
     const mShCar = wMeta("mSHcar", owned), mAcc = wMeta("mAcc", trips), mUtil = wMeta("mUtil", owned);
     if (mShCar == null && mAcc == null && mUtil == null) return "";
-    return secH("🎯", "#0891b2", `Tus metas de flota — ${escapeHTML(mes)}`,
+    return secH("🎯", "#0284c7", `Tus metas de flota — ${escapeHTML(mes)}`,
         "Acumulado del RANGO seleccionado vs el objetivo mensual acordado con tu KAM · para un % representativo, elegí el mes completo", "") +
       `<div class="section">
         ${_portalMetaRow("SH / Auto (interno)", shCar, mShCar, null, v => fmt(v))}
@@ -353,7 +353,7 @@ export function renderPartnerPortal() {
     };
     const now = fl(rowsLast), prev = fl(rowsPrev);
     html += `<div class="section"><div class="metric-row">
-      ${_kpiCard("🚗 Autos propios activos", escalaN, now.owned, now.owned, prev.owned, "#0891b2")}
+      ${_kpiCard("🚗 Autos propios activos", escalaN, now.owned, now.owned, prev.owned, "#0284c7")}
       ${_kpiCard("🎨 Brandeados", escalaN, now.branded, now.branded, prev.branded, "#7e22ce")}
       ${_kpiCard("⏱️ SH / Auto (interno)", escalaN, now.shCar, now.shCar, prev.shCar, "#8b5cf6", v => fmt(v))}
       ${_kpiCard("✅ Aceptación", `${escalaN} · ponderada por viajes`, now.accept, now.accept, prev.accept, "#10b981", v => fmt(v) + "%")}
@@ -363,7 +363,7 @@ export function renderPartnerPortal() {
       ${_kpiCard("📊 Conductores Activos", escalaN, k.ad,  k.ad,  k.adP, "#FF0000")}
       ${_kpiCard("🆕 Nuevos + Reactivados", "acumulado del rango", k.nr, k.nrL, k.nrP, "#f97316")}
       ${_kpiCard("⏱️ Horas de Conexión", "acumulado del rango", k.sh, k.shL, k.shP, "#8b5cf6", fmtSmart)}
-      ${_kpiCard("🚕 Viajes", "acumulado del rango", k.tr, k.trL, k.trP, "#0ea5e9", fmtSmart)}
+      ${_kpiCard("🚕 Viajes", "acumulado del rango", k.tr, k.trL, k.trP, "#0284c7", fmtSmart)}
     </div></div>`;
   }
 
@@ -371,14 +371,14 @@ export function renderPartnerPortal() {
 
   // ── Evolución: una gráfica por KPI (mismo estilo que el deck) ───────────
   const charts = line === "fleet"
-    ? [{ id: "portalChAd",  label: "Autos propios activos", color: "#0891b2", fn: r => r.ownedFleetActiveCars || 0 },
+    ? [{ id: "portalChAd",  label: "Autos propios activos", color: "#0284c7", fn: r => r.ownedFleetActiveCars || 0 },
        { id: "portalChNr",  label: "Brandeados",            color: "#7e22ce", fn: r => r.brandedActiveCars || 0 },
        { id: "portalChSh",  label: "Horas internas de flota", color: "#8b5cf6", fn: r => r.internalFleetSh || 0 },
-       { id: "portalChTr",  label: "Viajes",                color: "#0ea5e9", fn: r => r.trips || 0 }]
+       { id: "portalChTr",  label: "Viajes",                color: "#0284c7", fn: r => r.trips || 0 }]
     : [{ id: "portalChAd",  label: "Conductores Activos",   color: "#FF0000", fn: r => r.activeDrivers || 0 },
        { id: "portalChNr",  label: "Nuevos + Reactivados",  color: "#f97316", fn: r => (r.newPartner || 0) + (r.newService || 0) + (r.reactivated || 0) },
        { id: "portalChSh",  label: "Horas de Conexión",     color: "#8b5cf6", fn: r => r.supplyHours || 0 },
-       { id: "portalChTr",  label: "Viajes",                color: "#0ea5e9", fn: r => r.trips || 0 }];
+       { id: "portalChTr",  label: "Viajes",                color: "#0284c7", fn: r => r.trips || 0 }];
 
   html += secH("📈", "#10b981", "Tu evolución", `Período a período · escala ${STATE.curMode}`, "");
   html += `<div class="section"><div class="agy-style-527">${

@@ -28,7 +28,7 @@ export const SEG_STATUS = [
   { key: "pendiente", es: "Pendiente", en: "Pending",     color: "#9ca3af" },
   { key: "en_curso",  es: "En curso",  en: "In progress", color: "#3b82f6" },
   { key: "hecho",     es: "Hecho",     en: "Done",        color: "#10b981" },
-  { key: "bloqueado", es: "Bloqueado", en: "Blocked",     color: "#ef4444" }
+  { key: "bloqueado", es: "Bloqueado", en: "Blocked",     color: "#dc2626" }
 ];
 export function _segStatus(k) { return SEG_STATUS.find(s => s.key === k) || SEG_STATUS[0]; }
 export function _segStatusColor(k) { return _segStatus(k).color; }
@@ -188,7 +188,7 @@ export function _segBuildGantt(rows, opts) {
   const order = _segProjectOrder(tasks);
 
   const brdToday = i => (i === todayIdx ? "border-left:2px solid rgba(255,0,0,.5);" : "");
-  const th = (s, i) => `<th style="text-align:center;padding:4px 5px;border-bottom:2px solid #eee;background:#fafafa;font-size:.56rem;font-weight:700;color:${i === todayIdx ? "#FF0000" : "#666"};white-space:nowrap;${i != null ? brdToday(i) : ""}">${escapeHTML(s)}</th>`;
+  const th = (s, i) => `<th style="text-align:center;padding:4px 5px;border-bottom:2px solid #e5e5e5;background:#fafafa;font-size:.56rem;font-weight:700;color:${i === todayIdx ? "#FF0000" : "#555"};white-space:nowrap;${i != null ? brdToday(i) : ""}">${escapeHTML(s)}</th>`;
   const headTimeline = tl ? tl.cols.map((c, i) => th(c.label, i)).join("") : "";
 
   // Cuerpo agrupado por proyecto: fila de encabezado (barra-span del proyecto) + tareas.
@@ -325,13 +325,13 @@ function _segRenderResumen(tasks) {
     </div>`;
 
   let html = `<div class="section"><div class="metric-row">
-    ${kpi("⚠️ Vencidas", totalOverdue, totalOverdue ? "#ef4444" : "#9ca3af", "Tareas con fecha de fin pasada que no están hechas")}
+    ${kpi("⚠️ Vencidas", totalOverdue, totalOverdue ? "#dc2626" : "#9ca3af", "Tareas con fecha de fin pasada que no están hechas")}
     ${kpi("🚫 Bloqueadas", totalBlocked, totalBlocked ? "#f59e0b" : "#9ca3af", "Tareas marcadas como bloqueadas")}
     ${kpi("📋 Abiertas", totalOpen, "#3b82f6", "Tareas que no están hechas")}
     ${kpi("✅ Hechas", totalDone, "#10b981", "Tareas completadas")}
   </div></div>`;
 
-  html += _secH("👥", "#0ea5e9", `Partners con seguimiento (${rows.length})`,
+  html += _secH("👥", "#0284c7", `Partners con seguimiento (${rows.length})`,
     sinTareas ? `${sinTareas} partner${sinTareas === 1 ? "" : "es"} del dashboard todavía sin ninguna tarea cargada`
               : "Todos los partners del dashboard tienen seguimiento");
 
@@ -358,10 +358,10 @@ function _segRenderResumen(tasks) {
       </td>
       <td><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${kcol};margin-right:4px"></span>${escapeHTML(r.kam || "—")}</td>
       <td class="tn">${fmt(r.projects.size)}</td>
-      ${cell(r.overdue, "#ef4444")}
+      ${cell(r.overdue, "#dc2626")}
       ${cell(r.byStatus.pendiente, "#6b7280")}
       ${cell(r.byStatus.en_curso, "#3b82f6")}
-      ${cell(r.byStatus.bloqueado, "#ef4444")}
+      ${cell(r.byStatus.bloqueado, "#dc2626")}
       ${cell(done, "#10b981")}
       <td class="tn">${r.nextDue ? _segFmtD(r.nextDue) : "—"}</td>
       <td><button class="mode-btn seg-open" data-act="segOpenPartner" data-partner="${escapeHTML(r.partner)}" title="Ver el Gantt y las tareas de ${escapeHTML(r.partner)}">Abrir →</button></td>
@@ -494,7 +494,7 @@ export function renderSeguimiento() {
              "Línea de tiempo por tarea (día / semana / mes según el rango)")
          + `<div class="section"><div id="segGantt">${_segBuildGantt(SEG_STATE.draft, { en: false })}</div></div>`;
   } else {
-    body = _secH("📋", "#0ea5e9", `Seguimiento · ${partner}`,
+    body = _secH("📋", "#0284c7", `Seguimiento · ${partner}`,
              "Proyecto → tareas · Owner · fechas · resultado esperado — se comparte en el PDF del partner")
          + editor
          + _secH("📊", "#10b981", "Gantt", "Se actualiza mientras editás")

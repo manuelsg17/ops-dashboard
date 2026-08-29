@@ -85,7 +85,7 @@ export function renderFleetExterno() {
   if (!FLEET_EXT.enabled) { el.innerHTML = _fleetExtSetupPanel(); return; }
 
   if (!FLEET_EXT_STATE.schemaLoaded) {
-    el.innerHTML = secH("🛞", "#0ea5e9", "Fleet Externo", "Descubriendo el esquema de la base del colega…", "") +
+    el.innerHTML = secH("🛞", "#0284c7", "Fleet Externo", "Descubriendo el esquema de la base del colega…", "") +
       `<div class="section agy-style-182">⏳ Leyendo tablas y columnas disponibles…</div>`;
     loadFleetExtSchema().then(() => renderFleetExterno());
     return;
@@ -103,7 +103,7 @@ export function renderFleetExterno() {
 
 // ── PANELES ────────────────────────────────────────────────────────────────────
 export function _fleetExtSetupPanel() {
-  return secH("🛞", "#0ea5e9", "Fleet Externo", "Conectar la base del colega (solo-lectura, en vivo) y explorar toda su data de fleet", "") + `
+  return secH("🛞", "#0284c7", "Fleet Externo", "Conectar la base del colega (solo-lectura, en vivo) y explorar toda su data de fleet", "") + `
     <div class="section agy-style-183">
       <div class="agy-style-184">
         Tu dashboard leerá <strong>en vivo</strong> la base del colega con un segundo cliente de <strong>solo-lectura</strong> y te mostrará <strong>todas las tablas y columnas</strong> que expongas. La <strong>anon key es pública</strong> (la protege el RLS/grants del colega) y se guarda solo en <strong>tu navegador</strong>.
@@ -127,7 +127,7 @@ grant select on all tables in schema public to anon;
 }
 
 export function _fleetExtErrorPanel(msg, isSchema) {
-  return secH("🛞", "#ef4444", "Fleet Externo", isSchema ? "No se pudo descubrir el esquema" : "No se pudo leer la tabla", "") + `
+  return secH("🛞", "#dc2626", "Fleet Externo", isSchema ? "No se pudo descubrir el esquema" : "No se pudo leer la tabla", "") + `
     <div class="section agy-style-183">
       <div class="agy-style-191">
         <strong>Error:</strong> ${escapeHTML(msg)}
@@ -153,7 +153,7 @@ export function _fleetExtExplorer(loadingData) {
   const sel    = FLEET_EXT_STATE.table;
   const selCols = (tables.find(t => t.name === sel) || {}).cols || [];
 
-  let html = secH("🛞", "#0ea5e9", "Fleet Externo",
+  let html = secH("🛞", "#0284c7", "Fleet Externo",
     `${fmt(tables.length)} tabla(s) descubierta(s) · <span class="agy-style-195">${escapeHTML(host)}</span> · solo-lectura, en vivo`, "");
 
   // Barra: filtro de tablas + reconfigurar + refrescar esquema
@@ -169,7 +169,7 @@ export function _fleetExtExplorer(loadingData) {
         ${shown.map(t => {
           const on = t.name === sel;
           return `<button data-act="selectFleetExtTable" data-table="${escapeHTML(t.name)}" class="crud-btn" title="${fmt(t.cols.length)} columnas"
-            style="padding:3px 10px;font-size:.74rem;${on ? "background:#0ea5e9;color:#fff;border-color:#0ea5e9;font-weight:700" : ""}">${escapeHTML(t.name)} <span class="agy-style-202">· ${fmt(t.cols.length)}</span></button>`;
+            style="padding:3px 10px;font-size:.74rem;${on ? "background:#0284c7;color:#fff;border-color:#0284c7;font-weight:700" : ""}">${escapeHTML(t.name)} <span class="agy-style-202">· ${fmt(t.cols.length)}</span></button>`;
         }).join("") || `<span class="agy-style-203">Sin tablas (revisá los grants de SELECT al rol anónimo).</span>`}
       </div>
     </div>`;

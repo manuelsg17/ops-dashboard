@@ -437,7 +437,7 @@ export function _pvLineBody(partner, line, citiesOf, dates) {
   }
 
   if (line === "fleet") {
-    let html = secH("🚗", "#0891b2", "Fleet · Perú General",
+    let html = secH("🚗", "#0284c7", "Fleet · Perú General",
       "Presencia, calidad y revenue/productividad de flota de este partner", d2s(lastDate));
     html += _rendFleetCardsBody(_rendFleetAgg(lastRows), _rendFleetAgg(prevRows));
     html += secH("🏙️", "#06b6d4", "Fleet por Ciudad", "KPIs de flota por ciudad", "");
@@ -584,7 +584,7 @@ export function renderPartnerView() {
                     : STATE.curMode === "diario"  ? _t("scaleDaily")
                     : _t("scaleWeekly");
   const isEN = PARTNER_VIEW_STATE.lang === "en";
-  const langBtnStyle = on => `padding:6px 11px;font-size:.74rem;font-weight:700;border:1px solid #ddd;cursor:pointer;background:${on?'#0ea5e9':'#fff'};color:${on?'#fff':'#555'};border-radius:6px`;
+  const langBtnStyle = on => `padding:6px 11px;font-size:.74rem;font-weight:700;border:1px solid #e5e5e5;cursor:pointer;background:${on?'#0284c7':'#fff'};color:${on?'#fff':'#555'};border-radius:6px`;
 
   let html = `
     <div class="agy-style-102">
@@ -1021,7 +1021,7 @@ export function _pvExecutiveSummary(ctx) {
 
   // ── Render ────────────────────────────────────────────────────────────────
   const sevStyle = {
-    red:    { bg:"#fff5f5", bd:"#fecaca", tc:"#991b1b" },
+    red:    { bg:"#fff5f5", bd:"#fecaca", tc:"#b91c1c" },
     yellow: { bg:"#fffbeb", bd:"#fde68a", tc:"#92400e" },
     green:  { bg:"#f0fdf4", bd:"#86efac", tc:"#166534" },
     info:   { bg:"#f0f9ff", bd:"#bae6fd", tc:"#075985" }
@@ -1045,7 +1045,7 @@ export function _pvExecutiveSummary(ctx) {
   const findingsWord = top.length === 1 ? _t("findingsOne") : _t("findingsMany");
   const headerSub = `${top.length} ${findingsWord} · ${_t("execSummarySub")}`;
   return `
-    ${_secH("💼", "#0ea5e9", _t("execSummary"), headerSub)}
+    ${_secH("💼", "#0284c7", _t("execSummary"), headerSub)}
     <div class="section agy-style-290">
       ${items}
     </div>`;
@@ -1061,7 +1061,7 @@ export function _pvKpiCard(label, cur, prev, color, opts = {}) {
   const value = isMoney ? `$${formatN(cur)}` : formatN(cur);
   const bdgHtml = prev !== null ? bdgMode(cur, prev, "mb-badge") : "";
   return `
-    <div style="background:#fff;border:1px solid #eee;border-top:3px solid ${color};border-radius:10px;padding:10px 12px">
+    <div style="background:#fff;border:1px solid #e5e5e5;border-top:3px solid ${color};border-radius:10px;padding:10px 12px">
       <div class="agy-style-291">${escapeHTML(label)}</div>
       <div class="agy-style-292">
         <span class="agy-style-293">${value}</span>
@@ -1152,7 +1152,7 @@ export function _pvCitySection(partner, city, dates, recibeLeads, seriesCached) 
     </div>`;
 
   return `
-    <div style="border:1px solid #eee;border-top:3px solid ${cityColor};border-radius:10px;padding:14px;margin-bottom:14px">
+    <div style="border:1px solid #e5e5e5;border-top:3px solid ${cityColor};border-radius:10px;padding:14px;margin-bottom:14px">
       <div class="agy-style-300">
         <div class="agy-style-301">
           <span style="width:12px;height:12px;border-radius:50%;background:${cityColor}"></span>
@@ -1575,7 +1575,7 @@ export function _pvConvInner(selectedPartner) {
   const F = d.F;
   const fpct = v => (v == null || isNaN(v)) ? "—" : (+v).toFixed(1) + "%";
   const tkey = { firstOrder: "convFirstOrder", n5: "convN5", n10: "convN10", n25: "convN25", n50: "convN50", n100: "convN100" };
-  const th = (s, left) => `<th style="text-align:${left ? "left" : "right"};padding:6px 8px;border-bottom:2px solid #eee;font-size:.7rem;background:#fafafa;white-space:nowrap">${escapeHTML(s)}</th>`;
+  const th = (s, left) => `<th style="text-align:${left ? "left" : "right"};padding:6px 8px;border-bottom:2px solid #e5e5e5;font-size:.7rem;background:#fafafa;white-space:nowrap">${escapeHTML(s)}</th>`;
   const rowHtml = (label, vals, color, hl) => `<tr style="${hl ? "background:#fff5f5" : ""}">
       <td style="padding:6px 8px;border-bottom:1px solid #f3f3f3;font-weight:${hl ? 800 : 600};color:${color};white-space:nowrap">
         <span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${color};margin-right:6px"></span>${escapeHTML(label)}</td>
@@ -1601,7 +1601,7 @@ export function _pvConvInner(selectedPartner) {
       <table class="agy-style-311">
         <thead><tr>${th("", true)}${d.cols.map(c => th(_t(tkey[c]))).join("")}</tr></thead>
         <tbody>
-          ${rowHtml(selectedPartner, d.partnerVals, "#ef4444", true)}
+          ${rowHtml(selectedPartner, d.partnerVals, "#dc2626", true)}
           ${rowHtml(_t("convAvgTop", { n: 5 }),  d.top5,  "#3b82f6", false)}
           ${rowHtml(_t("convAvgTop", { n: 10 }), d.top10, "#1e40af", false)}
         </tbody>
@@ -1631,7 +1631,7 @@ export function _pvConvMountChart(selectedPartner) {
   _pvMountChart("pvConvChart", el, {
     series: [{ name: cohortLabel, data: cohortData }, { name: selectedPartner, data: partnerData }],
     chart: { type: "bar", height: 280, toolbar: { show: false }, animations: { enabled: false }, fontFamily: "inherit" },
-    colors: ["#3b82f6", "#ef4444"],
+    colors: ["#3b82f6", "#dc2626"],
     plotOptions: { bar: { columnWidth: "62%", borderRadius: 3, dataLabels: { position: "top" } } },
     dataLabels: {
       enabled: true,
@@ -1655,9 +1655,9 @@ export function _pvCityId(city) { return city.toLowerCase().replace(/[^a-z0-9]/g
 // Permiten comparar al partner contra tiers específicos (líder, peers cercanos, grupo
 // medio) en vez de un único promedio que se diluye al comparar partners grandes.
 export const PV_COHORT_BANDS = [
-  { key: "t1",   range: [0, 1],  color: "#ef4444", es: "Top 1",       en: "Top 1" },
+  { key: "t1",   range: [0, 1],  color: "#dc2626", es: "Top 1",       en: "Top 1" },
   { key: "t23",  range: [1, 3],  color: "#f59e0b", es: "Top 2-3",     en: "Top 2-3" },
-  { key: "t45",  range: [3, 5],  color: "#0ea5e9", es: "Top 4-5",     en: "Top 4-5" },
+  { key: "t45",  range: [3, 5],  color: "#0284c7", es: "Top 4-5",     en: "Top 4-5" },
   { key: "t610", range: [5, 10], color: "#a855f7", es: "Top 6-10",    en: "Top 6-10" },
   { key: "t5",   range: [0, 5],  color: "#10b981", es: "Prom. Top 5", en: "Avg Top 5" }
 ];
@@ -1717,7 +1717,7 @@ export function pvShareToggle() {
 // enciende solo para su análisis. Reconstruye los scopes en sitio (sin re-render total).
 export function _pvLegendBtnHtml() {
   const on = !!PARTNER_VIEW_STATE.showLegend;
-  return `<button id="pvLegendBtn" data-act="pvLegendToggle" class="preset-btn${on ? " active" : ""}" title="${escapeHTML(_t("legendHint"))}" style="flex:0 0 auto;white-space:nowrap;padding:4px 10px;${on ? "background:#0ea5e9;color:#fff;border-color:#0ea5e9" : ""}">📋 ${escapeHTML(_t("legendBtn"))}</button>`;
+  return `<button id="pvLegendBtn" data-act="pvLegendToggle" class="preset-btn${on ? " active" : ""}" title="${escapeHTML(_t("legendHint"))}" style="flex:0 0 auto;white-space:nowrap;padding:4px 10px;${on ? "background:#0284c7;color:#fff;border-color:#0284c7" : ""}">📋 ${escapeHTML(_t("legendBtn"))}</button>`;
 }
 
 export function pvLegendToggle() {
@@ -1810,7 +1810,7 @@ export function _pvCohortLegend(scopeCity, dates) {
     { key: "commission", label: _t("commission"),    fn: v => "$" + fmtSmart(v) },
     { key: "gmv",        label: "GMV",               fn: v => "$" + fmtSmart(v) }
   ];
-  const th = (s, left) => `<th style="text-align:${left ? "left" : "right"};padding:4px 7px;border-bottom:1px solid #eee;background:#fafafa;font-size:.62rem;white-space:nowrap">${escapeHTML(s)}</th>`;
+  const th = (s, left) => `<th style="text-align:${left ? "left" : "right"};padding:4px 7px;border-bottom:1px solid #e5e5e5;background:#fafafa;font-size:.62rem;white-space:nowrap">${escapeHTML(s)}</th>`;
 
   const blocks = activeBands.map(b => {
     const members = cohorts.ranked.slice(b.range[0], b.range[1]);
@@ -2064,7 +2064,7 @@ export function _pvBuildScopeCharts(partner, scopeCity, idPrefix, dates, recibeL
   _pvCmpLine(`pvs_${idPrefix}_gmv`, labels, { name: "GMV", data: series.map(s => s.gmv) }, lines(s => s.gmv), "#f59e0b", fmtSmart, true);
   // SH por auto activo (horas, 1 decimal) y Tasa de aceptación (fracción 0-1 → %). Cohorte =
   // promedio SIMPLE de la tasa de cada partner (s.shCar/s.accept), no ponderado (decisión del KAM).
-  _pvCmpLine(`pvs_${idPrefix}_shcar`, labels, { name: _t("shPerCar"), data: series.map(s => s.shCar) }, lines(s => s.shCar), "#0891b2", v => (v || 0).toFixed(1));
+  _pvCmpLine(`pvs_${idPrefix}_shcar`, labels, { name: _t("shPerCar"), data: series.map(s => s.shCar) }, lines(s => s.shCar), "#0284c7", v => (v || 0).toFixed(1));
   _pvCmpLine(`pvs_${idPrefix}_accept`, labels, { name: _t("acceptRate"), data: series.map(s => s.accept) }, lines(s => s.accept), "#db2777", v => ((v || 0) * 100).toFixed(1) + "%");
   const tbl = document.getElementById(`pvs_${idPrefix}_nr_tbl`);
   if (tbl) tbl.innerHTML = _pvNRTable(series, dates, recibeLeads);
@@ -2126,7 +2126,7 @@ export function _pvChannelSection(selectedPartner) {
 export function _pvChannelInner(selectedPartner) {
   const d = _pvChannelData(selectedPartner);
   const fmtN = v => fmt(Math.round(v || 0));
-  const th = (s, left) => `<th style="text-align:${left ? "left" : "right"};padding:6px 8px;border-bottom:2px solid #eee;font-size:.66rem;background:#fafafa;white-space:nowrap">${escapeHTML(s)}</th>`;
+  const th = (s, left) => `<th style="text-align:${left ? "left" : "right"};padding:6px 8px;border-bottom:2px solid #e5e5e5;font-size:.66rem;background:#fafafa;white-space:nowrap">${escapeHTML(s)}</th>`;
   const rowHtml = (label, vals, color, hl) => `<tr style="${hl ? "background:#fff5f5" : ""}">
       <td style="padding:6px 8px;border-bottom:1px solid #f3f3f3;font-weight:${hl ? 800 : 600};color:${color};white-space:nowrap">
         <span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${color};margin-right:6px"></span>${escapeHTML(label)}</td>
@@ -2139,7 +2139,7 @@ export function _pvChannelInner(selectedPartner) {
       <table class="agy-style-328">
         <thead><tr>${th("", true)}${PV_CHANNELS.map(c => th(c.label)).join("")}</tr></thead>
         <tbody>
-          ${rowHtml(selectedPartner, d.partnerVals, "#ef4444", true)}
+          ${rowHtml(selectedPartner, d.partnerVals, "#dc2626", true)}
           ${rowHtml(_t("convAvgTop", { n: 5 }),  d.top5,  "#3b82f6", false)}
           ${rowHtml(_t("convAvgTop", { n: 10 }), d.top10, "#1e40af", false)}
         </tbody>
@@ -2166,7 +2166,7 @@ export function _pvChannelMountChart(selectedPartner) {
   _pvMountChart("pvChannelChart", el, {
     series: [{ name: cohortLabel, data: cohortData }, { name: selectedPartner, data: partnerData }],
     chart: { type: "bar", height: 320, toolbar: { show: false }, animations: { enabled: false }, fontFamily: "inherit" },
-    colors: ["#3b82f6", "#ef4444"],
+    colors: ["#3b82f6", "#dc2626"],
     plotOptions: { bar: { columnWidth: "68%", borderRadius: 3, dataLabels: { position: "top" } } },
     dataLabels: {
       enabled: true,

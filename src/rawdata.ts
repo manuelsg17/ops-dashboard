@@ -272,7 +272,7 @@ export function _rawViewToggle() {
   const isData   = RAW_STATE.view !== "flotas";
   const btn = (v, label) => `
     <button data-act="rawSwitchView" data-view="${escapeHTML(v)}"
-      style="padding:6px 14px;font-size:.78rem;font-weight:700;border:1px solid #ddd;cursor:pointer;
+      style="padding:6px 14px;font-size:.78rem;font-weight:700;border:1px solid #e5e5e5;cursor:pointer;
         background:${RAW_STATE.view===v?'#FF0000':'#fff'};color:${RAW_STATE.view===v?'#fff':'#555'};
         border-radius:6px">${label}</button>`;
   return `
@@ -602,7 +602,7 @@ export function _renderFlotasView() {
           <td class="agy-style-503">
             <button data-act="flotaStartEdit" data-clid="${clidH}" title="${escapeHTML(t("raw.editarTip"))}" class="agy-style-504">\u270F\uFE0F</button>
             ${r.tieneFlota
-              ? `<button data-act="flotaToggleActivo" data-clid="${clidH}" data-activo="${!r.activo ? 1 : 0}" title="${r.activo?t("raw.marcarInactiva"):t("raw.reactivar")}" style="padding:3px 8px;font-size:.7rem;background:${r.activo?"#fff5f5":"#f0fdf4"};border:1px solid ${r.activo?"#fecaca":"#86efac"};color:${r.activo?"#991b1b":"#166534"};border-radius:5px;cursor:pointer">${r.activo?"\uD83D\uDEAB":"\u2713"}</button>`
+              ? `<button data-act="flotaToggleActivo" data-clid="${clidH}" data-activo="${!r.activo ? 1 : 0}" title="${r.activo?t("raw.marcarInactiva"):t("raw.reactivar")}" style="padding:3px 8px;font-size:.7rem;background:${r.activo?"#fff5f5":"#f0fdf4"};border:1px solid ${r.activo?"#fecaca":"#86efac"};color:${r.activo?"#b91c1c":"#166534"};border-radius:5px;cursor:pointer">${r.activo?"\uD83D\uDEAB":"\u2713"}</button>`
               : `<button data-act="flotaToggleActivo" data-clid="${clidH}" data-activo="0" title="${escapeHTML(t("raw.marcarInactivaCrear"))}" class="agy-style-505">\uD83D\uDEAB</button>`}
           </td>
         </tr>`;
@@ -848,7 +848,7 @@ export function _reconClasif(sample) {
   const excl = typeof rowExcludedFromTaxi === "function" && rowExcludedFromTaxi(sample);
   const fleet= typeof rowIsFleet          === "function" && rowIsFleet(sample);
   if (tuk)             return { omit: true,  fleet, label: "\uD83D\uDEFA TukTuk (omitido)",   color: "#b45309", bg: "#fffbeb" };
-  if (excl)            return { omit: true,  fleet, label: "\u26D4 Excluido (omitido)",  color: "#991b1b", bg: "#fff5f5" };
+  if (excl)            return { omit: true,  fleet, label: "\u26D4 Excluido (omitido)",  color: "#b91c1c", bg: "#fff5f5" };
   if (fleet)           return { omit: false, fleet, label: "\uD83D\uDE97 Fleet",              color: "#166534", bg: "" };
   return                      { omit: false, fleet, label: "Taxi",                 color: "#64748b", bg: "" };
 }
@@ -858,7 +858,7 @@ export function _renderReconView() {
              : STATE.curMode === "diario"  ? STATE.rawDataDiarioFull
              :                              STATE.rawDataFull;
   if (!src0 || !src0.length) {
-    return secH("\uD83E\uDDFE", "#0ea5e9", t("raw.recon"), t("raw.sinDatosCargados"), "") + _rawViewToggle();
+    return secH("\uD83E\uDDFE", "#0284c7", t("raw.recon"), t("raw.sinDatosCargados"), "") + _rawViewToggle();
   }
   // FULL ya viene deduplicado; reaplicar es idempotente y garantiza no doble conteo.
   const src = (typeof dropLegacyAggregateRows === "function") ? dropLegacyAggregateRows(src0) : src0;
@@ -914,7 +914,7 @@ export function _renderReconView() {
   const cityOpts     = allCities.map(c => `<option value="${c}"${RAW_STATE.city === c ? " selected" : ""}>${cityLabel(c)}</option>`).join("");
   const singlePeriod = RAW_STATE.dateFrom === RAW_STATE.dateTo;
 
-  let html = secH("\uD83E\uDDFE", "#0ea5e9", t("raw.recon"),
+  let html = secH("\uD83E\uDDFE", "#0284c7", t("raw.recon"),
     t("raw.reconSub", { n: fmt(clids.length), o: fmt(omitCount) }), "");
   html += _rawViewToggle();
 

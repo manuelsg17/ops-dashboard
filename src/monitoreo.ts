@@ -77,7 +77,7 @@ function _staleColor(dias) {
   if (dias === Infinity) return "#9ca3af";
   if (dias <= 7)  return "#10b981";
   if (dias <= 30) return "#f59e0b";
-  return "#ef4444";
+  return "#dc2626";
 }
 
 // ── CARGA ────────────────────────────────────────────────────────────────────
@@ -221,13 +221,13 @@ function _renderAccesos() {
         <tbody>${rows}</tbody></table></div>`;
   };
 
-  return secH("🔑", "#0ea5e9", t("mon.accesosTitulo"), t("mon.accesosSub"), "") +
+  return secH("🔑", "#0284c7", t("mon.accesosTitulo"), t("mon.accesosSub"), "") +
     `<div class="section">
       <div class="metric-row">
         ${kpi(t("mon.kpiCuentas"), users.length, "#6366f1", t("mon.kpiCuentasTip"))}
         ${kpi(t("mon.kpiActivas7"), activos7, "#10b981", t("mon.kpiActivas7Tip"))}
-        ${kpi(t("mon.kpiPartners"), partners.length, "#0891b2", t("mon.kpiPartnersTip"))}
-        ${kpi(t("mon.kpiNuncaEntraron"), nunca, nunca ? "#ef4444" : "#9ca3af", t("mon.kpiNuncaEntraronTip"))}
+        ${kpi(t("mon.kpiPartners"), partners.length, "#0284c7", t("mon.kpiPartnersTip"))}
+        ${kpi(t("mon.kpiNuncaEntraron"), nunca, nunca ? "#dc2626" : "#9ca3af", t("mon.kpiNuncaEntraronTip"))}
       </div>
       ${tabla(t("mon.tablaPartners"), partners)}
       ${tabla(t("mon.tablaEquipo"), internos)}
@@ -245,7 +245,7 @@ function _renderAuditoria() {
 
   const body = rows.length
     ? rows.map(r => {
-        const col = r.action === "DELETE" ? "#ef4444" : r.action === "INSERT" ? "#10b981" : "#f59e0b";
+        const col = r.action === "DELETE" ? "#dc2626" : r.action === "INSERT" ? "#10b981" : "#f59e0b";
         return `<tr>
           <td class="agy-style-90">${_fmtWhen(r.at)}</td>
           <td>${escapeHTML(r.user_email || "—")}</td>
@@ -279,7 +279,7 @@ function _renderIngestas() {
   if (items == null) return "";
 
   if (!items.length) {
-    return secH("🔄", "#0891b2", t("mon.ingestaTitulo"), t("mon.ingestaCarga"), "") +
+    return secH("🔄", "#0284c7", t("mon.ingestaTitulo"), t("mon.ingestaCarga"), "") +
       `<div class="section"><div class="agy-style-224">${t("mon.sinIngestasAun")}</div></div>`;
   }
 
@@ -305,7 +305,7 @@ function _renderIngestas() {
   };
 
   const filas = items.map(i => {
-    const col = i.status === "ok" ? "#10b981" : i.status === "rechazado" ? "#f59e0b" : "#ef4444";
+    const col = i.status === "ok" ? "#10b981" : i.status === "rechazado" ? "#f59e0b" : "#dc2626";
     const falt = (i.kpis_faltantes || []).length;
     const kpiTxt = i.kpis_ok == null ? "—"
       : `${i.kpis_ok}${falt ? ` <span style="color:#f59e0b" title="${escapeHTML(t("mon.faltaron", { l: (i.kpis_faltantes || []).slice(0, 12).join(", ") }))}">(−${falt})</span>` : ""}`;
@@ -320,7 +320,7 @@ function _renderIngestas() {
       <td class="tn">${i.filas_escritas == null ? "—" : fmt(i.filas_escritas)}</td>
       <td class="tn">${kpiTxt}</td>
       <td class="agy-style-90" style="font-size:.7rem">${escapeHTML(perTxt)}</td>
-      <td class="agy-style-90" style="font-size:.7rem;color:${i.error ? "#b91c1c" : "#999"}">${escapeHTML(i.error || "")}</td>
+      <td class="agy-style-90" style="font-size:.7rem;color:${i.error ? "#b91c1c" : "#888"}">${escapeHTML(i.error || "")}</td>
     </tr>`;
   }).join("");
 
@@ -333,7 +333,7 @@ function _renderIngestas() {
          <div style="margin-top:4px;font-family:monospace;font-size:.7rem">${escapeHTML((ultOk.kpis_faltantes || []).slice(0, 15).join(", "))}</div>
        </div>` : "";
 
-  return secH("🔄", "#0891b2", t("mon.ingestaTitulo"),
+  return secH("🔄", "#0284c7", t("mon.ingestaTitulo"),
       t("mon.ultimaCarga"), "") +
     `<div class="section">
       ${alerta}
@@ -393,14 +393,14 @@ function _renderUso() {
       t("mon.ultimos30dSub"), "") +
     `<div class="section">
       <div class="metric-row">
-        ${kpi(t("mon.kpiIngresos"), logins, "#0ea5e9", t("mon.kpiIngresosTip"))}
+        ${kpi(t("mon.kpiIngresos"), logins, "#0284c7", t("mon.kpiIngresosTip"))}
         ${kpi(t("mon.kpiPersonas"), personas, "#10b981", t("mon.kpiPersonasTip"))}
         ${kpi(t("mon.kpiDescargas"), descargas, "#8b5cf6", t("mon.kpiDescargasTip"))}
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;margin-top:14px">
         <div>
           <div style="font-weight:700;font-size:.78rem;margin-bottom:8px">${escapeHTML(t("mon.seccionesMasAbiertas"))}</div>
-          <div title="${escapeHTML(t("mon.seccionesTip"))}">${barras(tabs, "#0ea5e9")}</div>
+          <div title="${escapeHTML(t("mon.seccionesTip"))}">${barras(tabs, "#0284c7")}</div>
         </div>
         <div>
           <div style="font-weight:700;font-size:.78rem;margin-bottom:8px">${escapeHTML(t("mon.queDescarga"))}</div>

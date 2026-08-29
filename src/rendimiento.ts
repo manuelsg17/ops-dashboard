@@ -433,7 +433,7 @@ export function _renderRendImpl() {
     t("rend.prod.sub", { d: d2s(lastDate) }), "");
   html += `<div class="section"><div class="metric-row">
     ${_rendKpiCard(t("rend.kpi.horasCond"), "⏱️", pNow.shAd, pPrev.shAd, "#8b5cf6", v => fmt(v))}
-    ${_rendKpiCard(t("rend.kpi.viajesCond"), "🚕", pNow.trAd, pPrev.trAd, "#0ea5e9", v => fmt(v))}
+    ${_rendKpiCard(t("rend.kpi.viajesCond"), "🚕", pNow.trAd, pPrev.trAd, "#0284c7", v => fmt(v))}
     ${_rendKpiCard(t("rend.kpi.viajesHora"), "📐", pNow.trSh, pPrev.trSh, "#10b981", v => v.toFixed(2))}
   </div></div>`;
 
@@ -471,8 +471,8 @@ export function _renderRendImpl() {
       <div class="city-card" style="border-top-color:#10b981">
         <div class="city-name">${escapeHTML(t("rend.mov.suben"))}</div>${lista(suben, "#10b981", "+")}
       </div>
-      <div class="city-card" style="border-top-color:#ef4444">
-        <div class="city-name">${escapeHTML(t("rend.mov.bajan"))}</div>${lista(bajan, "#ef4444", "−")}
+      <div class="city-card" style="border-top-color:#dc2626">
+        <div class="city-name">${escapeHTML(t("rend.mov.bajan"))}</div>${lista(bajan, "#dc2626", "−")}
       </div>
     </div></div>`;
   }
@@ -957,7 +957,7 @@ export function _scheduleFleetCharts(filtered, dates, lastRows) {
   const tabTokenAtSched = STATE._tabRenderId;
   const byDate = _fleetAggByDate(filtered);
   const jobs = [
-    () => buildFleetTrendLine("chF_owned",   dates, byDate, "owned",  "#0891b2"),
+    () => buildFleetTrendLine("chF_owned",   dates, byDate, "owned",  "#0284c7"),
     () => buildFleetTrendLine("chF_shcar",   dates, byDate, "shCar",  "#8b5cf6"),
     () => buildFleetTrendLine("chF_accept",  dates, byDate, "accept", "#10b981"),
     () => buildFleetTrendLine("chF_branded", dates, byDate, "branded","#f59e0b"),
@@ -984,7 +984,7 @@ export function _renderFleetView(lastRows, prevRows, lastDate, prevDate) {
   let html = rendLineToggleHTML();
 
   // Perú general (10 KPIs de flota: presencia/calidad + revenue/productividad)
-  html += secH("🚗", "#0891b2", t("rend.fleet.peru"),
+  html += secH("🚗", "#0284c7", t("rend.fleet.peru"),
     t("rend.fleet.peruSub", { p: periodLabel }),
     d2s(lastDate));
   html += _rendFleetCardsBody(_rendFleetAgg(lastRows), _rendFleetAgg(prevRows));
@@ -1064,15 +1064,15 @@ export function _rendFleetCardsBody(c, p) {
   // auto-fit (no tocar la clase global — la usa también el Agregador con 3 cards).
   // auto-fit/minmax evita que se aplasten en pantallas angostas (envuelve a 2 filas).
   return `<div class="section"><div class="metric-row agy-style-226">
-      ${_rendKpiCard(t("rend.kpi.ownedCars"),   "🚗", c.owned,      p.owned,      "#0891b2", fmt)}
+      ${_rendKpiCard(t("rend.kpi.ownedCars"),   "🚗", c.owned,      p.owned,      "#0284c7", fmt)}
       ${_rendKpiCard(t("rend.kpi.shAuto"), "⏱️", c.shCar,      p.shCar,      "#8b5cf6", fmt)}
       ${_rendKpiCard(t("rend.kpi.aceptacion"),          "✅", c.accept,     p.accept,     "#10b981", pct)}
       ${_rendKpiCard(t("rend.kpi.brandedCars"), "🏷️", c.branded,    p.branded,    "#f59e0b", fmt)}
       ${_rendKpiCard(t("rend.kpi.pctBrand"),         "🎯", c.pctBranded, p.pctBranded, "#7e22ce", pct)}
       ${_rendKpiCard(t("rend.kpi.gmvAuto"),          "💰", c.gmvPerCar,        p.gmvPerCar,        "#059669", fmt)}
       ${_rendKpiCard(t("rend.kpi.comAuto"),     "💵", c.commissionPerCar, p.commissionPerCar, "#059669", fmt)}
-      ${_rendKpiCard(t("rend.kpi.viajesAuto"),       "🧭", c.tripsPerCar,      p.tripsPerCar,      "#0ea5e9", fmt)}
-      ${_rendKpiCard("Viajes / Hora",       "⚡", c.tripsPerHour,     p.tripsPerHour,     "#0ea5e9", fmt)}
+      ${_rendKpiCard(t("rend.kpi.viajesAuto"),       "🧭", c.tripsPerCar,      p.tripsPerCar,      "#0284c7", fmt)}
+      ${_rendKpiCard("Viajes / Hora",       "⚡", c.tripsPerHour,     p.tripsPerHour,     "#0284c7", fmt)}
       ${_rendKpiCard(t("rend.kpi.gmvHora"),          "📈", c.moneyPerHour,     p.moneyPerHour,     "#059669", fmt)}
     </div></div>`;
 }
@@ -1140,7 +1140,7 @@ export function _rendTkKPIs(lastRows, prevRows) {
       "Autos brandeados y activos del último período · solo sub-flotas TukTuk", "") +
     `<div class="section"><div class="metric-row">
       ${_rendKpiCard(t("rend.kpi.brandeados"),  "🏷️", c.branded, p.branded, "#7e22ce", fmt)}
-      ${_rendKpiCard(t("rend.kpi.activeCars"), "🚗", c.actCars, p.actCars, "#0891b2", fmt)}
+      ${_rendKpiCard(t("rend.kpi.activeCars"), "🚗", c.actCars, p.actCars, "#0284c7", fmt)}
     </div></div>` +
     _rendTkAdquisicion(lastRows, prevRows);
 }
@@ -1192,20 +1192,20 @@ export function _rendTkAdquisicion(lastRows, prevRows) {
       <td style="padding:8px 12px">${escapeHTML(partner)}</td>
       <td style="padding:8px 12px;text-align:right;font-weight:700;color:${col}">${fmt(n)}</td>
       <td style="padding:8px 12px;width:40%">
-        <div style="background:#eee;height:8px;border-radius:4px;overflow:hidden">
+        <div style="background:#e5e5e5;height:8px;border-radius:4px;overflow:hidden">
           <div style="width:${pctMeta}%;height:100%;background:${col}"></div>
         </div>
       </td>
     </tr>`;
   }).join("") : `<tr><td colspan="3" style="padding:12px;color:#888">Sin conductores nuevos en el rango.</td></tr>`;
 
-  return secH("🎯", "#e11d48", "TukTuk · Adquisición propia",
+  return secH("🎯", "#dc2626", "TukTuk · Adquisición propia",
       `Conductores nuevos traídos por el partner (excluye self-registration) · meta ${TK_META_NUEVOS_MES}/mes`, "") +
     `<div class="section">
       <div class="metric-row">
-        ${_rendKpiCard(t("rend.kpi.nuevosProp"), "🎯", propios, pPropios, "#e11d48", fmt, rangoTxt)}
+        ${_rendKpiCard(t("rend.kpi.nuevosProp"), "🎯", propios, pPropios, "#dc2626", fmt, rangoTxt)}
         ${_rendKpiCard(t("rend.kpi.selfReg"), "🔁", self, pSelf, "#94a3b8", fmt, "no cuenta para la meta")}
-        ${_rendKpiCard(t("rend.kpi.pctAdq"), "📈", pct, pPct, "#0891b2", v => v.toFixed(1) + "%", "propios / total nuevos")}
+        ${_rendKpiCard(t("rend.kpi.pctAdq"), "📈", pct, pPct, "#0284c7", v => v.toFixed(1) + "%", "propios / total nuevos")}
       </div>
       ${!mensual ? `<div class="agy-style-213" style="margin:10px 0">
         ⚠️ La meta de ${TK_META_NUEVOS_MES} es <strong>mensual</strong>. En escala ${STATE.curMode} el último período es ${STATE.curMode === "diario" ? "un día" : "una semana"}, así que no es comparable contra ella y el semáforo por partner queda en gris. Cambiá a <strong>Mensual</strong> para evaluar cumplimiento.

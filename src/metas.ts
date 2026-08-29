@@ -584,7 +584,7 @@ function _metasLineRows(mesName, hasLineMeta, selSet, cityFilter, kamFilter) {
 // del mes por ritmo lineal no significa nada (una tasa no se acumula).
 export function _renderMetasFleet(mesName, from, to, selSet, cityFilter, kamFilter, mesesDisponibles) {
   return _renderMetasLineView({
-    mesName, mesesDisponibles, icon: "🚗", color: "#0891b2", title: t("metas.tit.fleet"), badge: "Fleet",
+    mesName, mesesDisponibles, icon: "🚗", color: "#0284c7", title: t("metas.tit.fleet"), badge: "Fleet",
     sub: t("metas.fleetSub"),
     act: _metasFleetActuals(from, to, selSet, cityFilter),
     metaRows: _metasLineRows(mesName,
@@ -624,7 +624,7 @@ export function _renderMetasTk(mesName, from, to, selSet, cityFilter, kamFilter,
         snapSeries: a => a.adByDate, fmtFn: v => fmt(v) },
       { label: t("metas.nuevosReact"), sub: t("metas.acumulado"), color: "#f97316",
         meta: m => m.mtkNR, act: a => a.nr, proj: a => a.projNr, fmtFn: v => fmt(v) },
-      { label: t("metas.brandeados"), sub: t("metas.ultimoPeriodo"), color: "#0891b2",
+      { label: t("metas.brandeados"), sub: t("metas.ultimoPeriodo"), color: "#0284c7",
         // Brandeados NO lleva snapSeries: su proyección es PLANA (= nivel
         // actual), igual que AD desde ago 2026 — la nota histórica del ×1.4 vive en
         // Active Drivers, no de cualquier snapshot.
@@ -660,7 +660,7 @@ export function _renderMetasComb(mesName, from, to, selSet, cityFilter, kamFilte
         snapSeries: a => a.adByDate, fmtFn: v => fmt(v) },
       { label: t("metas.nuevosReact"), sub: t("metas.acumulado"), color: "#f97316",
         meta: m => sumMeta(m.mNR || null, m.mtkNR), act: a => a.nr, proj: a => a.projNr, fmtFn: v => fmt(v) },
-      { label: t("metas.horasConexion"), sub: t("metas.acumulado"), color: "#0891b2",
+      { label: t("metas.horasConexion"), sub: t("metas.acumulado"), color: "#0284c7",
         meta: m => sumMeta(m.mH || null, m.mtkSH), act: a => a.sh, proj: a => a.projSh, fmtFn: v => fmtSmart(v) }
     ],
     partnerFoot: m => {

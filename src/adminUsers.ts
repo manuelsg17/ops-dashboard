@@ -231,7 +231,7 @@ export const AU_UI = { q: "", rol: "todos", confirmDelete: null };
 function _roleMeta(r) {
   const M = {
     admin:   { emoji: "🛡️", label: t("au.rol.adminLabel"),   color: "#dc2626", bg: "#fef2f2", desc: t("au.rol.adminDesc") },
-    kam:     { emoji: "👤", label: t("au.rol.kamLabel"),     color: "#0891b2", bg: "#ecfeff", desc: t("au.rol.kamDesc") },
+    kam:     { emoji: "👤", label: t("au.rol.kamLabel"),     color: "#0284c7", bg: "#ecfeff", desc: t("au.rol.kamDesc") },
     viewer:  { emoji: "👁️", label: t("au.rol.viewerLabel"),  color: "#6b7280", bg: "#f9fafb", desc: t("au.rol.viewerDesc") },
     partner: { emoji: "🤝", label: t("au.rol.partnerLabel"), color: "#7e22ce", bg: "#faf5ff", desc: t("au.rol.partnerDesc") }
   };
@@ -261,7 +261,7 @@ function _hace(iso) {
   if (dias < 7)   return { txt: t("au.haceDias", { n: dias }), color: "#10b981" };
   if (dias < 30)  return { txt: t("au.haceDias", { n: dias }), color: "#f59e0b" };
   const m = Math.floor(dias / 30);
-  return { txt: m === 1 ? t("au.haceMes", { n: m }) : t("au.haceMeses", { n: m }), color: "#ef4444" };
+  return { txt: m === 1 ? t("au.haceMes", { n: m }) : t("au.haceMeses", { n: m }), color: "#dc2626" };
 }
 
 export function renderAdminUsers() {

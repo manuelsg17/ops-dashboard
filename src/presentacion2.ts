@@ -237,7 +237,7 @@ export const P2_LOGO_MARK = `<span class="agy-style-330"><span class="agy-style-
 export function p2ModeInfo() {
   const es = PRESENT2_STATE.lang === "es";
   const m = STATE.curMode;
-  if (m === "mensual") return { label: es ? "Mensual" : "Monthly", unit: es ? "Mes" : "Month", units: es ? "meses" : "months", seg: es ? "seguidos" : "in a row", pop: "MoM", color: "#0891b2" };
+  if (m === "mensual") return { label: es ? "Mensual" : "Monthly", unit: es ? "Mes" : "Month", units: es ? "meses" : "months", seg: es ? "seguidos" : "in a row", pop: "MoM", color: "#0284c7" };
   if (m === "diario")  return { label: es ? "Diario"  : "Daily",   unit: es ? "Día" : "Day",   units: es ? "días" : "days",    seg: es ? "seguidos" : "in a row", pop: "DoD", color: "#a855f7" };
   return                       { label: es ? "Semanal" : "Weekly",  unit: es ? "Semana" : "Week", units: es ? "semanas" : "weeks", seg: es ? "seguidas" : "in a row", pop: "WoW", color: "#2563eb" };
 }
@@ -478,7 +478,7 @@ export function buildSlide2TkCriterios(partner, idx) {
         ${card(es ? "Self-registration" : "Self-registration", fmt(self),
                es ? "no cuenta para la meta" : "does not count", "#94a3b8")}
         ${card(es ? "% adquisición propia" : "% own acquisition", pctProp.toFixed(1) + "%",
-               es ? "propios / total nuevos" : "own / total new", "#0891b2")}
+               es ? "propios / total nuevos" : "own / total new", "#0284c7")}
         ${card(es ? "vs mes anterior" : "vs previous month",
                delta === null ? "—" : (delta >= 0 ? "+" : "") + delta.toFixed(1) + "%",
                delta === null ? (es ? "sin base previa" : "no prior base") : "MoM",
@@ -505,9 +505,9 @@ export function buildSlide2TkCriterios(partner, idx) {
 
 // Bandas de cohorte (mismas que Vista Partner). range = [inicio, fin) sobre el ranking.
 export const P2_BANDS = [
-  { key: "t1",   range: [0, 1],  color: "#ef4444", es: "Top 1",       en: "Top 1" },
+  { key: "t1",   range: [0, 1],  color: "#dc2626", es: "Top 1",       en: "Top 1" },
   { key: "t23",  range: [1, 3],  color: "#f59e0b", es: "Top 2-3",     en: "Top 2-3" },
-  { key: "t45",  range: [3, 5],  color: "#0ea5e9", es: "Top 4-5",     en: "Top 4-5" },
+  { key: "t45",  range: [3, 5],  color: "#0284c7", es: "Top 4-5",     en: "Top 4-5" },
   { key: "t610", range: [5, 10], color: "#a855f7", es: "Top 6-10",    en: "Top 6-10" },
   { key: "t5",   range: [0, 5],  color: "#10b981", es: "Prom. Top 5", en: "Avg Top 5" }
 ];
@@ -887,7 +887,7 @@ export function p2KpiDefsFleet(es) {
   return [
     { key: "nr",                   label: es ? "Nuevos + Reactivados" : "New + Reactivated", color: "#f97316", kind: "num" },
     { key: "accept",               label: "Acceptance Rate",                                 color: "#10b981", kind: "pct" },
-    { key: "ownedFleetActiveCars", label: es ? "Owned Fleet Active Cars" : "Owned Fleet Active Cars", color: "#0ea5e9", kind: "num" },
+    { key: "ownedFleetActiveCars", label: es ? "Owned Fleet Active Cars" : "Owned Fleet Active Cars", color: "#0284c7", kind: "num" },
     { key: "shCarInt",             label: es ? "Internal Fleet SH/Auto" : "Internal Fleet SH/Car",     color: "#8b5cf6", kind: "ratio1" }
   ];
 }
@@ -1595,7 +1595,7 @@ export function buildSlide2Alerts(partner, dates, idx) {
 export const P2_FC_KPIS = [
   { key: "ad",    es: "Conductores Activos", en: "Active Drivers", color: "#FF0000", kind: "num"  },
   { key: "sh",    es: "Horas de Conexión",   en: "Supply Hours",   color: "#8b5cf6", kind: "numK" },
-  { key: "gmv",   es: "GMV",                 en: "GMV",            color: "#0ea5e9", kind: "money" },
+  { key: "gmv",   es: "GMV",                 en: "GMV",            color: "#0284c7", kind: "money" },
   { key: "trips", es: "Viajes",              en: "Trips",          color: "#10b981", kind: "num"  }
 ];
 export function _p2FcFmt(kind, v) {
@@ -1715,7 +1715,7 @@ export function _p2FcPalancasHTML(C, es) {
       (onTrack ? "✓ " : "") + fmt(need) + (es ? " N+R/mes" : " N+R/mo"),
       onTrack ? (es ? `tu ritmo (~${fmt(now)}) alcanza` : `your pace (~${fmt(now)}) suffices`)
               : (es ? `hoy ~${fmt(now)} · faltan ${fmt(shortBy)}` : `today ~${fmt(now)} · short ${fmt(shortBy)}`),
-      onTrack ? "#10b981" : "#0891b2",
+      onTrack ? "#10b981" : "#0284c7",
       es ? `Aunque tu meta de AD (${fmt(Math.round(C.target))}) sea parecida a hoy (${fmt(Math.round(L.adNow))}), cada mes se te van conductores por rotación (retención ${retA}). Para sostener/llegar a la meta necesitás ~${fmt(need)} nuevos+reactivados en el mes; hoy promediás ~${fmt(now)}${shortBy > 0 ? ` (te faltan ~${fmt(shortBy)})` : ""}. Alternativa: subir la retención de ${retA} a ${retB}.`
          : `Even if your AD goal (${fmt(Math.round(C.target))}) is close to today (${fmt(Math.round(L.adNow))}), churn takes drivers each month (retention ${retA}). To hold/reach it you need ~${fmt(need)} new+reactivated in the month; today you average ~${fmt(now)}${shortBy > 0 ? ` (short ~${fmt(shortBy)})` : ""}. Alternative: raise retention from ${retA} to ${retB}.`));
   }
@@ -1762,7 +1762,7 @@ export function buildSlide2Forecast(partner, dates, idx) {
     const last = r.history[r.history.length - 1];
     const f3 = r.forecast[r.forecast.length - 1];
     const growth = last ? (f3 - last) / last * 100 : null;
-    const gcol = growth == null ? "#999" : growth >= 0 ? "#10b981" : "#FF0000";
+    const gcol = growth == null ? "#888" : growth >= 0 ? "#10b981" : "#FF0000";
     const gtxt = growth == null ? "" : (growth >= 0 ? "+" : "") + growth.toFixed(1) + "%";
     const acc = r.mape != null ? "±" + r.mape.toFixed(0) + "%" : "—";
     // Cada tarjeta es una celda del grid 2×2 (altura acotada por grid-template-rows:1fr) →
@@ -1791,7 +1791,7 @@ export function buildSlide2Forecast(partner, dates, idx) {
   const avg = mapes.length ? mapes.reduce((s, v) => s + v, 0) / mapes.length : null;
   const nBack = Math.min(6, C.histMonths.length - Math.max(4, C.histMonths.length - 6));
   const sw = (style) => `<span style="display:inline-block;width:16px;height:0;border-top:2px ${style};vertical-align:middle;margin-right:5px"></span>`;
-  const swSolid = sw("solid #888"), swDash = sw("dashed #888"), swUp = sw("dashed #10b981"), swDown = sw("dashed #ef4444");
+  const swSolid = sw("solid #888"), swDash = sw("dashed #888"), swUp = sw("dashed #10b981"), swDown = sw("dashed #dc2626");
   const legend = `<div class="agy-style-422">
       <span class="agy-style-423">${swSolid}${es ? `Real (${C.histMonths.length} meses)` : `Actual (${C.histMonths.length} mo.)`}</span>
       <span class="agy-style-423">${swDash}${es ? "Proyección esperada" : "Expected forecast"}</span>
@@ -1828,7 +1828,7 @@ export function p2ForecastChart(canvasId, labels, hist, fcObj, color, kind, root
   const es = PRESENT2_STATE.lang === "es";
   const lastIdx = labels.length - 1;
   const fmtV = v => v == null ? "" : (kind === "money" ? "$" + fmtSmart(v) : kind === "numK" ? fmtSmart(v) : fmt(Math.round(v)));
-  const UP = "#10b981", DN = "#ef4444";   // verde = si crece (máx) · rojo = si decrece (mín)
+  const UP = "#10b981", DN = "#dc2626";   // verde = si crece (máx) · rojo = si decrece (mín)
   const chart = new Chart(canvas, {
     type: "line",
     data: { labels: labels.map(d2s), datasets: [

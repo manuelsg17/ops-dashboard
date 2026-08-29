@@ -33,31 +33,31 @@ body {
   margin: 0 auto 16px;
 }
 .login-logo svg { width: 28px; height: 28px; }
-.login-title { font-weight: 900; font-size: 1.4rem; letter-spacing: -.5px; margin-bottom: 4px; }
+.login-title { font-weight: 900; font-size: 1.35rem; letter-spacing: -.5px; margin-bottom: 4px; }
 .login-title span { color: #FF0000; }
-.login-sub   { font-size: .8rem; color: #aaa; margin-bottom: 28px; }
+.login-sub   { font-size: 0.78rem; color: #aaa; margin-bottom: 28px; }
 .login-input {
   width: 100%;
   border: 2px solid #e5e5e5;
   border-radius: 8px;
   padding: 11px 14px;
-  font-size: .9rem;
+  font-size: 0.9rem;
   outline: none;
   margin-bottom: 10px;
   transition: border .15s;
 }
 .login-input:focus { border-color: #FF0000; }
-.login-error  { color: #FF0000; font-size: .78rem; min-height: 18px; margin-bottom: 8px; }
+.login-error  { color: #FF0000; font-size: 0.78rem; min-height: 18px; margin-bottom: 8px; }
 .login-btn {
   width: 100%;
   background: #FF0000; color: #fff;
   border: none; border-radius: 8px;
-  padding: 12px; font-size: .95rem; font-weight: 700;
+  padding: 12px; font-size: 0.95rem; font-weight: 700;
   cursor: pointer; transition: opacity .15s;
 }
 .login-btn:hover    { opacity: .85; }
 .login-btn:disabled { opacity: .5; cursor: not-allowed; }
-.login-footer { font-size: .72rem; color: #ccc; margin-top: 20px; }
+.login-footer { font-size: 0.7rem; color: #ccc; margin-top: 20px; }
 
 /* ── APP CONTAINER ────────────────────────────────────────────────────────── */
 #appContainer {
@@ -93,13 +93,13 @@ body {
 
 .brand     { font-weight: 900; font-size: 1.1rem; letter-spacing: -.5px; }
 .brand span{ color: #FF0000; }
-.brand-sub { font-size: .66rem; color: #aaa; }
+.brand-sub { font-size: 0.66rem; color: #aaa; }
 
 .nav-tabs { display: flex; gap: 4px; margin-left: 20px; align-items: center; }
 .nav-tab  {
   padding: 8px 16px; border-radius: 8px;
-  font-size: .83rem; font-weight: 600;
-  border: none; background: none; cursor: pointer; color: #999;
+  font-size: 0.82rem; font-weight: 600;
+  border: none; background: none; cursor: pointer; color: #888;
   transition: all .15s;
 }
 .nav-tab:hover  { background: #f5f5f5; color: #111; }
@@ -128,7 +128,7 @@ body {
 .nav-dropdown-menu.open { display: flex; }
 .nav-dd-item {
   padding: 8px 14px; border-radius: 7px;
-  font-size: .82rem; font-weight: 600;
+  font-size: 0.82rem; font-weight: 600;
   border: none; background: none; cursor: pointer; color: #555;
   text-align: left; transition: background .12s, color .12s;
   white-space: nowrap;
@@ -138,7 +138,7 @@ body {
 
 .up-btn {
   padding: 7px 14px; border-radius: 6px;
-  font-size: .8rem; font-weight: 600; cursor: pointer;
+  font-size: 0.78rem; font-weight: 600; cursor: pointer;
   display: flex; align-items: center; gap: 5px;
   border: 2px dashed #FF0000; color: #FF0000; background: #fff;
   transition: background .15s;
@@ -151,7 +151,7 @@ input[type="file"]  { display: none; }
 /* El email completo (yango.hbexp@gmail.com) se comía ~180px de la barra. Se
    trunca con ellipsis y el completo queda en el title (lo pone auth.ts). */
 .user-badge {
-  font-size: .75rem; color: #888;
+  font-size: 0.74rem; color: #888;
   background: #f5f5f5; padding: 5px 10px; border-radius: 20px;
   max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
@@ -159,7 +159,7 @@ input[type="file"]  { display: none; }
    solo avisa que los números pueden moverse en un instante. Discreto a
    propósito — un spinner bloqueante anularía todo el beneficio del caché. */
 .data-refreshing {
-  font-size: .7rem; color: #b45309;
+  font-size: 0.7rem; color: #b45309;
   background: #fef3c7; padding: 4px 9px; border-radius: 20px;
   white-space: nowrap;
 }
@@ -173,14 +173,14 @@ input[type="file"]  { display: none; }
    SIDEBAR, debajo de "Datos cargados": son dos caras del mismo dato (cuándo
    pintó tu navegador vs cuándo entró el dato a la base). */
 .db-last-update {
-  font-size: .7rem; color: #6b7280;
+  font-size: 0.7rem; color: #6b7280;
   background: #f3f4f6; padding: 6px 10px; border-radius: 8px;
   margin-bottom: 4px;
 }
 .db-last-update.stale { color: #b45309; background: #fef3c7; font-weight: 600; }
 .logout-btn {
   padding: 7px 14px; border-radius: 6px;
-  font-size: .8rem; font-weight: 600; cursor: pointer;
+  font-size: 0.78rem; font-weight: 600; cursor: pointer;
   border: 2px solid #e5e5e5; color: #555; background: #fff;
   transition: all .15s;
 }
@@ -203,7 +203,7 @@ input[type="file"]  { display: none; }
   position: sticky; top: 58px;
 }
 .sb-label {
-  font-size: .72rem; font-weight: 700;
+  font-size: 0.7rem; font-weight: 700;
   text-transform: uppercase; letter-spacing: .6px;
   color: #555; margin: 12px 0 5px;
 }
@@ -212,17 +212,17 @@ input[type="file"]  { display: none; }
 .sb-sel, .sb-inp {
   width: 100%;
   border: 1px solid #e5e5e5; border-radius: 6px;
-  padding: 6px 9px; font-size: .82rem;
+  padding: 6px 9px; font-size: 0.82rem;
   outline: none; background: #fff; color: #111;
 }
 .sb-sel:focus, .sb-inp:focus { border-color: #FF0000; }
 
 .date-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-.date-grid label { font-size: .7rem; color: #aaa; display: block; margin-bottom: 2px; }
+.date-grid label { font-size: 0.7rem; color: #aaa; display: block; margin-bottom: 2px; }
 .preset-btn {
   flex: 1; min-width: 60px;
   border: 1px solid #e5e5e5; border-radius: 5px;
-  padding: 4px 6px; font-size: .72rem; cursor: pointer;
+  padding: 4px 6px; font-size: 0.7rem; cursor: pointer;
   background: #f9f9f9; color: #444;
   transition: background .15s, border-color .15s;
 }
@@ -247,7 +247,7 @@ input[type="file"]  { display: none; }
 /* display:block, NO flex: el nombre es un nodo de texto suelto al lado de
    .pdot y text-overflow no aplica a texto anónimo dentro de un flex. */
 .pi label {
-  font-size: .78rem; cursor: pointer;
+  font-size: 0.78rem; cursor: pointer;
   display: block; user-select: none;
   flex: 1 1 auto; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -259,7 +259,7 @@ input[type="file"]  { display: none; }
 .sb-row { display: flex; gap: 5px; margin-bottom: 5px; }
 .sb-row button {
   flex: 1; background: #f5f5f5; border: 1px solid #e5e5e5;
-  border-radius: 5px; padding: 4px; font-size: .72rem;
+  border-radius: 5px; padding: 4px; font-size: 0.7rem;
   cursor: pointer; font-weight: 600;
 }
 .sb-row button:hover { background: #FF0000; color: #fff; border-color: #FF0000; }
@@ -305,7 +305,7 @@ input[type="file"]  { display: none; }
 .apply-btn {
   background: #FF0000; color: #fff;
   border: none; border-radius: 8px;
-  padding: 10px; font-size: .85rem; font-weight: 700;
+  padding: 10px; font-size: 0.82rem; font-weight: 700;
   cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   transition: opacity .15s;
 }
@@ -315,7 +315,7 @@ input[type="file"]  { display: none; }
 .ds-banner {
   background: #f0fdf4; border: 1px solid #10b981;
   border-radius: 8px; padding: 8px 12px;
-  margin-bottom: 12px; font-size: .75rem;
+  margin-bottom: 12px; font-size: 0.74rem;
   display: flex; align-items: center; gap: 8px;
 }
 .ds-banner.err { background: #fff5f5; border-color: #FF0000; }
@@ -344,11 +344,11 @@ input[type="file"]  { display: none; }
   font-size: 1rem; flex-shrink: 0;
 }
 .sh-title { font-weight: 900; font-size: 1rem; color: #111; }
-.sh-sub   { font-size: .75rem; color: #aaa; margin-top: 1px; }
+.sh-sub   { font-size: 0.74rem; color: #aaa; margin-top: 1px; }
 .sh-tag   {
   margin-left: auto;
   display: inline-block; padding: 3px 10px; border-radius: 20px;
-  font-size: .72rem; font-weight: 700;
+  font-size: 0.7rem; font-weight: 700;
   background: #fff0f0; color: #FF0000;
 }
 .section { margin-bottom: 32px; }
@@ -365,24 +365,24 @@ input[type="file"]  { display: none; }
    largas (3.305.781,38) se apelmazan y la tarjeta se lee "tosca". 1.35rem/800
    con tracking casi neutro ocupa menos y se lee mejor. */
 .mcard-label {
-  font-size: .68rem; font-weight: 700;
+  font-size: 0.66rem; font-weight: 700;
   text-transform: uppercase; letter-spacing: .4px;
-  color: #666; margin-bottom: 3px;
+  color: #555; margin-bottom: 3px;
   display: flex; align-items: center; gap: 5px;
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.mcard-sub-label { font-size: .64rem; color: #bbb; margin-bottom: 7px; }
+.mcard-sub-label { font-size: 0.62rem; color: #aaa; margin-bottom: 7px; }
 .mcard-val       { font-size: 1.35rem; font-weight: 800; color: #111; margin-bottom: 4px; letter-spacing: -.3px; }
 .mcard-badge {
   display: inline-flex; align-items: center; gap: 3px;
-  padding: 2px 7px; border-radius: 20px; font-size: .68rem; font-weight: 700;
+  padding: 2px 7px; border-radius: 20px; font-size: 0.66rem; font-weight: 700;
 }
 .mcard-breakdown {
   margin-top: 10px; padding-top: 10px;
   border-top: 1px solid #f5f5f5;
   display: flex; flex-direction: column; gap: 4px;
 }
-.mb-row  { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: .73rem; }
+.mb-row  { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 0.7rem; }
 .mb-dot  { width: 7px; height: 7px; border-radius: 50%; margin-right: 5px;
            display: inline-block; vertical-align: middle; }
 /* min-width:0 + ellipsis: sin esto un nombre largo (partner, no KAM) empuja el
@@ -392,7 +392,7 @@ input[type="file"]  { display: none; }
 .mb-name { flex: 1 1 auto; min-width: 0; color: #555; display: block;
            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mb-val  { font-weight: 700; color: #111; flex: 0 0 auto; white-space: nowrap; }
-.mb-badge { font-size: .63rem; font-weight: 700; padding: 1px 5px; border-radius: 10px;
+.mb-badge { font-size: 0.62rem; font-weight: 700; padding: 1px 5px; border-radius: 10px;
             margin-left: 0; flex: 0 0 auto; }
 
 /* Badge colors */
@@ -412,12 +412,12 @@ input[type="file"]  { display: none; }
   border-top: 3px solid #06b6d4;
 }
 .city-name {
-  font-weight: 900; font-size: .95rem;
+  font-weight: 900; font-size: 0.95rem;
   margin-bottom: 12px; display: flex; align-items: center; gap: 6px;
 }
 .city-kpi {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 5px 0; border-bottom: 1px solid #f5f5f5; font-size: .8rem;
+  padding: 5px 0; border-bottom: 1px solid #f5f5f5; font-size: 0.78rem;
 }
 .city-kpi:last-child { border-bottom: none; }
 .city-kpi-label  { color: #777; }
@@ -433,22 +433,22 @@ input[type="file"]  { display: none; }
   display: flex; align-items: center; justify-content: space-between;
   margin-bottom: 10px;
 }
-.chart-title { font-weight: 700; font-size: .85rem; color: #111; }
+.chart-title { font-weight: 700; font-size: 0.82rem; color: #111; }
 .png-btn {
   background: #f5f5f5; border: 1px solid #e5e5e5;
   border-radius: 5px; padding: 3px 8px;
-  font-size: .7rem; font-weight: 600; cursor: pointer; color: #777;
+  font-size: 0.7rem; font-weight: 600; cursor: pointer; color: #777;
   transition: all .15s;
 }
 .png-btn:hover { background: #FF0000; color: #fff; border-color: #FF0000; }
 
 /* ── TABLE ────────────────────────────────────────────────────────────────── */
 .tbl-wrap { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.05); overflow-x: auto; }
-.dtbl { width: 100%; border-collapse: collapse; font-size: .79rem; }
+.dtbl { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
 .dtbl th {
   background: #f5f5f5; padding: 8px 10px; text-align: left;
-  font-weight: 700; font-size: .71rem; text-transform: uppercase;
-  letter-spacing: .4px; color: #666; cursor: pointer; user-select: none; white-space: nowrap;
+  font-weight: 700; font-size: 0.7rem; text-transform: uppercase;
+  letter-spacing: .4px; color: #555; cursor: pointer; user-select: none; white-space: nowrap;
 }
 .dtbl th:hover   { background: #fff0f0; color: #FF0000; }
 .dtbl th.sa::after { content: " ↑"; }
@@ -456,7 +456,7 @@ input[type="file"]  { display: none; }
 .dtbl td         { padding: 7px 10px; border-bottom: 1px solid #f5f5f5; white-space: nowrap; }
 .dtbl tr:hover td{ background: #fafafa; }
 .tn     { text-align: right; font-weight: 600; }
-.tbadge { display: inline-block; padding: 1px 5px; border-radius: 10px; font-size: .66rem; font-weight: 700; }
+.tbadge { display: inline-block; padding: 1px 5px; border-radius: 10px; font-size: 0.66rem; font-weight: 700; }
 
 /* ── PARTNER CARDS ────────────────────────────────────────────────────────── */
 .partner-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(300px,1fr)); gap: 14px; }
@@ -465,16 +465,16 @@ input[type="file"]  { display: none; }
   padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.05);
   border-left: 4px solid #e5e5e5;
 }
-.pcard-name { font-weight: 900; font-size: .92rem; }
-.pcard-sub  { font-size: .7rem; color: #aaa; margin-top: 2px; margin-bottom: 12px; }
+.pcard-name { font-weight: 900; font-size: 0.9rem; }
+.pcard-sub  { font-size: 0.7rem; color: #aaa; margin-top: 2px; margin-bottom: 12px; }
 .pcard-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .pk         { background: #f9f9f9; border-radius: 8px; padding: 9px; }
-.pk-label   { font-size: .67rem; color: #aaa; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 3px; }
-.pk-val     { font-weight: 700; font-size: .95rem; }
+.pk-label   { font-size: 0.66rem; color: #aaa; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 3px; }
+.pk-val     { font-weight: 700; font-size: 0.95rem; }
 .pk-wide    { grid-column: 1/-1; background: #f9f9f9; border-radius: 8px; padding: 9px; }
 .pk-sub-grid{ display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 6px; }
-.pk-sub-label{ font-size: .63rem; color: #bbb; margin-bottom: 2px; }
-.pk-sub-val  { font-weight: 700; font-size: .82rem; }
+.pk-sub-label{ font-size: 0.62rem; color: #aaa; margin-bottom: 2px; }
+.pk-sub-val  { font-weight: 700; font-size: 0.82rem; }
 
 /* ── METAS ────────────────────────────────────────────────────────────────── */
 .meta-sum-card {
@@ -510,17 +510,17 @@ input[type="file"]  { display: none; }
   display: none; pointer-events: none;
   border-top: 3px solid #FF0000;
 }
-.ft-d { font-weight: 700; font-size: .8rem; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #eee; }
-.ft-r { display: flex; align-items: center; gap: 7px; padding: 2px 0; font-size: .76rem; }
+.ft-d { font-weight: 700; font-size: 0.78rem; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #e5e5e5; }
+.ft-r { display: flex; align-items: center; gap: 7px; padding: 2px 0; font-size: 0.74rem; }
 .ft-dot{ width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .ft-n  { flex: 1; color: #444; }
 .ft-v  { font-weight: 700; color: #111; white-space: nowrap; }
 
 /* ── EMPTY STATE ──────────────────────────────────────────────────────────── */
-.empty { text-align: center; padding: 60px 20px; color: #bbb; }
+.empty { text-align: center; padding: 60px 20px; color: #aaa; }
 .empty svg { width: 50px; height: 50px; margin-bottom: 12px; opacity: .2; }
-.empty p   { font-size: .95rem; }
-.empty-sub { font-size: .78rem; color: #ccc; margin-top: 6px; }
+.empty p   { font-size: 0.95rem; }
+.empty-sub { font-size: 0.78rem; color: #ccc; margin-top: 6px; }
 
 /* ── LOADING OVERLAY ──────────────────────────────────────────────────────── */
 .overlay {
@@ -531,7 +531,7 @@ input[type="file"]  { display: none; }
 }
 .spinner {
   width: 36px; height: 36px;
-  border: 4px solid #eee; border-top-color: #FF0000;
+  border: 4px solid #e5e5e5; border-top-color: #FF0000;
   border-radius: 50%;
   animation: spin .7s linear infinite;
 }
@@ -571,12 +571,12 @@ input[type="file"]  { display: none; }
 .mode-btn {
   padding: 5px 14px;
   border-radius: 6px;
-  font-size: .78rem;
+  font-size: 0.78rem;
   font-weight: 600;
   border: none;
   background: none;
   cursor: pointer;
-  color: #999;
+  color: #888;
   white-space: nowrap;
   transition: all .15s;
 }
@@ -644,7 +644,7 @@ body.no-sidebar .sidebar-wrap { display: none !important; }
 .upload-menu-item {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 16px;
-  font-size: .82rem; font-weight: 500; color: #333;
+  font-size: 0.82rem; font-weight: 500; color: #333;
   cursor: pointer;
   transition: background .12s;
 }
@@ -688,7 +688,7 @@ body.no-sidebar .sidebar-wrap { display: none !important; }
   display: inline-flex; align-items: center; justify-content: center;
   background: #FF0000; color: #fff;
   border-radius: 4px; padding: 1px 5px;
-  font-size: .65rem; font-weight: 700;
+  font-size: 0.62rem; font-weight: 700;
   margin-right: 5px; cursor: help;
   animation: pulse-red 2s infinite;
 }
@@ -702,7 +702,7 @@ body.no-sidebar .sidebar-wrap { display: none !important; }
   display: inline-flex; align-items: center; gap: 3px;
   background: #fef3c7; color: #92400e;
   font-weight: 700; border-radius: 5px;
-  padding: 2px 7px; font-size: .78rem;
+  padding: 2px 7px; font-size: 0.78rem;
 }
 tr.leads-row td:last-child,
 tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
@@ -711,19 +711,19 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
   display: inline-flex; align-items: center; gap: 6px;
   background: #fffbeb; border: 1px solid #fde68a;
   border-radius: 8px; padding: 5px 12px;
-  font-size: .78rem; color: #92400e; font-weight: 600;
+  font-size: 0.78rem; color: #92400e; font-weight: 600;
   margin-bottom: 12px;
 }
 
 /* ── CONFIG CRUD ─────────────────────────────────────────────────────────── */
 .crud-input {
   border: 1px solid #e5e5e5; border-radius: 5px;
-  padding: 5px 8px; font-size: .8rem; width: 100%;
+  padding: 5px 8px; font-size: 0.78rem; width: 100%;
   outline: none;
 }
 .crud-input:focus { border-color: #FF0000; }
 .crud-btn {
-  padding: 4px 10px; border-radius: 5px; font-size: .75rem;
+  padding: 4px 10px; border-radius: 5px; font-size: 0.74rem;
   font-weight: 600; cursor: pointer; border: none; transition: background .12s;
 }
 .crud-btn-edit  { background: #f5f5f5; color: #555; }
@@ -734,13 +734,13 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 .crud-btn-save:hover  { background: #059669; }
 .crud-btn-add   { background: #FF0000; color: #fff; }
 .crud-btn-add:hover   { background: #cc0000; }
-.crud-btn-cancel { background: #f5f5f5; color: #999; }
+.crud-btn-cancel { background: #f5f5f5; color: #888; }
 .crud-btn-cancel:hover { background: #e5e5e5; }
 
 /* ── PROYECTOS MODULE ────────────────────────────────────────────────────── */
 .proj-label {
   display: block;
-  font-size: .7rem; font-weight: 700;
+  font-size: 0.7rem; font-weight: 700;
   text-transform: uppercase; letter-spacing: .5px;
   color: #aaa; margin-bottom: 4px;
 }
@@ -780,7 +780,7 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 .seg-controls {
   display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px;
   padding: 14px 16px; margin-bottom: 16px;
-  background: #fff; border: 1px solid #eee; border-radius: 10px;
+  background: #fff; border: 1px solid #e5e5e5; border-radius: 10px;
 }
 .seg-ctl-field { display: flex; flex-direction: column; gap: 5px; }
 .seg-ctl-search { position: relative; min-width: 240px; }
@@ -791,7 +791,7 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 }
 .seg-kam-badge { margin-bottom: 12px; }
 .seg-kam-badge span {
-  color: #fff; font-size: .7rem; font-weight: 700;
+  color: #fff; font-size: 0.7rem; font-weight: 700;
   padding: 5px 10px; border-radius: 12px;
 }
 
@@ -803,14 +803,14 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
   box-shadow: 0 6px 20px rgba(0,0,0,.12);
 }
 .seg-opt {
-  padding: 7px 12px; font-size: .78rem; cursor: pointer;
+  padding: 7px 12px; font-size: 0.78rem; cursor: pointer;
   display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #f3f3f3;
 }
 .seg-opt:hover { background: #fafafa; }
 .seg-opt-sel  { background: #fff0f0; font-weight: 700; }
 .seg-opt-dot  { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
 .seg-opt-tag  {
-  margin-left: auto; font-size: .62rem; font-weight: 700;
+  margin-left: auto; font-size: 0.62rem; font-weight: 700;
   color: #0e7490; background: #ecfeff; padding: 2px 7px; border-radius: 10px;
 }
 
@@ -822,36 +822,36 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 .seg-progress-fill { height: 100%; background: #10b981; }
 .seg-summary td { vertical-align: top; }
 .seg-row-alert { background: #fff5f5; }
-.seg-open { font-size: .68rem !important; padding: 4px 10px !important; white-space: nowrap; }
+.seg-open { font-size: 0.66rem !important; padding: 4px 10px !important; white-space: nowrap; }
 
 /* Kanban */
 .seg-kanban {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 12px; align-items: start;
 }
-.seg-col { background: #fafafa; border: 1px solid #eee; border-radius: 10px; overflow: hidden; }
+.seg-col { background: #fafafa; border: 1px solid #e5e5e5; border-radius: 10px; overflow: hidden; }
 .seg-col-head {
-  padding: 10px 12px; font-size: .76rem; font-weight: 700; color: #333;
-  background: #fff; border-bottom: 2px solid #ddd;
+  padding: 10px 12px; font-size: 0.74rem; font-weight: 700; color: #333;
+  background: #fff; border-bottom: 2px solid #e5e5e5;
   display: flex; align-items: center;
 }
 .seg-col-count {
-  margin-left: auto; font-size: .68rem; color: #666;
+  margin-left: auto; font-size: 0.66rem; color: #555;
   background: #f0f0f0; padding: 1px 8px; border-radius: 10px;
 }
 .seg-col-body { padding: 10px; display: flex; flex-direction: column; gap: 9px; max-height: 620px; overflow-y: auto; }
-.seg-col-empty { text-align: center; color: #bbb; font-size: .75rem; padding: 12px 0; }
+.seg-col-empty { text-align: center; color: #aaa; font-size: 0.74rem; padding: 12px 0; }
 .seg-card {
   background: #fff; border: 1px solid #ececec; border-left: 3px solid #ccc;
   border-radius: 7px; padding: 9px 10px;
 }
-.seg-card-overdue { border-color: #fecaca; border-left-color: #ef4444; background: #fffafa; }
-.seg-card-partner { font-size: .64rem; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: .3px; margin-bottom: 3px; }
-.seg-card-task    { font-size: .78rem; font-weight: 600; color: #222; line-height: 1.35; }
-.seg-card-meta    { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 6px; font-size: .66rem; color: #777; }
-.seg-card-goal    { margin-top: 6px; font-size: .68rem; color: #0e7490; }
+.seg-card-overdue { border-color: #fecaca; border-left-color: #dc2626; background: #fffafa; }
+.seg-card-partner { font-size: 0.62rem; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: .3px; margin-bottom: 3px; }
+.seg-card-task    { font-size: 0.78rem; font-weight: 600; color: #222; line-height: 1.35; }
+.seg-card-meta    { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 6px; font-size: 0.66rem; color: #777; }
+.seg-card-goal    { margin-top: 6px; font-size: 0.66rem; color: #0e7490; }
 .seg-chip         { font-weight: 700; padding: 1px 7px; border-radius: 9px; }
-.seg-overdue-txt  { color: #ef4444; font-weight: 700; }
+.seg-overdue-txt  { color: #dc2626; font-weight: 700; }
 
 /* ── CONFIGURACIÓN → USUARIOS Y ACCESOS ────────────────────────────────────
    Panel de administración de cuentas. Se pasó de una tabla densa (5 columnas
@@ -865,15 +865,15 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 .au-search {
   flex: 1; min-width: 200px; max-width: 320px;
   border: 1px solid #e5e5e5; border-radius: 8px;
-  padding: 8px 12px; font-size: .82rem; outline: none;
+  padding: 8px 12px; font-size: 0.82rem; outline: none;
   transition: border-color .15s;
 }
 .au-search:focus { border-color: #FF0000; }
 .au-chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .au-chip {
-  border: 1px solid #e5e5e5; background: #fff; color: #666;
+  border: 1px solid #e5e5e5; background: #fff; color: #555;
   border-radius: 20px; padding: 5px 12px;
-  font-size: .74rem; cursor: pointer; transition: all .15s;
+  font-size: 0.74rem; cursor: pointer; transition: all .15s;
 }
 .au-chip:hover { background: #fafafa; }
 .au-chip.on    { border-color: #111; color: #111; font-weight: 700; }
@@ -882,15 +882,15 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 .au-btn {
   border: 1px solid #e5e5e5; background: #fff; color: #444;
   border-radius: 7px; padding: 6px 12px;
-  font-size: .76rem; font-weight: 600; cursor: pointer; transition: all .15s;
+  font-size: 0.74rem; font-weight: 600; cursor: pointer; transition: all .15s;
 }
-.au-btn:hover:not(:disabled) { border-color: #bbb; background: #fafafa; }
+.au-btn:hover:not(:disabled) { border-color: #aaa; background: #fafafa; }
 .au-btn:disabled { opacity: .35; cursor: not-allowed; }
 .au-btn-primary { background: #FF0000; border-color: #FF0000; color: #fff; }
 .au-btn-primary:hover:not(:disabled) { opacity: .88; background: #FF0000; }
 .au-btn-danger  { background: #dc2626; border-color: #dc2626; color: #fff; }
 .au-btn-danger:hover:not(:disabled) { opacity: .88; background: #dc2626; }
-.au-icon-btn { padding: 6px 9px; font-size: .85rem; line-height: 1; }
+.au-icon-btn { padding: 6px 9px; font-size: 0.82rem; line-height: 1; }
 .au-icon-danger:hover:not(:disabled) { border-color: #dc2626; color: #dc2626; background: #fef2f2; }
 
 /* Invitar: plegado por defecto — es una acción ocasional y ocupaba el espacio
@@ -901,7 +901,7 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 }
 .au-invite > summary {
   cursor: pointer; padding: 10px 14px;
-  font-size: .8rem; font-weight: 700; color: #075985;
+  font-size: 0.78rem; font-weight: 700; color: #075985;
   list-style: none; display: flex; align-items: center; gap: 7px;
 }
 .au-invite > summary::-webkit-details-marker { display: none; }
@@ -912,12 +912,12 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 }
 .au-input {
   border: 1px solid #d7dde3; border-radius: 7px;
-  padding: 7px 11px; font-size: .8rem; outline: none; background: #fff;
+  padding: 7px 11px; font-size: 0.78rem; outline: none; background: #fff;
   flex: 1; min-width: 180px;
 }
 .au-input:focus { border-color: #0284c7; }
 .au-input-sm { flex: 0 0 auto; min-width: 0; width: auto; }
-.au-hint { font-size: .7rem; color: #0369a1; line-height: 1.5; flex-basis: 100%; margin: 2px 0 0; }
+.au-hint { font-size: 0.7rem; color: #0369a1; line-height: 1.5; flex-basis: 100%; margin: 2px 0 0; }
 .au-footnote { color: #888; margin-top: 12px; }
 
 /* Grilla de tarjetas */
@@ -938,23 +938,23 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 }
 .au-ident { flex: 1; min-width: 0; }
 .au-email {
-  font-size: .82rem; font-weight: 700; color: #111;
+  font-size: 0.82rem; font-weight: 700; color: #111;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .au-you {
-  font-size: .58rem; font-weight: 800; text-transform: uppercase;
+  font-size: 0.58rem; font-weight: 800; text-transform: uppercase;
   background: #111; color: #fff; padding: 1px 6px; border-radius: 8px; margin-left: 6px;
 }
-.au-meta { font-size: .66rem; color: #999; margin-top: 2px; display: flex; gap: 5px; flex-wrap: wrap; }
+.au-meta { font-size: 0.66rem; color: #888; margin-top: 2px; display: flex; gap: 5px; flex-wrap: wrap; }
 .au-actions { display: flex; gap: 4px; flex: 0 0 auto; }
 
 .au-field { margin-bottom: 11px; }
 .au-field:last-child { margin-bottom: 0; }
 .au-field-label {
-  font-size: .64rem; font-weight: 800; text-transform: uppercase;
-  letter-spacing: .5px; color: #999; margin-bottom: 5px;
+  font-size: 0.62rem; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .5px; color: #888; margin-bottom: 5px;
 }
-.au-field-hint { font-weight: 500; text-transform: none; letter-spacing: 0; color: #bbb; margin-left: 5px; }
+.au-field-hint { font-weight: 500; text-transform: none; letter-spacing: 0; color: #aaa; margin-left: 5px; }
 
 /* Rol: botones en vez de <select>. Los 4 roles son pocos y mutuamente
    excluyentes, así que verlos todos a la vez evita abrir un desplegable para
@@ -963,7 +963,7 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 .au-role {
   border: 1px solid #e5e5e5; background: #fff; color: #777;
   border-radius: 7px; padding: 5px 10px;
-  font-size: .72rem; font-weight: 600; cursor: pointer; transition: all .15s;
+  font-size: 0.7rem; font-weight: 600; cursor: pointer; transition: all .15s;
 }
 .au-role:hover { background: #fafafa; }
 .au-role.on    { font-weight: 800; }
@@ -971,29 +971,29 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 .au-perms { display: flex; flex-wrap: wrap; gap: 5px; }
 .au-perm {
   display: inline-flex; align-items: center; gap: 5px;
-  border: 1px solid #eee; border-radius: 7px; padding: 4px 9px;
-  font-size: .7rem; color: #666; cursor: pointer; transition: all .15s;
+  border: 1px solid #e5e5e5; border-radius: 7px; padding: 4px 9px;
+  font-size: 0.7rem; color: #555; cursor: pointer; transition: all .15s;
 }
 .au-perm:hover { background: #fafafa; }
 .au-perm.on { border-color: #86efac; background: #f0fdf4; color: #166534; font-weight: 700; }
 .au-perm input { margin: 0; cursor: pointer; }
-.au-perm-implicit { font-size: .7rem; color: #bbb; font-style: italic; }
+.au-perm-implicit { font-size: 0.7rem; color: #aaa; font-style: italic; }
 
 .au-clids { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
 .au-clid {
   display: inline-flex; align-items: center; gap: 5px;
   background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 8px;
-  padding: 3px 4px 3px 9px; font-size: .7rem; color: #6b21a8;
+  padding: 3px 4px 3px 9px; font-size: 0.7rem; color: #6b21a8;
 }
-.au-clid i      { font-style: normal; color: #a78bfa; font-size: .64rem; }
+.au-clid i      { font-style: normal; color: #a78bfa; font-size: 0.62rem; }
 .au-clid button {
   border: none; background: none; color: #7c3aed;
-  cursor: pointer; font-weight: 800; padding: 0 4px; font-size: .85rem; line-height: 1;
+  cursor: pointer; font-weight: 800; padding: 0 4px; font-size: 0.82rem; line-height: 1;
 }
 .au-clid button:hover { color: #dc2626; }
 .au-clid-add { display: flex; gap: 5px; }
 .au-warn {
-  font-size: .7rem; color: #b45309; background: #fffbeb;
+  font-size: 0.7rem; color: #b45309; background: #fffbeb;
   border: 1px solid #fde68a; border-radius: 7px; padding: 6px 9px; margin-bottom: 6px;
 }
 
@@ -1003,20 +1003,20 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
   margin-top: 12px; padding: 11px 12px;
   background: #fef2f2; border: 1px solid #fecaca; border-radius: 9px;
 }
-.au-danger-txt { font-size: .72rem; color: #991b1b; line-height: 1.55; margin-bottom: 9px; }
+.au-danger-txt { font-size: 0.7rem; color: #b91c1c; line-height: 1.55; margin-bottom: 9px; }
 .au-danger-actions { display: flex; gap: 7px; justify-content: flex-end; }
 
 .au-empty { text-align: center; padding: 34px 16px; }
 .au-empty-ico { font-size: 2rem; margin-bottom: 8px; }
-.au-empty-txt { font-size: .82rem; color: #888; margin-bottom: 14px; }
+.au-empty-txt { font-size: 0.82rem; color: #888; margin-bottom: 14px; }
 .au-alert {
   background: #fff5f5; border: 1px solid #fecaca; border-radius: 9px;
-  padding: 13px 15px; color: #991b1b; font-size: .8rem; line-height: 1.6;
+  padding: 13px 15px; color: #b91c1c; font-size: 0.78rem; line-height: 1.6;
 }
 .au-alert button { margin-top: 9px; }
 .au-spinner {
   width: 26px; height: 26px; margin: 0 auto 12px;
-  border: 3px solid #eee; border-top-color: #FF0000; border-radius: 50%;
+  border: 3px solid #e5e5e5; border-top-color: #FF0000; border-radius: 50%;
 }
 @media (prefers-reduced-motion: no-preference) {
   .au-spinner { animation: auSpin .8s linear infinite; }
@@ -1030,12 +1030,12 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
   display: flex; gap: 11px; align-items: flex-start;
   background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 9px;
   padding: 11px 14px; margin-bottom: 14px;
-  font-size: .78rem; color: #1e40af; line-height: 1.55;
+  font-size: 0.78rem; color: #1e40af; line-height: 1.55;
 }
 .metas-escala-aviso .mea-ico { font-size: 1.05rem; line-height: 1.3; flex: 0 0 auto; }
 .metas-escala-aviso strong   { font-weight: 700; }
 .metas-escala-aviso .mea-hint {
-  display: block; margin-top: 5px; font-size: .73rem; color: #3b82f6;
+  display: block; margin-top: 5px; font-size: 0.7rem; color: #3b82f6;
 }
 
 /* ── CALCULADORA: metas ya guardadas + modo de guardado (ago 2026) ──────────
@@ -1044,7 +1044,7 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
    qué fila YA tiene meta en la base, y qué valor difiere de lo guardado. */
 .calc-badge-saved {
   display: inline-block; margin-left: 6px; padding: 1px 6px;
-  font-size: .6rem; font-weight: 800; letter-spacing: .02em;
+  font-size: 0.58rem; font-weight: 800; letter-spacing: .02em;
   color: #065f46; background: #d1fae5; border-radius: 10px; vertical-align: middle;
 }
 /* Ámbar = distinto de lo que hay en la base; al guardar se sobrescribe. */
@@ -1058,19 +1058,19 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
   margin-bottom: 12px; background: #fafafa;
 }
 .calc-mode-title {
-  font-size: .7rem; font-weight: 800; letter-spacing: .04em;
+  font-size: 0.7rem; font-weight: 800; letter-spacing: .04em;
   text-transform: uppercase; color: #6b7280; margin-bottom: 8px;
 }
 .calc-mode-opt {
   display: flex; gap: 8px; align-items: flex-start;
   padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 8px;
   background: #fff; cursor: pointer; margin-bottom: 6px;
-  font-size: .78rem; line-height: 1.35;
+  font-size: 0.78rem; line-height: 1.35;
 }
 .calc-mode-opt:last-child { margin-bottom: 0; }
 .calc-mode-opt.active { border-color: #10b981; background: #f0fdf4; }
 .calc-mode-opt input { margin-top: 2px; flex: 0 0 auto; cursor: pointer; }
-.calc-mode-desc { color: #6b7280; font-size: .72rem; }
+.calc-mode-desc { color: #6b7280; font-size: 0.7rem; }
 
 /* ══════════════════════════════════════════════════════════════════════════
    TABLET / iPAD (ago 2026)
@@ -1103,7 +1103,7 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
   .topbar       { padding: 0 14px; }
   .topbar-left  { gap: 10px; }
   .nav-tabs     { margin-left: 10px; }
-  .nav-tab      { padding: 8px 11px; font-size: .8rem; white-space: nowrap; }
+  .nav-tab      { padding: 8px 11px; font-size: 0.78rem; white-space: nowrap; }
   .user-badge   { max-width: 120px; }
   .up-btn       { padding: 7px 11px; }
   #langSwitch button { padding: 4px 7px !important; }
@@ -1115,16 +1115,16 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
   .topbar-left   { gap: 8px; padding: 6px 0; min-width: 0; }
   .topbar-right  { gap: 6px; padding: 6px 0; flex-wrap: nowrap; }
   .brand-sub     { display: none; }          /* "Partner Performance Analytics" */
-  .brand         { font-size: .95rem; white-space: nowrap; }
+  .brand         { font-size: 0.95rem; white-space: nowrap; }
   .logo          { width: 30px; height: 30px; }
   /* La nav NO se encoge: comprimirla recortaba "Configuración" a mitad de
      palabra. El espacio se gana achicando los propios controles. */
   .nav-tabs      { margin-left: 6px; gap: 1px; flex-shrink: 0; }
-  .nav-tab       { padding: 7px 8px; font-size: .74rem; white-space: nowrap; }
+  .nav-tab       { padding: 7px 8px; font-size: 0.74rem; white-space: nowrap; }
   .topbar-right  { flex-shrink: 0; }
   /* El selector de idioma son 3 banderas: a 38px cada una se comían 113px de
      una barra que ya iba justa. */
-  #langSwitch button { padding: 4px 6px !important; font-size: .8rem !important; }
+  #langSwitch button { padding: 4px 6px !important; font-size: 0.78rem !important; }
   #langSwitch { gap: 2px; }
   .logout-btn    { padding: 7px 10px; }
   /* El email completo no aporta en pantalla chica: la sesión ya se ve por el
@@ -1190,7 +1190,7 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
   /* Las tarjetas de KPI se compactan un poco para que las dos columnas no
      obliguen a truncar los números grandes. */
   .mcard-val   { font-size: 1.25rem; }
-  .mcard-label { font-size: .66rem; }
+  .mcard-label { font-size: 0.66rem; }
   /* Las tablas anchas se desplazan solas en vez de romper el layout. */
   .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 }
@@ -1206,7 +1206,7 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
   .plist label { min-height: 40px; display: flex; align-items: center; gap: 8px; }
   .plist input[type="checkbox"] { width: 20px; height: 20px; }
   /* Inputs de la calculadora: escribir metas con el dedo. */
-  .calc-inp { min-height: 40px; font-size: .9rem; }
+  .calc-inp { min-height: 40px; font-size: 0.9rem; }
 }
 
 /* ── AVISO DE VERSIÓN NUEVA (ago 2026) ─────────────────────────────────────
@@ -1224,18 +1224,18 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
   background: #111; color: #fff;
   border-radius: 10px;
   box-shadow: 0 8px 28px rgba(0,0,0,.28);
-  font-size: .8rem; line-height: 1.35;
+  font-size: 0.78rem; line-height: 1.35;
 }
 .new-version-bar button {
   flex: 0 0 auto;
   padding: 7px 12px; border: none; border-radius: 7px;
   background: #FF0000; color: #fff;
-  font-size: .78rem; font-weight: 700; cursor: pointer;
+  font-size: 0.78rem; font-weight: 700; cursor: pointer;
 }
 .new-version-bar button:hover { opacity: .88; }
 .new-version-bar .nvb-close {
-  background: transparent; color: #999;
-  padding: 4px 6px; font-size: .9rem; font-weight: 400;
+  background: transparent; color: #888;
+  padding: 4px 6px; font-size: 0.9rem; font-weight: 400;
 }
 .new-version-bar .nvb-close:hover { color: #fff; }
 
@@ -1258,7 +1258,7 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 .lang-select {
   border: 1px solid #e5e5e5; border-radius: 6px;
   background: #fff; color: #555;
-  font-size: .76rem; font-weight: 600;
+  font-size: 0.74rem; font-weight: 600;
   padding: 6px 4px;
   cursor: pointer; outline: none;
   max-width: 132px;
@@ -1269,11 +1269,11 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 .topbar        { padding: 0 16px; }
 .topbar-left   { gap: 10px; }
 .brand         { font-size: 1rem; }
-.brand-sub     { font-size: .62rem; }
-.nav-tab       { padding: 7px 12px; font-size: .8rem; }
+.brand-sub     { font-size: 0.62rem; }
+.nav-tab       { padding: 7px 12px; font-size: 0.78rem; }
 .up-btn        { padding: 7px 9px; }        /* ícono solo: sin ancho de texto */
-.logout-btn    { padding: 6px 12px; font-size: .78rem; }
-.user-badge    { font-size: .72rem; padding: 4px 9px; }
+.logout-btn    { padding: 6px 12px; font-size: 0.78rem; }
+.user-badge    { font-size: 0.7rem; padding: 4px 9px; }
 
 /* ── MENÚ DE SESIÓN (email → Salir) ────────────────────────────────────────
    "Salir" era un botón permanente en la barra para una acción que se usa una
@@ -1287,7 +1287,7 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
   transition: border-color .15s, color .15s;
 }
 .user-menu-wrap .user-badge::after {
-  content: "▾"; font-size: .7rem; color: #bbb; flex: 0 0 auto;
+  content: "▾"; font-size: 0.7rem; color: #aaa; flex: 0 0 auto;
 }
 /* El truncado vive en el span, no en el botón: un flex item no se encoge por
    debajo de su contenido sin min-width:0, y el ellipsis no aplica a un nodo de
@@ -1308,7 +1308,7 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 .user-menu-item {
   display: block; width: 100%;
   padding: 9px 14px; border-radius: 7px;
-  font-size: .82rem; font-weight: 600;
+  font-size: 0.82rem; font-weight: 600;
   border: none; background: none; cursor: pointer; color: #555;
   text-align: left;
 }
@@ -1323,7 +1323,7 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 .p2-lvl-primary, .p2-lvl-secondary { display: flex; gap: 8px; align-items: stretch; }
 .p2-lvl-primary > div, .p2-lvl-secondary > div { flex: 1 1 0; min-width: 0; }
 .p2-lvl-secondary > div { padding: 5px 10px; }
-.p2-lvl-secondary .agy-style-379 { font-size: .82rem; font-weight: 800; color: #475569; }
+.p2-lvl-secondary .agy-style-379 { font-size: 0.82rem; font-weight: 800; color: #475569; }
 
 /* Logo del partner en la carátula. Sin imagen cargada se dibuja un monograma
    con las iniciales en el color del partner (p2CoverLogo, presentacion2.ts) —
@@ -1335,5 +1335,5 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 }
 .p2-cover-monogram {
   display: flex; align-items: center; justify-content: center;
-  border: 1.5px solid; font-weight: 800; font-size: 1.4rem; letter-spacing: .5px;
+  border: 1.5px solid; font-weight: 800; font-size: 1.35rem; letter-spacing: .5px;
 }
