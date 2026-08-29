@@ -680,10 +680,10 @@ export function renderPartnerView() {
       <div class="agy-style-282">
         <div class="agy-style-283">${_pvEs ? "Estamos afinando esta sección" : "We're refining this section"}</div>
         <div class="agy-style-284">${_pvEs
-          ? "Para métricas 100% precisas usá <b>Presentación 2.0</b> mientras terminamos de validar Vista Partner."
-          : "For 100% accurate metrics use <b>Presentation 2.0</b> while we finish validating Partner View."}</div>
+          ? "Para métricas 100% precisas usá <b>Presentación</b> mientras terminamos de validar Vista Partner."
+          : "For 100% accurate metrics use <b>Presentation</b> while we finish validating Partner View."}</div>
       </div>
-      <button data-act="switchTab" data-tab="present2" class="agy-style-285">${_pvEs ? "Ir a Presentación 2.0 →" : "Go to Presentation 2.0 →"}</button>
+      <button data-act="switchTab" data-tab="present2" class="agy-style-285">${_pvEs ? "Ir a Presentación →" : "Go to Presentation →"}</button>
     </div>`;
 
   // Marca de render unica para evitar race conditions de setTimeout

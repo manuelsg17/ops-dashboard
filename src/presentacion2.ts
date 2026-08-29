@@ -1862,7 +1862,7 @@ export function renderPresent2() {
   // rawDataFull (no rawData) — así el guard no falla si TODO lo cargado resulta
   // ser tuktuk (rawData quedaría vacío tras la exclusión, pero sí hay data).
   if (!STATE.rawDataFull || !STATE.rawDataFull.length) {
-    el.innerHTML = `<div class="empty"><p>Carga datos de <strong>Rendimiento</strong> para usar Presentación 2.0.</p></div>`;
+    el.innerHTML = `<div class="empty"><p>Carga datos de <strong>Rendimiento</strong> para usar Presentación.</p></div>`;
     return;
   }
   // Selector = unión taxi + tuktuk (deck combinado): un partner puede tener
@@ -2194,7 +2194,7 @@ export async function downloadPresent2PDF() {
       // y el scale de html2canvas coincidan (P2_EXPORT_SCALE), no el formato.
       pdf.addImage(canvas.toDataURL("image/jpeg", 1.0), "JPEG", 0, 0, 1280, 720);
     }
-    stampPDF(pdf, `Presentación 2.0 — ${partner}`);
+    stampPDF(pdf, `Presentación — ${partner}`);
     pdf.save(`${partner}_Presentacion2_${to}.pdf`);
   } catch (err) {
     console.error(err);

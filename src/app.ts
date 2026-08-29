@@ -200,12 +200,24 @@ export function switchTabFromMenu(tab) {
 export const _SVG_COLLAPSE = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>`;
 export const _SVG_EXPAND   = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>`;
 
+// La preferencia de sidebar se guarda POR TIPO DE PANTALLA. En escritorio el
+// sidebar es un panel fijo al costado y tenerlo abierto es lo natural; en
+// tablet FLOTA sobre el contenido, así que ese mismo "abierto" tapa los KPIs.
+// Con una sola clave, abrirlo una vez en la Mac lo dejaba abierto en el iPad.
+export function _esLayoutTablet() {
+  return typeof window !== "undefined" && window.matchMedia
+    ? window.matchMedia("(max-width: 1024px)").matches : false;
+}
+export function _sidebarPrefKey() {
+  return _esLayoutTablet() ? "yangoSidebarCollapsedTablet" : "yangoSidebarCollapsed";
+}
+
 export function toggleSidebar() {
   const sb  = document.getElementById("mainSidebar");
   const btn = document.getElementById("sidebarToggle");
   const collapsed = sb.classList.toggle("collapsed");
   btn.innerHTML = collapsed ? _SVG_EXPAND : _SVG_COLLAPSE;
-  lsSet("yangoSidebarCollapsed", collapsed ? "1" : "0");
+  lsSet(_sidebarPrefKey(), collapsed ? "1" : "0");
   // Reajustar gráficas ApexCharts al cambiar ancho (timer cancelable desde switchTab)
   clearTimeout(_sidebarResizeTimer);
   _sidebarResizeTimer = setTimeout(() => window.dispatchEvent(new Event("resize")), 220);
@@ -273,19 +285,24 @@ export function restoreFilters() {
     localStorage.removeItem("yangoFilters");
   }
 
-  // Restaurar estado del sidebar. En TABLET arranca cerrado salvo que el
-  // usuario haya elegido lo contrario: ahí el sidebar flota sobre el contenido
-  // (ver styles.css), así que dejarlo abierto de entrada taparía los datos con
-  // un panel de filtros que todavía no pidió.
-  const _pref = lsGet("yangoSidebarCollapsed");
-  const _esTablet = typeof window !== "undefined" && window.matchMedia
-    ? window.matchMedia("(max-width: 1024px)").matches : false;
-  if (_pref === "1" || (_pref === null && _esTablet)) {
-    const sb  = document.getElementById("mainSidebar");
-    const btn = document.getElementById("sidebarToggle");
-    if (sb)  sb.classList.add("collapsed");
-    if (btn) btn.innerHTML = _SVG_EXPAND;
-  }
+}
+
+// Restaurar estado del sidebar. En TABLET arranca cerrado salvo que el usuario
+// haya elegido lo contrario: ahí el sidebar FLOTA sobre el contenido (ver
+// styles.css), así que dejarlo abierto de entrada tapa los KPIs con un panel de
+// filtros que todavía no pidió.
+//
+// OJO — esto vivía DENTRO de restoreFilters(), después de su `return` temprano
+// de "no hay filtros guardados". O sea: no corría en un dispositivo sin
+// filtros previos, que es exactamente la primera visita en el iPad, el único
+// caso para el que se escribió. Va aparte y se llama siempre.
+export function restoreSidebarState() {
+  const _pref = lsGet(_sidebarPrefKey());
+  if (!(_pref === "1" || (_pref === null && _esLayoutTablet()))) return;
+  const sb  = document.getElementById("mainSidebar");
+  const btn = document.getElementById("sidebarToggle");
+  if (sb)  sb.classList.add("collapsed");
+  if (btn) btn.innerHTML = _SVG_EXPAND;
 }
 
 // ── MODE SWITCH (Semanal / Mensual) ───────────────────────────────────────────
@@ -705,6 +722,7 @@ export function popSidebarUI() {
   popKAM();
   popPartners(_sidebarList());
   restoreFilters();
+  restoreSidebarState();   // aparte: restoreFilters corta antes si no hay filtros guardados
 }
 
 export function filterPList() {
