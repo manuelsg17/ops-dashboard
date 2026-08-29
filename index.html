@@ -91,7 +91,12 @@
           <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
         </svg>
       </div>
-      <div>
+      <!-- translate="no": la marca es un nombre propio. Sin esto el navegador
+           detectaba la página como inglesa por estas dos líneas y ofrecía
+           traducirla al español, con resultados absurdos en el resto de la UI
+           ("Análisis" -> "pruebas de sangre"). Ver también la sincronización de
+           <html lang> en setUiLang (app.ts). -->
+      <div translate="no">
         <div class="brand">YANGO <span>Dashboard</span></div>
         <div class="brand-sub">Partner Performance Analytics</div>
       </div>

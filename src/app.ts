@@ -1332,7 +1332,7 @@ export async function deleteDashboardData() {
 
 // ── ACCIONES DELEGADAS (Fase A2) ─────────────────────────────────────────────
 import { registerActions } from "./shared/actions.js";
-import { t, setLang, aplicarI18nEstatico, selectorIdiomaHTML } from "./core/i18n";
+import { t, setLang, getLang, aplicarI18nEstatico, selectorIdiomaHTML } from "./core/i18n";
 import { logAccess } from "./shared/accessLog.js";
 
 // ── i18n de la interfaz ──────────────────────────────────────────────────────
@@ -1341,6 +1341,9 @@ import { logAccess } from "./shared/accessLog.js";
 // RE-RENDERIZAR la pestana activa: casi todo el texto se genera desde JS con
 // template literals, asi que no basta con repintar los data-i18n.
 export function _initUiLang() {
+  // El idioma guardado (localStorage) puede no ser el "es" del index.html —
+  // ver el comentario en setUiLang sobre la traducción automática.
+  try { document.documentElement.lang = getLang(); } catch (_) {}
   const cont = document.getElementById("langSwitch");
   if (cont) cont.innerHTML = selectorIdiomaHTML();
   aplicarI18nEstatico();
@@ -1348,6 +1351,13 @@ export function _initUiLang() {
 
 export function setUiLang(code) {
   if (!setLang(code)) return;
+  // Mantener <html lang> en sincronía con el idioma REAL de la interfaz.
+  // Sin esto quedaba clavado en "es" del index.html: al pasar a EN/RU, el
+  // navegador veía contenido inglés/ruso declarado como español, detectaba el
+  // idioma por su cuenta y ofrecía "traducir" — que es de donde salían
+  // "Tablero de instrumentos" (Dashboard) y "pruebas de sangre" (Análisis
+  // interpretado como análisis clínico).
+  try { document.documentElement.lang = code; } catch (_) {}
   const cont = document.getElementById("langSwitch");
   if (cont) cont.innerHTML = selectorIdiomaHTML();
   aplicarI18nEstatico();

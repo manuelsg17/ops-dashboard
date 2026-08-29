@@ -503,10 +503,14 @@ input[type="file"]  { display: none; }
 
 /* ── RESPONSIVE ───────────────────────────────────────────────────────────── */
 @media (max-width: 900px) {
-  .metric-row, .city-grid { grid-template-columns: 1fr; }
   .sidebar { width: 220px; min-width: 220px; }
 }
+/* Una sola columna SOLO en teléfono. Antes esta regla arrancaba en 900px, así
+   que en un iPad (768) cada KPI ocupaba el ancho completo: media pantalla
+   desperdiciada y había que hacer scroll para ver 4 tarjetas que entran de
+   sobra en dos columnas. */
 @media (max-width: 600px) {
+  .metric-row, .city-grid { grid-template-columns: 1fr; }
   .nav-tabs   { display: none; }
   .topbar-right { gap: 5px; }
 }
@@ -1051,8 +1055,16 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
   .brand-sub     { display: none; }          /* "Partner Performance Analytics" */
   .brand         { font-size: .95rem; white-space: nowrap; }
   .logo          { width: 30px; height: 30px; }
-  .nav-tabs      { margin-left: 8px; gap: 2px; }
-  .nav-tab       { padding: 7px 10px; font-size: .78rem; white-space: nowrap; }
+  /* La nav NO se encoge: comprimirla recortaba "Configuración" a mitad de
+     palabra. El espacio se gana achicando los propios controles. */
+  .nav-tabs      { margin-left: 6px; gap: 1px; flex-shrink: 0; }
+  .nav-tab       { padding: 7px 8px; font-size: .74rem; white-space: nowrap; }
+  .topbar-right  { flex-shrink: 0; }
+  /* El selector de idioma son 3 banderas: a 38px cada una se comían 113px de
+     una barra que ya iba justa. */
+  #langSwitch button { padding: 4px 6px !important; font-size: .8rem !important; }
+  #langSwitch { gap: 2px; }
+  .logout-btn    { padding: 7px 10px; }
   /* El email completo no aporta en pantalla chica: la sesión ya se ve por el
      avatar/botón de salir, y ocupaba media barra. */
   .user-badge    { display: none; }
@@ -1101,7 +1113,24 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
     box-shadow: 0 4px 16px rgba(0,0,0,.22);
     background: #fff;
   }
-  .main { padding: 12px; }
+  /* padding-bottom: deja aire para el botón flotante de filtros, que si no se
+     apoya encima del último dato de la página. */
+  .main { padding: 12px 12px 84px; }
+
+  /* ── Rejillas: 2 columnas, no 1 ──────────────────────────────────────── */
+  /* En 768px de ancho entran dos KPIs por fila con holgura. Con una sola
+     columna cada tarjeta medía ~215px de alto y apenas se veían 3 sin hacer
+     scroll — el mismo dato ocupando el doble de recorrido. */
+  .metric-row, .city-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  /* Las tarjetas de KPI se compactan un poco para que las dos columnas no
+     obliguen a truncar los números grandes. */
+  .mcard-val   { font-size: 1.5rem; }
+  .mcard-label { font-size: .72rem; }
+  /* Las tablas anchas se desplazan solas en vez de romper el layout. */
+  .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 }
 
 /* ── 3. Objetivos táctiles (solo donde el puntero es grueso) ───────────── */
