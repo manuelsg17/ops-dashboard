@@ -1313,3 +1313,27 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
   text-align: left;
 }
 .user-menu-item:hover { background: #fff5f5; color: #FF0000; }
+
+/* ── PRESENTACIÓN: jerarquía en "Avance vs Meta" + logo de carátula ─────────
+   Las tarjetas CON meta son el mensaje del slide (fila principal); las de
+   referencia/"sin meta" son contexto (fila secundaria, más compacta y
+   apagada). Antes convivían al mismo rango y no se distinguía el avance del
+   dato decorativo. */
+.p2-lvl-cards { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.p2-lvl-primary, .p2-lvl-secondary { display: flex; gap: 8px; align-items: stretch; }
+.p2-lvl-primary > div, .p2-lvl-secondary > div { flex: 1 1 0; min-width: 0; }
+.p2-lvl-secondary > div { padding: 5px 10px; }
+.p2-lvl-secondary .agy-style-379 { font-size: .82rem; font-weight: 800; color: #475569; }
+
+/* Logo del partner en la carátula. Sin imagen cargada se dibuja un monograma
+   con las iniciales en el color del partner (p2CoverLogo, presentacion2.ts) —
+   el espacio queda reservado para cuando haya logos reales en
+   STATE.partnerLogos. object-fit:contain para no deformar logos apaisados. */
+.p2-cover-logo {
+  width: 64px; height: 64px; border-radius: 16px;
+  margin-bottom: 14px; object-fit: contain;
+}
+.p2-cover-monogram {
+  display: flex; align-items: center; justify-content: center;
+  border: 1.5px solid; font-weight: 800; font-size: 1.4rem; letter-spacing: .5px;
+}

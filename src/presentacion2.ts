@@ -308,6 +308,19 @@ export function p2BrandFooter(idx) {
 }
 
 // ── SLIDE: CARÁTULA (branded, oscura) ─────────────────────────────────────────
+// Slot del LOGO del partner en la carátula. Hoy nadie carga logos, así que se
+// dibuja un monograma (iniciales en el color del partner) — el espacio ya está
+// reservado y maquetado. Cuando haya logos reales: poblar STATE.partnerLogos
+// (partner → dataURL o ruta same-origin; la CSP admite 'self', data: y blob:)
+// y esta función los usa sola, sin tocar el layout.
+export function p2CoverLogo(partner, col) {
+  const url = (STATE.partnerLogos || {})[partner];
+  if (url) return `<img class="p2-cover-logo" src="${escapeHTML(url)}" alt="">`;
+  const ini = String(partner || "").trim().split(/\s+/).slice(0, 2)
+    .map(w => w[0] || "").join("").toUpperCase();
+  return `<div class="p2-cover-logo p2-cover-monogram" style="color:${col};border-color:${col}33;background:${col}0d">${escapeHTML(ini)}</div>`;
+}
+
 export function buildSlide2Cover(partner, dates) {
   const es = PRESENT2_STATE.lang === "es";
   const col = (STATE.partnerColors && STATE.partnerColors[partner]) || "#FF0000";
@@ -328,6 +341,7 @@ export function buildSlide2Cover(partner, dates) {
         <div class="agy-style-345">${P2_LOGO_SVG}</div>
         <div class="agy-style-346">YANGO <span class="agy-style-51">Partners</span></div>
       </div>
+      ${p2CoverLogo(partner, col)}
       <div class="agy-style-175">
         <div style="width:14px;height:14px;border-radius:50%;background:${col}"></div>
         <div class="agy-style-347">${escapeHTML(partner)}</div>
@@ -1282,20 +1296,26 @@ export function buildSlide2Avance(partner, idx) {
     if (isTk) proj.cars = act.lastCars;   // snapshot: proyección = nivel actual
     // Metas reales de STATE.metasData (agregador: mA/mNR/mH · TukTuk: mtk*).
     const meta = p2MetaFor(partner, lv.city, mesName);
-    let cards = metricDefs.map(m => {
+    // Jerarquía (ago 2026): las tarjetas CON meta son el mensaje del slide y
+    // van en la fila principal; las de referencia/"sin meta" son contexto y
+    // van en una fila secundaria más compacta. Antes convivían al mismo rango
+    // visual y el ojo no sabía cuál era el avance y cuál el dato decorativo.
+    const metaCards = [], refCards = [];
+    metricDefs.forEach(m => {
       // Snapshot (AD/Cars) → último período; acumuladas (N+R/SH) → total del mes.
       const real = m.snap ? (act[m.snap] != null ? act[m.snap] : act[m.ak]) : act[m.ak];
       const goal = meta[m.mk] || 0, projV = proj[m.ak];
       const fmtN = m.kind === "numK" ? fmtSmart : fmt;
       if (!goal) {
         const subTxt = es ? "Sin meta" : "No target";
-        return `<div class="agy-style-392">
+        refCards.push(`<div class="agy-style-392">
           <div class="agy-style-383">${escapeHTML(m.label)}</div>
           <div class="agy-style-379">${fmtN(real)}</div>
-          <div class="agy-style-393">${subTxt}</div></div>`;
+          <div class="agy-style-393">${subTxt}</div></div>`);
+        return;
       }
       const pct = (real / goal) * 100, ppct = (projV / goal) * 100, col = p2AvanceColor(pct);
-      return `<div class="agy-style-381">
+      metaCards.push(`<div class="agy-style-381">
         <div class="agy-style-382">
           <span class="agy-style-383">${escapeHTML(m.label)}</span>
           <span style="font-size:.74rem;font-weight:800;color:${col}">${_p2PctTxt(pct)}</span>
@@ -1309,8 +1329,8 @@ export function buildSlide2Avance(partner, idx) {
           <div style="position:absolute;top:0;left:0;height:100%;width:${Math.min(pct, 100).toFixed(1)}%;background:${col};border-radius:5px"></div>
         </div>
         <div class="agy-style-388">${es ? "proy" : "proj"} ${fmtN(projV)} (${_p2PctTxt(ppct)})</div>
-      </div>`;
-    }).join("");
+      </div>`);
+    });
     if (fleetMode) {
       const fs = p2FleetSeries(partner, lv.city, monthDates);
       const lastOf = arr => (arr && arr.length) ? arr[arr.length - 1] : null;
@@ -1322,29 +1342,36 @@ export function buildSlide2Avance(partner, idx) {
       const accA = lastOf(fs.accept);     // 0-1 o null
       const shcA = lastOf(fs.shCarInt);   // ratio o null
       // Aceptación: meta real por ciudad SOLO si hay meta Y actual con dato; si no, referencia (— si null).
-      cards += (perCity && meta.mAcc != null && accA != null)
-        ? _p2MetaCard(es ? "Aceptación" : "Acceptance", accA * 100, meta.mAcc, null, v => fmt(v) + "%", es)
-        : p2RefCard(es ? "Acceptance Rate" : "Acceptance Rate", fs.accept, "pct", es);
+      if (perCity && meta.mAcc != null && accA != null)
+        metaCards.push(_p2MetaCard(es ? "Aceptación" : "Acceptance", accA * 100, meta.mAcc, null, v => fmt(v) + "%", es));
+      else refCards.push(p2RefCard(es ? "Acceptance Rate" : "Acceptance Rate", fs.accept, "pct", es));
       // SH/Auto interno:
-      cards += (perCity && meta.mSHcar != null && shcA != null)
-        ? _p2MetaCard(es ? "SH/Auto (interno)" : "Internal SH/Car", shcA, meta.mSHcar, null, v => fmt(v), es)
-        : p2RefCard(es ? "Internal Fleet SH/Auto" : "Internal Fleet SH/Car", fs.shCarInt, "ratio1", es);
-      // Utilización: solo meta, solo por ciudad (sin actual medible).
-      if (perCity && meta.mUtil != null) cards += _p2MetaOnlyCard(es ? "Utilización" : "Utilization", meta.mUtil, v => fmt(v) + "%", es ? "sin actual" : "no actual", es);
+      if (perCity && meta.mSHcar != null && shcA != null)
+        metaCards.push(_p2MetaCard(es ? "SH/Auto (interno)" : "Internal SH/Car", shcA, meta.mSHcar, null, v => fmt(v), es));
+      else refCards.push(p2RefCard(es ? "Internal Fleet SH/Auto" : "Internal Fleet SH/Car", fs.shCarInt, "ratio1", es));
+      // Utilización: solo meta, solo por ciudad (sin actual medible) — es contexto, va secundaria.
+      if (perCity && meta.mUtil != null) refCards.push(_p2MetaOnlyCard(es ? "Utilización" : "Utilization", meta.mUtil, v => fmt(v) + "%", es ? "sin actual" : "no actual", es));
       // Owned Fleet Active Cars: referencia (sin meta en BD).
-      cards += p2RefCard(es ? "Owned Fleet Active Cars" : "Owned Fleet Active Cars", fs.ownedFleetActiveCars, "num", es);
+      refCards.push(p2RefCard(es ? "Owned Fleet Active Cars" : "Owned Fleet Active Cars", fs.ownedFleetActiveCars, "num", es));
     }
-    return `<div style="display:flex;gap:8px;flex:1 1 0;min-height:0;max-height:200px;border-left:3px solid ${lv.color};padding-left:8px;align-items:stretch">
+    // Sin ninguna tarjeta con meta, las referencias suben a la fila principal
+    // (una fila secundaria sola parecería un slide en borrador).
+    const primary = metaCards.length ? metaCards : refCards;
+    const secondary = metaCards.length ? refCards : [];
+    return `<div style="display:flex;gap:8px;flex:1 1 0;min-height:0;max-height:230px;border-left:3px solid ${lv.color};padding-left:8px;align-items:stretch">
       <div class="agy-style-394"><span style="font-weight:800;font-size:.82rem;color:${lv.color}">${escapeHTML(lv.label)}</span></div>
-      <div class="agy-style-395">${cards}</div>
+      <div class="p2-lvl-cards">
+        <div class="p2-lvl-primary">${primary.join("")}</div>
+        ${secondary.length ? `<div class="p2-lvl-secondary">${secondary.join("")}</div>` : ""}
+      </div>
     </div>`;
   }).join("");
   const avTitle = isTk
     ? (es ? "Avance vs Meta TukTuk" : "TukTuk Goal vs Target")
     : (es ? "Avance vs Meta del mes" : "Goal vs Target");
   const avSub = es
-    ? "Actual vs meta · barra = avance · marca negra = proyección"
-    : "Actual vs goal · bar = progress · black mark = projection";
+    ? "Actual vs meta · barra = avance · barra tenue = proyección"
+    : "Actual vs goal · bar = progress · faded bar = projection";
   const noDataMsg = noMonthData
     ? (es ? `Sin datos de ${escapeHTML(mesName)} para comparar con la meta.` : `No data for ${escapeHTML(mesName)} to compare.`)
     : isTk
@@ -1427,8 +1454,8 @@ export function buildSlide2AvanceCombinado(partner, idx) {
 
   const title = es ? "Avance vs Meta Combinado" : "Combined Goal vs Target";
   const sub   = es
-    ? "Taxi + TukTuk sumados · barra = avance · marca negra = proyección"
-    : "Taxi + TukTuk combined · bar = progress · black mark = projection";
+    ? "Taxi + TukTuk sumados · barra = avance · barra tenue = proyección"
+    : "Taxi + TukTuk combined · bar = progress · faded bar = projection";
   const noDataMsg = noMonthData
     ? (es ? `Sin datos de ${escapeHTML(mesName)} para comparar con la meta.` : `No data for ${escapeHTML(mesName)} to compare.`)
     : (es ? "Sin metas cargadas para este mes." : "No goals loaded for this month.");
