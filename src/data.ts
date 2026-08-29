@@ -568,6 +568,12 @@ export function dropLegacyAggregateRows(rows) {
 // listos (el caller garantiza el orden — ver `deferred.then(...)`).
 function _applyMetasProyectosSeguimiento(metas, proyectos, seguimiento) {
   STATE.metasData = (metas || []).map(m => ({
+    // `clid` NO se copiaba (bug encontrado en la auditoría de ago 2026): sin
+    // él, el applyFlotasOverride de más abajo hacía `map[undefined]` y era un
+    // NO-OP silencioso — las metas de flotas marcadas `activo=false` seguían
+    // sumando al plan aunque su rendimiento SÍ estuviera excluido por ese mismo
+    // override, dejando meta sin fact posible (hunde el % de cumplimiento).
+    clid:    (m.clid || "").trim(),
     partner: STATE.CLID_MAP[m.clid] || m.partner,
     kam:     STATE.KAM_MAP[m.clid] || m.kam || "",
     city:    normCity(m.city),
