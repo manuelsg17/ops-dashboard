@@ -988,3 +988,37 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 .metas-escala-aviso .mea-hint {
   display: block; margin-top: 5px; font-size: .73rem; color: #3b82f6;
 }
+
+/* ── CALCULADORA: metas ya guardadas + modo de guardado (ago 2026) ──────────
+   El KAM abría la calculadora en 0 aunque ya tuviera metas cargadas, y guardar
+   reescribía el reparto entero. Estos estilos sostienen las dos señales nuevas:
+   qué fila YA tiene meta en la base, y qué valor difiere de lo guardado. */
+.calc-badge-saved {
+  display: inline-block; margin-left: 6px; padding: 1px 6px;
+  font-size: .6rem; font-weight: 800; letter-spacing: .02em;
+  color: #065f46; background: #d1fae5; border-radius: 10px; vertical-align: middle;
+}
+/* Ámbar = distinto de lo que hay en la base; al guardar se sobrescribe. */
+.calc-inp-dirty {
+  border-color: #f59e0b !important;
+  background: #fffbeb;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, .15);
+}
+.calc-mode-box {
+  border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px;
+  margin-bottom: 12px; background: #fafafa;
+}
+.calc-mode-title {
+  font-size: .7rem; font-weight: 800; letter-spacing: .04em;
+  text-transform: uppercase; color: #6b7280; margin-bottom: 8px;
+}
+.calc-mode-opt {
+  display: flex; gap: 8px; align-items: flex-start;
+  padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 8px;
+  background: #fff; cursor: pointer; margin-bottom: 6px;
+  font-size: .78rem; line-height: 1.35;
+}
+.calc-mode-opt:last-child { margin-bottom: 0; }
+.calc-mode-opt.active { border-color: #10b981; background: #f0fdf4; }
+.calc-mode-opt input { margin-top: 2px; flex: 0 0 auto; cursor: pointer; }
+.calc-mode-desc { color: #6b7280; font-size: .72rem; }

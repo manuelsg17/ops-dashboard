@@ -22,7 +22,25 @@ export const CALC_STATE = {
   // Metas KAM input manual (formato Yango con pesos) + metas TukTuk (Fase 7)
   kamGoals:   { ad: 0, sh: 0, nr: 0, otherProj: 0, fleetA2: 0 },
   // Idioma de la tarjeta compartible: "es" | "en" | "es-en" (bilingüe, default)
-  exportLang: "es-en"
+  exportLang: "es-en",
+
+  // ── METAS YA GUARDADAS EN BD (ago 2026) ────────────────────────────────────
+  // `saved` = lo que HOY está en la tabla `metas` para el mes objetivo, con la
+  // misma forma de clave que `edits` ("partner|||city|||metric"). Se siembra en
+  // `edits` al abrir para que el KAM VEA lo que ya cargó en vez de campos en 0
+  // (antes la calculadora arrancaba siempre vacía y no había forma de saber qué
+  // partners ya tenían meta sin ir a la pestaña Metas).
+  saved:      {},
+  // Mes+KAM ya sembrado, para no re-sembrar en cada render y pisar lo que el
+  // usuario está escribiendo. Formato "MES-AÑO|||kam".
+  savedKey:   "",
+  // Cómo escribe el botón de guardar:
+  //   "edits" → SOLO los (partner,ciudad,KPI) que cambiaron respecto de `saved`.
+  //             El resto de las metas del mes queda intacto. Es el default: un
+  //             ajuste puntual no debe reescribir el reparto entero.
+  //   "full"  → el reparto completo (comportamiento histórico), para cuando se
+  //             arma el mes desde cero con un goal de KAM.
+  saveMode:   "edits"
 };
 
 // Pesos Yango (formato KAM-level)
@@ -177,6 +195,63 @@ export function _calcAggMetaBases(e, g, cartTotals) {
     fleet, noAct
   };
 }
+// ── METAS YA GUARDADAS ───────────────────────────────────────────────────────
+// Lee de STATE.metasData lo que hoy existe en BD para (mesName, mesYear) y lo
+// devuelve con la MISMA forma de clave que CALC_STATE.edits, para que sembrar y
+// comparar sea trivial. `partner`/`city` de metasData ya vienen normalizados por
+// el loader (CLID_MAP + normCity), igual que el agregado de la calculadora, así
+// que las claves coinciden sin re-normalizar nada acá.
+//
+// Columna → métrica: solo las que la calculadora escribe. TukTuk (mtk*) queda
+// afuera a propósito: la calculadora ya no las edita (TukTuk entra al reparto
+// del agregador desde ago 2026) pero el merge del guardado las preserva.
+export function _calcMetasGuardadas(mesName, mesYear) {
+  const out = {};
+  if (!mesName) return out;
+  (STATE.metasData || []).forEach(m => {
+    if (m.mes !== mesName) return;
+    // Año: si ambos lados lo tienen y difieren, es OTRO año (ver _metasMatchMes
+    // en metas.ts). Una fila sin mes_year (upload viejo) no se puede descartar.
+    if (mesYear != null && m.mYear != null && m.mYear !== mesYear) return;
+    const base = `${m.partner}|||${m.city}`;
+    // OJO con las 3 del agregador: el loader hace `+m.meta_active_drivers`, así
+    // que un NULL de BD llega como 0 y NO se puede distinguir de una meta de 0
+    // real. Se toma >0 como "tiene meta" — una meta de 0 conductores no es una
+    // meta, y sembrar 0s falsos llenaría la tabla de valores que nadie cargó.
+    // Las de Fleet sí preservan null en el loader, así que ahí basta != null.
+    if (m.mA     > 0)     out[`${base}|||ad`]     = m.mA;
+    if (m.mNR    > 0)     out[`${base}|||nr`]     = m.mNR;
+    if (m.mH     > 0)     out[`${base}|||sh`]     = m.mH;
+    if (m.mSHcar != null) out[`${base}|||shcar`]  = m.mSHcar;
+    if (m.mAcc   != null) out[`${base}|||accept`] = m.mAcc;
+    if (m.mUtil  != null) out[`${base}|||util`]   = m.mUtil;
+  });
+  return out;
+}
+
+// Siembra `saved` en `edits` UNA vez por (mes, KAM): así los inputs muestran lo
+// que ya está en BD en vez de 0. No re-siembra en cada render — pisaría lo que
+// el usuario está tecleando.
+export function _calcSeedGuardadas(mesName, mesYear) {
+  const key = `${mesName}-${mesYear}|||${CALC_STATE.kam}`;
+  if (CALC_STATE.savedKey === key) return;
+  CALC_STATE.savedKey = key;
+  CALC_STATE.saved = _calcMetasGuardadas(mesName, mesYear);
+  // Solo sembrar donde el usuario todavía no escribió nada en esta sesión.
+  Object.keys(CALC_STATE.saved).forEach(k => {
+    if (CALC_STATE.edits[k] === undefined) CALC_STATE.edits[k] = CALC_STATE.saved[k];
+  });
+}
+
+// ¿Este (partner,ciudad,métrica) ya tiene meta guardada en BD para el mes?
+export function _calcYaGuardada(partner, city, metric) {
+  return CALC_STATE.saved[`${partner}|||${city}|||${metric}`] !== undefined;
+}
+// ¿Alguna de las métricas del agregador ya está guardada para esa fila?
+export function _calcFilaGuardada(partner, city) {
+  return ["ad", "sh", "nr"].some(mt => _calcYaGuardada(partner, city, mt));
+}
+
 // Meta distribuida o edit manual para un partner+city+metric.
 export function _calcGoalFor(partner, city, metric, base) {
   const k = `${partner}|||${city}|||${metric}`;
@@ -443,6 +518,14 @@ export function renderCalculator() {
   const allKAMs = [...new Set(Object.values(STATE.KAM_MAP).map(k => (k || "").trim()).filter(Boolean))].sort();
   const m = _calcComputeModel();
 
+  // Sembrar lo que YA está guardado en BD para el mes objetivo, antes que
+  // cualquier otro seeding: así el KAM abre la calculadora viendo sus metas
+  // reales (y qué partners ya tienen) en vez de una tabla en 0.
+  {
+    const { name: _mn, year: _my } = _calcNextMonthName(m.lastMonth || "");
+    _calcSeedGuardadas(_mn, _my);
+  }
+
   // Sembrar Utilización Fleet = 85 (default estándar) una vez por partner-ciudad fleet,
   // para que el 85 llegue a la tarjeta compartible y al guardado (no solo al input).
   // Guard: si el KAM la borra, no se re-siembra; calcResetEdits limpia el guard.
@@ -678,10 +761,18 @@ export function _calcSec4_distribucion(agg, distTotals, monthLabel) {
   const _input = (partner, city, metric, base) => {
     const k = `${partner}|||${city}|||${metric}`;
     const val = CALC_STATE.edits[k] !== undefined ? +CALC_STATE.edits[k] : Math.round(base);
-    return `<input type="number" step="1" min="0" class="calc-inp" value="${val}"
+    // Marca visual del estado respecto de la BD: sin marca = igual a lo
+    // guardado (o nunca guardado y sin tocar); ámbar = distinto de lo guardado
+    // (se va a sobrescribir al guardar en modo "solo lo que cambié").
+    const sv  = CALC_STATE.saved[k];
+    const cls = sv !== undefined && +sv !== +val ? " calc-inp-dirty" : "";
+    const ttl = sv !== undefined
+      ? ` title="${escapeHTML(t("calc.guardadoEnBD", { v: fmt(+sv) }))}"`
+      : "";
+    return `<input type="number" step="1" min="0" value="${val}"${ttl}
       data-pk="${escapeHTML(partner)}" data-city="${escapeHTML(city)}" data-metric="${metric}"
       data-act-change="calcOnGoalEdit"
-      class="agy-style-127"/>`;
+      class="calc-inp agy-style-127${cls}"/>`;
   };
   const _pctCell = (val, tot, noAct) => noAct
     ? `<td class="tn agy-style-128">—</td>`
@@ -698,10 +789,14 @@ export function _calcSec4_distribucion(agg, distTotals, monthLabel) {
     if (b.noAct) nManual++;
     const badge  = b.fleet ? ` <span class="agy-style-130">FLEET</span>` : "";
     const manual = b.noAct ? ` <span title="Sin actividad Taxi el último mes — fija la meta a mano" class="agy-style-131">FIJAR MANUAL</span>` : "";
+    // "YA TIENE META": este partner-ciudad ya tiene metas cargadas en BD para el
+    // mes objetivo. Antes no había forma de saberlo sin ir a la pestaña Metas.
+    const guardada = _calcFilaGuardada(e.partner, e.city)
+      ? ` <span class="calc-badge-saved" title="${escapeHTML(t("calc.yaTieneMetaTip"))}">${escapeHTML(t("calc.yaTieneMeta"))}</span>` : "";
     const rowStyle = b.noAct ? ' class="agy-style-132"' : (b.fleet ? ' class="agy-style-133"' : '');
     return `
       <tr${rowStyle}>
-        <td class="agy-style-116">${escapeHTML(e.partner)}${badge}${manual}</td>
+        <td class="agy-style-116">${escapeHTML(e.partner)}${badge}${manual}${guardada}</td>
         <td class="agy-style-117">${escapeHTML(e.city)}</td>
         ${_pctCell(e.ad, distTotals.ad, b.noAct)}
         <td>${_input(e.partner, e.city, "ad", b.ad)}</td>
@@ -827,19 +922,68 @@ export function _calcSecActions() {
   const kamNote = (canSave && kamAll)
     ? t("calc.kamNote")
     : "";
+
+  // ── Modo de guardado ───────────────────────────────────────────────────────
+  // El default es "solo lo que cambié": un ajuste puntual NO debe reescribir el
+  // reparto entero del mes. "Reparto completo" es el comportamiento histórico y
+  // se elige a conciencia cuando se arma el mes desde cero.
+  const nCambios = _calcContarCambios();
+  const modo = CALC_STATE.saveMode;
+  const _opt = (val, label, desc) => `
+    <label class="calc-mode-opt${modo === val ? " active" : ""}">
+      <input type="radio" name="calcSaveMode" value="${val}" ${modo === val ? "checked" : ""}
+             data-act-change="calcSetSaveMode" data-mode="${val}"/>
+      <span><strong>${escapeHTML(label)}</strong><br><span class="calc-mode-desc">${escapeHTML(desc)}</span></span>
+    </label>`;
+  const modoHTML = !canSave ? "" : `
+    <div class="calc-mode-box">
+      <div class="calc-mode-title">${escapeHTML(t("calc.modoTitulo"))}</div>
+      ${_opt("edits", t("calc.modoEdits"), t("calc.modoEditsDesc", { n: nCambios }))}
+      ${_opt("full",  t("calc.modoFull"),  t("calc.modoFullDesc"))}
+    </div>`;
+
+  // ── Zona de peligro: borrar las metas de ESTE KAM para el mes objetivo ─────
+  // Admin-only (igual que "Eliminar metas del mes" de la pestaña Metas); el
+  // enforcement real es RLS. Deshabilitado con KAM="Todos": borrar las metas de
+  // TODOS los KAMs de un mes ya existe en Metas y ahí está con su propio aviso.
+  const delBtn = !STATE.isAdmin ? "" : (kamAll
+    ? `<button disabled title="${escapeHTML(t("calc.borrarKamNeedKam"))}" class="agy-style-144">${escapeHTML(t("calc.btnBorrarKam"))}</button>`
+    : `<button class="agy-style-148" data-act="calcDeleteMetasKam">${escapeHTML(t("calc.btnBorrarKamDe", { k: CALC_STATE.kam }))}</button>`);
+
   return `
     ${_secH("✅", "#10b981", t("calc.actualizarCompartir"), t("calc.actualizarCompartirSub"))}
     <div class="section">
       <div class="tbl-wrap">
+        ${modoHTML}
         <div class="agy-style-147">
           ${saveBtn}
           <button class="agy-style-148" data-act="calcExportExcel">${escapeHTML(t("calc.btnDescargarCsv"))}</button>
           <button class="agy-style-149" data-act="calcResetEdits">${escapeHTML(t("calc.btnResetEdits"))}</button>
+          ${delBtn}
         </div>
         ${kamNote}
         <div class="agy-style-150">${t("calc.actualizarHint")}</div>
       </div>
     </div>`;
+}
+
+// Cuántos (partner,ciudad,KPI) difieren de lo que hay en BD. Es el conteo que se
+// muestra en el modo "solo lo que cambié" y lo que ese modo va a escribir.
+export function _calcContarCambios() {
+  let n = 0;
+  Object.keys(CALC_STATE.edits).forEach(k => {
+    const v = CALC_STATE.edits[k];
+    if (v === undefined || v === "") return;
+    const sv = CALC_STATE.saved[k];
+    if (sv === undefined || +sv !== +v) n++;
+  });
+  return n;
+}
+
+export function calcSetSaveMode(mode) {
+  if (mode !== "edits" && mode !== "full") return;
+  CALC_STATE.saveMode = mode;
+  renderCalculator();
 }
 
 // ── Vista compartible: i18n ES/EN + crecimiento vs último mes ─────────────────
@@ -1248,31 +1392,118 @@ async function _conReintento(fn) {
   }
 }
 
+// Recorta las filas del reparto a SOLO lo que difiere de lo guardado en BD.
+// Devuelve filas con únicamente las columnas cambiadas (+ la clave), para que
+// el merge de calcSaveMetas preserve todo lo demás tal cual está.
+//
+// POR QUÉ EXISTE: el reparto siempre produce una fila por partner del KAM, así
+// que guardar "para corregir un partner" reescribía las metas de todos. Con
+// este filtro, tocar un valor escribe ese valor y nada más.
+export function _calcFiltrarSoloCambios(rows) {
+  const COL2MET = {
+    meta_active_drivers: "ad", meta_nr: "nr", meta_supply_hours: "sh",
+    meta_sh_car: "shcar", meta_acceptance: "accept", meta_utilization: "util"
+  };
+  const out = [];
+  rows.forEach(r => {
+    const keep = { clid: r.clid, partner: r.partner, kam: r.kam, city: r.city,
+                   mes: r.mes, mes_year: r.mes_year };
+    let hay = false;
+    Object.keys(COL2MET).forEach(col => {
+      const k  = `${r.partner}|||${r.city}|||${COL2MET[col]}`;
+      // CRÍTICO — la condición es "lo TECLEÓ el usuario", no "difiere del
+      // reparto": `_calcGoalFor` devuelve goal × share, y con los objetivos de
+      // KAM en 0 (su valor inicial) ese cálculo da 0 para TODOS los partners.
+      // Si el filtro mirara `r[col]`, abrir la calculadora y guardar sin cargar
+      // objetivos escribiría ceros sobre todo el mes — exactamente el incidente
+      // del 13-ago-2026 que motivó domain/metasGuard.ts, pero colándose por
+      // debajo de ese freno (que valida totales, no filas parciales).
+      // Con `edits` como fuente, un 0 solo se escribe si alguien lo tecleó.
+      const ev = CALC_STATE.edits[k];
+      if (ev === undefined || ev === "") return;
+      const sv = CALC_STATE.saved[k];
+      if (sv === undefined || +sv !== +ev) { keep[col] = +ev; hay = true; }
+    });
+    if (hay) out.push(keep);
+  });
+  return out;
+}
+
+// Valores que BAJAN a 0 respecto de lo guardado. En modo "solo lo que cambié"
+// no corre el freno de metasGuard (valida totales de un reparto completo, que
+// acá no existe), así que esta es la red de seguridad equivalente: poner 0 a
+// mano es válido, pero se avisa explícitamente antes de escribirlo.
+export function _calcCerosQueBorran(rows) {
+  const COLS = ["meta_active_drivers", "meta_nr", "meta_supply_hours",
+                "meta_sh_car", "meta_acceptance", "meta_utilization"];
+  const MET  = { meta_active_drivers: "ad", meta_nr: "nr", meta_supply_hours: "sh",
+                 meta_sh_car: "shcar", meta_acceptance: "accept", meta_utilization: "util" };
+  const LBL  = { ad: "AD", nr: "N+R", sh: "SH", shcar: "SH/Auto", accept: "Aceptación", util: "Utilización" };
+  const out = [];
+  rows.forEach(r => COLS.forEach(col => {
+    if (r[col] == null || +r[col] !== 0) return;
+    const sv = CALC_STATE.saved[`${r.partner}|||${r.city}|||${MET[col]}`];
+    if (sv !== undefined && +sv > 0) out.push(`${r.partner} (${r.city}) · ${LBL[MET[col]]}: ${fmt(+sv)} → 0`);
+  }));
+  return out;
+}
+
 export async function calcSaveMetas() {
   if (!STATE.canWrite) { alert(t("calc.requiereKamAdmin")); return; }
   if (CALC_STATE.kam === "all") { alert(t("calc.elegirKamEspecifico")); return; }
   const m = _calcComputeModel();
-  const { rows, mesName, mesYear } = _calcBuildMetaRows(m);
-  if (!rows.length) { alert(t("calc.sinMetasParaGuardar")); return; }
+  const built = _calcBuildMetaRows(m);
+  const { mesName, mesYear } = built;
+  const soloCambios = CALC_STATE.saveMode === "edits";
+  const rows = soloCambios ? _calcFiltrarSoloCambios(built.rows) : built.rows;
+  if (!rows.length) {
+    alert(soloCambios ? t("calc.sinCambiosParaGuardar") : t("calc.sinMetasParaGuardar"));
+    return;
+  }
 
   // Resumen antes de escribir.
   const g = CALC_STATE.kamGoals;
   const a = _calcAggDistSums(m.aggLast1, m.distTot1, g);
   const nAgg   = rows.filter(r => r.meta_active_drivers != null).length;
   const nFleet = rows.filter(r => r.meta_sh_car != null || r.meta_acceptance != null || r.meta_utilization != null).length;
-  const summary =
-    `Guardar metas de ${CALC_STATE.kam} para ${mesName} ${mesYear}\n\n` +
-    `• Agregador (Taxi + TukTuk): ${nAgg} partner-ciudad · AD ${fmt(a.sumAD)} · SH ${fmt(a.sumSH)} · N+R ${fmt(a.sumNR)}\n` +
-    (nFleet ? `• Fleet: ${nFleet} partner-ciudad con meta\n` : "") +
-    `\nTotal filas: ${rows.length}\n\n` +
-    `⚠️ Esto REEMPLAZA las metas de ${mesName} ${mesYear} (no se suman ni acumulan a lo que ya\n` +
-    `exista para ese mes). Si guardas otra vez para ${mesName}, se sobrescriben.\n\n` +
-    `¿Confirmar y guardar en la base de datos?`;
+  const summary = soloCambios
+    ? `Actualizar SOLO lo que cambiaste · ${CALC_STATE.kam} · ${mesName} ${mesYear}\n\n` +
+      `• ${rows.length} partner-ciudad con algún valor distinto al guardado\n` +
+      (nAgg ? `• Agregador: ${nAgg} fila(s)\n` : "") +
+      (nFleet ? `• Fleet: ${nFleet} fila(s)\n` : "") +
+      `\nLos KPIs y partners que NO tocaste quedan EXACTAMENTE como están en la\n` +
+      `base de datos. Lo que sí tocaste se sobrescribe con el valor nuevo.\n\n` +
+      `¿Confirmar?`
+    : `Guardar el REPARTO COMPLETO de ${CALC_STATE.kam} para ${mesName} ${mesYear}\n\n` +
+      `• Agregador (Taxi + TukTuk): ${nAgg} partner-ciudad · AD ${fmt(a.sumAD)} · SH ${fmt(a.sumSH)} · N+R ${fmt(a.sumNR)}\n` +
+      (nFleet ? `• Fleet: ${nFleet} partner-ciudad con meta\n` : "") +
+      `\nTotal filas: ${rows.length}\n\n` +
+      `⚠️ Esto REEMPLAZA las metas de ${mesName} ${mesYear} de TODOS los partners del\n` +
+      `reparto, incluidos los que no tocaste. Si solo querías ajustar algunos,\n` +
+      `cancela y elegí "Solo lo que cambié".\n\n` +
+      `¿Confirmar y guardar en la base de datos?`;
   // FRENO ANTI-CEROS. La lógica vive en domain/metasGuard.ts (pura y testeada
   // con las filas reales del incidente del 13-ago-2026, cuando un guardado en
   // cero borró las metas de AGOSTO). Acá solo se aplica.
-  const chk = validarMetas(rows);
-  if (!chk.ok) { alert(mensajeMetasInvalidas(chk.faltantes)); return; }
+  //
+  // Solo corre en modo "reparto completo": valida que el TOTAL de cada métrica
+  // del reparto no sea 0, y en modo "solo lo que cambié" no hay reparto — una
+  // corrección legítima de un único KPI daría total 0 en los otros dos y
+  // quedaría bloqueada. La protección equivalente para ese modo es doble: el
+  // filtro solo escribe lo tecleado (ver _calcFiltrarSoloCambios) y los ceros
+  // que borran un valor existente se avisan uno por uno acá abajo.
+  if (!soloCambios) {
+    const chk = validarMetas(rows);
+    if (!chk.ok) { alert(mensajeMetasInvalidas(chk.faltantes)); return; }
+  } else {
+    const ceros = _calcCerosQueBorran(rows);
+    if (ceros.length && !confirm(
+      `⚠️ Vas a poner en CERO ${ceros.length} meta(s) que hoy tienen un valor cargado:\n\n` +
+      ceros.slice(0, 12).join("\n") +
+      (ceros.length > 12 ? `\n…y ${ceros.length - 12} más` : "") +
+      `\n\nUn 0 se guarda como meta 0, no "borra la fila". ¿Es lo que querés?`
+    )) return;
+  }
 
   if (!STATE._mensualLoaded) {
     alert("Los datos mensuales aún se están cargando. Espera unos segundos y vuelve a intentar.");
@@ -1318,7 +1549,12 @@ export async function calcSaveMetas() {
       sb.from("metas").upsert(payload, { onConflict: "clid,city,mes" }));
     if (error) throw error;
     await loadFromSupabase();
-    showBanner(true, `Metas de ${CALC_STATE.kam} guardadas para ${mesName} ${mesYear} (${payload.length} filas)`);
+    // Forzar la re-lectura de lo guardado: si no, `saved` queda con el estado
+    // ANTERIOR y la próxima comparación "¿cambió?" daría cambios fantasma.
+    CALC_STATE.savedKey = "";
+    showBanner(true, soloCambios
+      ? `${payload.length} meta(s) actualizadas · ${CALC_STATE.kam} · ${mesName} ${mesYear}`
+      : `Metas de ${CALC_STATE.kam} guardadas para ${mesName} ${mesYear} (${payload.length} filas)`);
     renderCalculator();
     if (STATE.curTab === "metas" && typeof renderMetas === "function") renderMetas();
   } catch (err) {
@@ -1330,6 +1566,66 @@ export async function calcSaveMetas() {
     } else {
       alert(t("calc.errorGuardarMetas") + msg);
     }
+  } finally {
+    showLoad(false);
+  }
+}
+
+// ── BORRAR LAS METAS DE UN KAM PARA EL MES OBJETIVO ──────────────────────────
+// Complemento del "Eliminar metas del mes" de la pestaña Metas, que borra el mes
+// ENTERO de todos los KAMs. Acá el alcance es el KAM elegido, para poder rehacer
+// su carga sin tocar la de los demás.
+//
+// Admin-only en la UI; el enforcement real es RLS. Borra por CLID (no por la
+// columna `kam` de la tabla, que puede haber quedado desactualizada respecto de
+// `partners` si el partner cambió de KAM después de cargarse la meta).
+export async function calcDeleteMetasKam() {
+  if (!STATE.isAdmin) { alert(t("calc.borrarKamSoloAdmin")); return; }
+  if (CALC_STATE.kam === "all") { alert(t("calc.borrarKamNeedKam")); return; }
+
+  const m = _calcComputeModel();
+  const { name: mesName, year: mesYear } = _calcNextMonthName(m.lastMonth || "");
+  if (!mesName) return;
+
+  // CLIDs que HOY pertenecen a este KAM (fuente de verdad: KAM_MAP/partners).
+  const clids = Object.keys(STATE.KAM_MAP || {})
+    .filter(c => (STATE.KAM_MAP[c] || "").trim() === CALC_STATE.kam);
+  if (!clids.length) { alert(t("calc.borrarKamSinClids", { k: CALC_STATE.kam })); return; }
+
+  // `x.kam` (no KAM_MAP[x.clid]): STATE.metasData NO expone `clid` — el loader
+  // lo usa para resolver partner/kam pero no lo copia al objeto. `x.kam` ya
+  // viene resuelto contra KAM_MAP ahí mismo, así que es la misma verdad.
+  const afectadas = (STATE.metasData || []).filter(x =>
+    x.mes === mesName && (mesYear == null || x.mYear == null || x.mYear === mesYear) &&
+    (x.kam || "").trim() === CALC_STATE.kam);
+
+  if (!afectadas.length) { alert(t("calc.borrarKamSinMetas", { k: CALC_STATE.kam, m: mesName })); return; }
+
+  if (!confirm(
+    `Eliminar las metas de ${CALC_STATE.kam} para ${mesName} ${mesYear}\n\n` +
+    `• ${afectadas.length} fila(s) (partner-ciudad)\n` +
+    `• Solo de este KAM: las de los demás KAMs no se tocan\n\n` +
+    `Esta acción NO se puede deshacer. Después vas a tener que volver a cargar\n` +
+    `las metas de ${CALC_STATE.kam} para ${mesName}.\n\n¿Confirmar?`
+  )) return;
+
+  showLoad(true, t("calc.borrandoMetas"));
+  try {
+    // ilike: casing mixto de `mes` en uploads viejos (mismo motivo que el select
+    // del guardado y que deleteMetasMes en metas.ts).
+    let q = sb.from("metas").delete().in("clid", clids).ilike("mes", mesName);
+    if (mesYear != null) q = q.eq("mes_year", mesYear);
+    const { error } = await _conReintento(() => q);
+    if (error) throw error;
+    await loadFromSupabase();
+    CALC_STATE.savedKey = "";   // re-leer lo guardado (ahora vacío para este KAM)
+    showBanner(true, `Metas de ${CALC_STATE.kam} eliminadas para ${mesName} ${mesYear} (${afectadas.length} filas)`);
+    renderCalculator();
+    if (STATE.curTab === "metas" && typeof renderMetas === "function") renderMetas();
+  } catch (err) {
+    const msg = (err && err.message) || String(err);
+    if (/42501|row-level security|permission/i.test(msg)) alert(t("calc.sinPermisosGuardar"));
+    else alert(t("calc.errorBorrarMetas") + msg);
   } finally {
     showLoad(false);
   }
@@ -1442,6 +1738,8 @@ registerActions({
   calcSetTab:        d => calcSetTab(d.key),
   calcOnKamChange:   (d, el) => calcOnKamChange(el.value),
   calcApplyChanges, calcSaveMetas, calcExportExcel, calcResetEdits, calcDownloadPartnerImage,
+  calcSetSaveMode:     d => calcSetSaveMode(d.mode),
+  calcDeleteMetasKam,
   calcOnKamGoalChange: (d, el) => calcOnKamGoalChange(d.metric, el.value),
   calcOnGoalEdit:      (d, el) => calcOnGoalEdit(el),
   calcSetExportLang:   d => calcSetExportLang(d.code),
