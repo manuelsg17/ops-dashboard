@@ -1212,3 +1212,39 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
   padding: 4px 6px; font-size: .9rem; font-weight: 400;
 }
 .new-version-bar .nvb-close:hover { color: #fff; }
+
+/* ── TOPBAR COMPACTA (ago 2026) ────────────────────────────────────────────
+   Referencia: la barra del dashboard de Pricing CI, que en el mismo ancho
+   entra holgada con tipografía más chica. Tres cambios pedidos por Manuel:
+   el botón de subir sin texto (la carga manual quedó en desuso con la ingesta
+   automática), el idioma como desplegable en vez de 3 banderas, y letra más
+   chica en general. */
+
+/* Texto solo para lectores de pantalla: el botón queda como ícono pero
+   conserva su nombre accesible. */
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* Idioma: un <select> nativo en lugar de las 3 banderas (~113px -> ~54px). */
+.lang-select {
+  border: 1px solid #e5e5e5; border-radius: 6px;
+  background: #fff; color: #555;
+  font-size: .76rem; font-weight: 600;
+  padding: 6px 4px;
+  cursor: pointer; outline: none;
+  max-width: 132px;
+}
+.lang-select:focus { border-color: #FF0000; }
+
+/* Tipografía general de la barra, un punto más chica. */
+.topbar        { padding: 0 16px; }
+.topbar-left   { gap: 10px; }
+.brand         { font-size: 1rem; }
+.brand-sub     { font-size: .62rem; }
+.nav-tab       { padding: 7px 12px; font-size: .8rem; }
+.up-btn        { padding: 7px 9px; }        /* ícono solo: sin ancho de texto */
+.logout-btn    { padding: 6px 12px; font-size: .78rem; }
+.user-badge    { font-size: .72rem; padding: 4px 9px; }

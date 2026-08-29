@@ -127,13 +127,18 @@
     <div class="topbar-right">
       <!-- Dropdown "Actualizar información" -->
       <div class="upload-dropdown" id="uploadDropdown">
-        <button class="up-btn upload-main-btn" data-act="toggleUploadMenu">
+        <button class="up-btn upload-main-btn" data-act="toggleUploadMenu" title="Subir datos" data-i18n-title="top.upload">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
             <polyline points="17 8 12 3 7 8"/>
             <line x1="12" y1="3" x2="12" y2="15"/>
           </svg>
-          <span data-i18n="top.upload">Subir datos</span>
+          <!-- Sin texto por pedido de Manuel: la carga manual quedó en desuso
+               desde que la ingesta de taxiparks es automática, así que el
+               botón no justifica ocupar ancho. El nombre sigue en el title
+               (accesible y visible al pasar el mouse) y el menú lista qué se
+               puede subir. -->
+          <span class="sr-only" data-i18n="top.upload">Subir datos</span>
           <svg class="upload-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <polyline points="6 9 12 15 18 9"/>
           </svg>

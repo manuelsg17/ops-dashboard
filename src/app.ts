@@ -1386,6 +1386,10 @@ export function setUiLang(code) {
 
 registerActions({
   setUiLang: d => setUiLang(d.lang),
+  // El selector de idioma pasó de 3 botones-bandera a un <select> (ocupaba
+  // ~113px de la barra). El handler de botón se conserva por si algo lo sigue
+  // usando; el del select lee el value.
+  setUiLangSel: (d, el) => setUiLang(el.value),
   // sidebar / filtros
   setDatePreset: d => setDatePreset(d.preset),
   onKAMChange, selectAll, deselectAll, toggleSidebar,

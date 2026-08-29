@@ -952,11 +952,22 @@ export function aplicarI18nEstatico(root: ParentNode = document): void {
 }
 
 /** Selector de idioma para la barra superior. */
+/**
+ * Selector de idioma como DESPLEGABLE (ago 2026).
+ *
+ * Antes eran las 3 banderas siempre visibles, que se comían ~113px de la barra
+ * superior — con el email y el botón de subir al lado, era de lo que sobraba.
+ * Ahora se ve solo el idioma activo y las otras dos aparecen al abrirlo.
+ *
+ * Es un <select> nativo a propósito, no un menú propio: en iPad abre el picker
+ * del sistema (cómodo con el dedo), no necesita JS de apertura/cierre ni
+ * manejo de foco, y se traduce solo al idioma del que se trate.
+ */
 export function selectorIdiomaHTML(): string {
-  return `<div class="lang-switch" title="${t("top.langTitle")}">` +
-    IDIOMAS.map(i =>
-      `<button class="lang-btn${i.code === _lang ? " active" : ""}" data-act="setUiLang" data-lang="${i.code}" title="${i.label}">${i.flag}</button>`
-    ).join("") + `</div>`;
+  const opts = IDIOMAS.map(i =>
+    `<option value="${i.code}"${i.code === _lang ? " selected" : ""}>${i.flag} ${i.label}</option>`
+  ).join("");
+  return `<select class="lang-select" data-act-change="setUiLangSel" title="${t("top.langTitle")}">${opts}</select>`;
 }
 
 /**
