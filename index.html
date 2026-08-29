@@ -239,6 +239,10 @@
       </div>
       <div class="plist" id="pList"></div>
     </div>
+    <!-- Velo del sidebar flotante (solo visible en tablet, ver styles.css).
+         Tocar fuera del panel lo cierra, que es lo que espera cualquiera que
+         use una tablet; en desktop está oculto por CSS y no estorba. -->
+    <button class="sb-veil" id="sbVeil" data-act="toggleSidebar" aria-label="Cerrar filtros"></button>
     <button class="sidebar-toggle" id="sidebarToggle" data-act="toggleSidebar" title="Ocultar/mostrar filtros">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
     </button>

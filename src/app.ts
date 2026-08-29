@@ -262,8 +262,14 @@ export function restoreFilters() {
     localStorage.removeItem("yangoFilters");
   }
 
-  // Restaurar estado del sidebar
-  if (lsGet("yangoSidebarCollapsed") === "1") {
+  // Restaurar estado del sidebar. En TABLET arranca cerrado salvo que el
+  // usuario haya elegido lo contrario: ahí el sidebar flota sobre el contenido
+  // (ver styles.css), así que dejarlo abierto de entrada taparía los datos con
+  // un panel de filtros que todavía no pidió.
+  const _pref = lsGet("yangoSidebarCollapsed");
+  const _esTablet = typeof window !== "undefined" && window.matchMedia
+    ? window.matchMedia("(max-width: 1024px)").matches : false;
+  if (_pref === "1" || (_pref === null && _esTablet)) {
     const sb  = document.getElementById("mainSidebar");
     const btn = document.getElementById("sidebarToggle");
     if (sb)  sb.classList.add("collapsed");

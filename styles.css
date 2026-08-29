@@ -1022,3 +1022,98 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 .calc-mode-opt.active { border-color: #10b981; background: #f0fdf4; }
 .calc-mode-opt input { margin-top: 2px; flex: 0 0 auto; cursor: pointer; }
 .calc-mode-desc { color: #6b7280; font-size: .72rem; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   TABLET / iPAD (ago 2026)
+   ──────────────────────────────────────────────────────────────────────────
+   Medido en 768x1024 ANTES de esto: la topbar se comía 129px (12.6% del alto,
+   y es sticky) y el sidebar 220px (28.6% del ancho) — quedaba 62.4% de la
+   pantalla para los datos. Además 18 de 22 controles medían menos de 44px de
+   alto, el mínimo cómodo para el dedo.
+
+   Tres decisiones:
+   1. La topbar se comprime a una sola fila (~64px) escondiendo lo prescindible
+      (el subtítulo de marca, el texto del botón de subir) — el logo y la nav
+      siguen ahí.
+   2. El sidebar deja de EMPUJAR el contenido y pasa a flotar por encima con un
+      velo: abierto tapa, cerrado devuelve el 100% del ancho a los datos. En un
+      dashboard que se lee, el filtro es momentáneo y los datos son permanentes.
+   3. Los controles suben a 44px de alto donde el puntero es grueso (dedo).
+   ══════════════════════════════════════════════════════════════════════════ */
+/* Fuera de tablet el velo no existe: el sidebar empuja, no tapa. */
+.sb-veil { display: none; }
+
+@media (max-width: 1024px) {
+  /* ── 1. Topbar en una sola fila ─────────────────────────────────────── */
+  .topbar        { padding: 0 12px; flex-wrap: nowrap; gap: 8px; }
+  .topbar-left   { gap: 8px; padding: 6px 0; min-width: 0; }
+  .topbar-right  { gap: 6px; padding: 6px 0; flex-wrap: nowrap; }
+  .brand-sub     { display: none; }          /* "Partner Performance Analytics" */
+  .brand         { font-size: .95rem; white-space: nowrap; }
+  .logo          { width: 30px; height: 30px; }
+  .nav-tabs      { margin-left: 8px; gap: 2px; }
+  .nav-tab       { padding: 7px 10px; font-size: .78rem; white-space: nowrap; }
+  /* El email completo no aporta en pantalla chica: la sesión ya se ve por el
+     avatar/botón de salir, y ocupaba media barra. */
+  .user-badge    { display: none; }
+  /* El botón de subir conserva el ícono; el texto se va (el menú lo explica). */
+  .up-btn span[data-i18n="top.upload"] { display: none; }
+  .up-btn        { padding: 8px 10px; }
+
+  /* ── 2. Sidebar como panel flotante ─────────────────────────────────── */
+  .sidebar-wrap  { position: relative; }
+  .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0;
+    z-index: 400;
+    width: 280px; min-width: 280px;
+    max-height: 100vh;
+    box-shadow: 4px 0 24px rgba(0,0,0,.18);
+    /* transform en vez de width: no re-maquetea el contenido de al lado en
+       cada frame de la animación (en iPad eso se nota). */
+    transition: transform .22s ease;
+    transform: translateX(0);
+  }
+  .sidebar.collapsed {
+    /* Se anula el colapso por ancho del desktop: acá se sale de pantalla, así
+       los filtros conservan su estado y su tamaño real al volver. */
+    width: 280px !important; min-width: 280px !important;
+    padding: 14px 12px !important; opacity: 1;
+    border-right: 1px solid #e5e5e5;
+    transform: translateX(-100%);
+  }
+  /* Velo: al tocarlo se cierra (mismo data-act que el botón). Solo aparece
+     acá y solo con el panel abierto — ver la regla `display:none` global. */
+  .sb-veil {
+    display: block;
+    position: fixed; inset: 0; z-index: 399;
+    background: rgba(0,0,0,.35);
+    border: none; padding: 0; cursor: pointer;
+  }
+  .sidebar.collapsed ~ .sb-veil { display: none; }
+  /* El botón de filtros queda flotante y siempre alcanzable con el pulgar.
+     `top: auto` es obligatorio: la regla base lo deja en `top: 74px` para su
+     sticky de desktop y, en un fixed con ambos bordes definidos, top gana
+     sobre bottom — el botón aparecía arriba tapando el selector de línea. */
+  .sidebar-toggle {
+    position: fixed; left: 12px; top: auto; bottom: 16px; z-index: 401;
+    width: 52px; height: 52px; margin: 0;
+    border-radius: 50%;
+    box-shadow: 0 4px 16px rgba(0,0,0,.22);
+    background: #fff;
+  }
+  .main { padding: 12px; }
+}
+
+/* ── 3. Objetivos táctiles (solo donde el puntero es grueso) ───────────── */
+@media (max-width: 1024px) and (pointer: coarse) {
+  .mode-btn, .preset-btn, .sb-sel, .sb-inp,
+  .logout-btn, .up-btn, .crud-btn, .apply-btn {
+    min-height: 44px;
+  }
+  .nav-tab, .nav-dd-item { min-height: 42px; display: flex; align-items: center; }
+  /* Las casillas de partner son la lista que más se toca del sidebar. */
+  .plist label { min-height: 40px; display: flex; align-items: center; gap: 8px; }
+  .plist input[type="checkbox"] { width: 20px; height: 20px; }
+  /* Inputs de la calculadora: escribir metas con el dedo. */
+  .calc-inp { min-height: 40px; font-size: .9rem; }
+}
