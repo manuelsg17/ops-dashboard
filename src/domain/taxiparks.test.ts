@@ -225,6 +225,21 @@ describe("porcentajes (bug de la carga automática, jul 2026)", () => {
     expect(toN("0.9145")).toBeCloseTo(0.9145, 10);
   });
 
+  it("fracción con EXACTAMENTE 3 decimales no se trata como miles (bug ago 2026)", () => {
+    // La heurística de separador de miles ("1.234" → 1234) NO aplica cuando la
+    // parte entera es 0 o el valor es un porcentaje: "0.914" nunca es un
+    // millar. Sin la excepción, una tasa llegando como string desde JSON
+    // (ingest-taxiparks) salía ×1000.
+    expect(toN("0.914")).toBeCloseTo(0.914, 10);
+    expect(toN("0,914")).toBeCloseTo(0.914, 10);
+    expect(toN("91.450%")).toBeCloseTo(0.9145, 10);
+    expect(toN("91,450%")).toBeCloseTo(0.9145, 10);
+    expect(toN(".914")).toBeCloseTo(0.914, 10);
+    // Los miles de verdad siguen siendo miles:
+    expect(toN("1.234")).toBe(1234);
+    expect(toN("1,234")).toBe(1234);
+  });
+
   it("detecta un lote con las tasas en escala 0-100", () => {
     const enPct   = Array.from({ length: 10 }, () => ({ acceptance_rate: 91.45 }));
     const enFracc = Array.from({ length: 10 }, () => ({ acceptance_rate: 0.9145 }));

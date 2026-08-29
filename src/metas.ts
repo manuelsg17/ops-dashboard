@@ -698,6 +698,10 @@ export function _renderMetasImpl() {
   const metas = STATE.metasData.filter(m => {
     if (m.mes !== mesName)                        return false;
     if (kamFilter !== "all" && m.kam !== kamFilter) return false;
+    // Mismo recorte de ciudad que el FACT: sin esto, con Ciudad=Arequipa los
+    // totales de plan (Perú y por KAM) sumaban las metas de TODAS las ciudades
+    // contra un FACT solo-Arequipa → % de cumplimiento hundido artificialmente.
+    if (cityFilter !== "all" && m.city !== cityFilter) return false;
     if (sel.length && !selSet.has(m.partner))     return false;
     return true;
   });

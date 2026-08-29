@@ -136,15 +136,25 @@ export function toN(v: any, label?: string, onWarn?: (l: string) => void): numbe
   } else if (hasComma) {
     const commaCount = (s.match(/,/g) || []).length;
     const digitsAfter = s.length - s.lastIndexOf(",") - 1;
-    if (commaCount > 1 || digitsAfter === 3) {
+    // "0,914" y "91,450%" son SIEMPRE decimales aunque tengan 3 dígitos tras la
+    // coma: nadie escribe "0 mil novecientos catorce", y un % nunca trae
+    // separador de miles. Sin esta excepción, una tasa que llega como STRING
+    // con exactamente 3 decimales (camino JSON de ingest-taxiparks, el mismo
+    // del bug del 20/07) se multiplicaba ×1000 en silencio.
+    const intPartC = s.slice(0, s.indexOf(",")).replace(/[+-]/g, "");
+    const fraccionC = esPorcentaje || intPartC === "0" || intPartC === "";
+    if (!fraccionC && (commaCount > 1 || digitsAfter === 3)) {
       s = s.replace(/,/g, "");                              // 1,234,567 o 1,234 → 1234567 / 1234
     } else {
-      s = s.replace(",", ".");                              // 12,5 → 12.5
+      s = s.replace(",", ".");                              // 12,5 / 0,914 / 91,450% → decimal
     }
   } else if (hasDot) {
     const dotCount = (s.match(/\./g) || []).length;
     const digitsAfter = s.length - s.lastIndexOf(".") - 1;
-    if (dotCount > 1 || (digitsAfter === 3 && s.indexOf(".") > 0)) {
+    // Misma excepción que la rama de coma: "0.914" y "91.450%" son decimales.
+    const intPartD = s.slice(0, s.indexOf(".")).replace(/[+-]/g, "");
+    const fraccionD = esPorcentaje || intPartD === "0" || intPartD === "";
+    if (!fraccionD && (dotCount > 1 || (digitsAfter === 3 && s.indexOf(".") > 0))) {
       s = s.replace(/\./g, "");                              // 1.234.567 o 1.234 → 1234567 / 1234
     }
     // else dejar el punto como decimal

@@ -444,10 +444,16 @@ export function _renderRendImpl() {
   // es que no había con qué comparar).
   const prevByPartner = new Map();
   prevRows.forEach(r => prevByPartner.set(r.partner, (prevByPartner.get(r.partner) || 0) + r.activeDrivers));
-  const movers = lastRows.map(r => {
-    const prev = prevByPartner.get(r.partner) || 0;
-    return { partner: r.partner, now: r.activeDrivers, prev, delta: r.activeDrivers - prev,
-             pct: prev > 0 ? ((r.activeDrivers - prev) / prev) * 100 : null };
+  const nowByPartner = new Map();
+  lastRows.forEach(r => nowByPartner.set(r.partner, (nowByPartner.get(r.partner) || 0) + r.activeDrivers));
+  // Unión actual ∪ previo: un partner con base previa y SIN fila esta semana
+  // (churn total, el caso más urgente de llamar) entra a "bajan" con −100% —
+  // antes se iteraba solo lastRows y desaparecer del export lo hacía invisible.
+  const movers = [...new Set([...nowByPartner.keys(), ...prevByPartner.keys()])].map(p => {
+    const now  = nowByPartner.get(p)  || 0;
+    const prev = prevByPartner.get(p) || 0;
+    return { partner: p, now, prev, delta: now - prev,
+             pct: prev > 0 ? ((now - prev) / prev) * 100 : null };
   }).filter(m => m.pct != null);
   const suben = movers.slice().sort((a, b) => b.delta - a.delta).filter(m => m.delta > 0).slice(0, 5);
   const bajan = movers.slice().sort((a, b) => a.delta - b.delta).filter(m => m.delta < 0).slice(0, 5);
@@ -552,14 +558,21 @@ export function mkMetricCard(label, icon, val, prevWk, apd, lastRows, prevRows, 
     const kl   = lastRows.filter(r => kpSet.has(r.partner));
     const kAll = apd.filter(r => kpSet.has(r.partner));
     const kpr  = prevRows.filter(r => kpSet.has(r.partner));
-    if (!kl.length && !kAll.length) return;
-    const kv  = gv(kl, kAll);
-    const kpv = gv(kpr, kpr);
-    if (!kv) return;
+    if (!kl.length && !kAll.length && !kpr.length) return;
+    // Métrica acumulada (N+R/Horas/Viajes): la fila muestra el ACUMULADO del
+    // rango (kAll) para que el breakdown sume el valor grande de la tarjeta —
+    // antes usaba solo el último período y las filas nunca cuadraban con el
+    // total. El badge compara último vs previo período, igual que el badge de
+    // la tarjeta (lwVal/pwVal). Snapshot (AD): último período, como siempre.
+    const kv   = gv(isCum ? kAll : kl);
+    const klv  = gv(kl);
+    const kpv  = gv(kpr);
+    // Un KAM en 0 con previo >0 ES noticia (cayó a cero) — no se oculta.
+    if (!kv && !kpv) return;
     const dot = KAM_COLORS[kam] || "#888";
     html += `<div class="mb-row">
       <span class="mb-name"><span class="mb-dot" style="background:${dot}"></span>${escapeHTML(kam)}</span>
-      <span class="mb-val">${fmt(kv)}</span>${bdgMode(kv, kpv, "mb-badge")}
+      <span class="mb-val">${fmt(kv)}</span>${bdgMode(klv, kpv, "mb-badge")}
     </div>`;
   });
 
@@ -571,8 +584,13 @@ export function mkMetricCard(label, icon, val, prevWk, apd, lastRows, prevRows, 
 export function buildTable(apd, lastDate, prevDate, sel) {
   const selSet = new Set(sel);
   const lR    = apd.filter(r => r.date === lastDate);
+  // El período previo DEBE pasar por el mismo filtro de ciudad que `apd` (que
+  // ya viene acotado por el sidebar): sin esto, con Ciudad=Lima la columna WoW
+  // comparaba Lima actual vs TODAS las ciudades previo → caídas falsas.
+  const _cityF = document.getElementById("cityFilter")?.value || "all";
   const _pAll = _rendLinePrev(prevDate, null);
-  const pRraw = _pAll.filter(r => selSet.has(r.partner));
+  const pRraw = _pAll.filter(r =>
+    (_cityF === "all" || r.city === _cityF) && selSet.has(r.partner));
   const pR    = aggPD(pRraw);
   // Historia completa (todas las fechas) para detectar declive, ignorando el rango.
   // Agregador cachea en STATE._apdFull; Fleet/TukTuk recomputan del slice (arrays chicos).
@@ -723,8 +741,12 @@ export function buildPartnerCards(apd, lastDate, prevDate, partners, sel) {
   if (!grid) return;
 
   const selSet  = new Set(sel);
+  // Mismo fix que buildTable: el previo respeta el filtro de ciudad activo,
+  // si no los badges WoW de las tarjetas comparan universos distintos.
+  const _cityF = document.getElementById("cityFilter")?.value || "all";
   const _pdAll = _rendLinePrev(prevDate, null);
-  const prevRaw = _pdAll.filter(r => selSet.has(r.partner));
+  const prevRaw = _pdAll.filter(r =>
+    (_cityF === "all" || r.city === _cityF) && selSet.has(r.partner));
   const prevAPD = aggPD(prevRaw);
 
   // Pre-indexar apd y prevAPD por partner una sola vez.

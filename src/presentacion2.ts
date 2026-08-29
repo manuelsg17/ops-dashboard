@@ -1334,12 +1334,22 @@ export function buildSlide2AvanceCombinado(partner, idx) {
   const noMonthData = metasLoaded && !taxiDates.length && !tkDates.length;
   const noData = (!taxiDates.length && !tkDates.length) || !metasLoaded;
 
+  // Proyección de AD COMBINADA: la serie taxi+tk se suma POR FECHA y se
+  // proyecta el máximo de ESA serie (×1.4) — sumar la proyección de cada
+  // línea (máx(taxi)+máx(tk)) sobre-estima siempre que cada línea picó en
+  // semanas distintas: es la regla "una proyección de snapshot no se suma
+  // hacia arriba" (caso Lizzo, jul 2026), la misma que ya aplica Metas
+  // Combinado — sin esto, deck y Metas daban números distintos.
+  const _combAdByDate = new Map();
+  taxiDates.forEach((d, i) => _combAdByDate.set(d, (_combAdByDate.get(d) || 0) + (taxiAct.adV[i] || 0)));
+  tkDates.forEach((d, i)   => _combAdByDate.set(d, (_combAdByDate.get(d) || 0) + (tkAct.adV[i]   || 0)));
+  const _combProjAD = projectSnapshot([..._combAdByDate.keys()].sort().map(d => _combAdByDate.get(d)));
+
   const defs = [
     { label: es ? "Conductores Activos" : "Active Drivers",
       // FACT = snapshot del último período de cada línea, sumados. PROYECCIÓN =
-      // la de cada línea (máx × 1.4) sumada — antes acá la proyección era igual
-      // al fact, así que la marca de proyección nunca se movía en esta slide.
-      real: taxiAct.lastAD + tkAct.lastAD, proj: taxiProj.ad + tkProj.ad,
+      // sobre la serie combinada (ver arriba).
+      real: taxiAct.lastAD + tkAct.lastAD, proj: _combProjAD,
       goal: (meta.mA || 0) + (meta.mtkAD || 0), fmtN: fmt },
     { label: es ? "Nuevos + Reactivados" : "New + React",
       real: taxiAct.nr + tkAct.nr, proj: taxiProj.nr + tkProj.nr,

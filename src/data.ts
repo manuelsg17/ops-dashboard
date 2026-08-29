@@ -401,11 +401,17 @@ async function _authToken() {
   if (_authTokenCache && now - _authTokenAt < 5000) return _authTokenCache;
   if (_authTokenInFlight) return _authTokenInFlight;
   _authTokenInFlight = (async () => {
-    const { data: { session } } = await sb.auth.getSession();
-    _authTokenCache = (session && session.access_token) || SUPABASE_ANON_KEY;
-    _authTokenAt = Date.now();
-    _authTokenInFlight = null;
-    return _authTokenCache;
+    try {
+      const { data: { session } } = await sb.auth.getSession();
+      _authTokenCache = (session && session.access_token) || SUPABASE_ANON_KEY;
+      _authTokenAt = Date.now();
+      return _authTokenCache;
+    } finally {
+      // SIEMPRE limpiar el in-flight, también si getSession() lanza (ej. el
+      // AbortError del lock, ago 2026). Sin esto, la promesa RECHAZADA quedaba
+      // cacheada para siempre y toda carga posterior fallaba hasta recargar.
+      _authTokenInFlight = null;
+    }
   })();
   return _authTokenInFlight;
 }
@@ -876,6 +882,20 @@ function _applyCoreData(partners, rend, frooms, flotas, opts = {}) {
     if (opts.resetLine !== false) {
       STATE.rendLine  = "comb";   // carga fresca → vista base Combinado (Taxi+TukTuk)
       STATE.metasLine = "comb";
+    }
+
+    // BUG REAL (ago 2026, reportado como "cambio de escala y los datos no
+    // cambian"): este pipeline llega SIEMPRE con el dataset SEMANAL. Con el
+    // arranque por caché, el usuario puede cambiar a mensual/diario mientras
+    // la revalidación de red sigue en vuelo; al resolver, esto pisaba
+    // STATE.rawData con semanal, _indexCoreData reindexaba sobre semanal y el
+    // tab activo se re-renderizaba con la escala EQUIVOCADA — la UI decía
+    // "Mensual" mostrando números semanales. El semanal fresco ya quedó en
+    // _semanalData para cuando vuelva; acá se respeta la escala elegida.
+    if (STATE.curMode === "mensual" && (STATE.rawDataMensual || []).length) {
+      STATE.rawData = STATE.rawDataMensual;
+    } else if (STATE.curMode === "diario" && (STATE.rawDataDiario || []).length) {
+      STATE.rawData = STATE.rawDataDiario;
     }
 }
 

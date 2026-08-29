@@ -1284,8 +1284,13 @@ export async function calcSaveMetas() {
   showLoad(true, t("calc.guardandoMetas"));
   try {
     const clids = [...new Set(rows.map(r => r.clid))];
+    // ilike, NO eq: la BD tiene casing mixto en `mes` por uploads viejos
+    // ("Septiembre" vs "SEPTIEMBRE" — deleteMetasMes ya usa ilike por lo
+    // mismo). Con eq, la fila vieja no se veía en el merge y el upsert (cuya
+    // UNIQUE es case-sensitive) INSERTABA un duplicado del mismo mes que el
+    // cliente luego sumaba dos veces.
     const { data: existing, error: selErr } = await _conReintento(() => sb.from("metas")
-      .select("*").in("clid", clids).eq("mes", mesName));
+      .select("*").in("clid", clids).ilike("mes", mesName));
     if (selErr) throw selErr;
     const exMap = new Map((existing || []).map(x => [`${x.clid}|||${normCity(x.city)}`, x]));
     // Payload homogéneo (mismas claves en todas las filas) → sin sorpresas de union en
@@ -1300,6 +1305,11 @@ export async function calcSaveMetas() {
     const payload = rows.map(r => {
       const ex = exMap.get(`${r.clid}|||${r.city}`) || {};
       const merged = { ...ex, ...r };
+      // Conservar el CASING del `mes` ya existente en BD: la UNIQUE
+      // (clid,city,mes) es case-sensitive, así que escribir "SEPTIEMBRE"
+      // sobre una fila "Septiembre" no conflictuaba → fila duplicada que el
+      // cliente (que normaliza a mayúsculas al cargar) sumaba dos veces.
+      if (ex.mes) merged.mes = ex.mes;
       const o = {};
       for (const c of COLS) o[c] = merged[c] !== undefined ? merged[c] : null;
       return o;
