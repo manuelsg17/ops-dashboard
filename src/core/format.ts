@@ -22,7 +22,15 @@ export function cityLabel(c) {
 
 // Display formatters — max 2 decimal places
 export function fmt(n) {
-  return (n || 0).toLocaleString("es-PE", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  // Arriba de 10.000 los decimales son ruido: "3.305.781,38" horas no aporta
+  // nada sobre "3.305.782" y alarga la cifra lo suficiente como para apretar
+  // las tarjetas de KPI. Debajo del corte se conservan (tasas, ratios, montos
+  // chicos), que es donde el decimal sí cambia la lectura.
+  const abs = Math.abs(n || 0);
+  return (n || 0).toLocaleString("es-PE", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: abs >= 10000 ? 0 : 2,
+  });
 }
 
 // Alta precisión (hasta 5 decimales) — SOLO para Data Raw/Conciliación, donde se

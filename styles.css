@@ -350,33 +350,49 @@ input[type="file"]  { display: none; }
   background: #fff; border-radius: 12px;
   padding: 16px 18px; box-shadow: 0 1px 4px rgba(0,0,0,.05);
 }
+/* Escala tipográfica de las tarjetas: se bajó un punto en todo (jul→ago 2026).
+   El número iba en 1.7rem/900 con -1px de tracking — a ese peso las cifras
+   largas (3.305.781,38) se apelmazan y la tarjeta se lee "tosca". 1.35rem/800
+   con tracking casi neutro ocupa menos y se lee mejor. */
 .mcard-label {
-  font-size: .72rem; font-weight: 700;
-  text-transform: uppercase; letter-spacing: .5px;
-  color: #555; margin-bottom: 4px;
+  font-size: .68rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .4px;
+  color: #666; margin-bottom: 3px;
   display: flex; align-items: center; gap: 5px;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.mcard-sub-label { font-size: .68rem; color: #bbb; margin-bottom: 8px; }
-.mcard-val       { font-size: 1.7rem; font-weight: 900; color: #111; margin-bottom: 4px; letter-spacing: -1px; }
+.mcard-sub-label { font-size: .64rem; color: #bbb; margin-bottom: 7px; }
+.mcard-val       { font-size: 1.35rem; font-weight: 800; color: #111; margin-bottom: 4px; letter-spacing: -.3px; }
 .mcard-badge {
   display: inline-flex; align-items: center; gap: 3px;
-  padding: 3px 8px; border-radius: 20px; font-size: .75rem; font-weight: 700;
+  padding: 2px 7px; border-radius: 20px; font-size: .68rem; font-weight: 700;
 }
 .mcard-breakdown {
   margin-top: 10px; padding-top: 10px;
   border-top: 1px solid #f5f5f5;
   display: flex; flex-direction: column; gap: 4px;
 }
-.mb-row  { display: flex; align-items: center; justify-content: space-between; font-size: .76rem; }
-.mb-dot  { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-right: 5px; }
-.mb-name { flex: 1; color: #555; display: flex; align-items: center; }
-.mb-val  { font-weight: 700; color: #111; }
-.mb-badge { font-size: .66rem; font-weight: 700; padding: 1px 5px; border-radius: 10px; margin-left: 5px; }
+.mb-row  { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: .73rem; }
+.mb-dot  { width: 7px; height: 7px; border-radius: 50%; margin-right: 5px;
+           display: inline-block; vertical-align: middle; }
+/* min-width:0 + ellipsis: sin esto un nombre largo (partner, no KAM) empuja el
+   valor fuera de la tarjeta en vez de truncarse.
+   OJO: .mb-name NO puede ser flex — el nombre es un nodo de texto suelto junto
+   al punto, y text-overflow no aplica a texto anónimo dentro de un flex. */
+.mb-name { flex: 1 1 auto; min-width: 0; color: #555; display: block;
+           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mb-val  { font-weight: 700; color: #111; flex: 0 0 auto; white-space: nowrap; }
+.mb-badge { font-size: .63rem; font-weight: 700; padding: 1px 5px; border-radius: 10px;
+            margin-left: 0; flex: 0 0 auto; }
 
 /* Badge colors */
 .b-pos { background: #d1fae5; color: #065f46; }
 .b-neg { background: #FF0000; color: #fff; }
 .b-neu { background: #e5e7eb; color: #6b7280; }
+/* El rojo pleno en el badge del titular ES la señal de alerta y se queda. Pero
+   repetido en las 5 filas del desglose producía un muro rojo que tapaba la
+   jerarquía: ahí va en tinte suave, igual de legible y en simetría con .b-pos. */
+.mb-badge.b-neg { background: #fee2e2; color: #b91c1c; }
 
 /* ── CITY CARDS ───────────────────────────────────────────────────────────── */
 .city-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; }
@@ -1163,8 +1179,8 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
   }
   /* Las tarjetas de KPI se compactan un poco para que las dos columnas no
      obliguen a truncar los números grandes. */
-  .mcard-val   { font-size: 1.5rem; }
-  .mcard-label { font-size: .72rem; }
+  .mcard-val   { font-size: 1.25rem; }
+  .mcard-label { font-size: .66rem; }
   /* Las tablas anchas se desplazan solas en vez de romper el layout. */
   .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 }
@@ -1262,6 +1278,12 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 }
 .user-menu-wrap .user-badge::after {
   content: "▾"; font-size: .7rem; color: #bbb; flex: 0 0 auto;
+}
+/* El truncado vive en el span, no en el botón: un flex item no se encoge por
+   debajo de su contenido sin min-width:0, y el ellipsis no aplica a un nodo de
+   texto suelto dentro de un flex. Sin esto el email desbordaba el pill. */
+.user-badge-mail {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .user-menu-wrap .user-badge:hover { border-color: #FF0000; color: #FF0000; }
 .user-menu {

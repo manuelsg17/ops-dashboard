@@ -315,8 +315,13 @@ export function showApp(user) {
   document.getElementById("appContainer").style.display = "flex";
   // El badge se trunca por CSS (max-width + ellipsis) para no comerse la barra;
   // el email completo queda accesible en el tooltip.
-  document.getElementById("userBadge").textContent      = user.email;
-  document.getElementById("userBadge").title            = user.email;
+  // El email va en un <span> propio, NO como texto suelto: el badge es
+  // inline-flex (por el "▾") y text-overflow:ellipsis no aplica a un nodo de
+  // texto anónimo dentro de un contenedor flex — el email se salía del pill.
+  const _ub = document.getElementById("userBadge");
+  _ub.innerHTML = `<span class="user-badge-mail"></span>`;
+  _ub.querySelector(".user-badge-mail").textContent = user.email;
+  _ub.title = user.email;
   STATE.userEmail = user.email;   // firma de los PDFs exportados (shared/pdfmeta.js)
   STATE.userId    = user.id;      // clave del caché local (data/cache.js)
 
