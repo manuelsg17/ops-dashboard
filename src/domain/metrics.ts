@@ -45,41 +45,40 @@ export function flowValue(serie: Serie): number {
 
 // ── Proyecciones ────────────────────────────────────────────────────────────
 
-// Proyección de Active Drivers: PLANA (= último período con dato).
+// Factor de proyección de Active Drivers — regla de NEGOCIO de Manuel.
 //
-// Historia de la regla, para que nadie la "mejore" de memoria:
-// - jul 2026: Manuel pidió máx del rango × 1.4 (AD_PROJECTION_FACTOR).
-// - ago 2026: se BACKTESTEÓ contra la serie real de producción (ene–ago 2026,
-//   Perú total y top-8 partners, 64 casos partner-mes): el ×1.4 sobreestimaba
-//   ~46% en promedio, TODOS los meses, sin excepción — la cartera es plana o
-//   declina suave y "el pico visto × 1.4" nunca ocurre. La proyección plana
-//   erró 3.4% (país) / 4.8% (partner), la mejor de los 4 métodos probados.
-//   Manuel decidió volver a plana con esos números a la vista.
-// El factor queda exportado por compatibilidad y para quien quiera dibujar una
-// línea de "potencial" (aspiracional, no proyección).
+// Historia (29-ago-2026, no repetirla): se backtesteó contra producción
+// (ene–ago 2026, Perú + top-8 partners): como PRONÓSTICO el ×1.4 sobrestima
+// ~46% (la cartera es plana/declive); la plana erró 3.4% y la tendencia 4.2%.
+// Se probaron ambas EN el producto y las dos se pegan al avance en una cartera
+// plana — "no veo la proyección". Manuel decidió, con esos números a la vista,
+// restaurar el ×1.4: se lee como POTENCIAL visible, no como estimación fina.
 export const AD_PROJECTION_FACTOR = 1.4;
 
 /**
  * Proyección de una métrica SNAPSHOT (Active Drivers y equivalentes):
- * TENDENCIA del rango extrapolada `periodsRemaining` períodos hacia el fin
- * de mes — nivel actual + pendiente media × períodos restantes, nunca < 0.
+ * máximo del rango × AD_PROJECTION_FACTOR — la regla original de Manuel,
+ * RESTAURADA el 29-ago-2026 (3ra vuelta) por decisión suya explícita y con
+ * el backtest a la vista.
  *
- * Sin `periodsRemaining` (o mes cerrado) degrada a PLANA (= nivel actual).
- * Ajuste de ago 2026 (2da vuelta): la plana pura era la más precisa del
- * backtest (3.4%) pero proyección == avance en TODAS las tarjetas — Manuel
- * la reportó como "no veo la proyección". La tendencia erró 4.2% en el mismo
- * backtest (2do mejor método, y el mejor en meses de caída sostenida) y sí
- * produce un cierre distinto del nivel actual. El ×1.4 sigue retirado
- * (~46% de error, ver arriba).
+ * Historia completa del día, para no repetirla: plana (la más precisa, 3.4%,
+ * pero proyección == avance y "no se veía") → tendencia (4.2%, pero con una
+ * cartera plana se pega al avance igual) → ×1.4 de nuevo. El ×1.4 sobrestima
+ * ~46% como PRONÓSTICO (ver backtest arriba), así que hay que leerlo como
+ * POTENCIAL/ambición, no como estimación del cierre — Manuel lo prefiere
+ * porque siempre dibuja una proyección visible y separada del avance.
+ *
+ * `periodsRemaining` se acepta y se ignora: el plumbing de fechas de los call
+ * sites (projAD(serie, lastDate)) queda listo por si la regla vuelve a una
+ * basada en calendario.
+ *
+ * Al agregar niveles NO se suman proyecciones: se proyecta la serie agregada
+ * (los máximos por ciudad caen en semanas distintas — caso Lizzo jul 2026).
  */
-export function projectSnapshot(serie: Serie, periodsRemaining: number = 0): number {
-  const vals: number[] = [];
-  for (const v of serie) if (v != null && !isNaN(v)) vals.push(v);
-  if (!vals.length) return 0;
-  const last = vals[vals.length - 1];
-  if (periodsRemaining <= 0 || vals.length < 2) return last;
-  const slope = (last - vals[0]) / (vals.length - 1);
-  return Math.max(0, last + slope * periodsRemaining);
+export function projectSnapshot(serie: Serie, _periodsRemaining: number = 0): number {
+  let max = 0;
+  for (const v of serie) if (v != null && !isNaN(v) && v > max) max = v;
+  return max * AD_PROJECTION_FACTOR;
 }
 
 /**

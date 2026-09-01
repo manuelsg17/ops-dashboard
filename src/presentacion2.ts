@@ -1201,11 +1201,11 @@ export function p2ActualsMTD(partner, scopeCity, monthDates) {
 export function p2ProjMTD(act, lastDate) {
   const { daysElapsed, daysRemaining } = calcProjectionDays(lastDate);
   // AD es SNAPSHOT (nivel), no un flujo acumulado, así que NO se extrapola por
-  // días restantes como N+R y las horas. Su proyección es PLANA (= último
-  // período) desde ago 2026 — decisión de Manuel tras backtest, historial en
-  // domain/metrics.ts. La regla vive en UN solo lugar (projectSnapshot); si hay
-  // que discutirla, se discute allá, no se bifurca acá — bifurcarla ya causó
-  // una vez que el deck y Metas dieran números distintos al mismo partner.
+  // días restantes como N+R y las horas. Su proyección es máx del rango × 1.4
+  // (POTENCIAL, regla de negocio restaurada 29-ago-2026 — historial en
+  // domain/metrics.ts). La regla vive en UN solo lugar (projectSnapshot); si
+  // hay que discutirla, se discute allá, no se bifurca acá — bifurcarla ya
+  // causó una vez que el deck y Metas dieran números distintos.
   return {
     ad: projAD(act.adV || [], lastDate),
     nr: projectFlow(act.nr, daysElapsed, daysRemaining),
@@ -1440,11 +1440,10 @@ export function buildSlide2AvanceCombinado(partner, idx) {
   const noData = (!taxiDates.length && !tkDates.length) || !metasLoaded;
 
   // Proyección de AD COMBINADA: la serie taxi+tk se suma POR FECHA y se
-  // proyecta ESA serie (plana desde ago 2026 = último período del total). Con
-  // la regla plana sumar por línea daría lo mismo si las fechas alinean, pero
-  // se conserva el camino por la serie agregada: es el único robusto si la
-  // regla vuelve a cambiar (con el máx ×1.4 anterior, sumar por línea
-  // sobre-estimaba — caso Lizzo, jul 2026 — y deck y Metas divergían).
+  // proyecta el máximo de ESA serie (×1.4) — sumar la proyección de cada
+  // línea (máx(taxi)+máx(tk)) sobre-estima siempre que cada línea picó en
+  // semanas distintas: "una proyección de snapshot no se suma hacia arriba"
+  // (caso Lizzo, jul 2026), la misma regla que aplica Metas Combinado.
   const _combAdByDate = new Map();
   taxiDates.forEach((d, i) => _combAdByDate.set(d, (_combAdByDate.get(d) || 0) + (taxiAct.adV[i] || 0)));
   tkDates.forEach((d, i)   => _combAdByDate.set(d, (_combAdByDate.get(d) || 0) + (tkAct.adV[i]   || 0)));

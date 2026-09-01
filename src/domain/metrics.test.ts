@@ -28,27 +28,21 @@ describe("snapshot vs flujo", () => {
 });
 
 describe("proyección de Active Drivers", () => {
-  it("sin horizonte es PLANA: el último período con dato, no el máximo ni ×1.4", () => {
-    // Decisión de Manuel (ago 2026) tras backtest contra producción: el máx
-    // ×1.4 sobreestimaba ~46% todos los meses. Ver el comentario largo en
-    // metrics.ts antes de volver a tocar esto.
-    expect(projectSnapshot([100, 150, 120])).toBe(120);
-    expect(AD_PROJECTION_FACTOR).toBe(1.4); // queda exportado como "potencial"
+  it("usa el MÁXIMO del rango × 1.4 (regla de negocio, RESTAURADA 29-ago-2026)", () => {
+    // Se probaron plana y tendencia el mismo día: más precisas como pronóstico
+    // pero en una cartera plana coinciden con el avance y "no se ve" la
+    // proyección. Manuel decidió volver al ×1.4 con el backtest a la vista:
+    // se lee como POTENCIAL, no como estimación fina. Historial en metrics.ts.
+    expect(projectSnapshot([100, 150, 120])).toBeCloseTo(150 * 1.4, 10);
+    expect(AD_PROJECTION_FACTOR).toBe(1.4);
   });
 
-  it("con horizonte extrapola la TENDENCIA media del rango", () => {
-    // [100,110,120]: pendiente +10/período; faltan 2 → 140.
-    expect(projectSnapshot([100, 110, 120], 2)).toBe(140);
-    // en caída no se recorta la tendencia (el churn hay que verlo)…
-    expect(projectSnapshot([120, 110, 100], 2)).toBe(80);
-    // …pero nunca proyecta negativo.
-    expect(projectSnapshot([50, 10], 3)).toBe(0);
-    // un solo dato no tiene pendiente: plana.
-    expect(projectSnapshot([100], 3)).toBe(100);
+  it("el 2do argumento (horizonte de calendario) se ignora — plumbing en espera", () => {
+    expect(projectSnapshot([100, 150, 120], 2)).toBeCloseTo(210, 10);
   });
 
-  it("ignora nulls al final: proyecta el último dato REAL", () => {
-    expect(projectSnapshot([100, 150, null as any])).toBe(150);
+  it("ignora nulls: el máximo se toma sobre los datos reales", () => {
+    expect(projectSnapshot([100, 150, null as any])).toBeCloseTo(210, 10);
   });
 
   it("una serie vacía o toda en cero proyecta 0, no NaN", () => {
@@ -84,7 +78,7 @@ describe("una sola regla por métrica (Metas, Rendimiento y el deck deben coinci
     const desdeMetas = projectSnapshot(serie);
     const desdeDeck  = projectSnapshot(serie);
     expect(desdeMetas).toBe(desdeDeck);
-    expect(desdeMetas).toBe(120);
+    expect(desdeMetas).toBeCloseTo(210, 10);
   });
 
   it("proyectar un flujo desde la serie o desde el total da lo mismo", () => {
@@ -96,30 +90,28 @@ describe("una sola regla por métrica (Metas, Rendimiento y el deck deben coinci
     expect(projectFlow(total, 10, 20)).toBeCloseTo(900, 10);
   });
 
-  it("con proyección PLANA, agregar por ciudad y proyectar da lo mismo", () => {
-    // Con el máx ×1.4 esto NO valía (caso Lizzo jul 2026: Lima picaba una
-    // semana y Arequipa otra → la suma de máximos era un número que nunca
-    // ocurrió; obligó a proyectar sobre la serie agregada vía snapSeries).
-    // Con la plana la propiedad se recupera: la suma de los últimos períodos
-    // por ciudad ES el último período del total. snapSeries queda inofensivo.
+  it("la proyección de un snapshot NO se puede sumar hacia arriba", () => {
+    // Caso real (Lizzo, jul 2026): Lima picó 2490 en una semana y Arequipa 229
+    // en OTRA. Sumar los máximos por ciudad da un número que nunca ocurrió; la
+    // única lectura fiel es el máximo de la serie TOTAL. Por eso metas/deck
+    // proyectan sobre la serie agregada (snapSeries / _combAdByDate).
     const lima     = [2490, 2450, 2400];
     const arequipa = [222, 229, 219];
     const trujillo = [50, 39, 40];
     const total    = lima.map((_, i) => lima[i] + arequipa[i] + trujillo[i]);
 
-    const sumaDePlanas  = projectSnapshot(lima) + projectSnapshot(arequipa) + projectSnapshot(trujillo);
-    const planaDelTotal = projectSnapshot(total);
-    expect(sumaDePlanas).toBe(planaDelTotal);
-    expect(planaDelTotal).toBe(2659);
+    const sumaDeMaximos  = projectSnapshot(lima) + projectSnapshot(arequipa) + projectSnapshot(trujillo);
+    const maximoDelTotal = projectSnapshot(total);
+    expect(maximoDelTotal).toBeCloseTo(2762 * 1.4, 6);
+    expect(sumaDeMaximos).toBeGreaterThan(maximoDelTotal);
   });
 
-  it("el FACT y la proyección PLANA de un snapshot coinciden a fin de mes", () => {
-    // Con la plana, "¿cuántos hay hoy?" y "¿en cuánto cerrará el mes?" dan el
-    // mismo número a propósito: el backtest mostró que el nivel actual es el
-    // mejor estimador del cierre en una cartera plana (error medio 3.4%).
+  it("el FACT es el último período; la proyección, el máximo × 1.4 — no se mezclan", () => {
+    // El FACT responde "¿cuántos hay hoy?"; la proyección, "¿el potencial del
+    // mes?". Colapsarlas fue el origen de una divergencia deck-vs-Metas.
     const serie = [100, 150, 120];
     expect(snapshotValue(serie)).toBe(120);
-    expect(projectSnapshot(serie)).toBe(120);
+    expect(projectSnapshot(serie)).toBeCloseTo(210, 10);
   });
 });
 

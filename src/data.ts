@@ -151,20 +151,16 @@ export function projA(vals, daysElapsed, daysRemaining) {
   return projectFlow(total, daysElapsed, daysRemaining);
 }
 
-// Proyección de un SNAPSHOT (Active Drivers): TENDENCIA del rango extrapolada
-// al fin de mes — regla vigente desde ago 2026 (2da vuelta), historial y
-// backtest en domain/metrics.ts. Punto único para las ~9 llamadas del
-// dashboard, para que Metas, el deck y el portal no puedan divergir.
+// Proyección de un SNAPSHOT (Active Drivers): máx del rango × 1.4 — regla de
+// negocio de Manuel, restaurada el 29-ago-2026 (historial y backtest en
+// domain/metrics.ts: léase como POTENCIAL, no como pronóstico fino). Punto
+// único para las ~9 llamadas del dashboard, para que Metas, el deck y el
+// portal no puedan divergir.
 //
-// `lastDate` (opcional) es la fecha del ÚLTIMO período de la serie: con ella
-// se calculan los períodos que faltan del mes (escala-aware, vía
-// calcProjectionDays). Sin fecha no se inventa horizonte: degrada a plana.
-//
-// OJO — el gate "en mensual no se proyecta" se intentó y se revirtió el
-// 29-ago-2026: `curMode === "mensual"` NO significa "el período cerró" (el
-// último mes puede estar EN CURSO), y ata una regla de negocio al estado de
-// la UI. El horizonte correcto sale del CALENDARIO (daysRemaining), que en un
-// mes cerrado da 0 y degrada a plana solo.
+// `lastDate` hoy NO se usa (el ×1.4 no depende del calendario) pero el
+// plumbing se conserva en los call sites por si la regla vuelve a una basada
+// en fechas. OJO: no agregar gate por escala — `curMode === "mensual"` NO
+// significa "el período cerró" (se intentó y revirtió, ver git).
 export function projAD(serie, lastDate) {
   // Redondeado: se proyectan CONDUCTORES; "2.768,57 conductores" resta seriedad.
   return Math.round(projectSnapshot(serie, _periodsLeft(lastDate)));

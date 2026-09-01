@@ -975,9 +975,8 @@ export function _renderMetasImpl() {
     const sorted = cityDates.map(d => byDate[d]);
     // AD = SNAPSHOT: el FACT es el ÚLTIMO período (nivel actual), no el máx del
     // rango — así cuadra con la slide del deck y con KPIs por Nivel. La
-    // PROYECCIÓN es PLANA desde ago 2026 (backtest en domain/metrics.ts), así
-    // que coincide con el FACT; el pipeline se conserva por si la regla vuelve
-    // a cambiar.
+    // PROYECCIÓN es máx del rango × 1.4 (restaurada 29-ago-2026, ver
+    // domain/metrics.ts) — potencial del mes, siempre visible sobre el FACT.
     // N+R/SH son flujos: se acumulan y se proyectan por ritmo lineal.
     const lastAD = sorted.length ? sorted[sorted.length - 1].ad : 0;
     const crAD = lastAD;
@@ -1159,17 +1158,17 @@ export function metaResCard(label, sub, real, meta, proj, color, fmtFn) {
     : "";
   const cumplTip = t("metas.cumplTip", { f: F(real), p: F(meta) });
   // Dos reglas distintas y a propósito: los FLUJOS (N+R, horas) se extrapolan
-  // por ritmo del mes; los SNAPSHOTS (Active Drivers) proyectan PLANO (= nivel
-  // del último período). Ver el historial de la regla en domain/metrics.ts —
-  // el máx × 1.4 anterior se retiró tras backtestearlo contra producción.
+  // por ritmo del mes; los SNAPSHOTS (Active Drivers) proyectan máx del rango
+  // × 1.4 (POTENCIAL — regla de negocio restaurada el 29-ago-2026, historial
+  // completo en domain/metrics.ts).
   // El texto del tooltip TIENE que decir lo que el código hace: una vez se
   // "corrigió" el cálculo para que coincidiera con un tooltip impreciso, al
   // revés de lo que correspondía.
   const projTip = STATE.curMode === "mensual"
     ? `Flujos (N+R, horas): no se extrapolan, el período mensual ya viene completo. `
-      + `Active Drivers: nivel del último período (proyección plana).`
+      + `Active Drivers: período de mayor AD del rango × 1.4 (potencial).`
     : `Flujos (N+R, horas): total acumulado × días del mes / días transcurridos. `
-      + `Active Drivers: nivel del último período (proyección plana).`;
+      + `Active Drivers: período de mayor AD del rango × 1.4 (potencial).`;
   return `
     <div class="meta-sum-card">
       <div class="mcard-label">${label}</div>
