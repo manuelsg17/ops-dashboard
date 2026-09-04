@@ -838,6 +838,8 @@ function _applyCoreData(partners, rend, frooms, flotas, opts = {}) {
     STATE.FLEETROOM_IS_TUKTUK    = {};
     STATE.FLEETROOM_IS_FLEET     = {};
     STATE.FLEETROOM_EXCLUDE_TAXI = {};
+    STATE.FLEETROOM_IS_DELIVERY  = {};
+    STATE.FLEETROOM_IS_CARGO     = {};
     STATE.FLEETROOM_NAME         = {};
     (frooms || []).forEach(f => {
       const id = (f.db_id || "").trim();
@@ -845,6 +847,8 @@ function _applyCoreData(partners, rend, frooms, flotas, opts = {}) {
       STATE.FLEETROOM_IS_TUKTUK[id]    = f.is_tuktuk === true;
       STATE.FLEETROOM_IS_FLEET[id]     = f.is_fleet === true;
       STATE.FLEETROOM_EXCLUDE_TAXI[id] = f.exclude_from_taxi === true;
+      STATE.FLEETROOM_IS_DELIVERY[id]  = f.is_delivery === true;
+      STATE.FLEETROOM_IS_CARGO[id]     = f.is_cargo === true;
       STATE.FLEETROOM_NAME[id]         = (f.name || "").trim();
     });
 
@@ -1776,29 +1780,51 @@ export async function setPartnerFlag(clid, key, value, partnerFallback, kamFallb
   if (error) throw error;
 }
 
-// ── MARCAR is_fleet / is_tuktuk / exclude_from_taxi POR FLEETROOM (db_id) ──────
+// ── MARCAR is_fleet / is_tuktuk / exclude_from_taxi / is_delivery / is_cargo
+// POR FLEETROOM (db_id) ─────────────────────────────────────────────────────
 // Granularidad por sub-flota: escribe a `fleetrooms` (PK db_id). Preserva los
-// OTROS dos flags (leidos de STATE.FLEETROOM_*) para no resetearlos a false, y
-// el clid/name/kam/city de contexto (para un CLID/fleetroom aun sin fila).
+// OTROS cuatro flags (leidos de STATE.FLEETROOM_*) para no resetearlos a
+// false, y el clid/name/kam/city de contexto (para un CLID/fleetroom aun sin
+// fila). is_delivery/is_cargo (ago 2026) marcan la sub-flota para que
+// Presentación pueda extraer esa data por separado — NO implican
+// exclude_from_taxi por sí solas, ese checkbox sigue siendo manual e
+// independiente (mismo criterio que ya se usaba para excluir cargo/delivery).
 export async function setFleetroomFlag(dbId, key, value, ctx = {}) {
+  return setFleetroomFlags(dbId, { [key]: value }, ctx);
+}
+
+// Version de setFleetroomFlag que escribe VARIOS flags en un solo upsert. Existe
+// para Delivery/Cargo (mutuamente excluyentes): tildar uno debe destildar el
+// otro EN LA MISMA escritura — dos llamadas a setFleetroomFlag en secuencia
+// leerían STATE.FLEETROOM_* todavía viejo (no se refresca hasta el próximo
+// loadFromSupabase) y la segunda pisaría a la primera con el valor stale.
+export async function setFleetroomFlags(dbId, patch, ctx = {}) {
   if (!dbId) throw new Error("Falta db_id");
-  const isFleet   = key === "is_fleet"          ? value : !!(STATE.FLEETROOM_IS_FLEET     || {})[dbId];
-  const isTuktuk  = key === "is_tuktuk"         ? value : !!(STATE.FLEETROOM_IS_TUKTUK    || {})[dbId];
-  const excludeTx = key === "exclude_from_taxi" ? value : !!(STATE.FLEETROOM_EXCLUDE_TAXI || {})[dbId];
+  const get = (key, map) => Object.prototype.hasOwnProperty.call(patch, key) ? patch[key] : !!(map || {})[dbId];
   const row = {
     db_id: dbId,
     clid:  ctx.clid || null,
     name:  ctx.name || (STATE.FLEETROOM_NAME || {})[dbId] || "",
     kam:   ctx.kam  || null,
     city:  ctx.city ? normCity(ctx.city) : null,
-    is_fleet:          isFleet,
-    is_tuktuk:         isTuktuk,
-    exclude_from_taxi: excludeTx,
+    is_fleet:          get("is_fleet",          STATE.FLEETROOM_IS_FLEET),
+    is_tuktuk:         get("is_tuktuk",         STATE.FLEETROOM_IS_TUKTUK),
+    exclude_from_taxi: get("exclude_from_taxi", STATE.FLEETROOM_EXCLUDE_TAXI),
+    is_delivery:       get("is_delivery",       STATE.FLEETROOM_IS_DELIVERY),
+    is_cargo:          get("is_cargo",          STATE.FLEETROOM_IS_CARGO),
     activo:            true
   };
   const { error } = await sb.from("fleetrooms").upsert([row], { onConflict: "db_id" });
   if (error) throw error;
 }
+
+// TRUE si el fleetroom (db_id) está marcado Delivery / Cargo. Sin fallback por
+// CLID a propósito (no vive en `partners`): un mismo CLID puede tener una
+// sub-flota Taxi normal y otra Cargo, así que el CLID entero nunca "es" una
+// vertical — solo cada sub-flota lo es. Sin clasificar → false (nunca se
+// asume Delivery/Cargo por default).
+export function rowIsDelivery(r) { return !!(STATE.FLEETROOM_IS_DELIVERY || {})[r.db_id]; }
+export function rowIsCargo(r)    { return !!(STATE.FLEETROOM_IS_CARGO    || {})[r.db_id]; }
 
 // ── UPLOAD RENDIMIENTO (pivot → flat rows) ────────────────────────────────────
 export async function uploadRendimiento(rows) {

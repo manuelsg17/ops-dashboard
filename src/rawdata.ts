@@ -441,6 +441,8 @@ export function _renderFlotasView() {
             <th class="agy-style-469">Fleet</th>
             <th class="agy-style-470">TukTuk</th>
             <th class="agy-style-471">${t("raw.col.excluirTaxi")}</th>
+            <th class="agy-style-471">${escapeHTML(t("raw.col.delivery"))}</th>
+            <th class="agy-style-471">${escapeHTML(t("raw.col.cargo"))}</th>
             <th class="agy-style-27">${escapeHTML(t("raw.col.estado"))}</th>
             <th class="agy-style-472">${escapeHTML(t("raw.col.accion"))}</th>
           </tr>
@@ -466,6 +468,8 @@ export function _renderFlotasView() {
       return `
           <td class="agy-style-27">${note}</td>
           <td class="agy-style-27">${note}</td>
+          <td class="agy-style-27">${note}</td>
+          <td class="agy-style-27">${note}</td>
           <td class="agy-style-27">${note}</td>`;
     }
     const isFleet   = !!(STATE.CLID_IS_FLEET  || {})[r.clid];
@@ -483,12 +487,18 @@ export function _renderFlotasView() {
             ${suggested ? `<div title="${escapeHTML(t("raw.nombreSugiereTuktukExcel"))}" class="agy-style-474">\u{1F6FA}?</div>` : ""}
             <input type="checkbox" title="${escapeHTML(t("raw.tuktukTip"))}" data-act-change="flotaSetFlag" data-clid="${clidH}" data-key="is_tuktuk" data-pfall="${pFall}" data-kfall="${kFall}" ${isTuktuk ? "checked" : ""} style="${suggested ? "outline:2px solid #f59e0b" : ""}"/>
           </td>
-          <td class="agy-style-27"><span class="agy-style-90" title="${escapeHTML(t("raw.excluirTaxiTip"))}">\u2014</span></td>`;
+          <td class="agy-style-27"><span class="agy-style-90" title="${escapeHTML(t("raw.excluirTaxiTip"))}">\u2014</span></td>
+          <td class="agy-style-27"><span class="agy-style-90" title="${escapeHTML(t("raw.soloFleetroomTip"))}">\u2014</span></td>
+          <td class="agy-style-27"><span class="agy-style-90" title="${escapeHTML(t("raw.soloFleetroomTip"))}">\u2014</span></td>`;
   }
 
   // Sub-filas por fleetroom (una por db_id) debajo de la fila del CLID. Cada una
-  // con 3 checkboxes (Fleet/TukTuk/Excluir Taxi) → fleetroomSetFlag(db_id,...).
-  // La sugerencia TukTuk se evalúa sobre el NOMBRE del fleetroom.
+  // con 5 checkboxes (Fleet/TukTuk/Excluir Taxi/Delivery/Cargo) →
+  // fleetroomSetFlag(db_id,...). La sugerencia TukTuk se evalúa sobre el
+  // NOMBRE del fleetroom. Delivery/Cargo (ago 2026) son EXCLUYENTES entre sí a
+  // nivel de UI (una sub-flota es una vertical, no dos) — tildar una destilda
+  // la otra en el momento; el guardado real sigue siendo uno a la vez, como
+  // los demás flags.
   function _fleetroomSubRows(r, clidH, froomMap) {
     const kamCtx  = escapeHTML(r.kam_efectivo === "—" ? "" : r.kam_efectivo);
     const cityCtx = escapeHTML(r.ciudad || "");
@@ -499,6 +509,8 @@ export function _renderFlotasView() {
         const isFleet  = !!(STATE.FLEETROOM_IS_FLEET     || {})[dbId];
         const isTuktuk = !!(STATE.FLEETROOM_IS_TUKTUK    || {})[dbId];
         const isExcl   = !!(STATE.FLEETROOM_EXCLUDE_TAXI || {})[dbId];
+        const isDeliv  = !!(STATE.FLEETROOM_IS_DELIVERY  || {})[dbId];
+        const isCargo  = !!(STATE.FLEETROOM_IS_CARGO     || {})[dbId];
         const sugg     = !isTuktuk && _tuktukSuggested(name);
         const cb = (key, checked, extraStyle = "") =>
           `<input type="checkbox" data-act-change="fleetroomSetFlag" data-dbid="${dbIdH}" data-key="${escapeHTML(key)}" data-name="${nameH}" data-clid="${clidH}" data-kam="${kamCtx}" data-city="${cityCtx}" ${checked ? "checked" : ""} style="${extraStyle}"/>`;
@@ -514,7 +526,8 @@ export function _renderFlotasView() {
           <td class="agy-style-27" title="Fleet">${cb("is_fleet", isFleet)}</td>
           <td class="agy-style-27" title="TukTuk">${cb("is_tuktuk", isTuktuk, sugg ? "outline:2px solid #f59e0b" : "")}</td>
           <td class="agy-style-27" title="Excluir de Taxi">${cb("exclude_from_taxi", isExcl)}</td>
-          <td colspan="2"></td>
+          <td class="agy-style-27" title="${escapeHTML(t("raw.deliveryTip"))}">${cb("is_delivery", isDeliv)}</td>
+          <td class="agy-style-27" title="${escapeHTML(t("raw.cargoTip"))}">${cb("is_cargo", isCargo)}</td>
         </tr>`;
       }).join("");
   }
@@ -726,7 +739,13 @@ export async function flotaSetFlag(clid, key, checked, partnerFallback, kamFallb
 export async function fleetroomSetFlag(dbId, key, checked, name, clid, kam, city) {
   showLoad(true, t("raw.guardando"));
   try {
-    await setFleetroomFlag(dbId, key, checked, { clid, name, kam, city });
+    // Delivery/Cargo son mutuamente excluyentes (una sub-flota es una
+    // vertical): al tildar una, la otra se destilda EN LA MISMA escritura
+    // (setFleetroomFlags) — dos writes secuenciales pisarían el recién guardado
+    // con el estado local todavía viejo. Al DEStildar no se toca la otra.
+    const exclusive = { is_delivery: "is_cargo", is_cargo: "is_delivery" }[key];
+    const patch = checked && exclusive ? { [key]: checked, [exclusive]: false } : { [key]: checked };
+    await setFleetroomFlags(dbId, patch, { clid, name, kam, city });
     showBanner(true, t("raw.actualizado"));
     await loadFromSupabase();
     renderRawData();
