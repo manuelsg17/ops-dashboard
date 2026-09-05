@@ -16,7 +16,7 @@
 import { snapshotLoad, snapshotSave, snapshotClear } from "./data/cache.js";
 import { t } from "./core/i18n";
 // Formulas de proyeccion: una sola definicion para todo el dashboard.
-import { projectFlow, projectSnapshot } from "./domain/metrics.js";
+import { projectFlow, projectSnapshot, dropDuplicatePeriods } from "./domain/metrics.js";
 
 
 // ── PARSER DE TAXIPARKS ─────────────────────────────────────────────────────
@@ -949,6 +949,11 @@ function _applyCoreData(partners, rend, frooms, flotas, opts = {}) {
     // Anti-doble-conteo: descartar la fila legacy agregada (db_id='') de una
     // (clid,city,date) si ya existe detalle por fleetroom. Antes de rawDataFull.
     STATE.rawData = dropLegacyAggregateRows(STATE.rawData);
+    // Anti-doble-conteo (2): un PERIODO ENTERO cargado dos veces bajo dos fechas
+    // distintas. Caso real ago 2026 en la tabla semanal (3 martes que eran copia
+    // exacta del lunes siguiente) — los flujos se sumaban dos veces y el deck
+    // mostraba N+R al 178% de la meta. Ver dropDuplicatePeriods.
+    STATE.rawData = dropDuplicatePeriods(STATE.rawData);
 
     // 6. Guardar copia completa
     STATE.rawDataFull = [...STATE.rawData];
@@ -2050,6 +2055,20 @@ export function updateIndexes() {
   STATE.allDates = (periods && periods.length)
     ? periods.slice()
     : [...new Set(STATE.rawData.map(r => r.date))].sort();
+
+  // El selector no puede ofrecer un período que el dataset ya descartó por ser
+  // un duplicado exacto (ver dropDuplicatePeriods). Pasaba en producción: la
+  // RPC listaba 04 y 11 de agosto —copias del lunes siguiente— y al elegirlas
+  // el rango no cuadraba con ningún dato propio.
+  //
+  // Solo se filtran las fechas DENTRO de la ventana cargada, que es donde se
+  // puede comprobar la duplicación. Fuera de la ventana la lista queda intacta
+  // para no romper la navegación hacia atrás (el motivo de que la RPC exista).
+  if (periods && periods.length && STATE.rawData.length) {
+    const cargadas = new Set(STATE.rawData.map(r => r.date));
+    const desde = [...cargadas].sort()[0];
+    STATE.allDates = STATE.allDates.filter(d => d < desde || cargadas.has(d));
+  }
   STATE.allPartners = [...new Set(STATE.rawData.map(r => r.partner))].sort();
 
   // Lista del SIDEBAR = Taxi + los partners que SOLO operan TukTuk.

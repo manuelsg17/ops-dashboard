@@ -165,6 +165,70 @@ export function median(nums: Array<number | null | undefined>): number | null {
   return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
 }
 
+// ── Períodos duplicados (ago 2026) ──────────────────────────────────────────
+/**
+ * Descarta un período cuyo conjunto de filas es IDÉNTICO al de otro período
+ * bajo otra fecha. Es el mismo dato cargado dos veces con dos etiquetas.
+ *
+ * Caso real que lo motivó: en `rendimiento` aparecieron 3 fechas en MARTES
+ * (04, 11 y 18 de agosto 2026) contra 43 en LUNES desde nov-2025, y cada fila
+ * del martes era byte a byte igual a la del lunes siguiente (mismo AD, mismas
+ * horas, mismos viajes, mismo db_id). Consecuencia: los FLUJOS (N+R, horas,
+ * viajes) se contaban DOS VECES en cualquier rango que abarcara el par —
+ * YEGO mostraba N+R al 178% y horas al 150% de su meta. El snapshot (AD) no se
+ * inflaba porque toma el último período, y por eso el error pasaba inadvertido.
+ *
+ * Qué copia se conserva: la del DÍA DE SEMANA DOMINANTE del dataset. En una
+ * serie semanal el período tiene un ancla fija (acá, lunes); la fecha fuera de
+ * ese ancla es la espuria. Quedarse con "la más reciente" habría conservado
+ * justamente la mala.
+ *
+ * NO es destructivo: filtra en memoria al cargar, la BD queda intacta. Solo
+ * actúa ante una coincidencia EXACTA, así que no puede descartar un período
+ * legítimo que apenas se parezca a otro.
+ */
+export function dropDuplicatePeriods(rows) {
+  const porFecha = new Map();
+  for (const r of (rows || [])) {
+    const d = r.date;
+    if (!d) continue;
+    let a = porFecha.get(d);
+    if (!a) { a = []; porFecha.set(d, a); }
+    a.push(r);
+  }
+  if (porFecha.size < 2) return rows || [];
+
+  const firma = (arr) => arr
+    .map(r => `${r.clid}|${r.city}|${r.db_id || ""}|${r.activeDrivers}|${r.supplyHours}|${r.trips}`)
+    .sort().join("\n");
+
+  // Día de semana dominante (el ancla del período).
+  const cuentaDow = {};
+  for (const d of porFecha.keys()) {
+    const dow = new Date(d + "T00:00:00").getDay();
+    cuentaDow[dow] = (cuentaDow[dow] || 0) + 1;
+  }
+  const dowDominante = +Object.keys(cuentaDow).sort((a, b) => cuentaDow[b] - cuentaDow[a])[0];
+
+  const porFirma = new Map();
+  for (const [d, arr] of porFecha) {
+    const f = firma(arr);
+    let g = porFirma.get(f);
+    if (!g) { g = []; porFirma.set(f, g); }
+    g.push(d);
+  }
+
+  const descartar = new Set();
+  for (const fechas of porFirma.values()) {
+    if (fechas.length < 2) continue;
+    const enAncla = fechas.filter(d => new Date(d + "T00:00:00").getDay() === dowDominante);
+    const conservar = enAncla.length ? enAncla.sort().slice(-1)[0] : fechas.sort().slice(-1)[0];
+    fechas.forEach(d => { if (d !== conservar) descartar.add(d); });
+  }
+  if (!descartar.size) return rows;
+  return rows.filter(r => !descartar.has(r.date));
+}
+
 // ── Tasas ponderadas ────────────────────────────────────────────────────────
 
 /**

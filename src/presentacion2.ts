@@ -1610,6 +1610,21 @@ export function buildSlide2Portada(partner, dates, idx) {
   addVert("Taxi", taxiAct.adV);
   addVert("TukTuk", tkAct.adV);
 
+  // HUECOS DE DATOS DEL PARTNER — los FLUJOS (N+R, horas) acumulan solo los
+  // períodos en los que el partner REPORTÓ. Si le faltan períodos del mes, su %
+  // contra una meta MENSUAL queda corto por datos faltantes, no por desempeño,
+  // y el informe lo mostraría como incumplimiento sin decir por qué.
+  //
+  // Se mide sobre el propio partner (p2Present), no sobre el rango: el MTD
+  // siempre arranca el día 1 del mes de la meta sin importar el "Desde", así
+  // que el rango no es lo que puede faltar — los datos del partner sí.
+  // Active Drivers no se ve afectado: es un snapshot, no se acumula.
+  PRESENT2_STATE.dataset = "taxi";
+  const conDato = p2Present(partner, null, mesDates).filter(Boolean).length;
+  PRESENT2_STATE.dataset = savedDs;
+  const totalPer = mesDates.length;
+  const coberturaParcial = totalPer > 0 && conDato < totalPer * 0.8;
+
   const ctx = { es, kpis, ciudades, verticales, diasRestantes, diasMes: daysInMonth };
   const lectura = p2Lectura(ctx);
   const accion  = p2Accion(ctx);
@@ -1665,6 +1680,9 @@ export function buildSlide2Portada(partner, dates, idx) {
         <span class="px-vtxt" style="color:${vColor}">${escapeHTML(vTxt)}</span>
         <span class="px-vsub">${es ? `${diasRestantes ? `quedan ${diasRestantes} días` : "mes cerrado"}` : `${diasRestantes ? `${diasRestantes} days left` : "month closed"}`}</span>
       </div>
+      ${coberturaParcial ? `<div class="px-aviso">${es
+        ? `Este partner reportó <b>${conDato} de ${totalPer}</b> períodos del mes. <b>Nuevos + Reactivados</b> y <b>Horas de Conexión</b> acumulan solo esos, así que su % contra la meta mensual queda corto por datos faltantes, no por desempeño. Conductores Activos no se ve afectado (es un nivel, no se acumula).`
+        : `This partner reported <b>${conDato} of ${totalPer}</b> periods this month. <b>New + Reactivated</b> and <b>Supply Hours</b> only accumulate those, so their % against a monthly target is short on data, not performance. Active Drivers is unaffected (it is a level).`}</div>` : ""}
       <div class="px-kpis">${barras}</div>
       <div class="px-abajo">
         <div class="px-card px-lectura">

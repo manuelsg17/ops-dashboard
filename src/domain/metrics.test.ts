@@ -3,7 +3,7 @@ import {
   snapshotValue, flowValue, projectSnapshot, projectFlow,
   weightedAvg, ratio, attainmentPct, sumKpis, groupSum, seriesByDate, retentionSeries,
   AD_PROJECTION_FACTOR, horasPorConductorBase, TK_HORAS_BASE_MIN, TK_MIN_ACTIVOS,
-  pacingFlujo, median
+  pacingFlujo, median, dropDuplicatePeriods
 } from "./metrics.js";
 import { pColor, pEstado } from "../core/format.js";
 
@@ -367,5 +367,63 @@ describe("escala de cumplimiento (pColor/pEstado)", () => {
     for (const p of [0, 50, 79.9, 80, 94.9, 95, 99.9, 100, 150, 150.1, 208, 400]) {
       expect(pColor(p)).toBe(esperado[pEstado(p)]);
     }
+  });
+});
+
+describe("períodos duplicados (mismo dato bajo dos fechas)", () => {
+  // Caso real, ago 2026: 3 fechas en martes contra 43 en lunes, cada fila del
+  // martes idéntica a la del lunes siguiente. Los FLUJOS se contaban dos veces
+  // (YEGO: N+R al 178%, horas al 150%); el snapshot no, y por eso no se veía.
+  const fila = (date: string, clid: string, ad: number, sh: number, tr: number) =>
+    ({ date, clid, city: "LIMA", db_id: "x", activeDrivers: ad, supplyHours: sh, trips: tr });
+
+  it("descarta el período duplicado y conserva el del día ancla", () => {
+    const rows = [
+      fila("2026-08-03", "A", 100, 1000, 500),   // lunes
+      fila("2026-08-04", "A", 200, 2000, 900),   // martes  ← copia de...
+      fila("2026-08-10", "A", 200, 2000, 900),   // lunes   ← ...este
+      fila("2026-08-17", "A", 300, 3000, 1200)   // lunes
+    ];
+    const out = dropDuplicatePeriods(rows);
+    const fechas = [...new Set(out.map(r => r.date))].sort();
+    expect(fechas).toEqual(["2026-08-03", "2026-08-10", "2026-08-17"]);
+  });
+
+  it("el flujo deja de contarse dos veces", () => {
+    const rows = [
+      fila("2026-08-04", "A", 200, 2000, 900),
+      fila("2026-08-10", "A", 200, 2000, 900),
+      fila("2026-08-17", "A", 300, 3000, 1200)
+    ];
+    const antes   = rows.reduce((s, r) => s + r.supplyHours, 0);
+    const despues = dropDuplicatePeriods(rows).reduce((s, r) => s + r.supplyHours, 0);
+    expect(antes).toBe(7000);
+    expect(despues).toBe(5000);   // 2000 + 3000, sin la copia
+  });
+
+  it("conserva el día ancla aunque el duplicado sea posterior", () => {
+    // Quedarse con "el más reciente" habría conservado el martes, que es el malo.
+    const rows = [
+      fila("2026-08-03", "A", 100, 1000, 500),   // lunes (ancla)
+      fila("2026-08-04", "A", 100, 1000, 500),   // martes, copia posterior
+      fila("2026-08-10", "A", 200, 2000, 900),
+      fila("2026-08-17", "A", 300, 3000, 1200)
+    ];
+    expect([...new Set(dropDuplicatePeriods(rows).map(r => r.date))]).toContain("2026-08-03");
+    expect([...new Set(dropDuplicatePeriods(rows).map(r => r.date))]).not.toContain("2026-08-04");
+  });
+
+  it("NO toca períodos que solo se parecen: la coincidencia debe ser exacta", () => {
+    const rows = [
+      fila("2026-08-03", "A", 100, 1000, 500),
+      fila("2026-08-10", "A", 100, 1000, 501),   // un viaje de diferencia
+      fila("2026-08-17", "A", 100, 1001, 500)    // una hora de diferencia
+    ];
+    expect(dropDuplicatePeriods(rows)).toHaveLength(3);
+  });
+
+  it("con un solo período, o sin filas, no hace nada", () => {
+    expect(dropDuplicatePeriods([])).toHaveLength(0);
+    expect(dropDuplicatePeriods([fila("2026-08-03", "A", 1, 1, 1)])).toHaveLength(1);
   });
 });
