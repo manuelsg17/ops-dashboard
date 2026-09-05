@@ -207,3 +207,32 @@ describe("seriesByDate", () => {
     expect(snapshotValue(seriesByDate({ "2026-03-01": 120, "2026-01-01": 80 }))).toBe(120);
   });
 });
+
+describe("meta paraguas: AD/N+R/SH de Taxi YA incluyen TukTuk", () => {
+  // Regla de negocio confirmada por Manuel (ago 2026) y verificada contra
+  // producción: meta_active_drivers/meta_nr/meta_supply_hours cubren Taxi +
+  // TukTuk juntos. En los partners con meta TukTuk, meta_tk_ad/meta_ad coincide
+  // con la participación de TukTuk sobre el TOTAL (Flota Pe: 167/972 = 17,2% y
+  // el real era 116/673 = 17,2%), no sobre el taxi (20,8%).
+  //
+  // El deck sumaba las dos metas e inflaba el objetivo: TRANSPOTAXI Lima
+  // mostraba 3.785 en vez de 2.661 → 60% de avance cuando el real era 86%.
+  // Este test fija la aritmética para que no vuelva a pasar.
+  const metaUmbrella = 2661;   // meta_active_drivers, Lima, agosto
+  const metaTkVieja  = 1124;   // meta_tk_ad (OBSOLETA desde ago 2026)
+  const realTaxi     = 1442;
+  const realTuktuk   = 835;
+
+  it("el avance combinado se mide contra la meta paraguas sola", () => {
+    const avance = (realTaxi + realTuktuk) / metaUmbrella * 100;
+    expect(avance).toBeCloseTo(85.6, 1);
+  });
+
+  it("sumar meta_tk_* a la paraguas infla el objetivo y hunde el avance", () => {
+    const inflada = metaUmbrella + metaTkVieja;
+    const avanceMalo = (realTaxi + realTuktuk) / inflada * 100;
+    expect(inflada).toBe(3785);
+    expect(avanceMalo).toBeCloseTo(60.2, 1);
+    expect(avanceMalo).toBeLessThan(70);   // el error se ve como incumplimiento
+  });
+});

@@ -1450,18 +1450,30 @@ export function buildSlide2AvanceCombinado(partner, idx) {
   const _combKeys = [..._combAdByDate.keys()].sort();
   const _combProjAD = projAD(_combKeys.map(d => _combAdByDate.get(d)), _combKeys[_combKeys.length - 1]);
 
+  // META PARAGUAS — mA/mNR/mH YA INCLUYEN TukTuk, no se les suma meta_tk_*.
+  //
+  // Verificado contra producción (ago 2026): en los partners con meta TukTuk, la
+  // razón meta_tk_ad/meta_active_drivers coincide con la participación real de
+  // TukTuk sobre el TOTAL, no sobre el taxi (Flota Pe 17,2% vs 17,2% real).
+  // Corrobora la Calculadora, que reparte cuotas sobre base combinada.
+  //
+  // Antes se sumaban (mA + mtkAD) y la meta salía inflada: TRANSPOTAXI Lima
+  // mostraba 3.785 en vez de 2.661 → 60% de avance cuando el real era 86%.
+  // Además meta_tk_* quedó OBSOLETA (Manuel, ago 2026): TukTuk ya no se mide
+  // con metas de AD/N+R/SH propias sino con criterios (24h por conductor base
+  // + meta de nuevos). Estas columnas no se leen más acá.
   const defs = [
     { label: es ? "Conductores Activos" : "Active Drivers",
       // FACT = snapshot del último período de cada línea, sumados. PROYECCIÓN =
       // sobre la serie combinada (ver arriba).
       real: taxiAct.lastAD + tkAct.lastAD, proj: _combProjAD,
-      goal: (meta.mA || 0) + (meta.mtkAD || 0), fmtN: fmt },
+      goal: meta.mA || 0, fmtN: fmt },
     { label: es ? "Nuevos + Reactivados" : "New + React",
       real: taxiAct.nr + tkAct.nr, proj: taxiProj.nr + tkProj.nr,
-      goal: (meta.mNR || 0) + (meta.mtkNR || 0), fmtN: fmt },
+      goal: meta.mNR || 0, fmtN: fmt },
     { label: es ? "Horas de Conexión" : "Supply Hours",
       real: taxiAct.sh + tkAct.sh, proj: taxiProj.sh + tkProj.sh,
-      goal: (meta.mH || 0) + (meta.mtkSH || 0), fmtN: fmtSmart }
+      goal: meta.mH || 0, fmtN: fmtSmart }
   ];
   const cards = defs.map(d => d.goal > 0
     ? _p2MetaCard(d.label, d.real, d.goal, d.proj, d.fmtN, es)
