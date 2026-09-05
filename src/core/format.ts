@@ -66,9 +66,32 @@ export function fmtSmart(n) {
 
 export function d2s(d) { return d ? d.split("-").reverse().join("/") : "--"; }
 
-// Semaphore
-export function semCls(p) { return p > 100 ? "sem-g" : p >= 80 ? "sem-g" : p >= 50 ? "sem-y" : "sem-r"; }
-export function pColor(p) { return p > 100 ? "#8b5cf6" : p >= 80 ? "#10b981" : p >= 50 ? "#f59e0b" : "#FF0000"; }
+// Semaforo. MISMO corte que pColor/pEstado (ver abajo): antes daba verde desde
+// 80% y contradecia al color de la barra que estaba al lado.
+// Color de un % de cumplimiento. Escala revisada (ago 2026) porque la anterior
+// (>100 morado · >=80 verde · >=50 ambar · <50 rojo) desinformaba en los dos
+// extremos, y estos informes los lee la gerencia del partner:
+//
+//   - 80% pintaba VERDE. Un partner 20% corto se leia como cumplido: falso
+//     positivo justo en la zona donde hay que actuar. Ahora verde = CUMPLIO.
+//   - 101% y 208% pintaban IGUAL (morado). Duplicar la meta no es un triunfo,
+//     es una meta mal calibrada, y el informe la celebraba en vez de
+//     señalarla. Ahora el morado empieza en 150% y significa "revisar meta".
+//
+// Cuatro estados con significado propio:
+//   morado >150  meta desalineada (revisar con el KAM)
+//   verde  >=100 cumplio
+//   ambar  >=80  cerca, falta poco
+//   rojo   <80   atrasado
+export function pColor(p) { return p > 150 ? "#8b5cf6" : p >= 100 ? "#10b981" : p >= 80 ? "#f59e0b" : "#FF0000"; }
+
+// Etiqueta del estado de cumplimiento, en el MISMO corte que pColor — asi el
+// color y la palabra nunca pueden contradecirse.
+export function pEstado(p) {
+  return p > 150 ? "meta_desalineada" : p >= 100 ? "cumplio" : p >= 80 ? "cerca" : "atrasado";
+}
+
+export function semCls(p) { return p >= 100 ? "sem-g" : p >= 80 ? "sem-y" : "sem-r"; }
 
 // Trend over last 3 periods
 export function trendI(vals) {

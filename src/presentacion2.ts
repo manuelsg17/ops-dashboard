@@ -32,6 +32,7 @@ window.Chart = Chart;
 import { projectFlow, retentionSeries, seriesByDate, snapshotValue,
          horasPorConductorBase, TK_HORAS_BASE_MIN, TK_MIN_ACTIVOS,
          pacingFlujo, median } from "./domain/metrics.js";
+import { p2Lectura, p2Accion } from "./domain/lectura.js";
 import { reportYM, MES_NOMBRES } from "./shared/mesReporte.js";
 import * as forecast from "./forecast.js";
 Object.assign(window, forecast);
@@ -141,6 +142,7 @@ export const P2_SLIDES = [
   // 🛺 Avance vs Meta en una hoja. Convive con los viejos A PROPÓSITO mientras
   // Manuel compara número contra número; cuando valide, los viejos se retiran
   // en un commit aparte que sea puramente de borrado.
+  { es: "✨ Ejecutivo",   en: "✨ Executive",   charts: false, build: (p, d, i) => buildSlide2Portada(p, i) },
   { es: "✨ Resumen",     en: "✨ Summary",     charts: false, build: (p, d, i) => buildSlide2Resumen(p, i) },
   { es: "✨ Ritmo del mes", en: "✨ Monthly pace", charts: false, build: (p, d, i) => buildSlide2Ritmo(p, i) },
   { es: "✨ Benchmark",    en: "✨ Benchmark",    charts: false, build: (p, d, i) => buildSlide2Benchmark(p, d, i) },
@@ -1226,9 +1228,9 @@ export function p2ProjMTD(act, lastDate) {
     sh: projectFlow(act.sh, daysElapsed, daysRemaining)
   };
 }
-// Mismos rangos que pColor() (data.js), usado en Metas/Ops/Insights: >100 morado,
-// >=80 verde, >=50 amarillo, <50 rojo. Antes esta función tenía su propio corte en
-// 80/100 (todo <80 salía rojo) — desalineado con el resto del dashboard.
+// Delega en pColor() (core/format), la MISMA escala que Metas, Rendimiento y el
+// portal — para que un 86% no signifique una cosa acá y otra allá. Los cortes
+// vigentes y el porqué de cada uno están documentados en pColor.
 export function p2AvanceColor(pct) { return pColor(pct); }
 
 // Tarjeta "Referencia" (sin meta en BD, ej. Fleet): valor actual + badge WoW,
@@ -2034,6 +2036,144 @@ export function buildSlide2Benchmark(partner, dates, idx) {
       <div class="bm-nota">${es
         ? "Estas métricas describen cómo opera tu flota y sirven para compararte. En los datos de este período NO se observó relación entre ellas y la variación de conductores activos, así que no se presentan como causa de crecimiento o caída."
         : "These metrics describe how your fleet operates and are for comparison. In this period's data no relationship was observed between them and active-driver change, so they are not presented as a cause of growth or decline."}</div>
+    </div>
+    ${p2BrandFooter(idx)}
+  </div>`;
+}
+
+// ── SLIDE: PORTADA EJECUTIVA (ago 2026) ───────────────────────────────────────
+// La lee la GERENCIA DEL PARTNER. Si solo leen esta hoja, tiene que alcanzar:
+// veredicto arriba, los 3 KPIs con su brecha, la lectura en frases con números,
+// y UNA acción.
+//
+// El gráfico es un BULLET CHART (barra de avance + marca de meta + marca de
+// calendario), no una torta ni columnas: es el formato que responde "¿cuánto
+// llevo, cuánto me falta y voy a tiempo?" en un solo golpe de vista y sin
+// leyenda. Cuatro barras apiladas se comparan entre sí de inmediato; cuatro
+// gráficos distintos, no.
+export function buildSlide2Portada(partner, idx) {
+  const es = PRESENT2_STATE.lang === "es";
+  const savedDs = PRESENT2_STATE.dataset;
+  const mesName = p2AvanceMes();
+
+  PRESENT2_STATE.dataset = "taxi";
+  const taxiDates = p2MonthDates(mesName);
+  const taxiAct = p2ActualsMTD(partner, null, taxiDates);
+  const levels = p2Levels(partner);
+  PRESENT2_STATE.dataset = "tuktuk";
+  const tkDates = p2MonthDates(mesName);
+  const tkAct = p2ActualsMTD(partner, null, tkDates);
+  PRESENT2_STATE.dataset = savedDs;
+
+  const dates = taxiDates.length ? taxiDates : tkDates;
+  const metasLoaded = !!(STATE.metasData || []).length;
+  if (!dates.length || !metasLoaded) {
+    return `<div class="agy-style-365">
+      ${p2BrandHeader(partner, (es ? "Resumen ejecutivo" : "Executive summary") + " · " + (mesName || "—"), "")}
+      <div class="agy-style-396">${es ? "Sin datos o metas del mes." : "No data or targets for the month."}</div>
+      ${p2BrandFooter(idx)}</div>`;
+  }
+
+  const lastDate = dates[dates.length - 1];
+  const { daysElapsed, daysInMonth } = calcProjectionDays(lastDate);
+  const diasRestantes = Math.max(daysInMonth - daysElapsed, 0);
+  const meta = p2MetaFor(partner, null, mesName);
+
+  // Paraguas Taxi + TukTuk: es lo que la meta cubre.
+  const kpis = [
+    { key: "ad", lbl: es ? "Conductores Activos" : "Active Drivers",
+      real: (taxiAct.lastAD || 0) + (tkAct.lastAD || 0), meta: meta.mA || 0, fmt, flujo: false },
+    { key: "nr", lbl: es ? "Nuevos + Reactivados" : "New + Reactivated",
+      real: (taxiAct.nr || 0) + (tkAct.nr || 0), meta: meta.mNR || 0, fmt, flujo: true },
+    { key: "sh", lbl: es ? "Horas de Conexión" : "Supply Hours",
+      real: (taxiAct.sh || 0) + (tkAct.sh || 0), meta: meta.mH || 0, fmt: fmtSmart, flujo: true }
+  ].map(k => ({ ...k, pct: k.meta > 0 ? (k.real / k.meta) * 100 : 0 }));
+
+  // Datos por ciudad para la regla de "dónde está la brecha".
+  const ciudades = levels.filter(l => l.city).map(lv => {
+    PRESENT2_STATE.dataset = "taxi";
+    const a = p2ActualsMTD(partner, lv.city, taxiDates);
+    PRESENT2_STATE.dataset = "tuktuk";
+    const b = p2ActualsMTD(partner, lv.city, tkDates);
+    PRESENT2_STATE.dataset = savedDs;
+    const m = p2MetaFor(partner, lv.city, mesName);
+    return { label: lv.label, color: lv.color,
+      adReal: (a.lastAD || 0) + (b.lastAD || 0), adMeta: m.mA || 0,
+      nrReal: (a.nr || 0) + (b.nr || 0),         nrMeta: m.mNR || 0,
+      shReal: (a.sh || 0) + (b.sh || 0),         shMeta: m.mH || 0 };
+  });
+
+  // Variación por vertical vs el período anterior (para la regla de arrastre).
+  const verticales = [];
+  const addVert = (label, serie) => {
+    if (!serie || serie.length < 2) return;
+    const ult = serie[serie.length - 1], prev = serie[serie.length - 2];
+    verticales.push({ label, varPct: prev > 0 ? ((ult - prev) / prev) * 100 : null });
+  };
+  addVert("Taxi", taxiAct.adV);
+  addVert("TukTuk", tkAct.adV);
+
+  const ctx = { es, kpis, ciudades, verticales, diasRestantes, diasMes: daysInMonth };
+  const lectura = p2Lectura(ctx);
+  const accion  = p2Accion(ctx);
+
+  // Veredicto: cuántas metas cumplen. Es el titular de la hoja.
+  const conMeta = kpis.filter(k => k.meta > 0);
+  const cumplen = conMeta.filter(k => k.pct >= 100).length;
+  const vColor = !conMeta.length ? "#888"
+               : cumplen === conMeta.length ? "#10b981"
+               : cumplen === 0 ? "#FF0000" : "#f59e0b";
+  const vTxt = !conMeta.length ? (es ? "Sin metas cargadas para el mes" : "No targets loaded")
+             : cumplen === conMeta.length ? (es ? `Las ${conMeta.length} metas del mes están cumplidas` : `All ${conMeta.length} targets met`)
+             : (es ? `${cumplen} de ${conMeta.length} metas cumplidas` : `${cumplen} of ${conMeta.length} targets met`);
+
+  const pctMes = Math.min((daysElapsed / daysInMonth) * 100, 100);
+
+  const barras = kpis.map(k => {
+    if (!k.meta) return `<div class="px-fila px-na">
+      <div class="px-lbl">${escapeHTML(k.lbl)}</div>
+      <div class="px-val">${k.fmt(k.real)}</div>
+      <div class="px-nota">${es ? "sin meta cargada" : "no target"}</div></div>`;
+    const col = pColor(k.pct);
+    const falta = k.meta - k.real;
+    return `<div class="px-fila">
+      <div class="px-lbl">${escapeHTML(k.lbl)}</div>
+      <div class="px-cifra">
+        <span class="px-val" style="color:${col}">${k.fmt(k.real)}</span>
+        <span class="px-meta">/ ${k.fmt(k.meta)}</span>
+        <span class="px-pct" style="color:${col}">${_p2PctTxt(k.pct)}</span>
+      </div>
+      <div class="px-bullet">
+        <div class="px-fill" style="width:${Math.min(k.pct, 100).toFixed(1)}%;background:${col}"></div>
+        ${k.flujo ? `<div class="px-hoy" style="left:calc(${pctMes.toFixed(1)}% - 1px)" title="${es ? "dónde debería ir hoy" : "expected today"}"></div>` : ""}
+      </div>
+      <div class="px-nota">${falta > 0
+        ? (es ? `faltan ${k.fmt(falta)}` : `${k.fmt(falta)} to go`)
+        : (es ? `+${k.fmt(-falta)} sobre la meta` : `+${k.fmt(-falta)} over target`)}${
+        k.flujo ? (es ? ` · el calendario va en ${pctMes.toFixed(0)}%` : ` · calendar at ${pctMes.toFixed(0)}%`) : ""}</div>
+    </div>`;
+  }).join("");
+
+  return `<div class="agy-style-365">
+    ${p2BrandHeader(partner, (es ? "Resumen ejecutivo" : "Executive summary") + " · " + (mesName || "—"),
+      es ? `Día ${daysElapsed} de ${daysInMonth}${diasRestantes ? ` · quedan ${diasRestantes} días` : " · mes cerrado"}`
+         : `Day ${daysElapsed} of ${daysInMonth}${diasRestantes ? ` · ${diasRestantes} days left` : " · month closed"}`)}
+    <div class="px-wrap">
+      <div class="px-veredicto" style="border-left-color:${vColor}">
+        <span class="px-sem" style="background:${vColor}"></span>
+        <span class="px-vtxt" style="color:${vColor}">${escapeHTML(vTxt)}</span>
+      </div>
+      <div class="px-barras">${barras}</div>
+      <div class="px-abajo">
+        <div class="px-lectura">
+          <div class="px-h">${es ? "Lectura" : "Reading"}</div>
+          <ul>${lectura.map(l => `<li>${escapeHTML(l)}</li>`).join("")}</ul>
+        </div>
+        ${accion ? `<div class="px-accion">
+          <div class="px-h px-h-acc">${es ? "Acción prioritaria" : "Priority action"}</div>
+          <div class="px-atxt">${escapeHTML(accion)}</div>
+        </div>` : ""}
+      </div>
     </div>
     ${p2BrandFooter(idx)}
   </div>`;

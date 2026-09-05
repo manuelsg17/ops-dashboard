@@ -5,6 +5,7 @@ import {
   AD_PROJECTION_FACTOR, horasPorConductorBase, TK_HORAS_BASE_MIN, TK_MIN_ACTIVOS,
   pacingFlujo, median
 } from "./metrics.js";
+import { pColor, pEstado } from "../core/format.js";
 
 // Estos tests no son de cobertura: cada uno fija una regla de NEGOCIO que ya se
 // rompió (o casi) alguna vez en este proyecto. Si uno falla, no lo "ajustes"
@@ -332,5 +333,37 @@ describe("mediana (para el benchmark del cohorte)", () => {
   it("lista vacía da null, no 0", () => {
     expect(median([])).toBeNull();
     expect(median([null, null])).toBeNull();
+  });
+});
+
+describe("escala de cumplimiento (pColor/pEstado)", () => {
+  // Vive en core/format pero la regla es de NEGOCIO: define qué se le muestra
+  // en verde a la gerencia del partner. Se testea acá para que un cambio de
+  // umbral sea deliberado y no un ajuste suelto.
+  it("verde significa CUMPLIÓ, no 'casi'", () => {
+    // Antes 80% era verde: un partner 20% corto se leía como cumplido.
+    expect(pEstado(80)).toBe("cerca");
+    expect(pEstado(99.9)).toBe("cerca");
+    expect(pEstado(100)).toBe("cumplio");
+  });
+
+  it("sobrecumplir por poco NO es lo mismo que duplicar la meta", () => {
+    // 101% y 208% pintaban idénticos. Un 208% es una meta mal calibrada.
+    expect(pEstado(105)).toBe("cumplio");
+    expect(pEstado(150)).toBe("cumplio");
+    expect(pEstado(208)).toBe("meta_desalineada");
+  });
+
+  it("debajo de 80 es atrasado", () => {
+    expect(pEstado(79.9)).toBe("atrasado");
+    expect(pEstado(0)).toBe("atrasado");
+  });
+
+  it("el color y la etiqueta usan el MISMO corte (no pueden contradecirse)", () => {
+    const verde = "#10b981", ambar = "#f59e0b", rojo = "#FF0000", morado = "#8b5cf6";
+    const esperado = { cumplio: verde, cerca: ambar, atrasado: rojo, meta_desalineada: morado };
+    for (const p of [0, 50, 79.9, 80, 99.9, 100, 150, 150.1, 208, 400]) {
+      expect(pColor(p)).toBe(esperado[pEstado(p)]);
+    }
   });
 });

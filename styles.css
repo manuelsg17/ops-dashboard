@@ -1457,3 +1457,48 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
   font-size: .62rem; color: #666; background: #f9f9f9;
   border-radius: 8px; padding: 8px 10px; margin-top: 10px; line-height: 1.4;
 }
+
+/* ── PRESENTACIÓN: portada ejecutiva (ago 2026) ─────────────────────────────
+   La lee la gerencia del partner. Jerarquía dura: veredicto → barras → texto.
+   Si solo leen esta hoja, tiene que alcanzar. */
+.px-wrap { display: flex; flex-direction: column; gap: 12px; flex: 1 0 auto; }
+/* Veredicto: el titular. Va primero y en grande porque es la única línea que
+   se lee sí o sí. */
+.px-veredicto {
+  display: flex; align-items: center; gap: 10px;
+  background: #fafafa; border-left: 4px solid; border-radius: 8px;
+  padding: 10px 14px;
+}
+.px-sem  { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+.px-vtxt { font-size: 1.05rem; font-weight: 800; letter-spacing: -.2px; }
+
+.px-barras { display: flex; flex-direction: column; gap: 9px; }
+.px-fila   { display: grid; grid-template-columns: 190px 1fr; grid-template-areas:
+             "lbl cifra" "bullet bullet" "nota nota"; gap: 2px 12px; align-items: baseline; }
+.px-fila.px-na { opacity: .6; }
+.px-lbl   { grid-area: lbl; font-size: .7rem; font-weight: 800; color: #555;
+            text-transform: uppercase; letter-spacing: .5px;
+            min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.px-cifra { grid-area: cifra; display: flex; align-items: baseline; gap: 6px; }
+.px-val   { font-size: 1.15rem; font-weight: 800; letter-spacing: -.3px; }
+.px-meta  { font-size: .74rem; font-weight: 700; color: #aaa; }
+.px-pct   { font-size: .9rem; font-weight: 800; margin-left: auto; }
+/* Bullet chart: avance + marca de calendario. La marca solo va en los FLUJOS —
+   en un snapshot (AD) el calendario no dice nada, ver buildSlide2Ritmo. */
+.px-bullet { grid-area: bullet; position: relative; height: 9px; background: #eee;
+             border-radius: 5px; margin-top: 3px; }
+.px-fill   { position: absolute; top: 0; left: 0; height: 100%; border-radius: 5px; }
+.px-hoy    { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #111; opacity: .6; }
+.px-nota   { grid-area: nota; font-size: .64rem; color: #888; }
+
+.px-abajo   { display: flex; gap: 12px; align-items: stretch; }
+.px-lectura { flex: 1 1 auto; min-width: 0; }
+.px-h       { font-size: .62rem; font-weight: 800; color: #888;
+              text-transform: uppercase; letter-spacing: .8px; margin-bottom: 4px; }
+.px-lectura ul { margin: 0; padding-left: 16px; }
+.px-lectura li { font-size: .72rem; color: #333; line-height: 1.45; margin-bottom: 3px; }
+/* La acción va aparte y destacada: es lo único que se le pide hacer. */
+.px-accion  { flex: 0 0 34%; background: #fff5f5; border: 1px solid #fecaca;
+              border-radius: 8px; padding: 10px 12px; }
+.px-h-acc   { color: #b91c1c; }
+.px-atxt    { font-size: .72rem; color: #7f1d1d; font-weight: 600; line-height: 1.45; }
