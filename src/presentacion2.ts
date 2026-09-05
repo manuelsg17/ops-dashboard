@@ -99,16 +99,47 @@ export function getCityVals(city, dates, metricFn) {
 
 export let PRESENT2_STATE = {
   partner:  null,
-  lang:     "es",       // es | en
+  lang:     "es",       // es | en | ru
   slide:    0,          // 0=Matriz, 1=Data Raw #, 2=Data Raw %
   cohort:   {},         // { t1, t23, t45, t610, t5 } activados
   cmpCity:  true,       // mostrar tendencia de ciudad
   fleetMode: "auto",    // "auto" | "fleet" | "taxi" — auto = según is_fleet del partner
   dataset:  "taxi",     // "taxi" | "tuktuk" — qué slice de partners/datos se muestra
   avanceMesSel: null,   // mes META de "Avance vs Meta": null = auto (según "Hasta")
+  // Hojas EXCLUIDAS del PDF (claves de p2SlideKey). Vacío = va todo el deck.
+  // Por qué existe: el deck se arma por VERTICAL, así que un partner con 1-2
+  // conductores en Delivery/Cargo igual recibía dos hojas por cada una. No se
+  // resuelve con un umbral automático (¿2 conductores? ¿5?): la decisión de qué
+  // le sirve a ESE partner es del KAM, y cambia según la conversación.
+  pdfOff:   new Set(),
+  pdfPanel: false,      // panel de selección abierto
   charts:   [],
   _renderId: 0
 };
+// Clave estable de una hoja del deck: la etiqueta ES + su vertical. Sirve entre
+// partners a propósito — "nunca mandes las hojas de Cargo" se mantiene al
+// cambiar de partner, que es como se usa.
+export function p2SlideKey(entry) {
+  return `${entry.ds}|${entry.def.es}`;
+}
+
+// Texto del deck en el idioma ELEGIDO PARA EL PARTNER, que es independiente del
+// idioma de la app: el KAM navega en español y exporta el PDF en ruso.
+//
+// No usa t() de core/i18n a propósito: ese lee un idioma GLOBAL (`_lang`) y acá
+// hacen falta dos idiomas vivos a la vez. El precio es tener las cadenas del
+// deck en el sitio donde se usan; a cambio, cada frase se lee junto a su cálculo
+// (y son frases de negocio, no etiquetas de UI: cambian con el contenido).
+//
+// `ru` opcional → cae a inglés, que es el idioma puente del equipo. Nunca cae a
+// español: un texto en español dentro de un deck ruso parece un error de datos.
+export function P2T(es, en, ru) {
+  const l = PRESENT2_STATE.lang;
+  return l === "en" ? en : l === "ru" ? (ru || en) : es;
+}
+export const P2_LANGS = [
+  { k: "es", lbl: "ES" }, { k: "en", lbl: "EN" }, { k: "ru", lbl: "RU" }
+];
 
 // Re-exportados desde shared/mesReporte.js (única fuente de verdad — usada
 // también por partnerPortal.ts, que no puede importar de acá directo sin
@@ -144,13 +175,17 @@ export function p2IsFleetMode(partner) {
 // render EN VIVO y el PDF (una sola fuente → no divergen). build(partner,dates)
 // → HTML; charts=true + chartFn(partner,dates,root) para slides con Chart.js.
 export const P2_SLIDES = [
-  { es: "Carátula",   en: "Cover",      charts: false, build: (p, d, i) => buildSlide2Cover(p, d) },
-  { es: "Ejecutivo",  en: "Executive",  charts: false, build: (p, d, i) => buildSlide2Portada(p, d, i) },
-  { es: "Resumen",    en: "Summary",    charts: false, build: (p, d, i) => buildSlide2Resumen(p, d, i) },
+  { es: "Carátula",   en: "Cover",     ru: "Обложка",  charts: false, build: (p, d, i) => buildSlide2Cover(p, d) },
+  { es: "Ejecutivo",  en: "Executive", ru: "Сводка",   charts: false, build: (p, d, i) => buildSlide2Portada(p, d, i) },
+  { es: "Resumen",    en: "Summary",   ru: "Итоги",    charts: false, build: (p, d, i) => buildSlide2Resumen(p, d, i) },
   // Proyección: SOLO PANTALLA (noPdf) — herramienta del KAM, no entra al deck
   // que recibe el partner. Decisión de Manuel, ago 2026.
-  { es: "Proyección", en: "Forecast",   charts: true, noPdf: true, build: (p, d, i) => buildSlide2Forecast(p, d, i), chartFn: (p, d, root) => buildSlide2ForecastCharts(p, d, root) }
+  { es: "Proyección", en: "Forecast",  ru: "Прогноз",  charts: true, noPdf: true, build: (p, d, i) => buildSlide2Forecast(p, d, i), chartFn: (p, d, root) => buildSlide2ForecastCharts(p, d, root) }
 ];
+// Embudo de captación: fuera de P2_SLIDES porque ese array se recorre por
+// sección y esta hoja va UNA sola vez, como Alertas.
+export const P2_EMBUDO_SLIDE = { es: "Captación", en: "Acquisition", ru: "Привлечение",
+  charts: false, build: (p, d, i) => buildSlide2Embudo(p, d, i) };
 
 // Slides que se repiten POR VERTICAL (Taxi / TukTuk / Delivery / Cargo). El
 // mecanismo de secciones (PRESENT2_STATE.dataset) hace que cada uno lea el
@@ -188,6 +223,14 @@ export function p2TuktukSectionVisible(partner) {
   return (STATE[_p2TkKey("Partners")] || []).includes(partner);
 }
 export function p2HasTaxi(partner)   { return (STATE.allPartners   || []).includes(partner); }
+// ¿Este partner registra perfiles PROPIOS? Decide si la hoja de captación entra
+// al deck: sin perfiles propios el embudo no tiene numerador y sería una hoja
+// vacía en el PDF. Se mira todo el slice cargado (no el rango) para que la hoja
+// no aparezca y desaparezca al mover el filtro una semana.
+export function p2TienePerfilesPropios(partner) {
+  return (STATE.rawDataFull || STATE.rawData || [])
+    .some(r => r.partner === partner && (r.newProfilesPartner || 0) > 0);
+}
 // Lista del SELECTOR: unión taxi + tuktuk (un partner tuktuk-only debe poder elegirse).
 export function p2PartnerList() {
   return [...new Set([...(STATE.allPartners || []), ..._p2TkPartnersAll()])].sort();
@@ -226,8 +269,11 @@ export function p2Deck(partner) {
   verticales.forEach(v => P2_POR_VERTICAL.forEach(def =>
     deck.push({ def: { ...def, es: `${def.es} · ${v.et}`, en: `${def.en} · ${v.et}` }, ds: v.ds })));
 
-  // 5. Alertas: UNA hoja con todas las categorías adentro (decisión de Manuel:
-  //    una por vertical volvía a inflar el deck).
+  // 5. Captación y activación (embudo de perfiles propios) + Alertas: UNA hoja
+  //    cada una, con todas las categorías adentro (una por vertical volvía a
+  //    inflar el deck). El embudo solo aparece si el partner registra perfiles
+  //    propios — si no, sería una hoja vacía en el PDF que recibe.
+  if (hasTaxi && p2TienePerfilesPropios(partner)) deck.push({ def: P2_EMBUDO_SLIDE, ds: "taxi" });
   deck.push({ def: P2_ALERTAS_SLIDE, ds: base });
 
   // 6. Proyección: solo pantalla, al final del cuerpo.
@@ -244,18 +290,65 @@ export function p2Deck(partner) {
 }
 // HTML del nav (prev/next + un botón por slide del deck; sección TukTuk tintada ámbar).
 export function p2NavHTML() {
-  const es = PRESENT2_STATE.lang === "es";
   const deck = p2Deck(PRESENT2_STATE.partner);
   const btns = deck.map((entry, i) => {
-    const label = es ? entry.def.es : entry.def.en;
+    const label = p2SlideLabel(entry.def);
     const on = PRESENT2_STATE.slide === i, tk = entry.ds === "tuktuk";
+    const fuera = !p2SlideEnPdf(entry);
     const activeBg = tk ? "#f59e0b" : "#FF0000";
     const bd = on ? activeBg : (tk ? "#fde68a" : "#e5e5e5");
     const bg = on ? activeBg : (tk ? "#fffbeb" : "#fff");
     const co = on ? "#fff" : (tk ? "#b45309" : "#555");
-    return `<button data-slide2="${i}" data-act="goSlide2" data-i="${i}" style="padding:6px 14px;border-radius:6px;font-size:.78rem;font-weight:600;border:2px solid ${bd};background:${bg};color:${co};cursor:pointer">${tk ? "🛺 " : ""}${escapeHTML(label)}</button>`;
+    // Las hojas excluidas del PDF se ven atenuadas y con ⃠: la exclusión tiene
+    // que notarse SIN abrir el panel, o el KAM manda un PDF incompleto sin darse
+    // cuenta de que lo había recortado en otra sesión.
+    const off = fuera ? "opacity:.45;text-decoration:line-through" : "";
+    return `<button data-slide2="${i}" data-act="goSlide2" data-i="${i}" title="${fuera ? escapeHTML(P2T("Fuera del PDF", "Excluded from PDF", "Не входит в PDF")) : ""}" style="padding:6px 14px;border-radius:6px;font-size:.78rem;font-weight:600;border:2px solid ${bd};background:${bg};color:${co};cursor:pointer;${off}">${tk ? "🛺 " : ""}${escapeHTML(label)}</button>`;
   }).join("");
   return `<button class="png-btn" data-act="prevSlide2" class="agy-style-329">◀</button>${btns}<button class="png-btn" data-act="nextSlide2" class="agy-style-329">▶</button>`;
+}
+// Etiqueta de una hoja en el idioma del deck.
+export function p2SlideLabel(def) {
+  return P2T(def.es, def.en, def.ru);
+}
+// ¿Esta hoja entra al PDF? `noPdf` es del código (Proyección: solo pantalla);
+// `pdfOff` es del KAM.
+export function p2SlideEnPdf(entry) {
+  return !entry.def.noPdf && !PRESENT2_STATE.pdfOff.has(p2SlideKey(entry));
+}
+// "12/17" para el botón. Se muestra SIEMPRE (no solo cuando hay exclusiones):
+// es el recordatorio de que el deck y el PDF pueden diferir.
+export function _p2PdfCount() {
+  const deck = p2Deck(PRESENT2_STATE.partner);
+  const total = deck.filter(e => !e.def.noPdf).length;
+  return `${deck.filter(p2SlideEnPdf).length}/${total}`;
+}
+// Panel de selección de hojas. Se abre desde el botón "Hojas del PDF".
+export function p2PdfPanelHTML() {
+  if (!PRESENT2_STATE.pdfPanel) return "";
+  const deck = p2Deck(PRESENT2_STATE.partner);
+  const filas = deck.map(entry => {
+    const k = p2SlideKey(entry);
+    if (entry.def.noPdf) {
+      return `<label class="p2pdf-row p2pdf-na" title="${escapeHTML(P2T("Esta hoja es solo de pantalla", "Screen-only sheet", "Только для экрана"))}">
+        <input type="checkbox" disabled><span>${escapeHTML(p2SlideLabel(entry.def))}</span>
+        <em>${escapeHTML(P2T("solo pantalla", "screen only", "только экран"))}</em></label>`;
+    }
+    const on = !PRESENT2_STATE.pdfOff.has(k);
+    return `<label class="p2pdf-row">
+      <input type="checkbox" ${on ? "checked" : ""} data-act-change="present2TogglePdfSlide" data-key="${escapeHTML(k)}">
+      <span>${entry.ds === "tuktuk" ? "🛺 " : ""}${escapeHTML(p2SlideLabel(entry.def))}</span></label>`;
+  }).join("");
+  const n = deck.filter(p2SlideEnPdf).length;
+  return `<div class="p2pdf-panel">
+    <div class="p2pdf-h">
+      <strong>${escapeHTML(P2T("Hojas que entran al PDF", "Sheets included in the PDF", "Страницы, входящие в PDF"))}</strong>
+      <span>${n} / ${deck.filter(e => !e.def.noPdf).length}</span>
+      <button class="png-btn" data-act="present2PdfAll" data-on="1">${escapeHTML(P2T("Todas", "All", "Все"))}</button>
+      <button class="png-btn" data-act="present2PdfAll" data-on="0">${escapeHTML(P2T("Ninguna", "None", "Ни одной"))}</button>
+    </div>
+    <div class="p2pdf-list">${filas}</div>
+  </div>`;
 }
 
 // Logo de marca (inline SVG, mismo ícono que la app). P2_LOGO_MARK = versión chica
@@ -1554,22 +1647,68 @@ export function p2TkCriteriosYM(mesName) {
 // los partners en cuartiles por USD/hora y la variación de AD fue igual en
 // todos (+1,9% / +2,9% / +1,1% / +1,8%). Es diagnóstico y comparación, no
 // predicción.
+// OJO con el 0 vs null: el denominador de cada tasa es el peso de las filas que
+// TRAÍAN el dato, no el total de viajes/horas. Con `trips > 0 ? accW/trips : null`
+// un partner sin ninguna acceptance_rate cargada devolvía 0 (no null) y entraba
+// al cohorte como si aceptara el 0% de los viajes, hundiendo la mediana de todos
+// los demás. Hoy producción trae las 41 columnas al 100%, así que no se ve; se
+// vio en local con un partner sembrado sin tasas, y volvería a aparecer con
+// cualquier escala o vertical nueva que no traiga la columna.
 export function p2OpsMetrics(rows) {
-  let trips = 0, horas = 0, accW = 0, badW = 0, mphW = 0;
+  let trips = 0, horas = 0, accW = 0, badW = 0, mphW = 0, cmpW = 0;
+  let accD = 0, badD = 0, mphD = 0, cmpD = 0;   // denominadores CON dato
+  // AD es SNAPSHOT: el nivel es el máximo por FECHA (Σ ciudades), nunca la suma
+  // de filas — con 3 ciudades × 4 semanas, Math.max sobre filas sueltas devuelve
+  // el pico de UNA ciudad y hunde el ratio horas/conductor.
+  const adPorFecha = {};
   for (const r of rows) {
     const t = r.trips || 0, h = r.supplyHours || 0;
     trips += t; horas += h;
-    if (r.acceptanceRate      != null) accW += r.acceptanceRate * t;
-    if (r.badRatedTripsShare  != null) badW += r.badRatedTripsShare * t;
-    if (r.moneyPerHour        != null) mphW += r.moneyPerHour * h;
+    adPorFecha[r.date] = (adPorFecha[r.date] || 0) + (r.activeDrivers || 0);
+    if (r.acceptanceRate      != null) { accW += r.acceptanceRate * t;     accD += t; }
+    if (r.badRatedTripsShare  != null) { badW += r.badRatedTripsShare * t; badD += t; }
+    if (r.completionRate      != null) { cmpW += r.completionRate * t;     cmpD += t; }
+    if (r.moneyPerHour        != null) { mphW += r.moneyPerHour * h;       mphD += h; }
   }
+  const ad = Math.max(0, ...Object.values(adPorFecha));
   return {
-    accept:   trips > 0 ? accW / trips : null,
-    bad:      trips > 0 ? badW / trips : null,
-    mph:      horas > 0 ? mphW / horas : null,
+    accept:   accD > 0 ? accW / accD : null,
+    bad:      badD > 0 ? badW / badD : null,
+    completion: cmpD > 0 ? cmpW / cmpD : null,
+    mph:      mphD > 0 ? mphW / mphD : null,
     tripsHr:  horas > 0 ? trips / horas : null,
-    ad: rows.length ? Math.max(...rows.map(r => r.activeDrivers || 0)) : 0
+    // Horas por conductor en el RANGO (no por semana): crece con el rango, pero
+    // el cohorte se calcula sobre el mismo rango, así que la comparación es
+    // justa. Mide intensidad de uso: dos partners con el mismo AD pueden tener
+    // la mitad de horas cada uno.
+    hrsDriver: ad > 0 ? horas / ad : null,
+    ad
   };
+}
+// Embudo de ACTIVACIÓN de los perfiles que registra el PARTNER (no los que trae
+// el servicio): de cada 100 perfiles creados, cuántos llegan a 1 / 10 / 50 / 100
+// viajes. Las columnas new_profiles_partner_reg* de taxiparks ya vienen como
+// PROPORCIÓN (verificado contra producción: Yego 73 perfiles → 0.2099 / 0.1235 /
+// 0.0741 / 0.0123), así que al agregar se ponderan por new_profiles_partner —
+// promediarlas a secas le daría el mismo peso a una semana de 2 perfiles que a
+// una de 90.
+//
+// Devuelve null (no 0) cuando el partner no registró perfiles propios en el
+// rango: 0% se leería como "no activás a nadie" cuando en realidad no hubo a
+// quién activar. En producción 6 de 86 partners comparables están en ese caso.
+export function p2FunnelMetrics(rows) {
+  let np = 0, w1 = 0, w10 = 0, w50 = 0, w100 = 0;
+  for (const r of rows) {
+    const n = r.newProfilesPartner || 0;
+    if (!n) continue;
+    np += n;
+    w1   += (r.newProfilesPartnerReg1   || 0) * n;
+    w10  += (r.newProfilesPartnerReg10  || 0) * n;
+    w50  += (r.newProfilesPartnerReg50  || 0) * n;
+    w100 += (r.newProfilesPartnerReg100 || 0) * n;
+  }
+  if (!np) return { perfiles: 0, r1: null, r10: null, r50: null, r100: null };
+  return { perfiles: np, r1: w1 / np, r10: w10 / np, r50: w50 / np, r100: w100 / np };
 }
 // ── SLIDE: PORTADA EJECUTIVA (ago 2026) ───────────────────────────────────────
 // La lee la GERENCIA DEL PARTNER. Si solo leen esta hoja, tiene que alcanzar:
@@ -1585,25 +1724,46 @@ export function p2OpsMetrics(rows) {
 // poca información para ocuparla; acá cumple mejor su función porque EXPLICA el
 // veredicto: "vas al 86% y además tu aceptación está 28% bajo la mediana" es una
 // historia, los dos datos separados son dos números sueltos.
-export function p2BenchStrip(partner, dates) {
-  const es = PRESENT2_STATE.lang === "es";
+// COHORTE ACOTADO A LAS CIUDADES DEL PARTNER. Antes comparaba contra todos los
+// partners del país y eso hacía trampa en las dos direcciones: medido en
+// producción (últimas 4 semanas, 86 partners con ≥50 activos), la mediana de
+// viajes/hora es 1,56 en Lima, 2,14 en Arequipa y 2,37 en Trujillo, y la tarifa
+// media 4,14 vs 3,29 vs 2,51. Contra la mediana nacional (1,99) un partner de
+// Trujillo salía "mejor que el mercado" por estar en Trujillo, y uno de Lima
+// salía "peor" por estar en Lima. Son mercados distintos, no operaciones
+// distintas.
+//
+// Cada partner del cohorte se mide SOLO en las ciudades donde opera el partner
+// que estamos mirando, así que la comparación es sobre el mismo terreno.
+export function p2BenchCohorte(partner, dates) {
   const dset = new Set(dates || []);
-  const todas = (STATE.rawData || []).filter(r => dset.has(r.date));
-  const mias  = todas.filter(r => r.partner === partner);
-  if (!mias.length) return "";
-  const yo = p2OpsMetrics(mias);
+  const enRango = (STATE.rawData || []).filter(r => dset.has(r.date));
+  const mias = enRango.filter(r => r.partner === partner);
+  if (!mias.length) return null;
+  const ciudades = new Set(mias.map(r => r.city));
+  const mismas = enRango.filter(r => ciudades.has(r.city));
   const porPartner = new Map();
-  todas.forEach(r => { let a = porPartner.get(r.partner); if (!a) { a = []; porPartner.set(r.partner, a); } a.push(r); });
-  const coh = [...porPartner.values()].map(p2OpsMetrics).filter(m => m.ad >= 50);
+  mismas.forEach(r => { let a = porPartner.get(r.partner); if (!a) { a = []; porPartner.set(r.partner, a); } a.push(r); });
+  return { mias: mismas.filter(r => r.partner === partner), grupos: [...porPartner.values()],
+           ciudades: [...ciudades] };
+}
+export function p2BenchStrip(partner, dates) {
+  const C = p2BenchCohorte(partner, dates);
+  if (!C) return "";
+  const yo = p2OpsMetrics(C.mias);
+  // Umbral de comparabilidad: 50 activos. Abajo de eso las tasas se disparan con
+  // 2 conductores raros y la mediana dejaría de describir a un par real.
+  const coh = C.grupos.map(p2OpsMetrics).filter(m => m.ad >= 50);
   if (coh.length < 3) return "";   // con menos de 3 pares la mediana no dice nada
-  const med = { accept: median(coh.map(m => m.accept)), mph: median(coh.map(m => m.mph)),
-                tripsHr: median(coh.map(m => m.tripsHr)), bad: median(coh.map(m => m.bad)) };
+  const med = {};
   const D = [
-    { k: "accept",  l: es ? "Aceptación" : "Acceptance",     f: v => (v * 100).toFixed(1) + "%", alto: true },
-    { k: "mph",     l: es ? "USD / hora" : "USD / hour",     f: v => "$" + v.toFixed(2),          alto: true },
-    { k: "tripsHr", l: es ? "Viajes / hora" : "Trips / hour", f: v => v.toFixed(2),               alto: true },
-    { k: "bad",     l: es ? "% mal calif." : "% badly rated", f: v => (v * 100).toFixed(1) + "%", alto: false }
+    { k: "accept",    l: P2T("Aceptación", "Acceptance", "Принятие"),        f: v => (v * 100).toFixed(1) + "%", alto: true },
+    { k: "tripsHr",   l: P2T("Viajes / hora", "Trips / hour", "Поездок / час"), f: v => v.toFixed(2),            alto: true },
+    { k: "hrsDriver", l: P2T("Horas / conductor", "Hours / driver", "Часов / водитель"), f: v => fmt(Math.round(v)), alto: true },
+    { k: "mph",       l: P2T("USD / hora", "USD / hour", "USD / час"),       f: v => "$" + v.toFixed(2),         alto: true },
+    { k: "bad",       l: P2T("% mal calif.", "% badly rated", "% плохих оценок"), f: v => (v * 100).toFixed(1) + "%", alto: false }
   ];
+  D.forEach(d => { med[d.k] = median(coh.map(m => m[d.k])); });
   const chips = D.map(d => {
     const mio = yo[d.k], m = med[d.k];
     if (mio == null || m == null) return `<div class="bs-chip"><span>${escapeHTML(d.l)}</span><b>—</b></div>`;
@@ -1613,12 +1773,131 @@ export function p2BenchStrip(partner, dates) {
     const col = mejor ? "#10b981" : "#FF0000";
     return `<div class="bs-chip"><span>${escapeHTML(d.l)}</span>
       <b style="color:${col}">${d.f(mio)}</b>
-      <i>${es ? "mediana" : "median"} ${d.f(m)}</i></div>`;
+      <i>${escapeHTML(P2T("mediana", "median", "медиана"))} ${d.f(m)}</i></div>`;
   }).join("");
+  const donde = C.ciudades.length === 1 ? cityLabel(C.ciudades[0])
+              : P2T("tus ciudades", "your cities", "ваших городах");
+  // Por qué MEDIANA y no promedio: el promedio se mueve con un solo caso
+  // extremo (sin el corte de 50 activos, el máximo de USD/hora es 12,13 contra
+  // una mediana de 6,09 — un partner arrastra el promedio de los 249). La
+  // mediana responde la pregunta que el partner se hace: "¿estoy en la mitad de
+  // arriba o en la de abajo?".
+  const tip = P2T(
+    `Mediana = el valor del medio: la mitad de los ${coh.length} partners está por encima y la mitad por debajo. Se usa mediana y no promedio porque un solo partner con un número extremo mueve el promedio y no la mediana.`,
+    `Median = the middle value: half of the ${coh.length} partners are above and half below. Median rather than average because one partner with an extreme figure moves the average but not the median.`,
+    `Медиана — среднее значение выборки: половина из ${coh.length} партнёров выше, половина ниже. Медиана, а не среднее: один партнёр с крайним значением сдвигает среднее, но не медиану.`);
   return `<div class="bs-tira">
-    <div class="bs-h">${es ? `Tu operación vs la mediana de ${coh.length} partners comparables` : `Your operation vs the median of ${coh.length} comparable partners`}</div>
+    <div class="bs-h" title="${escapeHTML(tip)}">${escapeHTML(P2T(
+      `Tu operación vs la mediana de ${coh.length} partners comparables en ${donde}`,
+      `Your operation vs the median of ${coh.length} comparable partners in ${donde}`,
+      `Ваша работа против медианы ${coh.length} сопоставимых партнёров в ${donde}`))} <span class="bs-i">ⓘ</span></div>
     <div class="bs-chips">${chips}</div>
   </div>`;
+}
+
+// ── SLIDE: CAPTACIÓN Y ACTIVACIÓN (sep 2026) ─────────────────────────────────
+// El embudo de los perfiles que registra EL PARTNER: de cada 100 que crea,
+// cuántos llegan a 1, 10, 50 y 100 viajes — y cómo se compara con la mediana de
+// sus pares en sus mismas ciudades.
+//
+// Por qué esta hoja y no otro KPI más: es el único bloque que separa "traigo
+// gente" de "la gente que traigo se queda". Medido en producción (últimas 4
+// semanas, 80 partners con perfiles propios) el paso 1 va de 21,8% (p25) a 62,1%
+// (p75) — el KPI con más dispersión de todo el set, o sea el que más distingue a
+// un partner de otro y el más accionable.
+//
+// Solo Taxi y solo perfiles de origen PARTNER: los que trae el servicio no
+// dependen de lo que el partner haga, así que meterlos diluiría justo la señal
+// que la hoja quiere dar.
+export function buildSlide2Embudo(partner, dates, idx) {
+  const savedDs = PRESENT2_STATE.dataset;
+  PRESENT2_STATE.dataset = "taxi";
+  const C = p2BenchCohorte(partner, dates);
+  PRESENT2_STATE.dataset = savedDs;
+  const head = (extra) => `<div class="agy-style-365 p2-hoja-cards">
+    ${p2BrandHeader(partner, P2T("Captación y activación", "Acquisition & activation", "Привлечение и активация"),
+      P2T("De cada perfil que registrás, cuántos llegan a manejar",
+          "Of every profile you register, how many end up driving",
+          "Сколько из зарегистрированных вами профилей начинают ездить"))}
+    ${extra}${p2BrandFooter(idx)}</div>`;
+  if (!C) return head(`<div class="agy-style-396">${escapeHTML(P2T("Sin datos en el rango.", "No data in range.", "Нет данных за период."))}</div>`);
+
+  const yo = p2FunnelMetrics(C.mias);
+  if (!yo.perfiles) return head(`<div class="agy-style-396">${escapeHTML(P2T(
+    "No registraste perfiles propios en este período, así que no hay embudo que medir.",
+    "You registered no own profiles in this period, so there is no funnel to measure.",
+    "В этом периоде вы не регистрировали собственные профили — воронку измерить не на чем."))}</div>`);
+
+  const coh = C.grupos.map(p2FunnelMetrics).filter(f => f.perfiles >= 10);
+  const med = k => median(coh.map(f => f[k]));
+  const PASOS = [
+    { k: "r1",   l: P2T("Hizo 1 viaje", "Made 1 trip", "Совершил 1 поездку") },
+    { k: "r10",  l: P2T("Llegó a 10 viajes", "Reached 10 trips", "Достиг 10 поездок") },
+    { k: "r50",  l: P2T("Llegó a 50 viajes", "Reached 50 trips", "Достиг 50 поездок") },
+    { k: "r100", l: P2T("Llegó a 100 viajes", "Reached 100 trips", "Достиг 100 поездок") }
+  ];
+  const pct = v => v == null ? "—" : (v * 100).toFixed(1) + "%";
+  const filas = PASOS.map(p => {
+    const mio = yo[p.k], m = coh.length >= 3 ? med(p.k) : null;
+    const col = m == null ? "#555" : (mio >= m ? "#10b981" : "#FF0000");
+    const ancho = Math.min((mio || 0) * 100, 100);
+    const marca = m == null ? "" : `<div class="fn-med" style="left:calc(${Math.min(m * 100, 100).toFixed(1)}% - 1px)"></div>`;
+    return `<div class="fn-fila">
+      <div class="fn-lbl">${escapeHTML(p.l)}</div>
+      <div class="fn-bar">${marca}<div class="fn-fill" style="width:${ancho.toFixed(1)}%;background:${col}"></div></div>
+      <div class="fn-val" style="color:${col}">${pct(mio)}</div>
+      <div class="fn-med-txt">${m == null ? "" : escapeHTML(P2T("mediana", "median", "медиана")) + " " + pct(m)}</div>
+      <div class="fn-abs">${mio == null ? "" : "≈ " + fmt(Math.round(mio * yo.perfiles))}</div>
+    </div>`;
+  }).join("");
+
+  // Dónde se cae el embudo: el paso con la peor brecha contra la mediana. Es la
+  // frase que convierte la hoja en una acción ("no es que traigas pocos: es que
+  // el 60% no llega ni a un viaje").
+  let lectura = "";
+  if (coh.length >= 3) {
+    // El paso peor se elige por CONDUCTORES perdidos, no por brecha relativa.
+    // Con la brecha relativa siempre gana el último escalón (1% vs 5% = -80%)
+    // aunque ahí se pierdan 7 conductores y en el primero 57: los pasos son
+    // acumulativos, así que arreglar el primero arrastra a todos los demás.
+    const gaps = PASOS.map(p => ({ p, mio: yo[p.k], m: med(p.k) }))
+      .filter(g => g.mio != null && g.m != null && g.m > 0)
+      .map(g => ({ ...g, gap: (g.mio - g.m) / g.m, faltan: (g.m - g.mio) * yo.perfiles }))
+      .sort((a, b) => b.faltan - a.faltan);
+    const peor = gaps[0];
+    const mejor = [...gaps].sort((a, b) => b.gap - a.gap)[0];
+    if (peor && peor.faltan > 0 && peor.gap < -0.1) {
+      const n = fmt(Math.round(peor.faltan));
+      lectura = P2T(
+        `Donde más se cae: "${peor.p.l}" — ${pct(peor.mio)} contra ${pct(peor.m)} de la mediana. Con la tasa de tus pares serían ${n} conductores más sobre los mismos perfiles: ese paso rinde más que traer más gente.`,
+        `Biggest drop-off: "${peor.p.l}" — ${pct(peor.mio)} vs a median of ${pct(peor.m)}. At your peers' rate that is ${n} more drivers from the same profiles: that step pays off more than adding people.`,
+        `Наибольшая потеря: «${peor.p.l}» — ${pct(peor.mio)} против медианы ${pct(peor.m)}. При ставке ваших коллег это ${n} водителей больше при тех же профилях: этот шаг важнее, чем привлекать больше людей.`);
+    }
+    else if (mejor && mejor.gap > 0.1) lectura = P2T(
+      `Tu embudo va por encima de la mediana en todos los pasos (el mejor: "${mejor.p.l}", ${pct(mejor.mio)} vs ${pct(mejor.m)}). Acá el techo es el volumen de perfiles, no la activación.`,
+      `Your funnel is above the median at every step (best: "${mejor.p.l}", ${pct(mejor.mio)} vs ${pct(mejor.m)}). The ceiling here is profile volume, not activation.`,
+      `Ваша воронка выше медианы на каждом шаге (лучший: «${mejor.p.l}», ${pct(mejor.mio)} против ${pct(mejor.m)}). Потолок здесь — объём профилей, а не активация.`);
+    else lectura = P2T(
+      "Tu embudo está en línea con la mediana del cohorte en todos los pasos.",
+      "Your funnel is in line with the cohort median at every step.",
+      "Ваша воронка соответствует медиане когорты на всех шагах.");
+  }
+  const donde = C.ciudades.length === 1 ? cityLabel(C.ciudades[0])
+              : P2T("tus ciudades", "your cities", "ваших городах");
+  return head(`<div class="fn-wrap">
+    <div class="fn-top">
+      <div class="fn-kpi"><span>${escapeHTML(P2T("Perfiles registrados por vos", "Profiles you registered", "Профилей зарегистрировано вами"))}</span><b>${fmt(Math.round(yo.perfiles))}</b></div>
+      <div class="fn-nota">${escapeHTML(coh.length >= 3
+        ? P2T(`Comparado contra la mediana de ${coh.length} partners de ${donde} con al menos 10 perfiles en el período.`,
+              `Compared against the median of ${coh.length} partners in ${donde} with at least 10 profiles in the period.`,
+              `Сравнение с медианой ${coh.length} партнёров в ${donde} с не менее чем 10 профилями за период.`)
+        : P2T("Sin pares suficientes en tus ciudades para una mediana confiable: se muestra solo tu embudo.",
+              "Not enough peers in your cities for a reliable median: only your funnel is shown.",
+              "Недостаточно сопоставимых партнёров для надёжной медианы: показана только ваша воронка."))}</div>
+    </div>
+    <div class="fn-tabla">${filas}</div>
+    ${lectura ? `<div class="fn-lectura">${escapeHTML(lectura)}</div>` : ""}
+  </div>`);
 }
 
 export function buildSlide2Portada(partner, dates, idx) {
@@ -2302,8 +2581,7 @@ export function renderPresent2() {
         <div>
           <label class="agy-style-433">${es ? "Idioma" : "Language"}</label>
           <div class="mode-toggle">
-            <button class="mode-btn ${es ? "active" : ""}" data-act="setPresent2Lang" data-lang="es">ES</button>
-            <button class="mode-btn ${!es ? "active" : ""}" data-act="setPresent2Lang" data-lang="en">EN</button>
+            ${P2_LANGS.map(L => `<button class="mode-btn ${PRESENT2_STATE.lang === L.k ? "active" : ""}" data-act="setPresent2Lang" data-lang="${L.k}">${L.lbl}</button>`).join("")}
           </div>
         </div>
         <div>
@@ -2333,9 +2611,11 @@ export function renderPresent2() {
         </div>` : ""}
         <div class="agy-style-439">
           <button data-act="switchTab" data-tab="rend" class="agy-style-440">← ${es ? "Volver" : "Back"}</button>
-          <button class="apply-btn agy-style-441" data-act="downloadPresent2PDF">⬇ ${es ? "Descargar PDF" : "Download PDF"}</button>
+          <button class="png-btn" data-act="present2TogglePdfPanel" title="${escapeHTML(P2T("Elegí qué hojas entran al PDF", "Choose which sheets go into the PDF", "Выберите страницы для PDF"))}">🗂 ${escapeHTML(P2T("Hojas", "Sheets", "Страницы"))} ${_p2PdfCount()}</button>
+          <button class="apply-btn agy-style-441" data-act="downloadPresent2PDF">⬇ ${escapeHTML(P2T("Descargar PDF", "Download PDF", "Скачать PDF"))}</button>
         </div>
       </div>
+      ${p2PdfPanelHTML()}
       <div id="present2Nav" class="agy-style-442">
         ${p2NavHTML()}
       </div>
@@ -2466,6 +2746,17 @@ export function present2ToggleCity() { PRESENT2_STATE.cmpCity = !PRESENT2_STATE.
 export function present2SetFleetMode(mode) { PRESENT2_STATE.fleetMode = mode; renderPresent2(); }
 // Mes META de "Avance vs Meta": "" → auto (según "Hasta"); nombre → fijo.
 export function present2SetAvanceMes(mes) { PRESENT2_STATE.avanceMesSel = mes || null; renderPresent2(); }
+export function present2TogglePdfPanel() { PRESENT2_STATE.pdfPanel = !PRESENT2_STATE.pdfPanel; renderPresent2(); }
+export function present2TogglePdfSlide(key) {
+  if (PRESENT2_STATE.pdfOff.has(key)) PRESENT2_STATE.pdfOff.delete(key);
+  else PRESENT2_STATE.pdfOff.add(key);
+  renderPresent2();
+}
+export function present2PdfAll(on) {
+  if (on) { PRESENT2_STATE.pdfOff.clear(); }
+  else p2Deck(PRESENT2_STATE.partner).forEach(e => { if (!e.def.noPdf) PRESENT2_STATE.pdfOff.add(p2SlideKey(e)); });
+  renderPresent2();
+}
 // Markup de los botones Taxi/TukTuk de la Sección (bar con id present2SectionBar).
 // "just-active" dispara la animación CSS de pop al repintarse (ver styles.css).
 export function _p2SectionBarHTML(curDs) {
@@ -2557,9 +2848,14 @@ export async function downloadPresent2PDF() {
   prog.innerHTML = `<div class="agy-style-445"></div><div id="p2Msg" class="agy-style-446">${es ? "Generando PDF..." : "Generating PDF..."}</div>`;
   document.body.appendChild(prog);
 
-  // Deck combinado: incluye sección Taxi + (si aplica) sección TukTuk. Se EXCLUYEN las
-  // slides marcadas noPdf (ej. Proyección, experimental) hasta validar mejor los datos.
-  const deck = p2Deck(partner).filter(e => !e.def.noPdf);
+  // Deck combinado: incluye sección Taxi + (si aplica) sección TukTuk. Se excluyen
+  // las slides marcadas noPdf (Proyección: solo pantalla) y las que el KAM haya
+  // desmarcado en el panel de hojas.
+  const deck = p2Deck(partner).filter(p2SlideEnPdf);
+  if (!deck.length) { document.body.removeChild(prog); alert(P2T(
+    "No queda ninguna hoja seleccionada para el PDF.",
+    "No sheets are selected for the PDF.",
+    "Не выбрано ни одной страницы для PDF.")); return; }
   PRESENT2_STATE._deckLen = deck.length;
   PRESENT2_STATE._showDsBadge = p2TuktukSectionVisible(partner) && p2HasTaxi(partner);
   const savedDs = PRESENT2_STATE.dataset;
@@ -2647,6 +2943,9 @@ registerActions({
   setPresent2Lang:      d => setPresent2Lang(d.lang),
   present2SetFleetMode: d => present2SetFleetMode(d.mode),
   present2SetAvanceMes: (d, el) => present2SetAvanceMes(el.value),
+  present2TogglePdfPanel,
+  present2TogglePdfSlide: d => present2TogglePdfSlide(d.key),
+  present2PdfAll:         d => present2PdfAll(d.on === "1"),
   present2ToggleCohort: d => present2ToggleCohort(d.key),
   present2JumpSection:  d => present2JumpSection(d.section),
   p2ShowPartnerList,

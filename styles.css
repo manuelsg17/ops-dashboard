@@ -1528,3 +1528,58 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
   padding: 7px 10px;
 }
 .px-aviso b { font-weight: 800; }
+
+/* ── PRESENTACIÓN: selección de hojas del PDF ─────────────────────────────────
+   El deck se arma por vertical, así que un partner con 1-2 conductores en
+   Delivery/Cargo recibía dos hojas de cada una. El KAM decide qué mandar. */
+.p2pdf-panel {
+  margin: 8px 0 4px; background: #fff; border: 1px solid #e5e5e5;
+  border-radius: 10px; padding: 10px 12px;
+}
+.p2pdf-h {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  font-size: .8rem; margin-bottom: 8px;
+}
+.p2pdf-h span { color: #777; font-variant-numeric: tabular-nums; }
+.p2pdf-list {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 2px 14px;
+}
+.p2pdf-row {
+  display: flex; align-items: center; gap: 7px; min-width: 0;
+  font-size: .78rem; padding: 3px 4px; border-radius: 6px; cursor: pointer;
+}
+.p2pdf-row:hover { background: #fafafa; }
+/* El texto suelto dentro de un flex NO trunca solo: sin min-width:0 + el span
+   con overflow, un título largo desborda la columna en silencio. */
+.p2pdf-row span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p2pdf-row em { font-size: .68rem; color: #aaa; font-style: normal; flex: none; }
+.p2pdf-na { opacity: .55; cursor: default; }
+.p2pdf-na:hover { background: none; }
+
+/* ── PRESENTACIÓN: embudo de captación y activación ───────────────────────── */
+.fn-wrap { display: flex; flex-direction: column; gap: 12px; }
+.fn-top { display: flex; align-items: center; gap: 16px; }
+.fn-kpi {
+  display: flex; flex-direction: column; gap: 1px; flex: none;
+  background: #fff; border: 1px solid #ececec; border-radius: 10px; padding: 8px 14px;
+}
+.fn-kpi span { font-size: var(--sl-lbl); letter-spacing: .04em; text-transform: uppercase; color: #888; font-weight: 700; }
+.fn-kpi b { font-size: var(--sl-val); font-weight: 900; color: #111; }
+.fn-nota { font-size: var(--sl-nota); color: #777; line-height: 1.35; min-width: 0; }
+.fn-tabla { display: flex; flex-direction: column; gap: 6px; background: #fff; border: 1px solid #ececec; border-radius: 10px; padding: 12px 14px; }
+.fn-fila { display: grid; grid-template-columns: 150px 1fr 62px 88px 56px; align-items: center; gap: 10px; }
+.fn-lbl { font-size: var(--sl-lbl); font-weight: 700; color: #444; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fn-bar { position: relative; height: 11px; background: #f0f0f0; border-radius: 6px; overflow: hidden; }
+.fn-fill { height: 100%; border-radius: 6px; }
+/* Marca de la mediana del cohorte: mismo lenguaje visual que .px-hoy del
+   Ejecutivo (una línea vertical = "la referencia contra la que te medís"). */
+.fn-med { position: absolute; top: -2px; bottom: -2px; width: 2px; background: #111; opacity: .55; z-index: 2; }
+.fn-val { font-size: var(--sl-val2); font-weight: 900; text-align: right; font-variant-numeric: tabular-nums; }
+.fn-med-txt, .fn-abs { font-size: var(--sl-nota); color: #999; font-variant-numeric: tabular-nums; }
+.fn-abs { text-align: right; }
+.fn-lectura {
+  font-size: var(--sl-nota); line-height: 1.45; color: #333;
+  background: #fff; border: 1px solid #ececec; border-left: 3px solid #FF0000;
+  border-radius: 8px; padding: 9px 12px;
+}
+.bs-i { opacity: .45; font-size: .8em; }
