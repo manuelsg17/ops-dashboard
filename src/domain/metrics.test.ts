@@ -413,13 +413,27 @@ describe("períodos duplicados (mismo dato bajo dos fechas)", () => {
     expect([...new Set(dropDuplicatePeriods(rows).map(r => r.date))]).not.toContain("2026-08-04");
   });
 
-  it("NO toca períodos que solo se parecen: la coincidencia debe ser exacta", () => {
+  it("NO toca períodos con distinto AD o viajes", () => {
     const rows = [
       fila("2026-08-03", "A", 100, 1000, 500),
       fila("2026-08-10", "A", 100, 1000, 501),   // un viaje de diferencia
-      fila("2026-08-17", "A", 100, 1001, 500)    // una hora de diferencia
+      fila("2026-08-17", "A", 101, 1000, 500)    // un conductor de diferencia
     ];
     expect(dropDuplicatePeriods(rows)).toHaveLength(3);
+  });
+
+  it("SÍ lo atrapa aunque las HORAS difieran — es acumulación tardía", () => {
+    // El caso real: al re-bajar el mismo período días después, AD y viajes
+    // salen idénticos pero el proveedor sigue sumando horas de esa semana.
+    // Con supply_hours dentro de la firma este duplicado pasaba de largo.
+    const rows = [
+      fila("2026-08-04", "A", 200, 1990, 900),   // martes, horas "viejas"
+      fila("2026-08-10", "A", 200, 2000, 900),   // lunes, +10h tardías
+      fila("2026-08-17", "A", 300, 3000, 1200)
+    ];
+    const out = dropDuplicatePeriods(rows);
+    expect([...new Set(out.map(r => r.date))]).toEqual(["2026-08-10", "2026-08-17"]);
+    expect(out.reduce((s, r) => s + r.supplyHours, 0)).toBe(5000);   // conserva las de la copia buena
   });
 
   it("con un solo período, o sin filas, no hace nada", () => {

@@ -170,13 +170,19 @@ export function median(nums: Array<number | null | undefined>): number | null {
  * Descarta un período cuyo conjunto de filas es IDÉNTICO al de otro período
  * bajo otra fecha. Es el mismo dato cargado dos veces con dos etiquetas.
  *
- * Caso real que lo motivó: en `rendimiento` aparecieron 3 fechas en MARTES
- * (04, 11 y 18 de agosto 2026) contra 43 en LUNES desde nov-2025, y cada fila
- * del martes era byte a byte igual a la del lunes siguiente (mismo AD, mismas
- * horas, mismos viajes, mismo db_id). Consecuencia: los FLUJOS (N+R, horas,
- * viajes) se contaban DOS VECES en cualquier rango que abarcara el par —
- * YEGO mostraba N+R al 178% y horas al 150% de su meta. El snapshot (AD) no se
- * inflaba porque toma el último período, y por eso el error pasaba inadvertido.
+ * Caso real que lo motivó: `dashboard-ops-cron` escribió el 2026-09-03 tres
+ * períodos con la fecha MAL (martes 04, 11 y 18 de agosto, contra 43 lunes
+ * desde nov-2025). Cada uno llevaba los datos del lunes 6 días posterior: AD y
+ * viajes idénticos fila por fila (232/232), horas apenas distintas por
+ * acumulación tardía. Consecuencia: los FLUJOS (N+R, horas, viajes) se
+ * contaban DOS VECES en cualquier rango que abarcara el par — YEGO mostraba
+ * N+R al 178% y horas al 150% de su meta. El snapshot (AD) no se inflaba
+ * porque toma el último período, y por eso el error pasaba inadvertido.
+ *
+ * ALCANCE: atrapa el re-envío limpio del mismo período. Si el proveedor
+ * además CAMBIÓ los valores entre una bajada y otra (pasó con el par
+ * 08-18/08-24: solo 152 de 227 filas con el mismo AD), la firma ya no coincide
+ * y esto no lo ve — eso hay que arreglarlo en el origen, no acá.
  *
  * Qué copia se conserva: la del DÍA DE SEMANA DOMINANTE del dataset. En una
  * serie semanal el período tiene un ancla fija (acá, lunes); la fecha fuera de
@@ -198,8 +204,15 @@ export function dropDuplicatePeriods(rows) {
   }
   if (porFecha.size < 2) return rows || [];
 
+  // La firma NO incluye supply_hours A PROPOSITO. Verificado contra produccion:
+  // cuando el mismo periodo se vuelve a bajar dias despues, AD y viajes salen
+  // identicos (232/232) pero las HORAS difieren por acumulacion tardia — el
+  // proveedor sigue sumando horas de esa semana. Incluirlas hacia que la firma
+  // no coincidiera y el duplicado pasara igual.
+  // AD + viajes identicos en las ~230 filas de un periodo es firma suficiente:
+  // dos semanas realmente distintas no coinciden asi por azar.
   const firma = (arr) => arr
-    .map(r => `${r.clid}|${r.city}|${r.db_id || ""}|${r.activeDrivers}|${r.supplyHours}|${r.trips}`)
+    .map(r => `${r.clid}|${r.city}|${r.db_id || ""}|${r.activeDrivers}|${r.trips}`)
     .sort().join("\n");
 
   // Día de semana dominante (el ancla del período).
