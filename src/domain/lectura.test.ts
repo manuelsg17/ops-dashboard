@@ -86,6 +86,71 @@ describe("lectura ejecutiva: frases con número y consecuencia", () => {
   });
 });
 
+describe("reglas nuevas (sep 2026)", () => {
+  // Los kpis del Ejecutivo llevan `flujo`: solo N+R y horas se acumulan, asi que
+  // solo esos se pueden comparar contra el calendario.
+  const conFlujo = base.kpis.map(k => ({ ...k, flujo: k.key !== "ad" }));
+
+  it("ritmo: dice el % del mes transcurrido y proyecta el cierre", () => {
+    // 25% de la meta con 23 de 31 dias pasados (74%) = atrasado de verdad.
+    const ctx = { ...base, diasRestantes: 8, diasMes: 31,
+      kpis: [{ key: "nr", lbl: "Nuevos + Reactivados", real: 100, meta: 400, pct: 25, fmt, flujo: true }] };
+    const t = p2Lectura(ctx).join(" ");
+    expect(t).toContain("74%");        // mes transcurrido
+    expect(t).toMatch(/en 135 \(34% de la meta\)/);   // 100 / 0.74 al cierre
+  });
+
+  it("ritmo NO se aplica a Active Drivers (es un nivel, no se acumula)", () => {
+    const ctx = { ...base, diasRestantes: 8, diasMes: 31,
+      kpis: [{ key: "ad", lbl: "Conductores Activos", real: 100, meta: 400, pct: 25, fmt, flujo: false }] };
+    const t = p2Lectura(ctx).join(" ");
+    expect(t).not.toContain("del mes transcurrido");
+  });
+
+  it("conductores cumplidos pero horas no: lo llama problema de actividad", () => {
+    const ctx = { ...base, verticales: [],
+      kpis: [
+        { key: "ad", lbl: "Conductores Activos", real: 100, meta: 100, pct: 100, fmt, flujo: false },
+        { key: "sh", lbl: "Horas de Conexión",   real: 70,  meta: 100, pct: 70,  fmt, flujo: true }
+      ] };
+    const t = p2Lectura(ctx).join(" ");
+    expect(t).toMatch(/actividad, no de captación/);
+  });
+
+  it("benchmark: solo habla si la brecha es material (>=15%)", () => {
+    const chico = { ...base, bench: { peor: { label: "Viajes por hora", valor: "1.90", mediana: "2.00", gapPct: -5 } } };
+    expect(p2Lectura(chico).join(" ")).not.toContain("por debajo de la mediana");
+    const grande = { ...base, bench: { peor: { label: "Viajes por hora", valor: "1.50", mediana: "2.00", gapPct: -25 } } };
+    expect(p2Lectura(grande).join(" ")).toMatch(/25% por debajo de la mediana/);
+  });
+
+  it("embudo: traduce la fuga a CONDUCTORES, no a puntos porcentuales", () => {
+    const ctx = { ...base, funnel: { mio: 21, mediana: 48, faltan: 57, perfiles: 168 } };
+    const t = p2Lectura(ctx).join(" ");
+    expect(t).toContain("57 conductores más");
+    expect(t).toContain("100 perfiles");
+  });
+
+  it("nunca mas de 4 frases: la portada no es un informe", () => {
+    const ctx = { ...base, diasRestantes: 20, diasMes: 31, kpis: conFlujo,
+      bench:  { peor: { label: "Viajes por hora", valor: "1.50", mediana: "2.00", gapPct: -25 } },
+      funnel: { mio: 21, mediana: 48, faltan: 57, perfiles: 168 } };
+    expect(p2Lectura(ctx).length).toBeLessThanOrEqual(4);
+  });
+
+  it("sin brecha de meta pero con fuga de embudo, la accion es activacion", () => {
+    const ctx = { ...base, kpis: base.kpis.map(k => ({ ...k, real: k.meta, pct: 100 })),
+      funnel: { mio: 21, mediana: 48, faltan: 57, perfiles: 168 } };
+    expect(p2Accion(ctx)).toMatch(/activación/);
+  });
+
+  it("ruso: no cae a espanol", () => {
+    const t = p2Lectura({ ...base, lang: "ru" }).join(" ");
+    expect(t).toMatch(/[а-яА-Я]/);
+    expect(t).not.toMatch(/quedan|Faltan/);
+  });
+});
+
 describe("umbral de meta cumplida = 95%", () => {
   it("un 96% NO se reporta como faltante: ya cumplió", () => {
     // Con el corte en 100 este caso decia "faltan X" mientras la barra estaba

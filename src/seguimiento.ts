@@ -672,13 +672,17 @@ export function p2PartnerHasSeguimiento(partner) {
   return (STATE.seguimientoData || []).some(r => r.partner === partner && (r.task || "").trim());
 }
 export function buildSlide2Seguimiento(partner, idx) {
-  const es = !(typeof PRESENT2_STATE !== "undefined" && PRESENT2_STATE.lang === "en");
-  const en = !es;
+  // El idioma del deck es de PRESENT2_STATE (el del partner), no el de la app.
+  const L = (typeof PRESENT2_STATE !== "undefined" ? PRESENT2_STATE.lang : "es") || "es";
+  const T = (es, en, ru) => L === "en" ? en : L === "ru" ? (ru || en) : es;
+  const en = L !== "es";   // el Gantt interno solo distingue es/no-es
   const rows = (STATE.seguimientoData || []).filter(r => r.partner === partner);
   const header = (typeof p2BrandHeader === "function")
-    ? p2BrandHeader(partner, en ? "Follow-up · Next steps" : "Seguimiento · Próximos pasos",
-        en ? "Project → tasks · owner · dates · expected result" : "Proyecto → tareas · owner · fechas · resultado esperado")
-    : `<h2>${escapeHTML(partner)} — ${en ? "Follow-up" : "Seguimiento"}</h2>`;
+    ? p2BrandHeader(partner, T("Seguimiento · Próximos pasos", "Follow-up · Next steps", "Сопровождение · Следующие шаги"),
+        T("Proyecto → tareas · owner · fechas · resultado esperado",
+          "Project → tasks · owner · dates · expected result",
+          "Проект → задачи · ответственный · сроки · ожидаемый результат"))
+    : `<h2>${escapeHTML(partner)} — ${T("Seguimiento", "Follow-up", "Сопровождение")}</h2>`;
   const footer = (typeof p2BrandFooter === "function") ? p2BrandFooter(idx) : "";
   return `<div class="agy-style-365">
     ${header}
