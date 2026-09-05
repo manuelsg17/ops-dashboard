@@ -1935,6 +1935,104 @@ export function _p2FunnelCtx(partner, dates) {
   return { mio: yo.r1 * 100, mediana: m * 100, faltan: Math.max(0, (m - yo.r1) * yo.perfiles), perfiles: yo.perfiles };
 }
 
+// ── BLOQUE: TRAYECTORIA (sep 2026) ───────────────────────────────────────────
+// El Ejecutivo contestaba "¿cumplo?", "¿por qué?", "¿qué hago?" y "¿cómo me
+// comparo?" — pero no "¿voy mejorando o empeorando?", que es la primera pregunta
+// que hace cualquier gerencia y la que explica todas las demás. Este bloque la
+// contesta y de paso llena la banda que quedaba vacía al pie de la hoja.
+//
+// Barras y no una línea: es el mismo lenguaje visual del resto del deck
+// (cumplimiento, embudo) y sobrevive intacto al html2canvas del PDF, que con SVG
+// escalado y `vector-effect` es donde suele romperse.
+//
+// El bloque CRECE con el espacio sobrante (flex en .px-trayectoria): en una hoja
+// alta las barras se hacen más altas en vez de dejar un hueco.
+//
+// Rango: el FILTRADO completo (no el mes de la meta). Una tendencia con dos
+// puntos no es una tendencia — hacen falta al menos 3 períodos o el bloque no se
+// dibuja y la hoja vuelve a cerrar como antes.
+export const TRAYECTORIA_MIN_PERIODOS = 3;
+export const TRAYECTORIA_MAX_BARRAS   = 13;
+
+// Serie → barras. `neg` permite valores negativos (retención con churn severo):
+// la barra se dibuja desde 0 y el valor se muestra igual, sin recortar.
+function _p2Barras(serie, color) {
+  const vals = serie.map(v => (v == null || isNaN(v)) ? null : v);
+  const max = Math.max(...vals.filter(v => v != null).map(Math.abs), 0.0001);
+  const ult = vals.length - 1;
+  return `<div class="tr-barras">${vals.map((v, i) => {
+    const h = v == null ? 0 : Math.max(2, (Math.abs(v) / max) * 100);
+    const c = v == null ? "#e8e8e8" : (v < 0 ? "#FF0000" : color);
+    const op = v == null ? 1 : (i === ult ? 1 : .38);
+    return `<span class="tr-b"><i style="height:${h.toFixed(1)}%;background:${c};opacity:${op}"></i></span>`;
+  }).join("")}</div>`;
+}
+export function p2TrayectoriaBloque(partner, dates) {
+  const per = (dates || []).slice(-TRAYECTORIA_MAX_BARRAS);
+  if (per.length < TRAYECTORIA_MIN_PERIODOS) return "";
+  const savedDs = PRESENT2_STATE.dataset;
+  // Paraguas Taxi + TukTuk, igual que los KPIs de arriba: si el partner empuja
+  // TukTuk, su trayectoria tiene que reflejarlo.
+  const sum = (fn) => {
+    PRESENT2_STATE.dataset = "taxi";  const a = p2Vals(partner, null, per, fn);
+    PRESENT2_STATE.dataset = "tuktuk";
+    const b = p2ActivePartners().includes(partner) ? p2Vals(partner, null, per, fn) : per.map(() => 0);
+    PRESENT2_STATE.dataset = savedDs;
+    return per.map((_, i) => (a[i] || 0) + (b[i] || 0));
+  };
+  const ad = sum(P2_GET.ad), newd = sum(P2_GET.newd), react = sum(P2_GET.react), sh = sum(P2_GET.sh);
+  const nr = per.map((_, i) => (newd[i] || 0) + (react[i] || 0));
+  const ret = retentionSeries(ad, newd, react);
+  if (!ad.some(v => v > 0)) { PRESENT2_STATE.dataset = savedDs; return ""; }
+
+  const mi = p2ModeInfo();
+  const varPct = (arr) => {
+    const v = arr[arr.length - 1], p = arr[arr.length - 2];
+    return (p == null || !p || v == null) ? null : ((v - p) / p) * 100;
+  };
+  const badge = (p, alto = true) => {
+    if (p == null) return `<em class="tr-var">—</em>`;
+    const bueno = alto ? p >= 0 : p <= 0;
+    return `<em class="tr-var" style="color:${bueno ? "#10b981" : "#FF0000"}">${p >= 0 ? "↑" : "↓"} ${Math.abs(p).toFixed(1)}%</em>`;
+  };
+  const ultRet = [...ret].reverse().find(v => v != null);
+  const PANELES = [
+    { l: P2T("Conductores Activos", "Active Drivers", "Активные водители"), c: "#FF0000",
+      serie: ad, v: fmt(ad[ad.length - 1] || 0), badge: badge(varPct(ad)) },
+    { l: P2T("Nuevos + Reactivados", "New + Reactivated", "Новые + реактивированные"), c: "#f97316",
+      serie: nr, v: fmt(nr.reduce((s, x) => s + x, 0)), badge: badge(varPct(nr)),
+      pie: P2T(`total de ${per.length} ${mi.units}`, `total over ${per.length} ${mi.units}`, `всего за ${per.length} ${mi.units}`) },
+    { l: P2T("Horas de Conexión", "Supply Hours", "Часы на линии"), c: "#0284c7",
+      serie: sh, v: fmtSmart(sh.reduce((s, x) => s + x, 0)), badge: badge(varPct(sh)),
+      pie: P2T(`total de ${per.length} ${mi.units}`, `total over ${per.length} ${mi.units}`, `всего за ${per.length} ${mi.units}`) },
+    // Retención: la palanca más barata. Sin ella, la tendencia de AD no se
+    // explica — un partner puede traer mucha gente y no crecer porque se le va
+    // por el otro lado.
+    { l: P2T("Retención", "Retention", "Удержание"), c: "#10b981",
+      serie: ret.map(v => v == null ? null : v * 100),
+      v: ultRet == null ? "—" : (ultRet * 100).toFixed(0) + "%",
+      // "del período anterior" y no `${mi.unit}`: en español la unidad cambia de
+      // género (el día / la semana / el mes) y salía "del semana anterior".
+      badge: "", pie: P2T("de tus activos del período anterior",
+                          "of your previous period's actives",
+                          "от активных прошлого периода") }
+  ];
+  const cuerpo = PANELES.map(p => `<div class="tr-p">
+    <div class="tr-lbl">${escapeHTML(p.l)}</div>
+    <div class="tr-cifra"><b>${p.v}</b>${p.badge}</div>
+    ${_p2Barras(p.serie, p.c)}
+    <div class="tr-pie">${escapeHTML(p.pie || P2T(`último de ${per.length} ${mi.units}`, `latest of ${per.length} ${mi.units}`, `последний из ${per.length} ${mi.units}`))}</div>
+  </div>`).join("");
+  return `<div class="px-card px-trayectoria">
+    <div class="px-h">${escapeHTML(P2T(
+      `Trayectoria · últim${per.length === 1 ? "o" : "as"} ${per.length} ${mi.units}`,
+      `Trajectory · last ${per.length} ${mi.units}`,
+      `Динамика · последние ${per.length} ${mi.units}`))} <span class="tr-h2">${escapeHTML(P2T(
+      "la barra llena es el período más reciente", "the solid bar is the latest period", "сплошная полоса — последний период"))}</span></div>
+    <div class="tr-grid">${cuerpo}</div>
+  </div>`;
+}
+
 export function buildSlide2Portada(partner, dates, idx) {
   const es = PRESENT2_STATE.lang === "es";
   const savedDs = PRESENT2_STATE.dataset;
@@ -2100,6 +2198,7 @@ export function buildSlide2Portada(partner, dates, idx) {
         </div>
         ${embudoHTML}
       </div>
+      ${p2TrayectoriaBloque(partner, dates)}
       ${p2BenchStrip(partner, dates)}
     </div>
     ${p2BrandFooter(idx)}

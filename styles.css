@@ -1407,7 +1407,7 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
    El bloque NO se estira (flex 0): si absorbiera todo el alto de la hoja, con
    una lectura de una sola frase quedaba una tarjeta con 200px de vacío adentro.
    El sobrante va abajo y la tira de benchmark se ancla al pie con margin-top. */
-.px-abajo   { display: flex; gap: 10px; align-items: stretch; flex: 0 0 auto; min-height: 0; }
+.px-abajo   { display: flex; gap: 10px; align-items: stretch; flex: 1 1 auto; min-height: 0; }
 .px-card    { background: #fff; border: 1px solid #eee; border-radius: 10px; padding: 9px 12px; }
 .px-lectura { flex: 1 1 auto; min-width: 0; }
 .px-h       { font-size: var(--sl-th); font-weight: 800; color: #888;
@@ -1644,3 +1644,29 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
               text-align: right; font-variant-numeric: tabular-nums; }
 .eb-pie   { font-size: var(--sl-nota); color: #777; line-height: 1.35; margin-top: auto; }
 .eb-pie-rojo { color: #b91c1c; font-weight: 700; }
+
+/* ── Ejecutivo: bloque de TRAYECTORIA ────────────────────────────────────────
+   Contesta "¿voy mejorando o empeorando?", que era la pregunta que faltaba, y
+   de paso ocupa la banda que quedaba vacía al pie. CRECE con el espacio
+   sobrante: en una hoja alta las barras se estiran en vez de dejar un hueco. */
+.px-trayectoria { flex: 0 0 auto; min-height: 92px; display: flex; flex-direction: column; }
+.tr-h2   { font-weight: 600; color: #bbb; text-transform: none; letter-spacing: 0; }
+.tr-grid { display: flex; gap: 10px; flex: 1 1 auto; min-height: 0; margin-top: 3px; }
+.tr-p    { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tr-lbl  { font-size: var(--sl-th); font-weight: 800; color: #666;
+           text-transform: uppercase; letter-spacing: .5px;
+           min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tr-cifra { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.tr-cifra b { font-size: var(--sl-val); font-weight: 800; color: #111; letter-spacing: -.3px; }
+.tr-var  { font-size: var(--sl-nota); font-weight: 800; font-style: normal; color: #aaa; }
+/* Las barras absorben el alto libre del panel: es lo que hace que el bloque
+   llene la hoja sin agrandar ni una sola letra. */
+/* Alto FIJO. Estirandolas con el alto sobrante llegaban a 170px en la geometria
+   del PDF y quedaban como bloques de color: se leia como relleno, no como una
+   serie. El sobrante lo absorbe la lectura, que es texto y puede crecer sin
+   verse mal. */
+.tr-barras { flex: none; height: 62px; display: flex; align-items: flex-end; gap: 2px; }
+.tr-b    { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: flex-end; }
+.tr-b i  { display: block; width: 100%; border-radius: 2px 2px 0 0; }
+.tr-pie  { font-size: var(--sl-nota); color: #aaa;
+           min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
