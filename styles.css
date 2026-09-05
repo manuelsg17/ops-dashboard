@@ -1363,7 +1363,12 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
    Dos zonas apiladas: cumplimiento (donde hay meta) y composición por
    vertical (donde solo hay volumen). Separadas a propósito — ver el comentario
    en buildSlide2Resumen. */
-.sc-wrap  { display: flex; flex-direction: column; gap: 14px; flex: 1; min-height: 0; }
+/* flex: 1 0 auto — puede CRECER pero NO encogerse por debajo de su contenido.
+   Con `flex:1; min-height:0` el wrapper se comprimia y sus filas se dibujaban
+   por FUERA, encima del pie de la hoja (visto en iPad vertical: la fila de
+   Cargo caia 60px debajo del pie). Ademas asi el scrollHeight de la hoja
+   refleja el alto real y el ajuste al contenido de renderSlide2 puede medirlo. */
+.sc-wrap  { display: flex; flex-direction: column; gap: 14px; flex: 1 0 auto; }
 .sc-zona-tit {
   font-size: .74rem; font-weight: 800; color: #111;
   text-transform: uppercase; letter-spacing: .5px;
@@ -1396,7 +1401,7 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
    Dos tarjetas grandes (el veredicto del mes) + detalle por ciudad. Los
    estados "no aplica" van en gris con el motivo escrito: un partner chico que
    ve un guion sin explicación asume que incumplió. */
-.tkc-wrap  { display: flex; flex-direction: column; gap: 14px; flex: 1; min-height: 0; }
+.tkc-wrap  { display: flex; flex-direction: column; gap: 14px; flex: 1 0 auto; }
 .tkc-cards { display: flex; gap: 12px; }
 .tkc-card {
   flex: 1 1 0; min-width: 0; background: #fafafa; border-radius: 10px;
@@ -1419,7 +1424,7 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 }
 
 /* ── PRESENTACIÓN: slides Ritmo del mes y Benchmark (ago 2026) ──────────────── */
-.rt-wrap  { display: flex; flex-direction: column; gap: 14px; flex: 1; min-height: 0; }
+.rt-wrap  { display: flex; flex-direction: column; gap: 14px; flex: 1 0 auto; }
 .rt-cards { display: flex; gap: 12px; }
 .rt-card  {
   flex: 1 1 0; min-width: 0; background: #fafafa; border-radius: 10px;

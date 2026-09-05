@@ -2603,9 +2603,30 @@ export function renderSlide2() {
     cont.style.aspectRatio = nNiveles >= 4 ? "16 / 13"
                            : nNiveles === 3 ? "16 / 11"
                            : "";           // "" = vuelve al 16/9 del CSS
+    cont.style.height = "";                // el ajuste al contenido se recalcula abajo
   }
 
   inner.innerHTML = s.build(partner, dates, PRESENT2_STATE.slide);
+
+  // AJUSTE AL CONTENIDO — cinturón genérico sobre el aspect-ratio de arriba.
+  // La hoja tiene overflow:hidden, así que si el contenido no entra se RECORTA
+  // en silencio: en iPad vertical (hoja 780×439) el Resumen perdía la fila de
+  // Cargo y la última fila se dibujaba 60px por debajo del pie, encima de él.
+  // El aspect-ratio fijo no puede prever cuántas filas tiene cada slide ni a
+  // qué ancho se está viendo, así que en vez de enumerar slides caso por caso
+  // se mide lo renderizado y se estira la hoja lo necesario.
+  // Solo CRECE (nunca encoge): una hoja más baja que 16:9 se vería rara.
+  if (cont) {
+    const hoja = inner.firstElementChild;
+    if (hoja && hoja.scrollHeight > hoja.clientHeight + 1) {
+      const falta = hoja.scrollHeight - hoja.clientHeight;
+      cont.style.aspectRatio = "";                                  // liberar la relación fija
+      cont.style.height = (cont.getBoundingClientRect().height + falta + 8) + "px";
+    } else {
+      cont.style.height = "";
+    }
+  }
+
   if (s.charts && s.chartFn) {
     setTimeout(() => {
       if (renderId !== PRESENT2_STATE._renderId || STATE.curTab !== "present2") return;
