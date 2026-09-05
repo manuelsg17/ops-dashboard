@@ -141,18 +141,37 @@ entero solo si el drift se vuelve inmanejable.
 
 ### Los datos sinteticos
 
-`supabase/seed_synthetic.sql` — 6 partners inventados (CLID `9000000000xx`, un
-rango que no existe en produccion), 3 ciudades, 3 meses.
+`supabase/seed_synthetic.sql` — 12 partners inventados (CLID `9000000000xx`, un
+rango que no existe en produccion) repartidos en 24 sub-flotas, 3 ciudades,
+4 verticales y 16 semanas (con mensual y diario DERIVADOS de la semanal).
 
-Estan **diseñados para verificar a ojo**: los volumenes son redondos y la relacion
-entre ellos exacta. Reproducen los casos que importan — TukTuk concentrado en Lima
-(como en produccion, donde Arequipa y Trujillo tienen cero), un partner solo-TukTuk
-sin operacion de taxi (el caso PIAGGIO), un sub-fleet de delivery que debe quedar
-fuera, y un partner sin TukTuk que sirve de control.
+**Copian la FORMA de los tres partners grandes de produccion, no sus datos**
+(sep 2026). La forma se midio con consultas agregadas — escala, volatilidad,
+ratios, reparto entre ciudades y verticales — y los valores se generan aca. No se
+baja ni una fila real a la maquina: es la regla del proyecto y ademas es lo unico
+que sirve, porque lo que hace realista una prueba es el comportamiento, no los
+digitos.
 
-El invariante que hace facil la verificacion: **si se carga un goal igual a la base,
-la cuota de cada partner tiene que salir identica a su propio volumen**. Cualquier
-otro numero es un bug de reparto. Los valores esperados estan al final del archivo.
+| perfil | imita | forma |
+|---|---|---|
+| ANDINA MOVILIDAD | Yego | ~2.450 AD en Lima, muy estable (CV 6%), 3 ciudades, las 4 verticales, 17 hojas de deck |
+| RUTA SUR | Lizzo | ~1.280 en Lima + TukTuk grande, CV 12% |
+| EXPRESO CAPITAL | TRANSPOTAXI | ~1.430 en Lima pero **CV 41%** y en caida: es el que dispara alertas, lecturas y trayectorias con forma |
+
+Los otros 9 existen para que las COHORTES tengan contra que compararse: el
+benchmark del Ejecutivo exige **>=3 pares con 50+ activos en las mismas ciudades**
+del partner, y sin relleno por ciudad esa tira simplemente no se dibuja. Con este
+seed hay 6 pares en Lima, 6 en Trujillo y 5 en Arequipa.
+
+Que cubre que la version anterior no cubria: el **embudo de captacion** (las
+columnas `new_profiles_partner_reg*`, que son proporciones y no conteos), las
+**metas** de las tres lineas, la volatilidad por flota, y ratios en el rango real
+(aceptacion 0,57-0,68, horas/conductor 14-24 por semana, viajes/hora 1,5 taxi /
+3,9 tuktuk). Con los ratios de la version vieja (aceptacion 0,74-0,95) el
+benchmark comparaba contra medianas que no existen en ningun mercado.
+
+Los **invariantes** que hay que sostener estan listados al final del archivo — son
+lo que se verifica, no numeros fijos: los numeros cambian si se toca el `setseed`.
 
 ### Trampa que sigue viva
 
