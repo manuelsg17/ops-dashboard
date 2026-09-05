@@ -204,11 +204,13 @@ function _portalMetas(line, rows) {
 
   // Qué meta aplica según la línea. `null` = ese KPI no tiene meta cargada para
   // esta línea (distinto de meta 0).
-  const pick = (taxi, tk) => {
-    if (line === "tk")    return tk;
-    if (line === "agg" || line === "fleet") return taxi;
-    return (taxi == null && tk == null) ? null : (taxi || 0) + (tk || 0);   // comb
-  };
+  // META PARAGUAS: mA/mNR/mH ya cubren Taxi + TukTuk juntos (ago 2026), así que
+  // el Combinado NO les suma meta_tk_*. Sumarlas contaba el objetivo de TukTuk
+  // dos veces y hundía el cumplimiento que ve el PARTNER: agosto-2026,
+  // TRANSPOTAXI Lima, plan de N+R 651 → 1.015 (+56%). El deck ya usaba el
+  // paraguas; acá y en la pestaña Metas se había quedado la suma vieja.
+  // `meta_tk_nr` sigue viva como meta del CRITERIO TukTuk (línea "tk").
+  const pick = (taxi, tk) => (line === "tk" ? tk : taxi);
   const sumOrNull = (fn) => {
     let t = null;
     delMes.forEach(m => { const v = fn(m); if (v != null) t = (t || 0) + v; });

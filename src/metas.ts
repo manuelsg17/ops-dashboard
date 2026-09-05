@@ -9,6 +9,8 @@ import {
   snapshotValue, seriesByDate, projectSnapshot, projectFlow,
   weightedAvg, ratio, sumKpis
 } from "./domain/metrics.js";
+import { reportYM, diasMesReporte } from "./shared/mesReporte.js";
+import { parseLocalDate } from "./core/dates";
 // metas.js — Pestaña Metas
 
 // Ordena meses por valor temporal. Acepta nombres ("MAYO","Mayo","may"),
@@ -63,6 +65,48 @@ export function _metasMatchMes(m, mesName, mesYearSel) {
   if (m.mes !== mesName) return false;
   if (mesYearSel == null || m.mYear == null) return true; // sin año conocido: no se puede descartar
   return m.mYear === mesYearSel;
+}
+
+// ── RANGO DEL SIDEBAR vs MES DE LA META ──────────────────────────────────────
+//
+// La meta es MENSUAL. El FACT salía del rango del sidebar TAL CUAL, sin recortarlo
+// al mes de la meta, así que por defecto (la ventana entera cargada: 16 semanas /
+// 6 meses / 90 días) se comparaban VARIOS meses de N+R y horas contra el objetivo
+// de UNO. Medido contra producción el 05-sep-2026, rango por defecto 11-may→24-ago
+// vs AGOSTO: N+R 64.851 en vez de 11.348 (5,7×) y horas 6,3× — un ~570% de
+// cumplimiento que no significaba nada. Y la proyección lo empeoraba: proyectFlow
+// extrapola ese total como si se hubiera acumulado en los días transcurridos de UN
+// mes (visto: 632% de plan).
+//
+// Ahora el FACT es la INTERSECCIÓN rango ∩ mes de la meta — la misma regla que ya
+// usan el deck (p2DatesMetaEnRango) y el portal del partner. El filtro se sigue
+// respetando: si el KAM mira una sola semana, ve esa semana; lo que ya no pasa es
+// mezclar meses bajo la etiqueta de uno.
+//
+// El bucketing es por mes de REPORTE (en semanal, el mes donde cae el jueves),
+// igual que el deck y el portal: la semana del Lun 29-jun cuenta en JULIO.
+export function _metasFechasDelMes(mesName, mesYearSel, from, to) {
+  const ord = mesName ? _metasMesOrden(mesName) : 0;
+  if (!ord) return [];
+  const todas = (STATE.allDates || []).filter(d => (!from || d >= from) && (!to || d <= to));
+  const ym = d => reportYM(d, STATE.curMode, parseLocalDate);
+  if (ord >= 100000) {                                   // mes ISO "YYYY-MM"
+    const yy = Math.floor(ord / 100), mm = ord % 100;
+    return todas.filter(d => { const r = ym(d); return r.y === yy && r.m === mm; });
+  }
+  const mn = ord - 2000;                                 // nombre de mes sin año
+  const cand = todas.filter(d => ym(d).m === mn);
+  if (mesYearSel != null) return cand.filter(d => ym(d).y === mesYearSel);
+  // Sin año en las metas (uploads viejos): el año más reciente presente en el
+  // rango, nunca la mezcla de dos años bajo el mismo nombre de mes.
+  const anios = [...new Set(cand.map(d => ym(d).y))].sort();
+  const ultimo = anios[anios.length - 1];
+  return ultimo == null ? [] : cand.filter(d => ym(d).y === ultimo);
+}
+// Todos los períodos de ese mes que EXISTEN (ignorando el "Desde" del sidebar,
+// pero sin pasar del "Hasta"): el denominador del aviso de cobertura.
+export function _metasFechasMesCompleto(mesName, mesYearSel, to) {
+  return _metasFechasDelMes(mesName, mesYearSel, "", to);
 }
 
 // Handler del selector de mes. Cambia el mes activo y re-renderiza.
@@ -143,11 +187,11 @@ export function _metasLineDataset(line) {
 // al agregar por ciudad/KAM/país. Promediar las tasas ya calculadas de varios
 // partners daría un número sin significado (un partner con 3 autos pesaría igual
 // que uno con 300).
-export function _metasFleetActuals(from, to, selSet, cityFilter) {
+export function _metasFleetActuals(fechas, selSet, cityFilter) {
   const by = new Map();
   const _sidebar = new Set(STATE.sidebarPartners || STATE.allPartners);
   _metasLineDataset("fleet").forEach(r => {
-    if (r.date < from || r.date > to) return;
+    if (!fechas.has(r.date)) return;
     if (cityFilter !== "all" && r.city !== cityFilter) return;
     if (selSet.size && !_lineSelHas(selSet, _sidebar, r.partner)) return;
     const k = `${r.partner}|||${r.city}`;
@@ -175,11 +219,11 @@ export function _metasFleetActuals(from, to, selSet, cityFilter) {
 // período); N+R y SH son FLUJO (Σ del rango). Se guardan también las SERIES por
 // período: sin ellas no se puede proyectar (la de AD alimenta la proyección plana y las
 // de flujo el ritmo lineal). Ver src/domain/metrics.ts.
-export function _metasTkActuals(from, to, selSet, cityFilter) {
+export function _metasTkActuals(fechas, selSet, cityFilter) {
   const by = new Map();
   const _sidebar = new Set(STATE.sidebarPartners || STATE.allPartners);
   _metasLineDataset("tk").forEach(r => {
-    if (r.date < from || r.date > to) return;
+    if (!fechas.has(r.date)) return;
     if (cityFilter !== "all" && r.city !== cityFilter) return;
     if (selSet.size && !_lineSelHas(selSet, _sidebar, r.partner)) return;
     const k = `${r.partner}|||${r.city}`;
@@ -193,18 +237,19 @@ export function _metasTkActuals(from, to, selSet, cityFilter) {
     e.nr += nr;
     e.sh += r.supplyHours || 0;   // acumulado del rango, igual que N+R (no es snapshot)
   });
-  by.forEach(e => _finishSeries(e));
+  const _ult = [...fechas].sort().at(-1);
+  by.forEach(e => _finishSeries(e, _ult));
   return by;
 }
 // Actuales COMBINADOS (Taxi+TukTuk) por (partner|||city): AD = snapshot del ÚLTIMO
 // período (misma convención que la slide "Avance Combinado" del deck), N+R y SH = Σ
 // del rango. Opera sobre el dataset concat — las filas de ambas líneas de una misma
 // fecha se suman antes de tomar el snapshot.
-export function _metasCombActuals(from, to, selSet, cityFilter) {
+export function _metasCombActuals(fechas, selSet, cityFilter) {
   const by = new Map();
   const _sidebar = new Set(STATE.sidebarPartners || STATE.allPartners);
   _metasLineDataset("comb").forEach(r => {
-    if (r.date < from || r.date > to) return;
+    if (!fechas.has(r.date)) return;
     if (cityFilter !== "all" && r.city !== cityFilter) return;
     if (selSet.size && !_lineSelHas(selSet, _sidebar, r.partner)) return;
     const k = `${r.partner}|||${r.city}`;
@@ -217,15 +262,16 @@ export function _metasCombActuals(from, to, selSet, cityFilter) {
     e.nr += nr;
     e.sh += r.supplyHours || 0;
   });
-  by.forEach(e => _finishSeries(e));
+  const _ult = [...fechas].sort().at(-1);
+  by.forEach(e => _finishSeries(e, _ult));
   return by;
 }
 
 // Cierra una entrada de actuals: convierte los mapas fecha→valor en series
 // ordenadas, saca los snapshots y calcula las proyecciones. Compartido por
 // TukTuk y Combinado para que las dos líneas no puedan divergir.
-function _finishSeries(e) {
-  const { daysElapsed, daysRemaining } = _metasProjDays();
+function _finishSeries(e, lastDate) {
+  const { daysElapsed, daysRemaining } = _metasProjDays(lastDate);
   const adS = seriesByDate(e._ad);
   e.ad     = snapshotValue(adS);
   e.cars   = e._cars ? snapshotValue(seriesByDate(e._cars)) : 0;
@@ -243,10 +289,11 @@ function _finishSeries(e) {
 // realmente visible en el filtro. Se calcula una vez por render (cachear acá
 // evitaría recalcularlo por cada partner, pero el costo es despreciable frente
 // a la claridad de no tener estado suelto).
-function _metasProjDays() {
+function _metasProjDays(lastDate) {
+  if (lastDate) return diasMesReporte(lastDate, STATE.curMode, parseLocalDate);
   const to = document.getElementById("dateTo")?.value || "";
   const dates = (STATE.allDates || []).filter(d => !to || d <= to);
-  return calcProjectionDays(dates[dates.length - 1] || to);
+  return diasMesReporte(dates[dates.length - 1] || to, STATE.curMode, parseLocalDate);
 }
 
 // Fila meta-vs-actual para un KPI de tasa/valor (sin proyección). meta null → oculta.
@@ -395,6 +442,26 @@ function _metasEscalaAviso() {
   </div>`;
 }
 
+// Aviso de COBERTURA: el rango del sidebar no cubre el mes entero de la meta.
+// Los FLUJOS (N+R, horas) acumulan solo los períodos filtrados, así que su % va
+// a quedar corto por el recorte, no por desempeño — y el snapshot (Active
+// Drivers) no se ve afectado. Es el gemelo del aviso que ya tiene el deck; sin
+// él, filtrar una semana se leía como incumplimiento.
+export function _metasCoberturaAviso(cob, mesName) {
+  if (!cob || cob.enRango === 0 || cob.enRango >= cob.total) return "";
+  return `<div class="metas-escala-aviso">
+    <span class="mea-ico">🔎</span>
+    <div>
+      <strong>${escapeHTML(t("metas.cobertura.titulo"))}</strong>
+      ${t("metas.cobertura.cuerpo", { n: cob.enRango, total: cob.total, mes: escapeHTML(mesLabel(mesName)) })}
+      <span class="mea-hint">${escapeHTML(t("metas.cobertura.hint"))}</span>
+    </div>
+  </div>`;
+}
+export function _metasSinPeriodosHTML(mesName) {
+  return t("metas.cobertura.sinPeriodos", { mes: escapeHTML(mesLabel(mesName)) });
+}
+
 // Barra de controles de Metas: selector de mes + borrado (admin) + PDF.
 // Vive acá porque la usan TANTO el agregador como las vistas de línea — antes
 // solo la pintaba el agregador, así que cambiar a Fleet/TukTuk/Combinado hacía
@@ -443,6 +510,10 @@ function _renderMetasLineView(cfg) {
   let html = metasLineToggleHTML();
   html += _metasControlsHTML(mesName, cfg.mesesDisponibles || []);
   html += _metasEscalaAviso();
+  html += _metasCoberturaAviso(cfg.cobertura, mesName);
+  if (cfg.cobertura && cfg.cobertura.enRango === 0) {
+    return html + `<div class="section"><div class="agy-style-224">${_metasSinPeriodosHTML(mesName)}</div></div>`;
+  }
   html += secH(icon, color, t("metas.secMes", { t: title, m: mesLabel(mesName) }), sub, "Peru");
 
   if (!metaRows.length) {
@@ -582,11 +653,11 @@ function _metasLineRows(mesName, hasLineMeta, selSet, cityFilter, kamFilter) {
 // Vista Metas Fleet. Sus KPIs son TASAS (SH/auto, aceptación), no cantidades:
 // por eso llevan `weight` y NO llevan proyección — proyectar una tasa al cierre
 // del mes por ritmo lineal no significa nada (una tasa no se acumula).
-export function _renderMetasFleet(mesName, from, to, selSet, cityFilter, kamFilter, mesesDisponibles) {
+export function _renderMetasFleet(mesName, fechas, selSet, cityFilter, kamFilter, mesesDisponibles, cobertura) {
   return _renderMetasLineView({
-    mesName, mesesDisponibles, icon: "🚗", color: "#0284c7", title: t("metas.tit.fleet"), badge: "Fleet",
+    mesName, mesesDisponibles, cobertura, icon: "🚗", color: "#0284c7", title: t("metas.tit.fleet"), badge: "Fleet",
     sub: t("metas.fleetSub"),
-    act: _metasFleetActuals(from, to, selSet, cityFilter),
+    act: _metasFleetActuals(fechas, selSet, cityFilter),
     metaRows: _metasLineRows(mesName,
       m => m.mSHcar != null || m.mAcc != null || m.mUtil != null,
       selSet, cityFilter, kamFilter),
@@ -610,11 +681,11 @@ export function _renderMetasFleet(mesName, from, to, selSet, cityFilter, kamFilt
 }
 
 // Vista Metas TukTuk: KPIs aditivos (AD/N+R/Brandeados/Horas).
-export function _renderMetasTk(mesName, from, to, selSet, cityFilter, kamFilter, mesesDisponibles) {
+export function _renderMetasTk(mesName, fechas, selSet, cityFilter, kamFilter, mesesDisponibles, cobertura) {
   return _renderMetasLineView({
-    mesName, mesesDisponibles, icon: "🛺", color: "#7e22ce", title: t("metas.tit.tuktuk"), badge: "TukTuk",
+    mesName, mesesDisponibles, cobertura, icon: "🛺", color: "#7e22ce", title: t("metas.tit.tuktuk"), badge: "TukTuk",
     sub: t("metas.tkSub"),
-    act: _metasTkActuals(from, to, selSet, cityFilter),
+    act: _metasTkActuals(fechas, selSet, cityFilter),
     metaRows: _metasLineRows(mesName,
       m => m.mtkAD != null || m.mtkNR != null || m.mtkCars != null || m.mtkSH != null,
       selSet, cityFilter, kamFilter),
@@ -641,33 +712,40 @@ export function _renderMetasTk(mesName, from, to, selSet, cityFilter, kamFilter,
 // combinada (meta agregador + meta TukTuk). Misma fórmula que la slide "Avance
 // Combinado" de Presentación 2.0 — si el partner se enfoca en TukTuk, ese avance
 // también cuenta para su meta.
-export function _renderMetasComb(mesName, from, to, selSet, cityFilter, kamFilter, mesesDisponibles) {
-  // Meta combinada = meta Taxi + meta TukTuk. `null` cuando NINGUNA de las dos
-  // existe (para no dibujar una meta 0 inventada en un partner que simplemente
-  // no tiene ese KPI cargado).
-  const sumMeta = (taxi, tk) => (taxi == null && tk == null) ? null : (taxi || 0) + (tk || 0);
+export function _renderMetasComb(mesName, fechas, selSet, cityFilter, kamFilter, mesesDisponibles, cobertura) {
+  // META PARAGUAS: mA/mNR/mH YA cubren Taxi + TukTuk juntos (decisión ago 2026,
+  // verificada contra la proporción real de cada línea). Sumarles meta_tk_* era
+  // contar el objetivo de TukTuk DOS veces: en agosto-2026 TRANSPOTAXI Lima
+  // pasaba de 2.661 a 3.785 AD de plan (+42%) y de 651 a 1.015 de N+R (+56%),
+  // así que la misma cuenta mostraba ~60% acá y ~86% en el deck. El deck ya usa
+  // el paraguas; esta vista y el portal se quedaron atrás.
+  //
+  // meta_tk_* NO es basura: `meta_tk_nr` sigue siendo la meta del CRITERIO
+  // TukTuk (nuevos + reactivados del mes) y se muestra en la vista TukTuk y en
+  // el Resumen del deck. Lo que no se puede es sumarla al paraguas.
+  const umbrella = v => (v == null || v === 0) ? null : v;
   return _renderMetasLineView({
-    mesName, mesesDisponibles, icon: "🔀", color: "#8b5cf6", title: t("metas.tit.comb"), badge: t("rend.linea.comb"),
+    mesName, mesesDisponibles, cobertura, icon: "🔀", color: "#8b5cf6", title: t("metas.tit.comb"), badge: t("rend.linea.comb"),
     sub: t("metas.combSub"),
-    act: _metasCombActuals(from, to, selSet, cityFilter),
+    act: _metasCombActuals(fechas, selSet, cityFilter),
     metaRows: _metasLineRows(mesName,
       m => (m.mA || 0) > 0 || (m.mNR || 0) > 0 || (m.mH || 0) > 0 ||
            m.mtkAD != null || m.mtkNR != null || m.mtkSH != null,
       selSet, cityFilter, kamFilter),
     kpis: [
       { label: t("metas.activeDrivers"), sub: t("metas.ultimoPeriodo"), color: "#8b5cf6",
-        meta: m => sumMeta(m.mA || null, m.mtkAD), act: a => a.ad, proj: a => a.projAd,
+        meta: m => umbrella(m.mA), act: a => a.ad, proj: a => a.projAd,
         snapSeries: a => a.adByDate, fmtFn: v => fmt(v) },
       { label: t("metas.nuevosReact"), sub: t("metas.acumulado"), color: "#f97316",
-        meta: m => sumMeta(m.mNR || null, m.mtkNR), act: a => a.nr, proj: a => a.projNr, fmtFn: v => fmt(v) },
+        meta: m => umbrella(m.mNR), act: a => a.nr, proj: a => a.projNr, fmtFn: v => fmt(v) },
       { label: t("metas.horasConexion"), sub: t("metas.acumulado"), color: "#0284c7",
-        meta: m => sumMeta(m.mH || null, m.mtkSH), act: a => a.sh, proj: a => a.projSh, fmtFn: v => fmtSmart(v) }
+        meta: m => umbrella(m.mH), act: a => a.sh, proj: a => a.projSh, fmtFn: v => fmtSmart(v) }
     ],
     partnerFoot: m => {
-      const hasTk = m.mtkAD != null || m.mtkNR != null || m.mtkSH != null;
+      const hasTk = m.mtkNR != null;
       return hasTk
-        ? `<div class="agy-style-230">Meta = Taxi ${fmt(m.mA || 0)} + TukTuk ${fmt(m.mtkAD || 0)} AD · N+R ${fmt(m.mNR || 0)}+${fmt(m.mtkNR || 0)} · SH ${fmtSmart(m.mH || 0)}+${fmtSmart(m.mtkSH || 0)}</div>`
-        : `<div class="agy-style-230" title="Este partner no tiene metas TukTuk — su combinado equivale al agregador">Sin metas TukTuk · el combinado equivale al agregador</div>`;
+        ? `<div class="agy-style-230" title="La meta del mes ya cubre Taxi + TukTuk; meta_tk_nr es la del criterio TukTuk, no se suma acá">Meta del mes = Taxi + TukTuk · criterio TukTuk aparte: ${fmt(m.mtkNR)} N+R</div>`
+        : `<div class="agy-style-230" title="La meta del mes cubre Taxi + TukTuk juntos">Meta del mes = Taxi + TukTuk</div>`;
     },
     emptyHint: `No hay metas cargadas para ${escapeHTML(mesName)} con el filtro actual.<br>
       Genéralas desde la <strong>Calculadora</strong> y guárdalas, o ajusta el filtro.`
@@ -713,6 +791,14 @@ export function _renderMetasImpl() {
   // _metasMatchMes. Sin esto, AGOSTO-2025 y AGOSTO-2026 se sumaban juntos.
   const mesYearSel = _metasMesActualYear(mesName);
 
+  // El FACT se acota al MES DE LA META dentro del rango elegido (ver
+  // _metasFechasDelMes): la meta es mensual, así que comparar contra un rango que
+  // abarca otros meses da un % que no significa nada.
+  const mesDates   = _metasFechasDelMes(mesName, mesYearSel, from, to);
+  const fechas     = new Set(mesDates);
+  const cobertura  = { enRango: mesDates.length,
+                       total: _metasFechasMesCompleto(mesName, mesYearSel, to).length };
+
   // Fase 3: líneas Fleet / TukTuk. Vista dedicada (meta vs actual de la línea) que
   // reemplaza el cuerpo de Metas. El agregador sigue con el flujo de abajo intacto.
   if (_metasLine() !== "agg") {
@@ -720,9 +806,9 @@ export function _renderMetasImpl() {
     document.getElementById("metasContent").style.display = "";
     const _line = _metasLine();
     document.getElementById("metasContent").innerHTML =
-        _line === "fleet" ? _renderMetasFleet(mesName, from, to, selSet, cityFilter, kamFilter, mesesDisponibles)
-      : _line === "comb"  ? _renderMetasComb(mesName, from, to, selSet, cityFilter, kamFilter, mesesDisponibles)
-      :                     _renderMetasTk(mesName, from, to, selSet, cityFilter, kamFilter, mesesDisponibles);
+        _line === "fleet" ? _renderMetasFleet(mesName, fechas, selSet, cityFilter, kamFilter, mesesDisponibles, cobertura)
+      : _line === "comb"  ? _renderMetasComb(mesName, fechas, selSet, cityFilter, kamFilter, mesesDisponibles, cobertura)
+      :                     _renderMetasTk(mesName, fechas, selSet, cityFilter, kamFilter, mesesDisponibles, cobertura);
     return;
   }
 
@@ -737,8 +823,9 @@ export function _renderMetasImpl() {
     return true;
   });
 
-  // Build performance data by partner+city+date (full precision)
-  const perfF  = getFilteredByDateRange(from, to);
+  // Build performance data by partner+city+date (full precision).
+  // Acotado al MES DE LA META dentro del rango: ver _metasFechasDelMes.
+  const perfF  = getFilteredByDateRange(from, to).filter(r => fechas.has(r.date));
   const cpMap  = {};
   // Diagnostico: trackear breakdown de los 3 componentes de N+R
   let _diagNP = 0, _diagNS = 0, _diagRE = 0;
@@ -770,9 +857,10 @@ export function _renderMetasImpl() {
     }
   }
 
-  // New projection: based on last data date + 6 days = end of current week
-  const maxDate = cpRows.length ? cpRows.map(r => r.date).sort().at(-1) : to;
-  const { daysElapsed, daysRemaining } = calcProjectionDays(maxDate);
+  // Proyección al cierre: días transcurridos del MES DE LA META (no del mes
+  // calendario de la última fecha — en semanal la del 29-jun reporta en julio).
+  const maxDate = cpRows.length ? cpRows.map(r => r.date).sort().at(-1) : (mesDates.at(-1) || to);
+  const { daysElapsed, daysRemaining } = diasMesReporte(maxDate, STATE.curMode, parseLocalDate);
 
   // Pre-indexar cpRows por partner y por partner+city UNA vez.
   // Antes getRPC hacia cpRows.filter() ~550 veces (O(n) por call).
@@ -918,6 +1006,12 @@ export function _renderMetasImpl() {
   let html = metasLineToggleHTML();
   html += _metasControlsHTML(mesName, mesesDisponibles);
   html += _metasEscalaAviso();
+  html += _metasCoberturaAviso(cobertura, mesName);
+  if (cobertura.enRango === 0) {
+    document.getElementById("metasContent").innerHTML =
+      html + `<div class="section"><div class="agy-style-224">${_metasSinPeriodosHTML(mesName)}</div></div>`;
+    return;
+  }
 
   // ── 1. Peru Summary ───────────────────────────────────────────────────────
   // Contador de partners en perf SIN meta asignada (sus fact suma al total
