@@ -1462,7 +1462,13 @@ export function buildSlide2Resumen(partner, dates, idx) {
     if (v.k === "taxi" || v.k === "tuktuk") {
       PRESENT2_STATE.dataset = v.k;
       t = p2ActualsMTD(partner, null, v.k === "taxi" ? taxiDates : tkDates);
-      t.ad = t.lastAD; t.hay = (v.k === "taxi" ? taxiDates : tkDates).length > 0;
+      t.ad = t.lastAD;
+      // "Hay" = ESTE partner opera la vertical, no "el dataset tiene fechas".
+      // Con lo segundo, un partner sin TukTuk igual recibía una fila "TukTuk
+      // 0 / 0 / 0" (las fechas del slice son globales, de todos los partners) —
+      // y una fila de ceros no se lee como "no aplica", se lee como una
+      // operación muerta.
+      t.hay = p2ActivePartners().includes(partner);
       PRESENT2_STATE.dataset = savedDs;
     } else {
       t = p2VerticalTotals(p2SliceVertical(v.k), partner, null, mesDates);
@@ -1575,7 +1581,9 @@ export function buildSlide2Resumen(partner, dates, idx) {
       </div>
       <div class="rs-card rs-comp">
         <div class="rs-h"><span class="rs-n">#</span>${P2T("¿De dónde viene?", "Where does it come from?", "Откуда это берётся?")}
-          <span class="rs-sub">${P2T("Perú · las 4 suman el total", "Peru · the 4 sum to total", "Перу · четыре в сумме дают итог")}</span></div>
+          <span class="rs-sub">${P2T(`Perú · ${comp.length === 1 ? "la vertical que operás" : `las ${comp.length} suman el total`}`,
+            `Peru · ${comp.length === 1 ? "the vertical you operate" : `the ${comp.length} sum to total`}`,
+            `Перу · ${comp.length === 1 ? "ваша вертикаль" : `${comp.length} в сумме дают итог`}`)}</span></div>
         <table class="rs-t">${cols}<thead>${th(L.ad, L.nr, L.sh)}</thead><tbody>${filasComp}</tbody></table>
       </div>
       ${fleetHTML || tkHTML ? `<div class="rs-dos">${fleetHTML}${tkHTML}</div>` : ""}

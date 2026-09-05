@@ -1400,12 +1400,14 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 .px-hoy    { position: absolute; top: -2px; bottom: -2px; width: 2px; background: #111; opacity: .55; }
 .px-nota   { font-size: var(--sl-nota); color: #888; }
 
-/* El BLOQUE ocupa el alto sobrante (así la tira de benchmark queda anclada al
-   pie de la hoja), pero las TARJETAS de adentro miden lo que miden: el espacio
-   en blanco cae DEBAJO de ellas, no dentro. Estirando las tarjetas, una lectura
-   de una sola frase dejaba una tarjeta con 200px de vacío adentro; sin estirar
-   el bloque, la hoja terminaba a media altura. */
-.px-abajo   { display: flex; gap: 10px; align-items: flex-start; flex: 1 1 auto; min-height: 0; }
+/* ENCUADRE EN ALTURA. Las dos columnas terminan SIEMPRE a la misma altura, sin
+   importar cuánto texto traiga la lectura o la acción: `stretch` iguala las dos
+   a la más alta y, dentro de la izquierda, la lectura absorbe la diferencia
+   (crece con el contenido, así que es la que tiene que dar).
+   El bloque NO se estira (flex 0): si absorbiera todo el alto de la hoja, con
+   una lectura de una sola frase quedaba una tarjeta con 200px de vacío adentro.
+   El sobrante va abajo y la tira de benchmark se ancla al pie con margin-top. */
+.px-abajo   { display: flex; gap: 10px; align-items: stretch; flex: 0 0 auto; min-height: 0; }
 .px-card    { background: #fff; border: 1px solid #eee; border-radius: 10px; padding: 9px 12px; }
 .px-lectura { flex: 1 1 auto; min-width: 0; }
 .px-h       { font-size: var(--sl-th); font-weight: 800; color: #888;
@@ -1473,13 +1475,21 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 .rs-dos   { display: flex; gap: 10px; align-items: stretch; }
 .rs-dos > * { flex: 1 1 0; min-width: 0; }
 .rs-comp  { min-width: 0; }
+/* Las tarjetas de la fila del pie son columnas flex para que su bloque de chips
+   pueda ESTIRARSE: Fleet trae 4 chips (2 filas) y Criterios TukTuk 2 (1 fila);
+   sin esto la de TukTuk quedaba con media tarjeta vacía al lado de la otra. */
+.rs-dos > .rs-card { display: flex; flex-direction: column; }
+.rs-dos > .rs-card > .rs-chips { flex: 1 1 auto; align-content: stretch; }
 /* Los chips ENVUELVEN en dos filas antes que truncar la etiqueta: con Fleet y
    TukTuk compartiendo la fila, los 4 chips de Fleet caían a ~85px y "Autos
    propios" quedaba como "AUTOS PRO…". Una etiqueta cortada obliga a adivinar
    qué métrica se está mirando. */
 .rs-chips { display: flex; gap: 7px; flex-wrap: wrap; }
 .rs-chip  {
-  flex: 1 1 calc(50% - 7px); min-width: 0; background: #fafafa; border-radius: 7px; padding: 6px 8px;
+  /* base de 130px: con la fila entera entran los 4 en una linea; compartiendo
+     fila con otro bloque entran 2 y bajan a una segunda. El reparto lo decide el
+     ancho disponible, no un 50% fijo. */
+  flex: 1 1 130px; min-width: 0; background: #fafafa; border-radius: 7px; padding: 6px 8px;
   display: flex; flex-direction: column; gap: 1px;
 }
 .rs-chip span { font-size: var(--sl-th); font-weight: 700; color: #888;
@@ -1603,13 +1613,15 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
   border-radius: 8px; padding: 9px 12px;
 }
 .bs-i { opacity: .45; font-size: .8em; }
+/* La tira va SIEMPRE al pie de la hoja: es el cierre, no un bloque más. */
+.px-wrap > .bs-tira { margin-top: auto; }
 
 /* ── Ejecutivo: lectura + acción apiladas, embudo al lado ─────────────────────
    Antes lectura y acción iban lado a lado. La acción es UNA frase y dejaba media
    columna vacía; el embudo ocupa ese espacio y se lee junto al cumplimiento
    ("no llegás a la meta Y el 79% de tus perfiles no arranca" es una historia). */
 .px-col { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-.px-col .px-lectura { flex: 0 0 auto; }
+.px-col .px-lectura { flex: 1 1 auto; }
 .px-col .px-accion  { flex: 0 0 auto; }
 /* ANCHO = una tarjeta de KPI, no un 36% suelto: arriba hay 3 tarjetas con 10px
    de gap, asi que una vale (100% - 20px)/3. Con eso el borde izquierdo del
