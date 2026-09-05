@@ -551,13 +551,34 @@ export function rowIsTuktuk(r) {
 }
 
 // TRUE si la fila debe EXCLUIRSE del calculo Taxi.
-// = es tuktuk  O  el fleetroom esta marcado exclude_from_taxi (ej. delivery).
+// = es tuktuk  O  delivery  O  cargo  O  exclude_from_taxi manual.
+//
+// Delivery/Cargo excluyen desde ago 2026: el proposito del flag es "extraer la
+// data de esos fleetrooms para su seccion" (Manuel), asi que no pueden quedar
+// contados dentro de Taxi — si no, la meta paraguas (Taxi+TukTuk) se compararia
+// contra un actual que incluye verticales que no cubre, y la composicion por
+// categoria del Scorecard contaria dos veces las mismas filas.
+// El checkbox manual "Excluir Taxi" sigue existiendo para los casos que no son
+// ninguna de las tres verticales.
 export function rowExcludedFromTaxi(r) {
   const id = r.db_id;
-  if (_frHas(STATE.FLEETROOM_IS_TUKTUK, id) || _frHas(STATE.FLEETROOM_EXCLUDE_TAXI, id)) {
-    return !!(STATE.FLEETROOM_IS_TUKTUK || {})[id] || !!(STATE.FLEETROOM_EXCLUDE_TAXI || {})[id];
+  if (_frHas(STATE.FLEETROOM_IS_TUKTUK, id) || _frHas(STATE.FLEETROOM_EXCLUDE_TAXI, id)
+      || _frHas(STATE.FLEETROOM_IS_DELIVERY, id) || _frHas(STATE.FLEETROOM_IS_CARGO, id)) {
+    return !!(STATE.FLEETROOM_IS_TUKTUK || {})[id] || !!(STATE.FLEETROOM_EXCLUDE_TAXI || {})[id]
+        || !!(STATE.FLEETROOM_IS_DELIVERY || {})[id] || !!(STATE.FLEETROOM_IS_CARGO || {})[id];
   }
   return !!(STATE.CLID_IS_TUKTUK || {})[r.clid];        // fleetroom desconocido o legacy → flag CLID
+}
+
+// Categoria (vertical) de una fila — PARTICION: cada fila cae en exactamente
+// una. El orden importa: Cargo y Delivery mandan sobre TukTuk/Taxi porque son
+// el marcado mas especifico. Lo usa el Scorecard del deck para descomponer el
+// total sin doble conteo.
+export function rowVertical(r) {
+  if (rowIsCargo(r))    return "cargo";
+  if (rowIsDelivery(r)) return "delivery";
+  if (rowIsTuktuk(r))   return "tuktuk";
+  return "taxi";
 }
 
 // TRUE si la fila pertenece a una sub-flota Fleet (para KPIs Fleet en present2).
@@ -927,6 +948,12 @@ function _applyCoreData(partners, rend, frooms, flotas, opts = {}) {
     STATE._tuktukPartners = [...new Set(STATE.rawDataTuktuk.map(r => r.partner))].sort();
     STATE._tuktukDates    = [...new Set(STATE.rawDataTuktuk.map(r => r.date))].sort();
 
+    // Slices Delivery/Cargo (ago 2026): mismo criterio que TukTuk — se separan
+    // de rawDataFull ANTES de la exclusión, para no perder las filas. Los
+    // consume el Scorecard del deck.
+    STATE.rawDataDelivery = STATE.rawDataFull.filter(r => rowIsDelivery(r));
+    STATE.rawDataCargo    = STATE.rawDataFull.filter(r => rowIsCargo(r));
+
     // Excluir del dataset Taxi los fleetrooms tuktuk o exclude_from_taxi (o,
     // legacy, CLIDs is_tuktuk). No contaminan otras pestañas.
     STATE.rawData = STATE.rawData.filter(r => !rowExcludedFromTaxi(r));
@@ -1190,6 +1217,10 @@ async function _loadMensual(silent) {
     STATE._tuktukMensualPartners = [...new Set(STATE.rawDataMensualTuktuk.map(r => r.partner))].sort();
     STATE._tuktukMensualDates    = [...new Set(STATE.rawDataMensualTuktuk.map(r => r.date))].sort();
 
+    // Slices Delivery/Cargo mensuales (espejo del semanal, ver allá).
+    STATE.rawDataMensualDelivery = (STATE.rawDataMensualFull || STATE.rawDataMensual).filter(r => rowIsDelivery(r));
+    STATE.rawDataMensualCargo    = (STATE.rawDataMensualFull || STATE.rawDataMensual).filter(r => rowIsCargo(r));
+
     // Excluir tuktuk/exclude_from_taxi por fleetroom (o CLID legacy).
     STATE.rawDataMensual = STATE.rawDataMensual.filter(r => !rowExcludedFromTaxi(r));
     // Slice Fleet mensual (Fase 2): espejo del semanal (Fleet ⊂ Agregador).
@@ -1251,6 +1282,10 @@ async function _loadDiario(silent) {
     });
     STATE._tuktukDiarioPartners = [...new Set(STATE.rawDataDiarioTuktuk.map(r => r.partner))].sort();
     STATE._tuktukDiarioDates    = [...new Set(STATE.rawDataDiarioTuktuk.map(r => r.date))].sort();
+
+    // Slices Delivery/Cargo diarios (espejo del semanal, ver allá).
+    STATE.rawDataDiarioDelivery = (STATE.rawDataDiarioFull || STATE.rawDataDiario).filter(r => rowIsDelivery(r));
+    STATE.rawDataDiarioCargo    = (STATE.rawDataDiarioFull || STATE.rawDataDiario).filter(r => rowIsCargo(r));
 
     // Excluir tuktuk/exclude_from_taxi por fleetroom (o CLID legacy).
     STATE.rawDataDiario = STATE.rawDataDiario.filter(r => !rowExcludedFromTaxi(r));
