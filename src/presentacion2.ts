@@ -366,9 +366,12 @@ export const P2_LOGO_MARK = `<span class="agy-style-330"><span class="agy-style-
 // estás y ningún texto queda hablando de "semana" cuando ves meses.
 export function p2ModeInfo() {
   const m = STATE.curMode;
-  if (m === "mensual") return { label: P2T("Mensual", "Monthly", "Ежемесячно"), unit: P2T("Mes", "Month", "Месяц"), units: P2T("meses", "months", "мес."), seg: P2T("seguidos", "in a row", "подряд"), pop: "MoM", color: "#0284c7" };
-  if (m === "diario")  return { label: P2T("Diario", "Daily", "Ежедневно"),   unit: P2T("Día", "Day", "День"),   units: P2T("días", "days", "дней"),    seg: P2T("seguidos", "in a row", "подряд"), pop: "DoD", color: "#a855f7" };
-  return                       { label: P2T("Semanal", "Weekly", "Еженедельно"),  unit: P2T("Semana", "Week", "Неделя"), units: P2T("semanas", "weeks", "нед."), seg: P2T("seguidas", "in a row", "подряд"), pop: "WoW", color: "#2563eb" };
+  // `ult` = "últimos/últimas" YA CONCORDADO. En español el género lo fija la
+  // unidad (los meses, los días, las semanas) y armar el título por
+  // concatenación daba "ÚLTIMAS 4 MESES".
+  if (m === "mensual") return { label: P2T("Mensual", "Monthly", "Ежемесячно"), unit: P2T("Mes", "Month", "Месяц"), units: P2T("meses", "months", "мес."), ult: P2T("últimos", "last", "последние"), seg: P2T("seguidos", "in a row", "подряд"), pop: "MoM", color: "#0284c7" };
+  if (m === "diario")  return { label: P2T("Diario", "Daily", "Ежедневно"),   unit: P2T("Día", "Day", "День"),   units: P2T("días", "days", "дней"),    ult: P2T("últimos", "last", "последние"), seg: P2T("seguidos", "in a row", "подряд"), pop: "DoD", color: "#a855f7" };
+  return                       { label: P2T("Semanal", "Weekly", "Еженедельно"),  unit: P2T("Semana", "Week", "Неделя"), units: P2T("semanas", "weeks", "нед."), ult: P2T("últimas", "last", "последние"), seg: P2T("seguidas", "in a row", "подряд"), pop: "WoW", color: "#2563eb" };
 }
 
 // Alerta de FRESCURA de datos (para el KAM — se pinta en el tab, NO va al PDF).
@@ -1996,15 +1999,19 @@ export function p2TrayectoriaBloque(partner, dates) {
     return `<em class="tr-var" style="color:${bueno ? "#10b981" : "#FF0000"}">${p >= 0 ? "↑" : "↓"} ${Math.abs(p).toFixed(1)}%</em>`;
   };
   const ultRet = [...ret].reverse().find(v => v != null);
+  // La cifra grande es SIEMPRE la del ULTIMO periodo, nunca el acumulado del
+  // rango. Con el total, el titulo decia 4.608 N+R al lado de un grafico cuya
+  // ultima barra vale 1.200: dos numeros distintos para la misma cosa, y el que
+  // se lee primero es el equivocado. La unidad la fija el filtro (mes, semana o
+  // dia) y el pie lo dice.
+  const ult = arr => arr[arr.length - 1];
   const PANELES = [
     { l: P2T("Conductores Activos", "Active Drivers", "Активные водители"), c: "#FF0000",
-      serie: ad, v: fmt(ad[ad.length - 1] || 0), badge: badge(varPct(ad)) },
+      serie: ad, v: fmt(ult(ad) || 0), badge: badge(varPct(ad)) },
     { l: P2T("Nuevos + Reactivados", "New + Reactivated", "Новые + реактивированные"), c: "#f97316",
-      serie: nr, v: fmt(nr.reduce((s, x) => s + x, 0)), badge: badge(varPct(nr)),
-      pie: P2T(`total de ${per.length} ${mi.units}`, `total over ${per.length} ${mi.units}`, `всего за ${per.length} ${mi.units}`) },
+      serie: nr, v: fmt(ult(nr) || 0), badge: badge(varPct(nr)) },
     { l: P2T("Horas de Conexión", "Supply Hours", "Часы на линии"), c: "#0284c7",
-      serie: sh, v: fmtSmart(sh.reduce((s, x) => s + x, 0)), badge: badge(varPct(sh)),
-      pie: P2T(`total de ${per.length} ${mi.units}`, `total over ${per.length} ${mi.units}`, `всего за ${per.length} ${mi.units}`) },
+      serie: sh, v: fmtSmart(ult(sh) || 0), badge: badge(varPct(sh)) },
     // Retención: la palanca más barata. Sin ella, la tendencia de AD no se
     // explica — un partner puede traer mucha gente y no crecer porque se le va
     // por el otro lado.
@@ -2021,11 +2028,14 @@ export function p2TrayectoriaBloque(partner, dates) {
     <div class="tr-lbl">${escapeHTML(p.l)}</div>
     <div class="tr-cifra"><b>${p.v}</b>${p.badge}</div>
     ${_p2Barras(p.serie, p.c)}
-    <div class="tr-pie">${escapeHTML(p.pie || P2T(`último de ${per.length} ${mi.units}`, `latest of ${per.length} ${mi.units}`, `последний из ${per.length} ${mi.units}`))}</div>
+    <div class="tr-pie">${escapeHTML(p.pie || P2T(
+      `${mi.unit.toLowerCase()} más reciente de ${per.length}`,
+      `latest ${mi.unit.toLowerCase()} of ${per.length}`,
+      `последний период из ${per.length}`))}</div>
   </div>`).join("");
   return `<div class="px-card px-trayectoria">
     <div class="px-h">${escapeHTML(P2T(
-      `Trayectoria · últim${per.length === 1 ? "o" : "as"} ${per.length} ${mi.units}`,
+      `Trayectoria · ${mi.ult} ${per.length} ${mi.units}`,
       `Trajectory · last ${per.length} ${mi.units}`,
       `Динамика · последние ${per.length} ${mi.units}`))} <span class="tr-h2">${escapeHTML(P2T(
       "la barra llena es el período más reciente", "the solid bar is the latest period", "сплошная полоса — последний период"))}</span></div>

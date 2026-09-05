@@ -347,17 +347,47 @@ export async function switchMode(mode) {
   popSidebarUI();
   STATE._suppressRestoreRender = false;
 
+  // Las pestañas lazy conservan el HTML de la escala ANTERIOR hasta que su render
+  // termina, y el suyo espera a que lleguen las columnas diferidas de la escala
+  // nueva (una request). En ese hueco el KAM veia un deck rotulado "SEMANAL"
+  // estando la app en mensual — y ese deck es el que se le manda al partner.
+  // Blanquearlas es lo unico que garantiza que no exista un estado en el que la
+  // pantalla dice una escala y los numeros son de otra.
+  invalidarPanelesDeEscala();
+
   // Otro yield antes del render pesado para que el browser pinte el spinner
   await new Promise(r => requestAnimationFrame(r));
 
   // Render unico del tab activo (restoreFilters no rendero por _suppressRestoreRender)
   if (STATE.curTab === "rend"        && STATE.rawData.length) renderRend();
   if (STATE.curTab === "metas"       && STATE.metasData.length && STATE.rawData.length) renderMetas();
+  // Estas cuatro leen las columnas DIFERIDAS, que son por escala: sin el await
+  // se renderizaban con la escala nueva pero esas columnas en null (KPIs y
+  // embudo en "—", sin ningun error). switchTab ya lo hacia; switchMode no.
+  if (_NEED_FULL_COLS.has(STATE.curTab) && typeof ensureFullRendColumns === "function") {
+    try { await ensureFullRendColumns(); } catch (e) { /* nunca bloquear el render */ }
+  }
   if (STATE.curTab === "partnerview" && STATE.rawData.length) renderPartnerView();
   if (STATE.curTab === "calculator"  && STATE.rawData.length) renderCalculator();
+  if (STATE.curTab === "present2"    && STATE.rawData.length && typeof renderPresent2 === "function") renderPresent2();
+  if (STATE.curTab === "rawdata"     && typeof renderRawData === "function") renderRawData();
 
   showLoad(false);
   _inSwitchMode = false;
+}
+
+// Pestañas cuyo contenido depende de la ESCALA y viven en un chunk lazy: su HTML
+// sobrevive al cambio de escala porque el panel no se desmonta. Ver el comentario
+// en switchMode.
+export const _NEED_FULL_COLS = new Set(["partnerview", "present2", "rawdata", "calculator"]);
+const _PANELES_DE_ESCALA = ["present2Content", "partnerViewContent", "calculatorContent", "rawdataContent"];
+export function invalidarPanelesDeEscala() {
+  _PANELES_DE_ESCALA.forEach(id => {
+    const el = document.getElementById(id);
+    // Solo si tiene algo: vaciar uno vacio dispararia el placeholder de switchTab
+    // sin motivo.
+    if (el && el.innerHTML.trim()) el.innerHTML = "";
+  });
 }
 
 // ── TAB NAVIGATION ────────────────────────────────────────────────────────────
@@ -442,7 +472,8 @@ export function switchTab(tab) {
     // cacheado esto ni se alcanza a ver.
     const LAZY_TAB_CONTENT = {
       partnerview: "partnerViewContent", present2: "present2Content",
-      calculator: "calculatorContent", config: "configContent", portal: "portalContent"
+      calculator: "calculatorContent", config: "configContent", portal: "portalContent",
+      rawdata: "rawdataContent"
     };
     const lazyBox = LAZY_TAB_CONTENT[tab] && document.getElementById(LAZY_TAB_CONTENT[tab]);
     if (lazyBox && !lazyBox.innerHTML.trim()) {
@@ -504,8 +535,7 @@ export function switchTab(tab) {
       // las 26 columnas que el arranque NO pide (ver TX_DEFERRED_COLS en
       // data.js). Se traen solo las que faltan y se fusionan sobre las filas ya
       // cargadas; es una vez por escala y por sesión.
-      const NEED_FULL_COLS = new Set(["partnerview", "present2", "rawdata", "calculator"]);
-      if (NEED_FULL_COLS.has(tab) && typeof ensureFullRendColumns === "function") {
+      if (_NEED_FULL_COLS.has(tab) && typeof ensureFullRendColumns === "function") {
         try { await ensureFullRendColumns(); } catch (e) { /* nunca bloquear el render */ }
         if (STATE._tabRenderId !== tokenAtDispatch || STATE.curTab !== tab) return;
       }
