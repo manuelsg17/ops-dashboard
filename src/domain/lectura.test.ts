@@ -131,6 +131,16 @@ describe("reglas nuevas (sep 2026)", () => {
     expect(t).toContain("100 perfiles");
   });
 
+  it("con el bloque del embudo al lado, la lectura NO lo repite", () => {
+    // El Ejecutivo dibuja el embudo en la columna de al lado: repetir el mismo
+    // numero a 3 cm gasta una de las 4 frases y se lee como relleno.
+    const ctx = { ...base, funnel: { mio: 21, mediana: 48, faltan: 57, perfiles: 168 }, funnelEnBloque: true };
+    expect(p2Lectura(ctx).join(" ")).not.toContain("57 conductores más");
+    // la ACCION si lo dice: es lo unico que se pide hacer.
+    const sinBrecha = { ...ctx, kpis: base.kpis.map(k => ({ ...k, real: k.meta, pct: 100 })) };
+    expect(p2Accion(sinBrecha)).toMatch(/activación/);
+  });
+
   it("nunca mas de 4 frases: la portada no es un informe", () => {
     const ctx = { ...base, diasRestantes: 20, diasMes: 31, kpis: conFlujo,
       bench:  { peor: { label: "Viajes por hora", valor: "1.50", mediana: "2.00", gapPct: -25 } },

@@ -124,8 +124,12 @@ export function p2Lectura(ctx) {
 
   // 6. EMBUDO (sep 2026). Separa "traigo poca gente" de "la gente que traigo no
   //    arranca" — dos problemas con acciones opuestas.
+  //    Se OMITE cuando el Ejecutivo ya dibuja el bloque del embudo al lado:
+  //    repetir el mismo número a 3 cm de distancia gasta una de las 4 frases y
+  //    hace ver el informe como relleno. La acción prioritaria sí lo repite, y
+  //    ahí está bien: es lo único que se pide hacer.
   const F = ctx.funnel;
-  if (F && F.faltan >= 5) {
+  if (F && F.faltan >= 5 && !ctx.funnelEnBloque) {
     out.push(T(
       `De cada 100 perfiles que registrás, ${F.mio.toFixed(0)} llegan a su primer viaje contra ${F.mediana.toFixed(0)} de tus pares: con esa tasa serían ${Math.round(F.faltan)} conductores más sin traer una persona extra.`,
       `Of every 100 profiles you register, ${F.mio.toFixed(0)} reach their first trip vs ${F.mediana.toFixed(0)} among your peers: at that rate it would be ${Math.round(F.faltan)} more drivers without adding a single person.`,

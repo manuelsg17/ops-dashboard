@@ -1400,7 +1400,12 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 .px-hoy    { position: absolute; top: -2px; bottom: -2px; width: 2px; background: #111; opacity: .55; }
 .px-nota   { font-size: var(--sl-nota); color: #888; }
 
-.px-abajo   { display: flex; gap: 10px; align-items: stretch; flex: 1 1 auto; min-height: 0; }
+/* El BLOQUE ocupa el alto sobrante (así la tira de benchmark queda anclada al
+   pie de la hoja), pero las TARJETAS de adentro miden lo que miden: el espacio
+   en blanco cae DEBAJO de ellas, no dentro. Estirando las tarjetas, una lectura
+   de una sola frase dejaba una tarjeta con 200px de vacío adentro; sin estirar
+   el bloque, la hoja terminaba a media altura. */
+.px-abajo   { display: flex; gap: 10px; align-items: flex-start; flex: 1 1 auto; min-height: 0; }
 .px-card    { background: #fff; border: 1px solid #eee; border-radius: 10px; padding: 9px 12px; }
 .px-lectura { flex: 1 1 auto; min-width: 0; }
 .px-h       { font-size: var(--sl-th); font-weight: 800; color: #888;
@@ -1583,3 +1588,28 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
   border-radius: 8px; padding: 9px 12px;
 }
 .bs-i { opacity: .45; font-size: .8em; }
+
+/* ── Ejecutivo: lectura + acción apiladas, embudo al lado ─────────────────────
+   Antes lectura y acción iban lado a lado. La acción es UNA frase y dejaba media
+   columna vacía; el embudo ocupa ese espacio y se lee junto al cumplimiento
+   ("no llegás a la meta Y el 79% de tus perfiles no arranca" es una historia). */
+.px-col { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.px-col .px-lectura { flex: 0 0 auto; }
+.px-col .px-accion  { flex: 0 0 auto; }
+.px-embudo { flex: 0 0 36%; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.px-abajo-solo .px-col { flex: 1 1 100%; }
+.eb-top   { font-size: var(--sl-nota); color: #888; }
+.eb-tabla { display: flex; flex-direction: column; gap: 5px; margin: 2px 0 1px; }
+.eb-fila  { display: grid; grid-template-columns: 62px 1fr 34px 28px; align-items: center; gap: 6px; }
+.eb-lbl   { font-size: var(--sl-nota); font-weight: 700; color: #555;
+            min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eb-bar   { position: relative; display: block; height: 9px; background: #f0f0f0; border-radius: 5px; }
+.eb-fill  { position: absolute; top: 0; left: 0; height: 100%; border-radius: 5px; }
+/* Mismo lenguaje que .px-hoy en las barras de meta: la línea vertical siempre
+   significa "la referencia contra la que te medís". */
+.eb-med   { position: absolute; top: -2px; bottom: -2px; width: 2px; background: #111; opacity: .5; z-index: 2; }
+.eb-val   { font-size: var(--sl-val2); font-weight: 900; text-align: right; font-variant-numeric: tabular-nums; }
+.eb-med-txt { font-size: var(--sl-nota); color: #888; font-style: normal;
+              text-align: right; font-variant-numeric: tabular-nums; }
+.eb-pie   { font-size: var(--sl-nota); color: #777; line-height: 1.35; margin-top: auto; }
+.eb-pie-rojo { color: #b91c1c; font-weight: 700; }

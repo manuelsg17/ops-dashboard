@@ -197,10 +197,7 @@ export const P2_SLIDES = [
   // que recibe el partner. Decisión de Manuel, ago 2026.
   { es: "Proyección", en: "Forecast",  ru: "Прогноз",  charts: true, noPdf: true, build: (p, d, i) => buildSlide2Forecast(p, d, i), chartFn: (p, d, root) => buildSlide2ForecastCharts(p, d, root) }
 ];
-// Embudo de captación: fuera de P2_SLIDES porque ese array se recorre por
-// sección y esta hoja va UNA sola vez, como Alertas.
-export const P2_EMBUDO_SLIDE = { es: "Captación", en: "Acquisition", ru: "Привлечение",
-  charts: false, build: (p, d, i) => buildSlide2Embudo(p, d, i) };
+
 
 // Slides que se repiten POR VERTICAL (Taxi / TukTuk / Delivery / Cargo). El
 // mecanismo de secciones (PRESENT2_STATE.dataset) hace que cada uno lea el
@@ -238,14 +235,6 @@ export function p2TuktukSectionVisible(partner) {
   return (STATE[_p2TkKey("Partners")] || []).includes(partner);
 }
 export function p2HasTaxi(partner)   { return (STATE.allPartners   || []).includes(partner); }
-// ¿Este partner registra perfiles PROPIOS? Decide si la hoja de captación entra
-// al deck: sin perfiles propios el embudo no tiene numerador y sería una hoja
-// vacía en el PDF. Se mira todo el slice cargado (no el rango) para que la hoja
-// no aparezca y desaparezca al mover el filtro una semana.
-export function p2TienePerfilesPropios(partner) {
-  return (STATE.rawDataFull || STATE.rawData || [])
-    .some(r => r.partner === partner && (r.newProfilesPartner || 0) > 0);
-}
 // Lista del SELECTOR: unión taxi + tuktuk (un partner tuktuk-only debe poder elegirse).
 export function p2PartnerList() {
   return [...new Set([...(STATE.allPartners || []), ..._p2TkPartnersAll()])].sort();
@@ -284,11 +273,11 @@ export function p2Deck(partner) {
   verticales.forEach(v => P2_POR_VERTICAL.forEach(def =>
     deck.push({ def: { ...def, es: `${def.es} · ${v.et}`, en: `${def.en} · ${v.et}`, ru: `${def.ru || def.en} · ${v.et}` }, ds: v.ds })));
 
-  // 5. Captación y activación (embudo de perfiles propios) + Alertas: UNA hoja
-  //    cada una, con todas las categorías adentro (una por vertical volvía a
-  //    inflar el deck). El embudo solo aparece si el partner registra perfiles
-  //    propios — si no, sería una hoja vacía en el PDF que recibe.
-  if (hasTaxi && p2TienePerfilesPropios(partner)) deck.push({ def: P2_EMBUDO_SLIDE, ds: "taxi" });
+  // 5. Alertas: UNA hoja con todas las categorías adentro (una por vertical
+  //    volvía a inflar el deck). El embudo de captación NO es una hoja propia:
+  //    vive DENTRO del Ejecutivo (pedido de Manuel, sep 2026) — una hoja entera
+  //    para cuatro porcentajes alargaba el deck justo cuando se venía de
+  //    acortarlo, y ahí abajo compite mejor con la lectura y la acción.
   deck.push({ def: P2_ALERTAS_SLIDE, ds: base });
 
   // 6. Proyección: solo pantalla, al final del cuerpo.
@@ -1804,109 +1793,87 @@ export function p2BenchStrip(partner, dates) {
   </div>`;
 }
 
-// ── SLIDE: CAPTACIÓN Y ACTIVACIÓN (sep 2026) ─────────────────────────────────
+// ── BLOQUE: CAPTACIÓN Y ACTIVACIÓN (sep 2026) ────────────────────────────────
 // El embudo de los perfiles que registra EL PARTNER: de cada 100 que crea,
-// cuántos llegan a 1, 10, 50 y 100 viajes — y cómo se compara con la mediana de
-// sus pares en sus mismas ciudades.
+// cuántos llegan a 1, 10, 50 y 100 viajes, contra la mediana de sus pares en sus
+// mismas ciudades.
 //
-// Por qué esta hoja y no otro KPI más: es el único bloque que separa "traigo
-// gente" de "la gente que traigo se queda". Medido en producción (últimas 4
-// semanas, 80 partners con perfiles propios) el paso 1 va de 21,8% (p25) a 62,1%
-// (p75) — el KPI con más dispersión de todo el set, o sea el que más distingue a
-// un partner de otro y el más accionable.
+// Nació como hoja propia y se movió al Ejecutivo: cuatro porcentajes no llenan
+// una hoja, y acá abajo hacen su trabajo mejor porque se leen JUNTO al
+// cumplimiento y a la acción — "no llegás a la meta de conductores Y encima el
+// 79% de tus perfiles no arranca" es una historia; en dos hojas separadas son
+// dos datos sueltos.
+//
+// Por qué este bloque y no otro KPI más: es el único que separa "traigo gente"
+// de "la gente que traigo se queda". Medido en producción (últimas 4 semanas, 80
+// partners con perfiles propios) el paso 1 va de 21,8% (p25) a 62,1% (p75) — el
+// KPI con más dispersión de todo el set, o sea el que más distingue a un partner
+// y el más accionable.
 //
 // Solo Taxi y solo perfiles de origen PARTNER: los que trae el servicio no
-// dependen de lo que el partner haga, así que meterlos diluiría justo la señal
-// que la hoja quiere dar.
-export function buildSlide2Embudo(partner, dates, idx) {
+// dependen de lo que el partner haga, así que meterlos diluiría la señal.
+// Devuelve "" cuando no hay nada que mostrar — el Ejecutivo entonces da todo el
+// ancho a la lectura en vez de dejar un hueco.
+export function p2EmbudoBloque(partner, dates) {
   const savedDs = PRESENT2_STATE.dataset;
   PRESENT2_STATE.dataset = "taxi";
   const C = p2BenchCohorte(partner, dates);
   PRESENT2_STATE.dataset = savedDs;
-  const head = (extra) => `<div class="agy-style-365 p2-hoja-cards">
-    ${p2BrandHeader(partner, P2T("Captación y activación", "Acquisition & activation", "Привлечение и активация"),
-      P2T("De cada perfil que registrás, cuántos llegan a manejar",
-          "Of every profile you register, how many end up driving",
-          "Сколько из зарегистрированных вами профилей начинают ездить"))}
-    ${extra}${p2BrandFooter(idx)}</div>`;
-  if (!C) return head(`<div class="agy-style-396">${escapeHTML(P2T("Sin datos en el rango.", "No data in range.", "Нет данных за период."))}</div>`);
-
+  if (!C) return "";
   const yo = p2FunnelMetrics(C.mias);
-  if (!yo.perfiles) return head(`<div class="agy-style-396">${escapeHTML(P2T(
-    "No registraste perfiles propios en este período, así que no hay embudo que medir.",
-    "You registered no own profiles in this period, so there is no funnel to measure.",
-    "В этом периоде вы не регистрировали собственные профили — воронку измерить не на чем."))}</div>`);
-
+  if (!yo.perfiles || yo.r1 == null) return "";
   const coh = C.grupos.map(p2FunnelMetrics).filter(f => f.perfiles >= 10);
-  const med = k => median(coh.map(f => f[k]));
+  const hayMed = coh.length >= 3;
+  const med = k => hayMed ? median(coh.map(f => f[k])) : null;
   const PASOS = [
-    { k: "r1",   l: P2T("Hizo 1 viaje", "Made 1 trip", "Совершил 1 поездку") },
-    { k: "r10",  l: P2T("Llegó a 10 viajes", "Reached 10 trips", "Достиг 10 поездок") },
-    { k: "r50",  l: P2T("Llegó a 50 viajes", "Reached 50 trips", "Достиг 50 поездок") },
-    { k: "r100", l: P2T("Llegó a 100 viajes", "Reached 100 trips", "Достиг 100 поездок") }
+    { k: "r1",   l: P2T("1 viaje",    "1 trip",    "1 поездка") },
+    { k: "r10",  l: P2T("10 viajes",  "10 trips",  "10 поездок") },
+    { k: "r50",  l: P2T("50 viajes",  "50 trips",  "50 поездок") },
+    { k: "r100", l: P2T("100 viajes", "100 trips", "100 поездок") }
   ];
-  const pct = v => v == null ? "—" : (v * 100).toFixed(1) + "%";
+  // Escala relativa al paso más alto (el propio o el de la mediana): con la
+  // escala fija 0-100% las barras de los últimos pasos quedan invisibles y el
+  // embudo deja de verse como un embudo.
+  const tope = Math.max(yo.r1 || 0, med("r1") || 0, 0.05);
   const filas = PASOS.map(p => {
-    const mio = yo[p.k], m = coh.length >= 3 ? med(p.k) : null;
-    const col = m == null ? "#555" : (mio >= m ? "#10b981" : "#FF0000");
-    const ancho = Math.min((mio || 0) * 100, 100);
-    const marca = m == null ? "" : `<div class="fn-med" style="left:calc(${Math.min(m * 100, 100).toFixed(1)}% - 1px)"></div>`;
-    return `<div class="fn-fila">
-      <div class="fn-lbl">${escapeHTML(p.l)}</div>
-      <div class="fn-bar">${marca}<div class="fn-fill" style="width:${ancho.toFixed(1)}%;background:${col}"></div></div>
-      <div class="fn-val" style="color:${col}">${pct(mio)}</div>
-      <div class="fn-med-txt">${m == null ? "" : escapeHTML(P2T("mediana", "median", "медиана")) + " " + pct(m)}</div>
-      <div class="fn-abs">${mio == null ? "" : "≈ " + fmt(Math.round(mio * yo.perfiles))}</div>
+    const mio = yo[p.k] || 0, m = med(p.k);
+    const col = m == null ? "#8b5cf6" : (mio >= m ? "#10b981" : "#FF0000");
+    const w = Math.min((mio / tope) * 100, 100);
+    const marca = m == null ? "" : `<div class="eb-med" style="left:calc(${Math.min((m / tope) * 100, 100).toFixed(1)}% - 1px)"></div>`;
+    return `<div class="eb-fila">
+      <span class="eb-lbl">${escapeHTML(p.l)}</span>
+      <span class="eb-bar">${marca}<span class="eb-fill" style="width:${w.toFixed(1)}%;background:${col}"></span></span>
+      <b class="eb-val" style="color:${col}">${(mio * 100).toFixed(0)}%</b>
+      <i class="eb-med-txt">${m == null ? "" : (m * 100).toFixed(0) + "%"}</i>
     </div>`;
   }).join("");
-
-  // Dónde se cae el embudo: el paso con la peor brecha contra la mediana. Es la
-  // frase que convierte la hoja en una acción ("no es que traigas pocos: es que
-  // el 60% no llega ni a un viaje").
-  let lectura = "";
-  if (coh.length >= 3) {
-    // El paso peor se elige por CONDUCTORES perdidos, no por brecha relativa.
-    // Con la brecha relativa siempre gana el último escalón (1% vs 5% = -80%)
-    // aunque ahí se pierdan 7 conductores y en el primero 57: los pasos son
-    // acumulativos, así que arreglar el primero arrastra a todos los demás.
-    const gaps = PASOS.map(p => ({ p, mio: yo[p.k], m: med(p.k) }))
-      .filter(g => g.mio != null && g.m != null && g.m > 0)
-      .map(g => ({ ...g, gap: (g.mio - g.m) / g.m, faltan: (g.m - g.mio) * yo.perfiles }))
-      .sort((a, b) => b.faltan - a.faltan);
-    const peor = gaps[0];
-    const mejor = [...gaps].sort((a, b) => b.gap - a.gap)[0];
-    if (peor && peor.faltan > 0 && peor.gap < -0.1) {
-      const n = fmt(Math.round(peor.faltan));
-      lectura = P2T(
-        `Donde más se cae: "${peor.p.l}" — ${pct(peor.mio)} contra ${pct(peor.m)} de la mediana. Con la tasa de tus pares serían ${n} conductores más sobre los mismos perfiles: ese paso rinde más que traer más gente.`,
-        `Biggest drop-off: "${peor.p.l}" — ${pct(peor.mio)} vs a median of ${pct(peor.m)}. At your peers' rate that is ${n} more drivers from the same profiles: that step pays off more than adding people.`,
-        `Наибольшая потеря: «${peor.p.l}» — ${pct(peor.mio)} против медианы ${pct(peor.m)}. При ставке ваших коллег это ${n} водителей больше при тех же профилях: этот шаг важнее, чем привлекать больше людей.`);
-    }
-    else if (mejor && mejor.gap > 0.1) lectura = P2T(
-      `Tu embudo va por encima de la mediana en todos los pasos (el mejor: "${mejor.p.l}", ${pct(mejor.mio)} vs ${pct(mejor.m)}). Acá el techo es el volumen de perfiles, no la activación.`,
-      `Your funnel is above the median at every step (best: "${mejor.p.l}", ${pct(mejor.mio)} vs ${pct(mejor.m)}). The ceiling here is profile volume, not activation.`,
-      `Ваша воронка выше медианы на каждом шаге (лучший: «${mejor.p.l}», ${pct(mejor.mio)} против ${pct(mejor.m)}). Потолок здесь — объём профилей, а не активация.`);
-    else lectura = P2T(
-      "Tu embudo está en línea con la mediana del cohorte en todos los pasos.",
-      "Your funnel is in line with the cohort median at every step.",
-      "Ваша воронка соответствует медиане когорты на всех шагах.");
-  }
-  const donde = C.ciudades.length === 1 ? cityLabel(C.ciudades[0])
-              : P2T("tus ciudades", "your cities", "ваших городах");
-  return head(`<div class="fn-wrap">
-    <div class="fn-top">
-      <div class="fn-kpi"><span>${escapeHTML(P2T("Perfiles registrados por vos", "Profiles you registered", "Профилей зарегистрировано вами"))}</span><b>${fmt(Math.round(yo.perfiles))}</b></div>
-      <div class="fn-nota">${escapeHTML(coh.length >= 3
-        ? P2T(`Comparado contra la mediana de ${coh.length} partners de ${donde} con al menos 10 perfiles en el período.`,
-              `Compared against the median of ${coh.length} partners in ${donde} with at least 10 profiles in the period.`,
-              `Сравнение с медианой ${coh.length} партнёров в ${donde} с не менее чем 10 профилями за период.`)
-        : P2T("Sin pares suficientes en tus ciudades para una mediana confiable: se muestra solo tu embudo.",
-              "Not enough peers in your cities for a reliable median: only your funnel is shown.",
-              "Недостаточно сопоставимых партнёров для надёжной медианы: показана только ваша воронка."))}</div>
-    </div>
-    <div class="fn-tabla">${filas}</div>
-    ${lectura ? `<div class="fn-lectura">${escapeHTML(lectura)}</div>` : ""}
-  </div>`);
+  // Cierre: la fuga traducida a CONDUCTORES. Es la única cifra de este bloque
+  // que se puede accionar — un punto porcentual no le dice nada a nadie.
+  const m1 = med("r1");
+  const faltan = m1 != null ? Math.round(Math.max(0, (m1 - yo.r1) * yo.perfiles)) : 0;
+  const pie = faltan >= 5
+    ? `<div class="eb-pie eb-pie-rojo">${escapeHTML(P2T(
+        `+${fmt(faltan)} conductores con la tasa de tus pares, sin traer una persona más`,
+        `+${fmt(faltan)} drivers at your peers' rate, without adding a single person`,
+        `+${fmt(faltan)} водителей при ставке коллег, без единого нового человека`))}</div>`
+    : hayMed
+    ? `<div class="eb-pie">${escapeHTML(P2T(
+        "Tu activación está a la par de tus pares.",
+        "Your activation matches your peers.",
+        "Ваша активация на уровне коллег."))}</div>`
+    : `<div class="eb-pie">${escapeHTML(P2T(
+        "Sin pares suficientes para una mediana confiable.",
+        "Not enough peers for a reliable median.",
+        "Недостаточно коллег для надёжной медианы."))}</div>`;
+  return `<div class="px-card px-embudo">
+    <div class="px-h">${escapeHTML(P2T("Captación → activación", "Acquisition → activation", "Привлечение → активация"))}</div>
+    <div class="eb-top">${escapeHTML(P2T(
+      `${fmt(Math.round(yo.perfiles))} perfiles registrados por vos`,
+      `${fmt(Math.round(yo.perfiles))} profiles you registered`,
+      `${fmt(Math.round(yo.perfiles))} профилей зарегистрировано вами`))}${hayMed ? ` · ${escapeHTML(P2T("línea = mediana", "line = median", "линия = медиана"))}` : ""}</div>
+    <div class="eb-tabla">${filas}</div>
+    ${pie}
+  </div>`;
 }
 
 // Peor brecha contra la mediana del cohorte, para la lectura del Ejecutivo.
@@ -2032,12 +1999,14 @@ export function buildSlide2Portada(partner, dates, idx) {
   const huecosPartner = totalPer > 0 && conDato < totalPer * 0.8;
   const coberturaParcial = rangoParcial || huecosPartner;
 
+  const embudoHTML = p2EmbudoBloque(partner, dates);
   // Contexto extra para la lectura: posición contra el cohorte y fuga del
   // embudo. Se calcula acá (no en domain/) porque necesita STATE; domain recibe
   // los números ya masticados y solo decide qué frase merece estar.
   const ctx = { lang: PRESENT2_STATE.lang, kpis, ciudades, verticales,
                 diasRestantes, diasMes: daysInMonth,
-                bench: _p2BenchCtx(partner, dates), funnel: _p2FunnelCtx(partner, dates) };
+                bench: _p2BenchCtx(partner, dates), funnel: _p2FunnelCtx(partner, dates),
+                funnelEnBloque: !!embudoHTML };
   const lectura = p2Lectura(ctx);
   const accion  = p2Accion(ctx);
 
@@ -2101,15 +2070,18 @@ export function buildSlide2Portada(partner, dates, idx) {
             ? `The filtered range covers <b>${mesDates.length} of ${todasDelMes.length}</b> periods of the month.`
             : `This partner reported <b>${conDato} of ${totalPer}</b> periods this month.`} <b>New + Reactivated</b> and <b>Supply Hours</b> only accumulate those, so their % against a <b>monthly</b> target falls short due to ${rangoParcial ? "the range cut" : "missing data"}, not performance. Widen the range to the full month to read real attainment. Active Drivers is unaffected (it is a level).`}</div>` : ""}
       <div class="px-kpis">${barras}</div>
-      <div class="px-abajo">
-        <div class="px-card px-lectura">
-          <div class="px-h">${P2T("Lectura", "Reading", "Что это значит")}</div>
-          <ul>${lectura.map(l => `<li>${escapeHTML(l)}</li>`).join("")}</ul>
+      <div class="px-abajo${embudoHTML ? "" : " px-abajo-solo"}">
+        <div class="px-col">
+          <div class="px-card px-lectura">
+            <div class="px-h">${P2T("Lectura", "Reading", "Что это значит")}</div>
+            <ul>${lectura.map(l => `<li>${escapeHTML(l)}</li>`).join("")}</ul>
+          </div>
+          ${accion ? `<div class="px-card px-accion">
+            <div class="px-h px-h-acc">${P2T("Acción prioritaria", "Priority action", "Приоритетное действие")}</div>
+            <div class="px-atxt">${escapeHTML(accion)}</div>
+          </div>` : ""}
         </div>
-        ${accion ? `<div class="px-card px-accion">
-          <div class="px-h px-h-acc">${P2T("Acción prioritaria", "Priority action", "Приоритетное действие")}</div>
-          <div class="px-atxt">${escapeHTML(accion)}</div>
-        </div>` : ""}
+        ${embudoHTML}
       </div>
       ${p2BenchStrip(partner, dates)}
     </div>
