@@ -843,10 +843,16 @@ export function applyFilters() {
   if (STATE.curTab === "metas"       && STATE.metasData.length && STATE.rawData.length) renderMetas();
   if (STATE.curTab === "partnerview" && STATE.rawData.length)                           renderPartnerView();
   if (STATE.curTab === "calculator"  && STATE.rawData.length)                           renderCalculator();
-  // Presentación 2.0: al mover el filtro, re-renderiza el slide actual (Avance vs Meta
-  // deriva su mes del "Hasta" → antes no se actualizaba porque applyFilters no lo tocaba).
-  if (STATE.curTab === "present2"    && typeof renderSlide2 === "function"
-      && PRESENT2_STATE.partner && STATE.rawData.length)                                renderSlide2();
+  // Data Raw NO va acá a propósito: está en NO_SIDEBAR_TABS y tiene sus propios
+  // selectores de ciudad y fecha adentro, así que el sidebar no lo toca. Sí
+  // depende de la ESCALA, y eso lo cubre switchMode.
+  // Presentación: re-render COMPLETO, no solo el slide. Con renderSlide2 la hoja
+  // se actualizaba pero el nav y el contador "Hojas x/y" quedaban con el deck
+  // anterior — y el deck cambia con el rango, porque una vertical sin datos en
+  // esas fechas deja de tener hojas. Un nav que miente sobre lo que se va a
+  // exportar es exactamente lo que no puede pasar acá.
+  if (STATE.curTab === "present2"    && typeof renderPresent2 === "function"
+      && PRESENT2_STATE.partner && STATE.rawData.length)                                renderPresent2();
 }
 
 export function updateDeclineSettings() {

@@ -2770,7 +2770,7 @@ export function renderPresent2() {
         <div class="agy-style-439">
           <button data-act="switchTab" data-tab="rend" class="agy-style-440">← ${P2T("Volver", "Back", "Назад")}</button>
           <button class="png-btn" data-act="present2TogglePdfPanel" title="${escapeHTML(P2T("Elegí qué hojas entran al PDF", "Choose which sheets go into the PDF", "Выберите страницы для PDF"))}">🗂 ${escapeHTML(P2T("Hojas", "Sheets", "Страницы"))} ${_p2PdfCount()}</button>
-          <button class="apply-btn agy-style-441" data-act="downloadPresent2PDF">⬇ ${escapeHTML(P2T("Descargar PDF", "Download PDF", "Скачать PDF"))}</button>
+          <button class="apply-btn agy-style-441" data-act="p2AbrirChequeoExport">⬇ ${escapeHTML(P2T("Descargar PDF", "Download PDF", "Скачать PDF"))}</button>
         </div>
       </div>
       ${p2PdfPanelHTML()}
@@ -2986,7 +2986,98 @@ export function p2SearchKeydown(e) {
 // Mismo patrón que downloadPresentPDF: cada slide se arma en un div temporal
 // 1280×720 y se captura con html2canvas. Los charts se construyen acotados al div
 // (root.querySelector) para no chocar con los canvas de la vista en vivo (ids dup).
+// ── CHEQUEO PREVIO A LA EXPORTACION (sep 2026) ───────────────────────────────
+// El PDF sale del dashboard y entra a la bandeja de un partner: es la unica
+// accion de esta app que no se puede deshacer. Lo que se revisa no son errores
+// de codigo sino DECISIONES DE FILTRO que producen un deck correcto pero que
+// dice otra cosa de la que el KAM cree — y que en pantalla pasan desapercibidas
+// porque cada aviso vive dentro de su hoja.
+//
+// Devuelve { resumen[], avisos[] }. Un aviso NO impide exportar: puede ser
+// deliberado (mandar una sola semana, por ejemplo). Solo obliga a mirarlo.
+export function p2ChequeoExport(partner) {
+  const mi = p2ModeInfo();
+  const from = document.getElementById("dateFrom")?.value || "";
+  const to   = document.getElementById("dateTo")?.value   || "";
+  const mesName = p2AvanceMes();
+  const deck = p2Deck(partner);
+  const dentro = deck.filter(p2SlideEnPdf);
+  const resumen = [
+    [P2T("Partner", "Partner", "Партнёр"), partner],
+    [P2T("Idioma del PDF", "PDF language", "Язык PDF"),
+      (P2_LANGS.find(l => l.k === PRESENT2_STATE.lang) || {}).lbl],
+    [P2T("Escala", "Scale", "Масштаб"), mi.label],
+    [P2T("Rango", "Range", "Период"), `${d2s(from)} → ${d2s(to)}`],
+    [P2T("Mes de la meta", "Goal month", "Месяц цели"), p2MesLabel(mesName)],
+    [P2T("Hojas", "Sheets", "Страницы"), `${dentro.length} / ${deck.filter(e => !e.def.noPdf).length}`]
+  ];
+  const avisos = [];
+  // 1. Rango que no cubre el mes de la meta: los FLUJOS quedan cortos y el % se
+  //    lee como incumplimiento. Es el aviso que ya sale en el Ejecutivo, pero
+  //    ahi hay que estar mirando esa hoja.
+  const savedDs = PRESENT2_STATE.dataset;
+  PRESENT2_STATE.dataset = "taxi";
+  const delMes = p2MonthDates(mesName);
+  const enRango = p2DatesMetaEnRango(mesName, p2SelectedDates(from, to, STATE.curMode));
+  PRESENT2_STATE.dataset = savedDs;
+  if (delMes.length && enRango.length < delMes.length) avisos.push(P2T(
+    `El rango cubre ${enRango.length} de ${delMes.length} períodos de ${p2MesLabel(mesName)}: Nuevos+Reactivados y Horas van a quedar cortos contra una meta mensual.`,
+    `The range covers ${enRango.length} of ${delMes.length} periods of ${p2MesLabel(mesName)}: New+Reactivated and Hours will fall short against a monthly goal.`,
+    `Диапазон покрывает ${enRango.length} из ${delMes.length} периодов месяца ${p2MesLabel(mesName)}: новые+реактивированные и часы будут занижены относительно месячной цели.`));
+  // 2. Sin metas del mes: el deck sale sin cumplimiento y se lee como si el
+  //    partner no hubiera llegado a nada.
+  const m = p2MetaFor(partner, null, mesName);
+  if (!(m.mA || m.mNR || m.mH)) avisos.push(P2T(
+    `No hay metas cargadas para ${p2MesLabel(mesName)}: el deck sale sin cumplimiento.`,
+    `No goals loaded for ${p2MesLabel(mesName)}: the deck goes out without attainment.`,
+    `Цели на ${p2MesLabel(mesName)} не загружены: колода уйдёт без выполнения.`));
+  // 3. Taxi y TukTuk con distinta frescura: el combinado suma un periodo que en
+  //    una linea existe y en la otra no. En pantalla esto se avisa arriba del
+  //    deck, fuera de las hojas — al exportar no se ve.
+  if (p2FreshnessWarn()) avisos.push(P2T(
+    "Taxi y TukTuk no llegan al mismo período: puede faltar subir uno de los dos.",
+    "Taxi and TukTuk do not reach the same period: one of the two may be missing.",
+    "Такси и ТукТук доходят до разных периодов: возможно, один из них не загружен."));
+  // 4. Escala no mensual contra una meta mensual (mismo motivo que el aviso de
+  //    la pestaña Metas): el % de Conductores Activos no es comparable.
+  if (STATE.curMode !== "mensual") avisos.push(P2T(
+    `Escala ${mi.label.toLowerCase()}: el % de Conductores Activos contra una meta MENSUAL no es comparable (es un nivel, no se acumula).`,
+    `${mi.label} scale: the Active Drivers % against a MONTHLY goal is not comparable (it is a level, it does not accumulate).`,
+    `Масштаб «${mi.label}»: процент активных водителей против МЕСЯЧНОЙ цели несопоставим (это уровень, он не накапливается).`));
+  return { resumen, avisos, hojas: dentro.length };
+}
+export function p2CerrarChequeo() {
+  document.getElementById("p2ExportChk")?.remove();
+  document.body.classList.remove("p2-modal-abierto");
+}
+// Modal, no confirm(): el confirm del navegador no puede mostrar la tabla ni los
+// avisos, y se acepta por reflejo. Mismo criterio que el borrado de usuarios.
+export function p2AbrirChequeoExport() {
+  const partner = PRESENT2_STATE.partner;
+  if (!partner) { alert(P2T("Selecciona un partner primero.", "Pick a partner first.", "Сначала выберите партнёра.")); return; }
+  p2CerrarChequeo();
+  const C = p2ChequeoExport(partner);
+  if (!C.hojas) { alert(P2T("No queda ninguna hoja seleccionada para el PDF.",
+    "No sheets are selected for the PDF.", "Не выбрано ни одной страницы для PDF.")); return; }
+  const div = document.createElement("div");
+  div.id = "p2ExportChk";
+  div.className = "p2chk-fondo";
+  div.innerHTML = `<div class="p2chk">
+    <div class="p2chk-h">${escapeHTML(P2T("Esto es lo que se va a exportar", "This is what will be exported", "Вот что будет экспортировано"))}</div>
+    <dl class="p2chk-dl">${C.resumen.map(([k, v]) =>
+      `<div><dt>${escapeHTML(k)}</dt><dd>${escapeHTML(String(v))}</dd></div>`).join("")}</dl>
+    ${C.avisos.length ? `<ul class="p2chk-avisos">${C.avisos.map(a => `<li>${escapeHTML(a)}</li>`).join("")}</ul>` : ""}
+    <div class="p2chk-btns">
+      <button class="png-btn" data-act="p2CerrarChequeo">${escapeHTML(P2T("Cancelar", "Cancel", "Отмена"))}</button>
+      <button class="apply-btn" data-act="downloadPresent2PDF">⬇ ${escapeHTML(P2T("Descargar PDF", "Download PDF", "Скачать PDF"))}</button>
+    </div>
+  </div>`;
+  document.body.appendChild(div);
+  document.body.classList.add("p2-modal-abierto");
+}
+
 export async function downloadPresent2PDF() {
+  p2CerrarChequeo();
   logAccess("download_pdf", "presentacion2:" + (PRESENT2_STATE.partner || "?"));
   const partner = PRESENT2_STATE.partner;
   if (!partner) { alert("Selecciona un partner primero."); return; }
@@ -3100,6 +3191,7 @@ registerActions({
   present2SetFleetMode: d => present2SetFleetMode(d.mode),
   present2SetAvanceMes: (d, el) => present2SetAvanceMes(el.value),
   present2TogglePdfPanel,
+  p2AbrirChequeoExport, p2CerrarChequeo,
   present2TogglePdfSlide: d => present2TogglePdfSlide(d.key),
   present2PdfAll:         d => present2PdfAll(d.on === "1"),
   present2ToggleCohort: d => present2ToggleCohort(d.key),

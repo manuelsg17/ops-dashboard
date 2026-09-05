@@ -1024,7 +1024,11 @@ function _indexCoreData() {
     STATE._suppressRestoreRender = false;
 }
 
-const _NEED_FULL_COLS_LOAD = new Set(["partnerview", "rawdata", "calculator"]);
+// Mismo conjunto que _NEED_FULL_COLS de app.ts. present2 FALTABA: si la data
+// fresca llegaba con el KAM parado en Presentacion, el deck se pintaba con las
+// columnas diferidas en null (embudo y benchmark en "—") o directamente no se
+// re-pintaba y seguia mostrando el snapshot del cache.
+const _NEED_FULL_COLS_LOAD = new Set(["partnerview", "rawdata", "calculator", "present2"]);
 
 export async function _renderActiveTabAfterLoad() {
     // Render solo el tab activo (mismo patron que applyFilters/switchMode).
@@ -1054,6 +1058,11 @@ export async function _renderActiveTabAfterLoad() {
       if (STATE.curTab === "partnerview" && typeof renderPartnerView === "function") renderPartnerView();
       if (STATE.curTab === "calculator"  && typeof renderCalculator === "function")  renderCalculator();
       if (STATE.curTab === "rawdata"     && typeof renderRawData === "function")     renderRawData();
+      // present2 NO estaba: con el caché pintando primero y la red revalidando
+      // por detrás (stale-while-revalidate), el KAM parado en Presentación se
+      // quedaba con los números del snapshot viejo y nada se lo decía. Es el
+      // deck que se le manda al partner.
+      if (STATE.curTab === "present2"    && typeof renderPresent2 === "function")   renderPresent2();
       }
     }
 }

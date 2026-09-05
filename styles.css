@@ -1670,3 +1670,31 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 .tr-b i  { display: block; width: 100%; border-radius: 2px 2px 0 0; }
 .tr-pie  { font-size: var(--sl-nota); color: #aaa;
            min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── PRESENTACIÓN: chequeo previo a exportar el PDF ──────────────────────────
+   El PDF es la única acción de la app que no se puede deshacer: sale del
+   dashboard y entra a la bandeja de un partner. El modal muestra qué se va a
+   exportar y qué decisiones de filtro conviene mirar antes. */
+.p2chk-fondo {
+  position: fixed; inset: 0; z-index: 99997; background: rgba(0,0,0,.35);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.p2chk {
+  background: #fff; border-radius: 14px; padding: 18px 20px; width: min(560px, 100%);
+  max-height: 90vh; overflow: auto; box-shadow: 0 18px 50px rgba(0,0,0,.25);
+}
+.p2chk-h { font-size: 1rem; font-weight: 800; letter-spacing: -.2px; margin-bottom: 12px; }
+.p2chk-dl { display: flex; flex-direction: column; gap: 5px; margin: 0 0 12px; }
+.p2chk-dl > div { display: flex; gap: 10px; align-items: baseline; }
+.p2chk-dl dt {
+  flex: 0 0 132px; font-size: var(--sl-th); font-weight: 800; color: #888;
+  text-transform: uppercase; letter-spacing: .5px;
+}
+.p2chk-dl dd { margin: 0; font-size: var(--sl-val2); font-weight: 700; color: #111; min-width: 0; }
+.p2chk-avisos {
+  margin: 0 0 14px; padding: 10px 12px 10px 28px; border-radius: 10px;
+  background: #fffbeb; border: 1px solid #fde68a;
+}
+.p2chk-avisos li { font-size: var(--sl-nota); line-height: 1.45; color: #92400e; margin-bottom: 5px; }
+.p2chk-avisos li:last-child { margin-bottom: 0; }
+.p2chk-btns { display: flex; gap: 8px; justify-content: flex-end; }
