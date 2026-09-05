@@ -3,7 +3,7 @@ import {
   snapshotValue, flowValue, projectSnapshot, projectFlow,
   weightedAvg, ratio, attainmentPct, sumKpis, groupSum, seriesByDate, retentionSeries,
   AD_PROJECTION_FACTOR, horasPorConductorBase, TK_HORAS_BASE_MIN, TK_MIN_ACTIVOS,
-  pacingFlujo, median, dropDuplicatePeriods
+  pacingFlujo, median, dropDuplicatePeriods, fechasEnRango
 } from "./metrics.js";
 import { pColor, pEstado } from "../core/format.js";
 
@@ -439,5 +439,39 @@ describe("períodos duplicados (mismo dato bajo dos fechas)", () => {
   it("con un solo período, o sin filas, no hace nada", () => {
     expect(dropDuplicatePeriods([])).toHaveLength(0);
     expect(dropDuplicatePeriods([fila("2026-08-03", "A", 1, 1, 1)])).toHaveLength(1);
+  });
+});
+
+describe("el deck respeta el rango filtrado", () => {
+  // Bug real: los slides recibían el rango filtrado pero el Ejecutivo y el
+  // Resumen usaban el mes entero e ignoraban el "Desde". Filtrando la semana
+  // del 24-ago, Metas mostraba N+R 276 y el deck 1.187 para el MISMO partner.
+  const mes = ["2026-08-03", "2026-08-10", "2026-08-17", "2026-08-24"];
+
+  it("recorta el mes al rango elegido", () => {
+    expect(fechasEnRango(mes, ["2026-08-24"])).toEqual(["2026-08-24"]);
+    expect(fechasEnRango(mes, ["2026-08-17", "2026-08-24"]))
+      .toEqual(["2026-08-17", "2026-08-24"]);
+  });
+
+  it("sin rango no recorta (el mes completo)", () => {
+    expect(fechasEnRango(mes, [])).toEqual(mes);
+    expect(fechasEnRango(mes, null as any)).toEqual(mes);
+  });
+
+  it("es una INTERSECCIÓN: no incorpora fechas de otros meses", () => {
+    // Si el rango abarca julio y agosto, el slide de AGOSTO no puede sumar julio.
+    const rango = ["2026-07-27", "2026-08-03", "2026-08-10"];
+    expect(fechasEnRango(mes, rango)).toEqual(["2026-08-03", "2026-08-10"]);
+  });
+
+  it("conserva el orden del período, no el del rango", () => {
+    expect(fechasEnRango(mes, ["2026-08-24", "2026-08-03"]))
+      .toEqual(["2026-08-03", "2026-08-24"]);
+  });
+
+  it("un rango sin solape da vacío, no el mes entero", () => {
+    // Devolver el mes acá sería el bug original disfrazado.
+    expect(fechasEnRango(mes, ["2026-09-07"])).toEqual([]);
   });
 });

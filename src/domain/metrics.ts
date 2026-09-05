@@ -242,6 +242,24 @@ export function dropDuplicatePeriods(rows) {
   return rows.filter(r => !descartar.has(r.date));
 }
 
+/**
+ * Fechas de un periodo (p. ej. el mes de la meta) acotadas al RANGO que el
+ * usuario filtro. Si el rango viene vacio, no recorta.
+ *
+ * Existe porque el deck tenia dos fuentes de fechas en conflicto: los slides
+ * recibian el rango filtrado, pero el Ejecutivo y el Resumen usaban el mes
+ * entero e ignoraban el "Desde". Con el filtro en una sola semana, Metas
+ * mostraba N+R 276 y el deck 1.187 para el MISMO partner.
+ *
+ * Conserva el ORDEN del periodo (no el del rango) y no inventa fechas que no
+ * esten en ambos: es una interseccion, no una union.
+ */
+export function fechasEnRango(delPeriodo, rango) {
+  if (!rango || !rango.length) return delPeriodo || [];
+  const set = new Set(rango);
+  return (delPeriodo || []).filter(d => set.has(d));
+}
+
 // ── Tasas ponderadas ────────────────────────────────────────────────────────
 
 /**

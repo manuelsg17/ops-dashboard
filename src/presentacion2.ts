@@ -31,7 +31,7 @@ window.Chart = Chart;
 // el problema no es cosmético, es de credibilidad delante del cliente.
 import { projectFlow, retentionSeries, seriesByDate, snapshotValue,
          horasPorConductorBase, TK_HORAS_BASE_MIN, TK_MIN_ACTIVOS,
-         pacingFlujo, median } from "./domain/metrics.js";
+         pacingFlujo, median, fechasEnRango } from "./domain/metrics.js";
 import { p2Lectura, p2Accion, META_CUMPLIDA_PCT } from "./domain/lectura.js";
 import { reportYM, MES_NOMBRES } from "./shared/mesReporte.js";
 import * as forecast from "./forecast.js";
@@ -139,7 +139,7 @@ export function p2IsFleetMode(partner) {
 export const P2_SLIDES = [
   { es: "Carátula",   en: "Cover",      charts: false, build: (p, d, i) => buildSlide2Cover(p, d) },
   { es: "Ejecutivo",  en: "Executive",  charts: false, build: (p, d, i) => buildSlide2Portada(p, d, i) },
-  { es: "Resumen",    en: "Summary",    charts: false, build: (p, d, i) => buildSlide2Resumen(p, i) },
+  { es: "Resumen",    en: "Summary",    charts: false, build: (p, d, i) => buildSlide2Resumen(p, d, i) },
   // Proyección: SOLO PANTALLA (noPdf) — herramienta del KAM, no entra al deck
   // que recibe el partner. Decisión de Manuel, ago 2026.
   { es: "Proyección", en: "Forecast",   charts: true, noPdf: true, build: (p, d, i) => buildSlide2Forecast(p, d, i), chartFn: (p, d, root) => buildSlide2ForecastCharts(p, d, root) }
@@ -1087,6 +1087,26 @@ export function p2MonthDates(mesName) {
   if (to && out.length) out = out.filter(d => d <= to);
   return out;
 }
+// RANGO DEL DECK vs MES DE LA META.
+//
+// `dates` (lo que renderSlide2 le pasa a cada slide via p2SelectedDates) SI
+// respeta el "Desde" y el "Hasta" del sidebar. p2MonthDates NO: devuelve todo el
+// mes de la meta hasta el "Hasta", ignorando el "Desde".
+//
+// El Ejecutivo y el Resumen usaban p2MonthDates y por eso mostraban el mes
+// entero aunque el KAM filtrara una sola semana: con el filtro en la semana del
+// 24-ago, Metas mostraba N+R 276 y el deck 1.187 para el MISMO partner. Dos
+// pantallas, dos numeros — y el deck es el que ve el partner.
+//
+// Ahora ambos usan la INTERSECCION: las fechas del rango filtrado que ademas
+// caen en el mes de la meta. El deck obedece el filtro y sigue sin mezclar
+// meses. Cuando el rango no cubre el mes entero, el % contra una meta MENSUAL
+// deja de ser comparable — por eso el aviso de cobertura es obligatorio y no
+// decorativo (misma logica que el banner que ya tiene la pestana Metas).
+export function p2DatesMetaEnRango(mesName, dates) {
+  return fechasEnRango(p2MonthDates(mesName), dates);
+}
+
 export function p2MetaFor(partner, scopeCity, mes) {
   return (STATE.metasData || []).reduce((o, m) => {
     if (m.partner === partner && m.mes === mes && (!scopeCity || m.city === scopeCity)) {
@@ -1262,7 +1282,7 @@ function _scCell(real, meta, fmtN) {
   </td>`;
 }
 
-export function buildSlide2Resumen(partner, idx) {
+export function buildSlide2Resumen(partner, dates, idx) {
   const es = PRESENT2_STATE.lang === "es";
   const savedDs = PRESENT2_STATE.dataset;
   const mesName = p2AvanceMes();
@@ -1271,15 +1291,22 @@ export function buildSlide2Resumen(partner, idx) {
   // (mismo camino que el resto de las slides → los números deben coincidir);
   // Delivery/Cargo de sus slices, ya indexados por escala.
   PRESENT2_STATE.dataset = "taxi";
-  const taxiDates = p2MonthDates(mesName);
+  const taxiDates = p2DatesMetaEnRango(mesName, dates);
   const levels = p2Levels(partner);
   PRESENT2_STATE.dataset = "tuktuk";
-  const tkDates = p2MonthDates(mesName);
+  const tkDates = p2DatesMetaEnRango(mesName, dates);
   PRESENT2_STATE.dataset = savedDs;
 
-  const dates = taxiDates.length ? taxiDates : tkDates;
+  // Fechas efectivas del slide = las del mes de la meta DENTRO del rango filtrado.
+  const mesDates = taxiDates.length ? taxiDates : tkDates;
+  // Mismo aviso que el Ejecutivo: con el rango recortado los FLUJOS acumulan
+  // menos y su % contra una meta MENSUAL deja de ser comparable.
+  PRESENT2_STATE.dataset = taxiDates.length ? "taxi" : "tuktuk";
+  const todasDelMes = p2MonthDates(mesName);
+  PRESENT2_STATE.dataset = savedDs;
+  const rangoParcial = todasDelMes.length > mesDates.length;
   const metasLoaded = !!(STATE.metasData || []).length;
-  if (!dates.length || !metasLoaded) {
+  if (!mesDates.length || !metasLoaded) {
     return `<div class="agy-style-365">
       ${p2BrandHeader(partner, (es ? "Resumen" : "Summary") + " · " + (mesName || "—"), "")}
       <div class="agy-style-396">${es ? "Sin datos o metas del mes." : "No data or targets."}</div>
@@ -1329,7 +1356,7 @@ export function buildSlide2Resumen(partner, idx) {
       t.ad = t.lastAD; t.hay = (v.k === "taxi" ? taxiDates : tkDates).length > 0;
       PRESENT2_STATE.dataset = savedDs;
     } else {
-      t = p2VerticalTotals(p2SliceVertical(v.k), partner, null, dates);
+      t = p2VerticalTotals(p2SliceVertical(v.k), partner, null, mesDates);
       t.hay = t.presente;
     }
     return { ...v, ad: t.ad || 0, nr: t.nr || 0, sh: t.sh || 0, hay: t.hay };
@@ -1417,6 +1444,9 @@ export function buildSlide2Resumen(partner, idx) {
     ${p2BrandHeader(partner, (es ? "Resumen" : "Summary") + " · " + (mesName || "—"),
       es ? "Cumplimiento del mes y de dónde viene" : "Monthly attainment and where it comes from")}
     <div class="rs-wrap">
+      ${rangoParcial ? `<div class="px-aviso">${es
+        ? `El rango filtrado cubre <b>${mesDates.length} de ${todasDelMes.length}</b> períodos del mes: <b>Nuevos + Reactivados</b> y <b>Horas de Conexión</b> acumulan solo esos, así que su % contra la meta <b>mensual</b> queda corto por el recorte del rango, no por desempeño.`
+        : `The filtered range covers <b>${mesDates.length} of ${todasDelMes.length}</b> periods of the month: <b>New + Reactivated</b> and <b>Supply Hours</b> accumulate only those, so their % against a <b>monthly</b> target falls short due to the range cut, not performance.`}</div>` : ""}
       <div class="rs-card">
         <div class="rs-h"><span class="rs-n">1</span>${es ? "¿Cumplo la meta del mes?" : "Am I meeting the target?"}
           <span class="rs-sub">${es ? "Taxi + TukTuk — la meta cubre las dos" : "Taxi + TukTuk"}</span></div>
@@ -1554,11 +1584,11 @@ export function buildSlide2Portada(partner, dates, idx) {
   const mesName = p2AvanceMes();
 
   PRESENT2_STATE.dataset = "taxi";
-  const taxiDates = p2MonthDates(mesName);
+  const taxiDates = p2DatesMetaEnRango(mesName, dates);
   const taxiAct = p2ActualsMTD(partner, null, taxiDates);
   const levels = p2Levels(partner);
   PRESENT2_STATE.dataset = "tuktuk";
-  const tkDates = p2MonthDates(mesName);
+  const tkDates = p2DatesMetaEnRango(mesName, dates);
   const tkAct = p2ActualsMTD(partner, null, tkDates);
   PRESENT2_STATE.dataset = savedDs;
 
@@ -1610,20 +1640,24 @@ export function buildSlide2Portada(partner, dates, idx) {
   addVert("Taxi", taxiAct.adV);
   addVert("TukTuk", tkAct.adV);
 
-  // HUECOS DE DATOS DEL PARTNER — los FLUJOS (N+R, horas) acumulan solo los
-  // períodos en los que el partner REPORTÓ. Si le faltan períodos del mes, su %
-  // contra una meta MENSUAL queda corto por datos faltantes, no por desempeño,
-  // y el informe lo mostraría como incumplimiento sin decir por qué.
+  // COBERTURA DEL MES — la meta es MENSUAL, pero el deck ahora respeta el rango
+  // que eligió el KAM. Si ese rango no cubre el mes entero, los FLUJOS (N+R,
+  // horas) acumulan solo los períodos filtrados y su % contra la meta queda
+  // corto por recorte de rango, NO por desempeño: filtrando una sola semana un
+  // partner que va bien aparece al 25%. Sin este aviso el informe lo mostraría
+  // como incumplimiento sin decir por qué (la pestaña Metas ya avisa lo mismo).
   //
-  // Se mide sobre el propio partner (p2Present), no sobre el rango: el MTD
-  // siempre arranca el día 1 del mes de la meta sin importar el "Desde", así
-  // que el rango no es lo que puede faltar — los datos del partner sí.
+  // Se compara contra el mes COMPLETO (p2MonthDates sin filtrar), así que el
+  // aviso distingue "te falta rango" de "el partner no reportó".
   // Active Drivers no se ve afectado: es un snapshot, no se acumula.
   PRESENT2_STATE.dataset = "taxi";
+  const todasDelMes = p2MonthDates(mesName);
   const conDato = p2Present(partner, null, mesDates).filter(Boolean).length;
   PRESENT2_STATE.dataset = savedDs;
   const totalPer = mesDates.length;
-  const coberturaParcial = totalPer > 0 && conDato < totalPer * 0.8;
+  const rangoParcial = todasDelMes.length > mesDates.length;
+  const huecosPartner = totalPer > 0 && conDato < totalPer * 0.8;
+  const coberturaParcial = rangoParcial || huecosPartner;
 
   const ctx = { es, kpis, ciudades, verticales, diasRestantes, diasMes: daysInMonth };
   const lectura = p2Lectura(ctx);
@@ -1681,8 +1715,12 @@ export function buildSlide2Portada(partner, dates, idx) {
         <span class="px-vsub">${es ? `${diasRestantes ? `quedan ${diasRestantes} días` : "mes cerrado"}` : `${diasRestantes ? `${diasRestantes} days left` : "month closed"}`}</span>
       </div>
       ${coberturaParcial ? `<div class="px-aviso">${es
-        ? `Este partner reportó <b>${conDato} de ${totalPer}</b> períodos del mes. <b>Nuevos + Reactivados</b> y <b>Horas de Conexión</b> acumulan solo esos, así que su % contra la meta mensual queda corto por datos faltantes, no por desempeño. Conductores Activos no se ve afectado (es un nivel, no se acumula).`
-        : `This partner reported <b>${conDato} of ${totalPer}</b> periods this month. <b>New + Reactivated</b> and <b>Supply Hours</b> only accumulate those, so their % against a monthly target is short on data, not performance. Active Drivers is unaffected (it is a level).`}</div>` : ""}
+        ? `${rangoParcial
+            ? `El rango filtrado cubre <b>${mesDates.length} de ${todasDelMes.length}</b> períodos del mes.`
+            : `Este partner reportó <b>${conDato} de ${totalPer}</b> períodos del mes.`} <b>Nuevos + Reactivados</b> y <b>Horas de Conexión</b> acumulan solo esos, así que su % contra la meta <b>mensual</b> queda corto por ${rangoParcial ? "el recorte del rango" : "datos faltantes"}, no por desempeño. Para leer el cumplimiento real, ampliá el rango a todo el mes. Conductores Activos no se ve afectado (es un nivel, no se acumula).`
+        : `${rangoParcial
+            ? `The filtered range covers <b>${mesDates.length} of ${todasDelMes.length}</b> periods of the month.`
+            : `This partner reported <b>${conDato} of ${totalPer}</b> periods this month.`} <b>New + Reactivated</b> and <b>Supply Hours</b> only accumulate those, so their % against a <b>monthly</b> target falls short due to ${rangoParcial ? "the range cut" : "missing data"}, not performance. Widen the range to the full month to read real attainment. Active Drivers is unaffected (it is a level).`}</div>` : ""}
       <div class="px-kpis">${barras}</div>
       <div class="px-abajo">
         <div class="px-card px-lectura">
