@@ -2,7 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   snapshotValue, flowValue, projectSnapshot, projectFlow,
   weightedAvg, ratio, attainmentPct, sumKpis, groupSum, seriesByDate, retentionSeries,
-  AD_PROJECTION_FACTOR, horasPorConductorBase, TK_HORAS_BASE_MIN, TK_MIN_ACTIVOS
+  AD_PROJECTION_FACTOR, horasPorConductorBase, TK_HORAS_BASE_MIN, TK_MIN_ACTIVOS,
+  pacingFlujo, median
 } from "./metrics.js";
 
 // Estos tests no son de cobertura: cada uno fija una regla de NEGOCIO que ya se
@@ -289,5 +290,47 @@ describe("criterios TukTuk: horas por conductor base", () => {
   it("no explota con ceros", () => {
     expect(horasPorConductorBase(0, 0, 0, 0).estado).toBe("pocos_activos");
     expect(horasPorConductorBase(0, 100, 0, 0).valor).toBe(0);
+  });
+});
+
+describe("ritmo del mes (pacing)", () => {
+  it("compara avance contra calendario: 50% del mes con 50% de la meta = en ritmo", () => {
+    const r = pacingFlujo(50, 100, 15, 30);
+    expect(r.pctMeta).toBe(50);
+    expect(r.pctMes).toBe(50);
+    expect(r.estado).toBe("en_ritmo");
+  });
+
+  it("detecta atraso y adelanto con umbral de 5pp", () => {
+    expect(pacingFlujo(40, 100, 15, 30).estado).toBe("atrasado");    // 40% vs 50% → -10pp
+    expect(pacingFlujo(60, 100, 15, 30).estado).toBe("adelantado");  // +10pp
+    expect(pacingFlujo(46, 100, 15, 30).estado).toBe("en_ritmo");    // -4pp, dentro del ruido
+  });
+
+  it("sin meta no inventa un ritmo", () => {
+    // Un 0% acá se leería como "vas atrasadísimo" cuando en realidad no se mide.
+    expect(pacingFlujo(50, 0, 15, 30).estado).toBe("sin_meta");
+    expect(pacingFlujo(50, 0, 15, 30).ritmo).toBeNull();
+  });
+
+  it("el mes cerrado no pasa de 100% de calendario", () => {
+    expect(pacingFlujo(90, 100, 31, 30).pctMes).toBe(100);
+  });
+});
+
+describe("mediana (para el benchmark del cohorte)", () => {
+  it("impar toma el del medio; par promedia los dos centrales", () => {
+    expect(median([3, 1, 2])).toBe(2);
+    expect(median([4, 1, 3, 2])).toBe(2.5);
+  });
+
+  it("ignora nulls y NaN, no los cuenta como 0", () => {
+    // Un null contado como 0 hundiría la mediana del cohorte.
+    expect(median([2, null, 4, undefined, NaN as any])).toBe(3);
+  });
+
+  it("lista vacía da null, no 0", () => {
+    expect(median([])).toBeNull();
+    expect(median([null, null])).toBeNull();
   });
 });

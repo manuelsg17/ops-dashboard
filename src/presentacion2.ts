@@ -30,7 +30,8 @@ window.Chart = Chart;
 // dice "proyectamos 210" y el deck dice 120 para el mismo partner y el mismo mes,
 // el problema no es cosmético, es de credibilidad delante del cliente.
 import { projectFlow, retentionSeries, seriesByDate, snapshotValue,
-         horasPorConductorBase, TK_HORAS_BASE_MIN, TK_MIN_ACTIVOS } from "./domain/metrics.js";
+         horasPorConductorBase, TK_HORAS_BASE_MIN, TK_MIN_ACTIVOS,
+         pacingFlujo, median } from "./domain/metrics.js";
 import { reportYM, MES_NOMBRES } from "./shared/mesReporte.js";
 import * as forecast from "./forecast.js";
 Object.assign(window, forecast);
@@ -141,6 +142,8 @@ export const P2_SLIDES = [
   // Manuel compara número contra número; cuando valide, los viejos se retiran
   // en un commit aparte que sea puramente de borrado.
   { es: "✨ Resumen",     en: "✨ Summary",     charts: false, build: (p, d, i) => buildSlide2Resumen(p, i) },
+  { es: "✨ Ritmo del mes", en: "✨ Monthly pace", charts: false, build: (p, d, i) => buildSlide2Ritmo(p, i) },
+  { es: "✨ Benchmark",    en: "✨ Benchmark",    charts: false, build: (p, d, i) => buildSlide2Benchmark(p, d, i) },
   { es: "Avance vs Meta", en: "Goal vs Target", charts: false, build: (p, d, i) => buildSlide2Avance(p, i) },
   { es: "Proyección",     en: "Forecast",       charts: true,  noPdf: true,  build: (p, d, i) => buildSlide2Forecast(p, d, i), chartFn: (p, d, root) => buildSlide2ForecastCharts(p, d, root) },
   { es: "KPIs por Nivel", en: "KPIs by Level",  charts: true,  build: (p, d, i) => buildSlide2Matrix(p, d, i), chartFn: (p, d, root) => buildSlide2MatrixCharts(p, d, root) },
@@ -1813,6 +1816,224 @@ export function buildSlide2CriteriosTk(partner, idx) {
           <th>${es ? "Horas / base" : "Hours / base"}</th></tr></thead>
           <tbody>${filas}</tbody></table>
       </div>` : ""}
+    </div>
+    ${p2BrandFooter(idx)}
+  </div>`;
+}
+
+// ── SLIDE: RITMO DEL MES (ago 2026) ───────────────────────────────────────────
+// Las metas son MENSUALES pero la conversación con el partner es SEMANAL, así
+// que la pregunta útil a mitad de mes no es "¿cumpliste?" sino "¿vas
+// encaminado?". Este slide compara el avance contra el calendario.
+//
+// SOLO para FLUJOS (N+R, horas). Active Drivers NO entra en el ritmo: es un
+// SNAPSHOT, no se acumula — estar al 60% del mes no significa que el AD deba ir
+// al 60% de la meta, ya debería estar cerca de su nivel final. Meterlo acá
+// mostraría un "atraso" inventado. Se muestra aparte, como nivel.
+export function buildSlide2Ritmo(partner, idx) {
+  const es = PRESENT2_STATE.lang === "es";
+  const savedDs = PRESENT2_STATE.dataset;
+  const mesName = p2AvanceMes();
+
+  PRESENT2_STATE.dataset = "taxi";
+  const taxiDates = p2MonthDates(mesName);
+  const taxiAct = p2ActualsMTD(partner, null, taxiDates);
+  PRESENT2_STATE.dataset = "tuktuk";
+  const tkDates = p2MonthDates(mesName);
+  const tkAct = p2ActualsMTD(partner, null, tkDates);
+  PRESENT2_STATE.dataset = savedDs;
+
+  const dates = taxiDates.length ? taxiDates : tkDates;
+  const lastDate = dates.length ? dates[dates.length - 1] : (p2AllDates() || []).slice(-1)[0];
+  const { daysElapsed, daysInMonth } = calcProjectionDays(lastDate);
+  const meta = p2MetaFor(partner, null, mesName);
+  const metasLoaded = !!(STATE.metasData || []).length;
+
+  if (!dates.length || !metasLoaded) {
+    return `<div class="agy-style-365">
+      ${p2BrandHeader(partner, (es ? "Ritmo del mes" : "Monthly pace") + " · " + (mesName || "—"), "")}
+      <div class="agy-style-396">${es ? "Sin datos o metas del mes para calcular el ritmo." : "No data or goals to compute pace."}</div>
+      ${p2BrandFooter(idx)}
+    </div>`;
+  }
+
+  // Paraguas Taxi + TukTuk (lo que la meta cubre).
+  const flujos = [
+    // `ent`: N+R son PERSONAS, la proyección se redondea ("cierra en 60,65
+    // conductores" no es un número que se le pueda decir a un partner).
+    { lbl: es ? "Nuevos + Reactivados" : "New + Reactivated", real: (taxiAct.nr || 0) + (tkAct.nr || 0), meta: meta.mNR || 0, f: fmt, ent: true },
+    { lbl: es ? "Horas de Conexión" : "Supply Hours",         real: (taxiAct.sh || 0) + (tkAct.sh || 0), meta: meta.mH  || 0, f: fmtSmart }
+  ];
+  const pctMesGlobal = Math.min((daysElapsed / daysInMonth) * 100, 100);
+
+  const VERD = {
+    adelantado: { txt: es ? "Adelantado" : "Ahead",     col: "#10b981" },
+    en_ritmo:   { txt: es ? "En ritmo"   : "On pace",   col: "#0284c7" },
+    atrasado:   { txt: es ? "Atrasado"   : "Behind",    col: "#FF0000" },
+    sin_meta:   { txt: es ? "Sin meta"   : "No target", col: "#888" }
+  };
+
+  const cards = flujos.map(m => {
+    const p = pacingFlujo(m.real, m.meta, daysElapsed, daysInMonth);
+    const v = VERD[p.estado];
+    if (p.estado === "sin_meta") {
+      return `<div class="rt-card rt-na">
+        <div class="rt-lbl">${escapeHTML(m.lbl)}</div>
+        <div class="rt-val">${m.f(m.real)}</div>
+        <div class="rt-sub">${es ? "sin meta cargada para el mes" : "no target loaded"}</div>
+      </div>`;
+    }
+    // Proyección al cierre por ritmo (misma regla que el resto del deck).
+    let proy = projectFlow(m.real, daysElapsed, daysInMonth - daysElapsed);
+    if (m.ent) proy = Math.round(proy);
+    const pctProy = (proy / m.meta) * 100;
+    return `<div class="rt-card">
+      <div class="rt-lbl">${escapeHTML(m.lbl)}</div>
+      <div class="rt-val">${m.f(m.real)} <span class="rt-meta">/ ${m.f(m.meta)}</span></div>
+      <div class="rt-barra">
+        <div class="rt-fill" style="width:${Math.min(p.pctMeta, 100).toFixed(1)}%;background:${v.col}"></div>
+        <div class="rt-hoy" style="left:calc(${p.pctMes.toFixed(1)}% - 1px)"></div>
+      </div>
+      <div class="rt-linea">
+        <span style="color:${v.col};font-weight:800">${v.txt}</span>
+        <span class="rt-dim">${_p2PctTxt(p.pctMeta)} ${es ? "de la meta" : "of target"} · ${p.ritmo >= 0 ? "+" : ""}${p.ritmo.toFixed(0)}pp ${es ? "vs calendario" : "vs calendar"}</span>
+      </div>
+      <div class="rt-proy">${es ? "a este ritmo cierra en" : "at this pace closes at"} <strong>${m.f(proy)}</strong> (${_p2PctTxt(pctProy)})</div>
+    </div>`;
+  }).join("");
+
+  // AD aparte: es nivel, no ritmo.
+  const adReal = (taxiAct.lastAD || 0) + (tkAct.lastAD || 0);
+  const adMeta = meta.mA || 0;
+  const adPct  = adMeta > 0 ? (adReal / adMeta) * 100 : null;
+
+  return `<div class="agy-style-365">
+    ${p2BrandHeader(partner, (es ? "Ritmo del mes" : "Monthly pace") + " · " + (mesName || "—"),
+      es ? `Día ${daysElapsed} de ${daysInMonth} · ${pctMesGlobal.toFixed(0)}% del mes transcurrido`
+         : `Day ${daysElapsed} of ${daysInMonth} · ${pctMesGlobal.toFixed(0)}% of month elapsed`)}
+    <div class="rt-wrap">
+      <div class="rt-cards">${cards}</div>
+      <div class="rt-nivel">
+        <span class="rt-nivel-lbl">${es ? "Conductores Activos" : "Active Drivers"}</span>
+        <span class="rt-nivel-val">${fmt(adReal)}${adMeta ? ` <span class="rt-meta">/ ${fmt(adMeta)}</span>` : ""}</span>
+        ${adPct != null ? `<span class="rt-nivel-pct" style="color:${p2AvanceColor(adPct)}">${_p2PctTxt(adPct)}</span>` : ""}
+        <span class="rt-nivel-nota">${es
+          ? "es un nivel, no se acumula: no aplica ritmo"
+          : "a level, not accumulated: pace does not apply"}</span>
+      </div>
+    </div>
+    ${p2BrandFooter(idx)}
+  </div>`;
+}
+
+// ── SLIDE: BENCHMARK OPERACIONAL (ago 2026) ───────────────────────────────────
+// Las 4 métricas de operación que más separan a un partner de otro y que hoy no
+// aparecen en el deck para nadie que no sea Fleet. Verificado sobre la última
+// semana con partners de >=50 activos: aceptación va de 43,8% a 76,5%, USD/hora
+// de 4,48 a 7,50, viajes/hora de 1,12 a 4,32.
+//
+// OJO — son TASAS: se ponderan por su denominador real (aceptación por viajes,
+// USD/hora por horas). Promediarlas a secas entre períodos o ciudades da un
+// número que no significa nada. Ver weightedAvg en domain/metrics.
+//
+// NO se presenta como causa de la pérdida de conductores: se probó partiendo
+// los partners en cuartiles por USD/hora y la variación de AD fue igual en
+// todos (+1,9% / +2,9% / +1,1% / +1,8%). Es diagnóstico y comparación, no
+// predicción.
+export function p2OpsMetrics(rows) {
+  let trips = 0, horas = 0, accW = 0, badW = 0, mphW = 0;
+  for (const r of rows) {
+    const t = r.trips || 0, h = r.supplyHours || 0;
+    trips += t; horas += h;
+    if (r.acceptanceRate      != null) accW += r.acceptanceRate * t;
+    if (r.badRatedTripsShare  != null) badW += r.badRatedTripsShare * t;
+    if (r.moneyPerHour        != null) mphW += r.moneyPerHour * h;
+  }
+  return {
+    accept:   trips > 0 ? accW / trips : null,
+    bad:      trips > 0 ? badW / trips : null,
+    mph:      horas > 0 ? mphW / horas : null,
+    tripsHr:  horas > 0 ? trips / horas : null,
+    ad: rows.length ? Math.max(...rows.map(r => r.activeDrivers || 0)) : 0
+  };
+}
+
+export function buildSlide2Benchmark(partner, dates, idx) {
+  const es = PRESENT2_STATE.lang === "es";
+  const dset = new Set(dates || []);
+  const todas = (STATE.rawData || []).filter(r => dset.has(r.date));
+  const mias  = todas.filter(r => r.partner === partner);
+
+  if (!mias.length) {
+    return `<div class="agy-style-365">
+      ${p2BrandHeader(partner, es ? "Benchmark operacional" : "Operational benchmark", "")}
+      <div class="agy-style-396">${es ? "Sin datos del partner en el rango." : "No partner data in range."}</div>
+      ${p2BrandFooter(idx)}
+    </div>`;
+  }
+
+  const yo = p2OpsMetrics(mias);
+
+  // Cohorte = partners con >=50 activos en el rango. El corte evita que flotas
+  // de 3 conductores muevan la mediana con ratios que no son representativos.
+  const porPartner = new Map();
+  todas.forEach(r => {
+    let a = porPartner.get(r.partner);
+    if (!a) { a = []; porPartner.set(r.partner, a); }
+    a.push(r);
+  });
+  const cohorte = [...porPartner.values()].map(p2OpsMetrics).filter(m => m.ad >= 50);
+  const med = {
+    accept:  median(cohorte.map(m => m.accept)),
+    bad:     median(cohorte.map(m => m.bad)),
+    mph:     median(cohorte.map(m => m.mph)),
+    tripsHr: median(cohorte.map(m => m.tripsHr))
+  };
+
+  // `mejorEsAlto`: en "% mal calificados" mejor es MÁS BAJO — sin esta marca el
+  // semáforo diría que un partner con más viajes mal calificados va bien.
+  const DEFS = [
+    { k: "accept",  lbl: es ? "Aceptación" : "Acceptance",        f: v => (v * 100).toFixed(1) + "%", alto: true  },
+    { k: "mph",     lbl: es ? "USD por hora" : "USD per hour",    f: v => "$" + v.toFixed(2),         alto: true  },
+    { k: "tripsHr", lbl: es ? "Viajes por hora" : "Trips per hour", f: v => v.toFixed(2),             alto: true  },
+    { k: "bad",     lbl: es ? "% mal calificados" : "% badly rated", f: v => (v * 100).toFixed(1) + "%", alto: false }
+  ];
+
+  const filas = DEFS.map(d => {
+    const mio = yo[d.k], m = med[d.k];
+    if (mio == null || m == null) {
+      return `<tr><td class="sc-lvl">${escapeHTML(d.lbl)}</td>
+        <td class="sc-num"><span class="sc-val">—</span></td>
+        <td class="sc-num"><span class="sc-val" style="color:#aaa">—</span></td>
+        <td class="sc-num"><span class="sc-sub">${es ? "sin dato" : "no data"}</span></td></tr>`;
+    }
+    const mejor = d.alto ? mio >= m : mio <= m;
+    const col = mejor ? "#10b981" : "#FF0000";
+    const dif = m !== 0 ? ((mio - m) / Math.abs(m)) * 100 : 0;
+    return `<tr>
+      <td class="sc-lvl">${escapeHTML(d.lbl)}</td>
+      <td class="sc-num"><span class="sc-val" style="color:${col}">${d.f(mio)}</span></td>
+      <td class="sc-num"><span class="sc-val" style="color:#888;font-weight:700">${d.f(m)}</span></td>
+      <td class="sc-num">
+        <span class="sc-val" style="color:${col};font-size:.8rem">${dif >= 0 ? "+" : ""}${dif.toFixed(0)}%</span>
+        <span class="sc-sub">${mejor ? (es ? "mejor que la mediana" : "better than median") : (es ? "peor que la mediana" : "worse than median")}</span>
+      </td>
+    </tr>`;
+  }).join("");
+
+  return `<div class="agy-style-365">
+    ${p2BrandHeader(partner, es ? "Benchmark operacional" : "Operational benchmark",
+      es ? `Tu operación vs la mediana de ${cohorte.length} partners con 50+ conductores activos`
+         : `Your operation vs the median of ${cohorte.length} partners with 50+ active drivers`)}
+    <div class="sc-wrap">
+      <table class="sc-tbl"><thead><tr>
+        <th></th><th>${es ? "Vos" : "You"}</th>
+        <th>${es ? "Mediana del cohorte" : "Cohort median"}</th>
+        <th>${es ? "Diferencia" : "Difference"}</th>
+      </tr></thead><tbody>${filas}</tbody></table>
+      <div class="bm-nota">${es
+        ? "Estas métricas describen cómo opera tu flota y sirven para compararte. En los datos de este período NO se observó relación entre ellas y la variación de conductores activos, así que no se presentan como causa de crecimiento o caída."
+        : "These metrics describe how your fleet operates and are for comparison. In this period's data no relationship was observed between them and active-driver change, so they are not presented as a cause of growth or decline."}</div>
     </div>
     ${p2BrandFooter(idx)}
   </div>`;

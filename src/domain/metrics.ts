@@ -130,6 +130,41 @@ export function horasPorConductorBase(sh: number, ad: number, nuevos: number, re
   return { valor, base, estado: (valor >= TK_HORAS_BASE_MIN ? "cumple" : "no_cumple") as "cumple" | "no_cumple" };
 }
 
+// ── Ritmo del mes (pacing) ──────────────────────────────────────────────────
+
+/**
+ * Compara cuanto del mes transcurrio contra cuanto de la meta se lleva.
+ *
+ * SOLO tiene sentido para FLUJOS (N+R, horas, viajes): son los que se acumulan,
+ * asi que "a mitad de mes deberia llevar la mitad" es una lectura valida.
+ * Para un SNAPSHOT (Active Drivers) NO aplica: el AD no se acumula, es un
+ * nivel — estar al 60% del mes no significa que el AD deba estar al 60% de la
+ * meta, ya deberia estar cerca de su valor final. Pasarle un snapshot da un
+ * "atraso" que no existe.
+ *
+ * `ritmo` = puntos porcentuales de adelanto (+) o atraso (-) contra el
+ * calendario. El umbral de +-5pp evita que un ruido de un dia se lea como
+ * problema.
+ */
+export function pacingFlujo(actual: number, meta: number, daysElapsed: number, daysInMonth: number) {
+  if (!meta || meta <= 0 || !daysInMonth) {
+    return { pctMeta: null, pctMes: null, ritmo: null, estado: "sin_meta" as const };
+  }
+  const pctMeta = (actual / meta) * 100;
+  const pctMes  = Math.min((daysElapsed / daysInMonth) * 100, 100);
+  const ritmo   = pctMeta - pctMes;
+  const estado  = ritmo >= 5 ? "adelantado" : ritmo <= -5 ? "atrasado" : "en_ritmo";
+  return { pctMeta, pctMes, ritmo, estado: estado as "adelantado" | "atrasado" | "en_ritmo" };
+}
+
+/** Mediana. Devuelve null con lista vacia — NO 0, que se leeria como un valor real. */
+export function median(nums: Array<number | null | undefined>): number | null {
+  const v = nums.filter((n): n is number => n != null && !isNaN(n)).sort((a, b) => a - b);
+  if (!v.length) return null;
+  const m = Math.floor(v.length / 2);
+  return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
+}
+
 // ── Tasas ponderadas ────────────────────────────────────────────────────────
 
 /**
