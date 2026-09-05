@@ -137,21 +137,24 @@ export function p2IsFleetMode(partner) {
 // render EN VIVO y el PDF (una sola fuente → no divergen). build(partner,dates)
 // → HTML; charts=true + chartFn(partner,dates,root) para slides con Chart.js.
 export const P2_SLIDES = [
-  { es: "Carátula",       en: "Cover",          charts: false, build: (p, d, i) => buildSlide2Cover(p, d) },
-  // ✨ Resumen (ago 2026): consolida Avance Combinado + Avance vs Meta +
-  // 🛺 Avance vs Meta en una hoja. Convive con los viejos A PROPÓSITO mientras
-  // Manuel compara número contra número; cuando valide, los viejos se retiran
-  // en un commit aparte que sea puramente de borrado.
-  { es: "✨ Ejecutivo",   en: "✨ Executive",   charts: false, build: (p, d, i) => buildSlide2Portada(p, i) },
-  { es: "✨ Resumen",     en: "✨ Summary",     charts: false, build: (p, d, i) => buildSlide2Resumen(p, i) },
-  { es: "✨ Ritmo del mes", en: "✨ Monthly pace", charts: false, build: (p, d, i) => buildSlide2Ritmo(p, i) },
-  { es: "✨ Benchmark",    en: "✨ Benchmark",    charts: false, build: (p, d, i) => buildSlide2Benchmark(p, d, i) },
-  { es: "Avance vs Meta", en: "Goal vs Target", charts: false, build: (p, d, i) => buildSlide2Avance(p, i) },
-  { es: "Proyección",     en: "Forecast",       charts: true,  noPdf: true,  build: (p, d, i) => buildSlide2Forecast(p, d, i), chartFn: (p, d, root) => buildSlide2ForecastCharts(p, d, root) },
-  { es: "KPIs por Nivel", en: "KPIs by Level",  charts: true,  build: (p, d, i) => buildSlide2Matrix(p, d, i), chartFn: (p, d, root) => buildSlide2MatrixCharts(p, d, root) },
-  { es: "Data Raw (#)",   en: "Data Raw (#)",   charts: false, build: (p, d, i) => buildSlide2Raw(p, d, false, i) },
-  { es: "Data Raw (%)",   en: "Data Raw (%)",   charts: false, build: (p, d, i) => buildSlide2Raw(p, d, true, i) },
-  { es: "Alertas",        en: "Alerts",         charts: false, build: (p, d, i) => buildSlide2Alerts(p, d, i) }
+  { es: "Carátula",   en: "Cover",      charts: false, build: (p, d, i) => buildSlide2Cover(p, d) },
+  { es: "Ejecutivo",  en: "Executive",  charts: false, build: (p, d, i) => buildSlide2Portada(p, d, i) },
+  { es: "Resumen",    en: "Summary",    charts: false, build: (p, d, i) => buildSlide2Resumen(p, i) },
+  // Proyección: SOLO PANTALLA (noPdf) — herramienta del KAM, no entra al deck
+  // que recibe el partner. Decisión de Manuel, ago 2026.
+  { es: "Proyección", en: "Forecast",   charts: true, noPdf: true, build: (p, d, i) => buildSlide2Forecast(p, d, i), chartFn: (p, d, root) => buildSlide2ForecastCharts(p, d, root) }
+];
+
+// Slides que se repiten POR VERTICAL (Taxi / TukTuk / Delivery / Cargo). El
+// mecanismo de secciones (PRESENT2_STATE.dataset) hace que cada uno lea el
+// slice correcto sin duplicar código.
+export const P2_POR_VERTICAL = [
+  { es: "KPIs por Nivel", en: "KPIs by Level", charts: true, build: (p, d, i) => buildSlide2Matrix(p, d, i), chartFn: (p, d, root) => buildSlide2MatrixCharts(p, d, root) }
+];
+// Anexo por vertical, al final del deck.
+export const P2_ANEXO_VERTICAL = [
+  { es: "Data Raw (#)", en: "Data Raw (#)", charts: false, build: (p, d, i) => buildSlide2Raw(p, d, false, i) },
+  { es: "Data Raw (%)", en: "Data Raw (%)", charts: false, build: (p, d, i) => buildSlide2Raw(p, d, true, i) }
 ];
 
 // ── DECK COMBINADO Taxi + TukTuk (Fase 6) ─────────────────────────────────────
@@ -181,15 +184,6 @@ export function p2PartnerList() {
 }
 // Portada divisoria de sección (se inserta antes de la sección TukTuk).
 export const P2_DIVIDER = { es: "TukTuk", en: "TukTuk", charts: false, build: (p) => buildSlide2SectionCover(p, "tuktuk") };
-// Criterios del mes (TukTuk). Va SOLO en la sección TukTuk, justo después del
-// divisor: es lo primero que el partner tiene que ver de esa línea, porque es lo
-// que se le pide. Ver TK_META_NUEVOS_MES en rendimiento.ts (misma constante, una
-// sola definición) y buildSlide2TkCriterios abajo para por qué Full Timers no está.
-export const P2_TK_CRITERIOS_SLIDE = { es: "Criterios del mes", en: "Monthly criteria", charts: false, build: (p, d, i) => buildSlide2TkCriterios(p, i) };
-// ✨ Criterios TukTuk (ago 2026): formato NUEVO — 24h por conductor base + meta
-// de nuevos (N+R). Convive con el viejo mientras Manuel compara; cuando valide,
-// el de arriba se retira en un commit puramente de borrado.
-export const P2_TK_CRITERIOS2_SLIDE = { es: "✨ Criterios TukTuk", en: "✨ TukTuk Criteria", charts: false, build: (p, d, i) => buildSlide2CriteriosTk(p, i) };
 // Slide de Seguimiento (Fase 3, render-only): solo si el partner tiene tareas cargadas.
 // Va al final del deck y entra al PDF automáticamente (no es noPdf). Definida en seguimiento.js.
 export const P2_SEG_SLIDE = { es: "Seguimiento", en: "Follow-up", charts: false, build: (p, d, i) => buildSlide2Seguimiento(p, i) };
@@ -198,31 +192,44 @@ export const P2_SEG_SLIDE = { es: "Seguimiento", en: "Follow-up", charts: false,
 // más abajo); si el combinado estuviera ahí, se duplicaría (una vez por sección). Se
 // inserta a mano en p2Deck(), UNA sola vez, justo después de la carátula — es la vista
 // rápida "cómo va TODO mi negocio", va primero, antes del detalle Taxi/TukTuk individual.
-export const P2_COMBINADO_SLIDE = { es: "Avance Combinado", en: "Combined Goal", charts: false, build: (p, d, i) => buildSlide2AvanceCombinado(p, i) };
+// Alertas: UNA hoja con las 4 categorías adentro (antes se repetía por sección).
+export const P2_ALERTAS_SLIDE = { es: "Alertas", en: "Alerts", charts: false, build: (p, d, i) => buildSlide2Alertas(p, d, i) };
 // Deck por partner: carátula + [Combinado si hay TukTuk] + [sección Taxi] + [divisor + sección TukTuk].
 export function p2Deck(partner) {
   const hasTaxi = p2HasTaxi(partner);
-  const showTk  = p2TuktukSectionVisible(partner);   // datos existen Y la escala activa los soporta (no Diario)
-  const body = P2_SLIDES.slice(1);   // Avance, KPIs, Data Raw #, Data Raw %, Alertas
-  // Cover y body por defecto van a "taxi" salvo que el partner sea tuktuk-only Y la sección
-  // tuktuk sea visible en esta escala — así cover y body NUNCA quedan en datasets distintos
-  // (antes: tuktuk-only en Diario podía dejar el cover en "tuktuk" con el body vacío en "taxi").
-  const fallbackTaxi = hasTaxi || !showTk;
-  const deck = [{ def: P2_SLIDES[0], ds: fallbackTaxi ? "taxi" : "tuktuk" }];  // carátula
-  if (fallbackTaxi) {
-    // Combinado solo si el partner tiene TukTuk (si no, sería idéntico al Taxi-only).
-    if (showTk) deck.push({ def: P2_COMBINADO_SLIDE, ds: "taxi" });
-    body.forEach(def => deck.push({ def, ds: "taxi" }));
-  }
-  if (showTk) {
-    deck.push({ def: P2_DIVIDER, ds: "tuktuk" });
-    deck.push({ def: P2_TK_CRITERIOS_SLIDE, ds: "tuktuk" });
-    deck.push({ def: P2_TK_CRITERIOS2_SLIDE, ds: "tuktuk" });
-    body.forEach(def => deck.push({ def, ds: "tuktuk" }));
-  }
-  // Seguimiento (Fase 3): al final del deck, solo si el partner tiene tareas.
+  const showTk  = p2TuktukSectionVisible(partner);   // datos existen Y la escala los soporta (no Diario)
+  const hasDl   = p2TieneVertical(partner, "delivery");
+  const hasCg   = p2TieneVertical(partner, "cargo");
+  // Cover/Ejecutivo/Resumen van a "taxi" salvo que el partner sea tuktuk-only:
+  // así nunca quedan en un dataset distinto al del cuerpo.
+  const base = hasTaxi || !showTk ? "taxi" : "tuktuk";
+
+  // 1. Carátula → 2. Ejecutivo → 3. Resumen (los tres, una vez, con TODO adentro)
+  const deck = P2_SLIDES.filter(d => !d.noPdf || true).slice(0, 3).map(def => ({ def, ds: base }));
+
+  // 4. Una sección de gráficas POR VERTICAL que el partner realmente opere.
+  const verticales = [];
+  if (hasTaxi) verticales.push({ ds: "taxi",     et: "Taxi" });
+  if (showTk)  verticales.push({ ds: "tuktuk",   et: "TukTuk" });
+  if (hasDl)   verticales.push({ ds: "delivery", et: "Delivery" });
+  if (hasCg)   verticales.push({ ds: "cargo",    et: "Cargo" });
+  verticales.forEach(v => P2_POR_VERTICAL.forEach(def =>
+    deck.push({ def: { ...def, es: `${def.es} · ${v.et}`, en: `${def.en} · ${v.et}` }, ds: v.ds })));
+
+  // 5. Alertas: UNA hoja con todas las categorías adentro (decisión de Manuel:
+  //    una por vertical volvía a inflar el deck).
+  deck.push({ def: P2_ALERTAS_SLIDE, ds: base });
+
+  // 6. Proyección: solo pantalla, al final del cuerpo.
+  deck.push({ def: P2_SLIDES[3], ds: base });
+
+  // 7. Anexo Data Raw, una hoja por vertical (conserva el corte por ciudad).
+  verticales.forEach(v => P2_ANEXO_VERTICAL.forEach(def =>
+    deck.push({ def: { ...def, es: `${def.es} · ${v.et}`, en: `${def.en} · ${v.et}` }, ds: v.ds })));
+
+  // Seguimiento: solo si el partner tiene tareas cargadas.
   if (typeof p2PartnerHasSeguimiento === "function" && p2PartnerHasSeguimiento(partner))
-    deck.push({ def: P2_SEG_SLIDE, ds: "taxi" });
+    deck.push({ def: P2_SEG_SLIDE, ds: base });
   return deck;
 }
 // HTML del nav (prev/next + un botón por slide del deck; sección TukTuk tintada ámbar).
@@ -389,146 +396,6 @@ export function buildSlide2SectionCover(partner, ds) {
       <div class="agy-style-355">${sub} <strong class="agy-style-352">${tk ? "TukTuk" : "Taxi"}</strong></div>
     </div>`;
 }
-
-// ── SLIDE: Criterios del mes (TukTuk) ────────────────────────────────────────
-// Muestra "Nuevos conductores de adquisición propia" vs la meta del criterio.
-//
-// LA DEFINICIÓN ES LA LETRA CHICA: el criterio dice "de adquisición propia: no
-// contempla self-registration", y esa distinción existe tal cual en la fuente —
-// new_from_partner (los trae el partner, CUENTAN) vs new_from_service
-// (self-registration, NO cuentan). El desglose se muestra abajo a propósito: este
-// deck se le manda al partner, así que tiene que poder auditar de dónde sale el
-// número en vez de recibir un total sin explicación.
-//
-// FULL TIMERS NO ESTÁ, y no es un olvido: la measure no existe en las 48 del
-// reporte de taxiparks y NO se puede derivar de sh_per_active_driver, que es un
-// PROMEDIO — el share de conductores sobre 40h necesita la distribución. Un
-// promedio de 40h sale igual con todos en 40h que con la mitad en 80h y la otra
-// mitad en cero. Mostrar un placeholder en un deck que ve el partner sería peor
-// que no mostrarlo: se agrega cuando la fuente exponga la métrica.
-export function buildSlide2TkCriterios(partner, idx) {
-  const es = PRESENT2_STATE.lang === "es";
-  const META = 100;                       // = TK_META_NUEVOS_MES (criterios del mes)
-  const rows  = p2RawDataset().filter(r => r.partner === partner);
-
-  // SIEMPRE POR MES, sea cual sea la escala en la que esté navegando el KAM.
-  // El criterio es "100 al mes": en semanal el último período son 7 días, y la
-  // primera version mostraba "3 / 100" con un disclaimer. Como la escala por
-  // defecto es Semanal, el partner recibía ese slide casi siempre — el numero
-  // grande contradecía el mensaje. Ahora se agrega por MES DE REPORTE (p2ReportYM,
-  // el mismo bucketing que usa Avance vs Meta: en semanal la semana cuenta en el
-  // mes de su jueves), así que en semanal suma sus ~4 semanas y da el mes real.
-  const porMes = new Map();
-  rows.forEach(r => {
-    const { y, m } = p2ReportYM(r.date);
-    if (!y) return;
-    const k = `${y}-${String(m).padStart(2, "0")}`;
-    let e = porMes.get(k);
-    if (!e) { e = { propios: 0, self: 0 }; porMes.set(k, e); }
-    e.propios += r.newPartner  || 0;
-    e.self    += r.newService  || 0;
-  });
-  const meses = [...porMes.keys()].sort();
-  const last = meses[meses.length - 1], prev = meses[meses.length - 2];
-  const cur  = porMes.get(last) || { propios: 0, self: 0 };
-  const propios  = cur.propios, self = cur.self;
-  const pPropios = prev ? (porMes.get(prev).propios) : 0;
-  const total   = propios + self;
-  const pctProp = total > 0 ? (propios / total) * 100 : 0;
-
-  // Ya no hay caso "no comparable": la cifra es mensual por construcción.
-  const pctMeta = Math.min(100, (propios / META) * 100);
-  const col = propios >= META ? "#10b981" : propios >= META * 0.5 ? "#f59e0b" : "#FF0000";
-  const delta = pPropios > 0 ? ((propios - pPropios) / pPropios) * 100 : null;
-  // El mes es cerrado sólo si hay uno posterior; si es el último, va MTD.
-  //
-  // BUG REAL (auditoría ago 2026): `last === meses[meses.length-1]` es
-  // trivialmente cierto por construcción (así se definió `last` una línea
-  // arriba) — por precedencia de operadores la condición quedaba
-  // `meses.length<2 || curMode!=="mensual"`, así que en mensual con ≥2 meses
-  // NUNCA marcaba "mes en curso" (aunque el último mes estuviera a medias) y
-  // en semanal/diario SIEMPRE lo marcaba (aunque el mes ya estuviera cerrado
-  // hace tiempo). Solo afecta la etiqueta "parcial"/MTD, no el número. Fix:
-  // comparar contra el mes calendario REAL — cerrado si `last` quedó en el
-  // pasado, en curso si `last` es el mes actual.
-  const _hoy = new Date();
-  const _mesActual = `${_hoy.getFullYear()}-${String(_hoy.getMonth() + 1).padStart(2, "0")}`;
-  const parcial = meses.length < 1 || last === _mesActual;
-
-  // Evolución: últimos 6 MESES, para que se vea la tendencia y no un dato suelto.
-  const ultimos = meses.slice(-6);
-  const maxEvo = Math.max(META, ...ultimos.map(k => porMes.get(k).propios));
-  const evo = ultimos.map(k => {
-    const v = porMes.get(k).propios;
-    const h = Math.max(3, Math.round((v / maxEvo) * 90));
-    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
-      <div style="font-size:.68rem;font-weight:700;color:#334155">${fmt(v)}</div>
-      <div style="width:100%;height:90px;display:flex;align-items:flex-end">
-        <div style="width:100%;height:${h}px;background:${v >= META ? "#10b981" : "#f59e0b"};border-radius:4px 4px 0 0"></div>
-      </div>
-      <div style="font-size:.6rem;color:#94a3b8">${escapeHTML(String(k))}</div>
-    </div>`;
-  }).join("");
-
-  const card = (label, val, sub, color) => `
-    <div style="flex:1;background:#fff;border:1px solid #e2e8f0;border-top:3px solid ${color};border-radius:10px;padding:14px 16px">
-      <div style="font-size:.72rem;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.03em">${label}</div>
-      <div style="font-size:1.9rem;font-weight:800;color:${color};margin-top:4px">${val}</div>
-      <div style="font-size:.68rem;color:#94a3b8;margin-top:2px">${sub}</div>
-    </div>`;
-
-  return `
-    <div style="padding:8px 4px">
-      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:4px">
-        <div style="font-size:1.35rem;font-weight:800;color:#0f172a">🛺 ${es ? "Criterios del mes" : "Monthly criteria"}</div>
-        <div style="color:#94a3b8;font-size:.8rem">${escapeHTML(partner)} · ${escapeHTML(String(last || ""))}</div>
-      </div>
-      <div style="color:#64748b;font-size:.82rem;margin-bottom:14px">
-        ${es ? "Conductores nuevos traídos por el partner. No contempla self-registration."
-             : "New drivers brought in by the partner. Self-registration does not count."}
-      </div>
-
-      <div style="display:flex;gap:12px;margin-bottom:16px">
-        ${card(es ? "Nuevos propios" : "Own acquisition", fmt(propios),
-               (es ? "meta " : "target ") + META + (parcial ? (es ? " · mes en curso" : " · month in progress") : ""), col)}
-        ${card(es ? "Self-registration" : "Self-registration", fmt(self),
-               es ? "no cuenta para la meta" : "does not count", "#94a3b8")}
-        ${card(es ? "% adquisición propia" : "% own acquisition", pctProp.toFixed(1) + "%",
-               es ? "propios / total nuevos" : "own / total new", "#0284c7")}
-        ${card(es ? "vs mes anterior" : "vs previous month",
-               delta === null ? "—" : (delta >= 0 ? "+" : "") + delta.toFixed(1) + "%",
-               delta === null ? (es ? "sin base previa" : "no prior base") : "MoM",
-               delta === null ? "#94a3b8" : delta >= 0 ? "#10b981" : "#FF0000")}
-      </div>
-
-      <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;margin-bottom:14px">
-        <div style="display:flex;justify-content:space-between;font-size:.75rem;font-weight:700;color:#334155;margin-bottom:6px">
-          <span>${es ? "Avance vs meta" : "Progress vs target"}</span><span>${fmt(propios)} / ${META}</span>
-        </div>
-        <div style="background:#eef2f7;height:14px;border-radius:7px;overflow:hidden">
-          <div style="width:${pctMeta}%;height:100%;background:${col}"></div>
-        </div>
-      </div>
-
-      <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px">
-        <div style="font-size:.75rem;font-weight:700;color:#334155;margin-bottom:10px">
-          ${es ? "Evolución · nuevos propios" : "Trend · own acquisition"}
-        </div>
-        <div style="display:flex;gap:8px;align-items:flex-end">${evo || `<div style="color:#94a3b8;font-size:.8rem">${es ? "Sin datos" : "No data"}</div>`}</div>
-      </div>
-    </div>`;
-}
-
-// Bandas de cohorte (mismas que Vista Partner). range = [inicio, fin) sobre el ranking.
-export const P2_BANDS = [
-  { key: "t1",   range: [0, 1],  color: "#dc2626", es: "Top 1",       en: "Top 1" },
-  { key: "t23",  range: [1, 3],  color: "#f59e0b", es: "Top 2-3",     en: "Top 2-3" },
-  { key: "t45",  range: [3, 5],  color: "#0284c7", es: "Top 4-5",     en: "Top 4-5" },
-  { key: "t610", range: [5, 10], color: "#a855f7", es: "Top 6-10",    en: "Top 6-10" },
-  { key: "t5",   range: [0, 5],  color: "#10b981", es: "Prom. Top 5", en: "Avg Top 5" }
-];
-
-// ── HELPERS DE DATOS ──────────────────────────────────────────────────────────
 export function destroyPresent2Charts() {
   PRESENT2_STATE.charts.forEach(c => { try { c.destroy(); } catch (e) {} });
   PRESENT2_STATE.charts = [];
@@ -541,11 +408,55 @@ export function destroyPresent2Charts() {
 // en semanal/diario el semanal. Antes siempre leía el semanal → tuktuk salía en
 // BLANCO en modo mensual (buscaba claves de mes "YYYY-MM" en un índice de semanas).
 // (Taxi ya es mode-aware porque _byCityDate/rawData/allDates se reconstruyen en switchMode.)
+// Bandas de cohorte para comparar al partner contra su grupo de tamaño.
+export const P2_BANDS = [
+  { key: "t1",   range: [0, 1],  color: "#dc2626", es: "Top 1",       en: "Top 1" },
+  { key: "t23",  range: [1, 3],  color: "#f59e0b", es: "Top 2-3",     en: "Top 2-3" },
+  { key: "t45",  range: [3, 5],  color: "#0284c7", es: "Top 4-5",     en: "Top 4-5" },
+  { key: "t610", range: [5, 10], color: "#a855f7", es: "Top 6-10",    en: "Top 6-10" },
+  { key: "t5",   range: [0, 5],  color: "#10b981", es: "Prom. Top 5", en: "Avg Top 5" }
+];
+
 export function _p2TkMensual() { return STATE.curMode === "mensual"; }
-export function p2CityDateIndex()  { return PRESENT2_STATE.dataset === "tuktuk" ? (_p2TkMensual() ? STATE._tuktukMensualByCityDate : STATE._tuktukByCityDate) : STATE._byCityDate; }
-export function p2RawDataset()     { return PRESENT2_STATE.dataset === "tuktuk" ? (_p2TkMensual() ? (STATE.rawDataMensualTuktuk || []) : (STATE.rawDataTuktuk || [])) : (STATE.rawData || []); }
-export function p2ActivePartners() { return PRESENT2_STATE.dataset === "tuktuk" ? (_p2TkMensual() ? (STATE._tuktukMensualPartners || []) : (STATE._tuktukPartners || [])) : (STATE.allPartners || []); }
-export function p2AllDates()       { return PRESENT2_STATE.dataset === "tuktuk" ? (_p2TkMensual() ? (STATE._tuktukMensualDates || []) : (STATE._tuktukDates || [])) : (STATE.allDates || []); }
+
+// Sufijo de escala para las claves de STATE de las verticales nuevas. El
+// dataset "taxi" NO lo necesita: STATE.rawData/_byCityDate ya apuntan a la
+// escala activa. TukTuk y las verticales viven en slices paralelos, asi que si
+// no se elige el sufijo el deck lee el slice SEMANAL estando en mensual, en
+// silencio (mismo bug que ya se arreglo en los selectores de linea).
+function _p2Suf() { return STATE.curMode === "mensual" ? "Mensual" : STATE.curMode === "diario" ? "Diario" : ""; }
+// Verticales que viven en un slice propio (todas menos taxi, que es el dataset base).
+const P2_VERT = { delivery: 1, cargo: 1 };
+
+export function p2CityDateIndex() {
+  const ds = PRESENT2_STATE.dataset;
+  if (ds === "tuktuk") return _p2TkMensual() ? STATE._tuktukMensualByCityDate : STATE._tuktukByCityDate;
+  if (P2_VERT[ds])     return STATE[`_${ds}${_p2Suf()}ByCityDate`] || new Map();
+  return STATE._byCityDate;
+}
+export function p2RawDataset() {
+  const ds = PRESENT2_STATE.dataset, suf = _p2Suf();
+  if (ds === "tuktuk") return (_p2TkMensual() ? STATE.rawDataMensualTuktuk : STATE.rawDataTuktuk) || [];
+  if (P2_VERT[ds])     return STATE[`rawData${suf}${ds[0].toUpperCase()}${ds.slice(1)}`] || [];
+  return STATE.rawData || [];
+}
+export function p2ActivePartners() {
+  const ds = PRESENT2_STATE.dataset;
+  if (ds === "tuktuk") return (_p2TkMensual() ? STATE._tuktukMensualPartners : STATE._tuktukPartners) || [];
+  if (P2_VERT[ds])     return STATE[`_${ds}${_p2Suf()}Partners`] || [];
+  return STATE.allPartners || [];
+}
+export function p2AllDates() {
+  const ds = PRESENT2_STATE.dataset;
+  if (ds === "tuktuk") return (_p2TkMensual() ? STATE._tuktukMensualDates : STATE._tuktukDates) || [];
+  if (P2_VERT[ds])     return STATE[`_${ds}${_p2Suf()}Dates`] || [];
+  return STATE.allDates || [];
+}
+// ¿El partner opera esta vertical en la escala activa?
+export function p2TieneVertical(partner, vert) {
+  const suf = _p2Suf();
+  return (STATE[`_${vert}${suf}Partners`] || []).includes(partner);
+}
 
 // Espejo local de getPartnerVals/getCityVals (presentacion.js), pero acotado al
 // índice del dataset activo — así taxi se comporta IDÉNTICO a antes (misma
@@ -1004,7 +915,7 @@ export function buildSlide2MatrixCharts(partner, dates, root) {
 // ── SLIDES 1 y 2: DATA RAW numérico / porcentual ──────────────────────────────
 // Columnas (formato de referencia): Trips · Supply Hours · Active Drivers ·
 // New Drivers · Reactivated · Partner Commission · N+R · Retención · Trips/SH · Trips/AD · SH/AD.
-// Labels espejados al ES/EN de p2KpiDefs (matriz) y buildSlide2Avance — la MISMA métrica
+// Labels espejados al ES/EN de p2KpiDefs (matriz) — la MISMA métrica
 // debe llamarse igual en todo el deck. Antes solo "Retención" traducía; el resto quedaba en
 // inglés fijo aun con lang=es (inconsistente con KPIs por Nivel/Avance, que sí traducen).
 // `grp` agrupa las columnas bajo una cabecera de sección (Volumen / Eficiencia
@@ -1291,232 +1202,6 @@ export function _p2MetaOnlyCard(label, goal, fmtN, note, es) {
 // % honesto: NO redondear 99.5-99.99 a "100%" (parecería meta cumplida sin estarlo).
 // <100 → 1 decimal (99.6%); ≥100 → entero (106%). Espeja el criterio de la pestaña Metas.
 export function _p2PctTxt(pct) { return (pct >= 100 ? pct.toFixed(0) : Math.min(pct, 99.9).toFixed(1)) + "%"; }
-
-export function buildSlide2Avance(partner, idx) {
-  const es = PRESENT2_STATE.lang === "es";
-  const isTk = PRESENT2_STATE.dataset === "tuktuk";   // TukTuk: metas meta_tk_* (Fase 4)
-  const fleetMode = p2IsFleetMode(partner);
-  const mesName = p2AvanceMes();
-  const monthDates = p2MonthDates(mesName);
-  const lastDate = monthDates.length ? monthDates[monthDates.length - 1] : p2AllDates().slice(-1)[0];
-  const levels = p2Levels(partner);
-  // Necesita fechas del mes META + metas cargadas. Si hay metas pero el mes elegido no
-  // tiene datos (≤ Hasta), NO se muestran actuals de otro mes: se avisa "sin datos del mes".
-  const metasLoaded = !!(STATE.metasData || []).length;
-  const noMonthData = metasLoaded && !monthDates.length;
-  const noData = !monthDates.length || !metasLoaded;
-  // TukTuk usa metas meta_tk_* (AD/N+R/Brandeados); Taxi usa meta_active_drivers/nr/sh.
-  // `snap` marca métricas SNAPSHOT (nivel actual, no acumuladas): su "fact" es el ÚLTIMO
-  // período visible (lastAD/lastCars), NO el máximo del mes — así el número coincide con
-  // la última semana (KPIs por Nivel) y con la proyección, en vez de sobre-mostrar el pico.
-  const metricDefs = isTk ? [
-    { mk: "mtkAD",   ak: "ad",   snap: "lastAD",   label: es ? "Conductores Activos" : "Active Drivers", kind: "num" },
-    { mk: "mtkNR",   ak: "nr",   label: es ? "Nuevos + Reactivados" : "New + React",   kind: "num" },
-    { mk: "mtkCars", ak: "cars", snap: "lastCars", label: es ? "Brandeados" : "Branded",                 kind: "num" }
-  ] : [
-    { mk: "mA",  ak: "ad", snap: "lastAD", label: es ? "Conductores Activos" : "Active Drivers", kind: "num"  },
-    { mk: "mNR", ak: "nr", label: es ? "Nuevos + Reactivados" : "New + React",   kind: "num"  },
-    { mk: "mH",  ak: "sh", label: es ? "Horas de Conexión" : "Supply Hours",     kind: "numK" }
-  ];
-  // KPIs Fleet (Fase 4): Aceptación y SH/Auto con meta real si está cargada (meta_acceptance
-  // / meta_sh_car); Utilización solo meta; Owned Cars como referencia. Ver bloque fleetMode.
-  const rows = levels.map(lv => {
-    const act = p2ActualsMTD(partner, lv.city, monthDates);
-    if (isTk) {   // Brandeados: snapshot → ÚLTIMO período (Σ ciudades en la última fecha)
-      const carsV = p2Vals(partner, lv.city, monthDates, r => r.brandedActiveCars || 0);
-      act.lastCars = carsV.length ? carsV[carsV.length - 1] : 0;
-      act.cars     = act.lastCars;   // compat
-    }
-    const proj = p2ProjMTD(act, lastDate);
-    if (isTk) proj.cars = act.lastCars;   // snapshot: proyección = nivel actual
-    // Metas reales de STATE.metasData (agregador: mA/mNR/mH · TukTuk: mtk*).
-    const meta = p2MetaFor(partner, lv.city, mesName);
-    // Jerarquía (ago 2026): las tarjetas CON meta son el mensaje del slide y
-    // van en la fila principal; las de referencia/"sin meta" son contexto y
-    // van en una fila secundaria más compacta. Antes convivían al mismo rango
-    // visual y el ojo no sabía cuál era el avance y cuál el dato decorativo.
-    const metaCards = [], refCards = [];
-    metricDefs.forEach(m => {
-      // Snapshot (AD/Cars) → último período; acumuladas (N+R/SH) → total del mes.
-      const real = m.snap ? (act[m.snap] != null ? act[m.snap] : act[m.ak]) : act[m.ak];
-      const goal = meta[m.mk] || 0, projV = proj[m.ak];
-      const fmtN = m.kind === "numK" ? fmtSmart : fmt;
-      if (!goal) {
-        const subTxt = es ? "Sin meta" : "No target";
-        refCards.push(`<div class="agy-style-392">
-          <div class="agy-style-383">${escapeHTML(m.label)}</div>
-          <div class="agy-style-379">${fmtN(real)}</div>
-          <div class="agy-style-393">${subTxt}</div></div>`);
-        return;
-      }
-      const pct = (real / goal) * 100, ppct = (projV / goal) * 100, col = p2AvanceColor(pct);
-      metaCards.push(`<div class="agy-style-381">
-        <div class="agy-style-382">
-          <span class="agy-style-383">${escapeHTML(m.label)}</span>
-          <span style="font-size:.74rem;font-weight:800;color:${col}">${_p2PctTxt(pct)}</span>
-        </div>
-        <div class="agy-style-384">
-          <span class="agy-style-385">${fmtN(real)}</span>
-          <span class="agy-style-386">/ ${fmtN(goal)}</span>
-        </div>
-        <div class="agy-style-387">
-          ${ppct > pct ? `<div style="position:absolute;top:0;left:0;height:100%;width:${Math.min(Math.max(ppct, 0), 100).toFixed(1)}%;background:${p2AvanceColor(ppct)};opacity:.35;border-radius:5px"></div>` : ""}
-          <div style="position:absolute;top:0;left:0;height:100%;width:${Math.min(pct, 100).toFixed(1)}%;background:${col};border-radius:5px"></div>
-          ${ppct != null ? `<div class="p2-proj-tick" style="left:calc(${Math.min(Math.max(ppct, 0), 100).toFixed(1)}% - 1px)"></div>` : ""}
-        </div>
-        <div class="agy-style-388">${es ? "proy" : "proj"} ${fmtN(projV)} (${_p2PctTxt(ppct)})</div>
-      </div>`);
-    });
-    if (fleetMode) {
-      const fs = p2FleetSeries(partner, lv.city, monthDates);
-      const lastOf = arr => (arr && arr.length) ? arr[arr.length - 1] : null;
-      // Las tasas Fleet (aceptación, SH/auto) NO se promedian entre ciudades sin ponderar,
-      // así que la comparación meta-vs-actual SOLO se muestra POR CIUDAD. A nivel Perú-general
-      // (lv.city null) se muestran como REFERENCIA (sin %), igual que hace la pestaña Metas
-      // (que no agrega Fleet a Perú). Evita "actual ponderado ÷ meta de una ciudad" engañoso.
-      const perCity = lv.city != null;
-      const accA = lastOf(fs.accept);     // 0-1 o null
-      const shcA = lastOf(fs.shCarInt);   // ratio o null
-      // Aceptación: meta real por ciudad SOLO si hay meta Y actual con dato; si no, referencia (— si null).
-      if (perCity && meta.mAcc != null && accA != null)
-        metaCards.push(_p2MetaCard(es ? "Aceptación" : "Acceptance", accA * 100, meta.mAcc, null, v => fmt(v) + "%", es));
-      else refCards.push(p2RefCard(es ? "Acceptance Rate" : "Acceptance Rate", fs.accept, "pct", es));
-      // SH/Auto interno:
-      if (perCity && meta.mSHcar != null && shcA != null)
-        metaCards.push(_p2MetaCard(es ? "SH/Auto (interno)" : "Internal SH/Car", shcA, meta.mSHcar, null, v => fmt(v), es));
-      else refCards.push(p2RefCard(es ? "Internal Fleet SH/Auto" : "Internal Fleet SH/Car", fs.shCarInt, "ratio1", es));
-      // Utilización: solo meta, solo por ciudad (sin actual medible) — es contexto, va secundaria.
-      if (perCity && meta.mUtil != null) refCards.push(_p2MetaOnlyCard(es ? "Utilización" : "Utilization", meta.mUtil, v => fmt(v) + "%", es ? "sin actual" : "no actual", es));
-      // Owned Fleet Active Cars: referencia (sin meta en BD).
-      refCards.push(p2RefCard(es ? "Owned Fleet Active Cars" : "Owned Fleet Active Cars", fs.ownedFleetActiveCars, "num", es));
-    }
-    // Sin ninguna tarjeta con meta, las referencias suben a la fila principal
-    // (una fila secundaria sola parecería un slide en borrador).
-    const primary = metaCards.length ? metaCards : refCards;
-    const secondary = metaCards.length ? refCards : [];
-    return `<div style="display:flex;gap:8px;flex:1 1 0;min-height:0;max-height:230px;border-left:3px solid ${lv.color};padding-left:8px;align-items:stretch">
-      <div class="agy-style-394"><span style="font-weight:800;font-size:.82rem;color:${lv.color}">${escapeHTML(lv.label)}</span></div>
-      <div class="p2-lvl-cards">
-        <div class="p2-lvl-primary">${primary.join("")}</div>
-        ${secondary.length ? `<div class="p2-lvl-secondary">${secondary.join("")}</div>` : ""}
-      </div>
-    </div>`;
-  }).join("");
-  const avTitle = isTk
-    ? (es ? "Avance vs Meta TukTuk" : "TukTuk Goal vs Target")
-    : (es ? "Avance vs Meta del mes" : "Goal vs Target");
-  const avSub = es
-    ? "Actual vs meta · barra = avance · marca ▏= proyección"
-    : "Actual vs goal · bar = progress · ▏mark = projection";
-  const noDataMsg = noMonthData
-    ? (es ? `Sin datos de ${escapeHTML(mesName)} para comparar con la meta.` : `No data for ${escapeHTML(mesName)} to compare.`)
-    : isTk
-      ? (es ? "Sin metas TukTuk para este mes." : "No TukTuk goals for this month.")
-      : (es ? "Sin metas cargadas para este mes." : "No goals loaded for this month.");
-  return `<div class="agy-style-365">
-    ${p2BrandHeader(partner, avTitle + " · " + (mesName || "—"), avSub)}
-    ${noData
-      ? `<div class="agy-style-396">${noDataMsg}</div>`
-      : `<div class="agy-style-366">${rows}</div>`}
-    ${p2BrandFooter(idx)}
-  </div>`;
-}
-
-// ── SLIDE: AVANCE VS META COMBINADO (Taxi + TukTuk) ───────────────────────────
-// Vista rápida "cómo va TODO mi negocio": suma Conductores Activos, N+R y Horas de
-// Conexión de Taxi + TukTuk contra la meta combinada (meta Taxi + meta TukTuk).
-// Solo Perú-general (sin desglose por ciudad — eso ya existe por separado en las
-// slides Taxi/TukTuk individuales). Se inserta UNA VEZ en el deck vía p2Deck(), NO
-// vía P2_SLIDES (ese array se re-ejecuta completo para la sección Taxi Y para la
-// TukTuk — agregarla ahí la duplicaría). Solo aparece para partners con TukTuk
-// (p2TuktukSectionVisible) — sin TukTuk, "combinado" sería idéntico a Taxi-only.
-export function buildSlide2AvanceCombinado(partner, idx) {
-  const es = PRESENT2_STATE.lang === "es";
-  const savedDs = PRESENT2_STATE.dataset;   // restaurar antes de salir (accessors globales)
-
-  const mesName = p2AvanceMes();   // dataset-agnóstico (lee metasData + "Hasta")
-
-  PRESENT2_STATE.dataset = "taxi";
-  const taxiDates = p2MonthDates(mesName);
-  const taxiLastDate = taxiDates.length ? taxiDates[taxiDates.length - 1] : p2AllDates().slice(-1)[0];
-  const taxiAct  = p2ActualsMTD(partner, null, taxiDates);
-  const taxiProj = p2ProjMTD(taxiAct, taxiLastDate);
-
-  PRESENT2_STATE.dataset = "tuktuk";
-  const tkDates = p2MonthDates(mesName);
-  const tkLastDate = tkDates.length ? tkDates[tkDates.length - 1] : p2AllDates().slice(-1)[0];
-  const tkAct  = p2ActualsMTD(partner, null, tkDates);
-  const tkProj = p2ProjMTD(tkAct, tkLastDate);
-
-  PRESENT2_STATE.dataset = savedDs;   // restaurar YA — antes de cualquier early-return
-
-  const meta = p2MetaFor(partner, null, mesName);   // dataset-agnóstico (mA/mNR/mH + mtkAD/mtkNR/mtkSH)
-  const metasLoaded = !!(STATE.metasData || []).length;
-  const noMonthData = metasLoaded && !taxiDates.length && !tkDates.length;
-  const noData = (!taxiDates.length && !tkDates.length) || !metasLoaded;
-
-  // Proyección de AD COMBINADA: la serie taxi+tk se suma POR FECHA y se
-  // proyecta el máximo de ESA serie (×1.4) — sumar la proyección de cada
-  // línea (máx(taxi)+máx(tk)) sobre-estima siempre que cada línea picó en
-  // semanas distintas: "una proyección de snapshot no se suma hacia arriba"
-  // (caso Lizzo, jul 2026), la misma regla que aplica Metas Combinado.
-  const _combAdByDate = new Map();
-  taxiDates.forEach((d, i) => _combAdByDate.set(d, (_combAdByDate.get(d) || 0) + (taxiAct.adV[i] || 0)));
-  tkDates.forEach((d, i)   => _combAdByDate.set(d, (_combAdByDate.get(d) || 0) + (tkAct.adV[i]   || 0)));
-  const _combKeys = [..._combAdByDate.keys()].sort();
-  const _combProjAD = projAD(_combKeys.map(d => _combAdByDate.get(d)), _combKeys[_combKeys.length - 1]);
-
-  // META PARAGUAS — mA/mNR/mH YA INCLUYEN TukTuk, no se les suma meta_tk_*.
-  //
-  // Verificado contra producción (ago 2026): en los partners con meta TukTuk, la
-  // razón meta_tk_ad/meta_active_drivers coincide con la participación real de
-  // TukTuk sobre el TOTAL, no sobre el taxi (Flota Pe 17,2% vs 17,2% real).
-  // Corrobora la Calculadora, que reparte cuotas sobre base combinada.
-  //
-  // Antes se sumaban (mA + mtkAD) y la meta salía inflada: TRANSPOTAXI Lima
-  // mostraba 3.785 en vez de 2.661 → 60% de avance cuando el real era 86%.
-  // Además meta_tk_* quedó OBSOLETA (Manuel, ago 2026): TukTuk ya no se mide
-  // con metas de AD/N+R/SH propias sino con criterios (24h por conductor base
-  // + meta de nuevos). Estas columnas no se leen más acá.
-  const defs = [
-    { label: es ? "Conductores Activos" : "Active Drivers",
-      // FACT = snapshot del último período de cada línea, sumados. PROYECCIÓN =
-      // sobre la serie combinada (ver arriba).
-      real: taxiAct.lastAD + tkAct.lastAD, proj: _combProjAD,
-      goal: meta.mA || 0, fmtN: fmt },
-    { label: es ? "Nuevos + Reactivados" : "New + React",
-      real: taxiAct.nr + tkAct.nr, proj: taxiProj.nr + tkProj.nr,
-      goal: meta.mNR || 0, fmtN: fmt },
-    { label: es ? "Horas de Conexión" : "Supply Hours",
-      real: taxiAct.sh + tkAct.sh, proj: taxiProj.sh + tkProj.sh,
-      goal: meta.mH || 0, fmtN: fmtSmart }
-  ];
-  const cards = defs.map(d => d.goal > 0
-    ? _p2MetaCard(d.label, d.real, d.goal, d.proj, d.fmtN, es)
-    : `<div class="agy-style-392">
-        <div class="agy-style-383">${escapeHTML(d.label)}</div>
-        <div class="agy-style-379">${d.fmtN(d.real)}</div>
-        <div class="agy-style-393">${es ? "Sin meta" : "No target"}</div>
-      </div>`
-  ).join("");
-
-  const title = es ? "Avance vs Meta Combinado" : "Combined Goal vs Target";
-  const sub   = es
-    ? "Taxi + TukTuk sumados · barra = avance · marca ▏= proyección"
-    : "Taxi + TukTuk combined · bar = progress · ▏mark = projection";
-  const noDataMsg = noMonthData
-    ? (es ? `Sin datos de ${escapeHTML(mesName)} para comparar con la meta.` : `No data for ${escapeHTML(mesName)} to compare.`)
-    : (es ? "Sin metas cargadas para este mes." : "No goals loaded for this month.");
-
-  return `<div class="agy-style-365">
-    ${p2BrandHeader(partner, title + " · " + (mesName || "—"), sub, { text: es ? "🔀 COMBINADO" : "🔀 COMBINED", color: "#8b5cf6" })}
-    ${noData
-      ? `<div class="agy-style-396">${noDataMsg}</div>`
-      : `<div class="agy-style-397">${cards}</div>`}
-    ${p2BrandFooter(idx)}
-  </div>`;
-}
-
 // ── SLIDE: RESUMEN / SCORECARD (ago 2026) ─────────────────────────────────────
 // Consolida en UNA hoja lo que hoy toma tres (Avance Combinado + Avance vs Meta
 // + 🛺 Avance vs Meta). Responde de un vistazo: ¿cómo voy, en qué ciudad, y en
@@ -1525,7 +1210,7 @@ export function buildSlide2AvanceCombinado(partner, idx) {
 // Dos zonas separadas A PROPÓSITO, porque no todo se mide igual:
 //   1. CUMPLIMIENTO — solo donde hay meta. La meta paraguas (mA/mNR/mH) cubre
 //      Taxi + TukTuk juntos, así que el actual que se compara es la SUMA de
-//      ambos. No se le suma meta_tk_* (obsoleta, ver buildSlide2AvanceCombinado).
+//      ambos. No se le suma meta_tk_* (obsoleta desde ago 2026).
 //   2. COMPOSICIÓN — las 4 verticales con su actual y su crecimiento. Sin meta
 //      para Delivery/Cargo (aún no definidas): se muestran como referencia.
 // Mezclar las dos zonas sería fingir que Delivery tiene cumplimiento cuando no
@@ -1582,9 +1267,9 @@ export function buildSlide2Resumen(partner, idx) {
   const savedDs = PRESENT2_STATE.dataset;
   const mesName = p2AvanceMes();
 
-  // Actuales por vertical. Taxi y TukTuk salen de los accesores del deck
-  // (mismo camino que las slides existentes → los números tienen que coincidir);
-  // Delivery y Cargo, de sus slices propios.
+  // Fechas y actuales por vertical. Taxi/TukTuk salen de los accesores del deck
+  // (mismo camino que el resto de las slides → los números deben coincidir);
+  // Delivery/Cargo de sus slices, ya indexados por escala.
   PRESENT2_STATE.dataset = "taxi";
   const taxiDates = p2MonthDates(mesName);
   const levels = p2Levels(partner);
@@ -1594,84 +1279,156 @@ export function buildSlide2Resumen(partner, idx) {
 
   const dates = taxiDates.length ? taxiDates : tkDates;
   const metasLoaded = !!(STATE.metasData || []).length;
-  const noData = !dates.length || !metasLoaded;
+  if (!dates.length || !metasLoaded) {
+    return `<div class="agy-style-365">
+      ${p2BrandHeader(partner, (es ? "Resumen" : "Summary") + " · " + (mesName || "—"), "")}
+      <div class="agy-style-396">${es ? "Sin datos o metas del mes." : "No data or targets."}</div>
+      ${p2BrandFooter(idx)}</div>`;
+  }
 
-  // ── Zona 1: cumplimiento del paraguas por ciudad ──────────────────────────
-  const filaCumpl = (lv) => {
-    PRESENT2_STATE.dataset = "taxi";
-    const aTx = p2ActualsMTD(partner, lv.city, taxiDates);
-    PRESENT2_STATE.dataset = "tuktuk";
-    const aTk = p2ActualsMTD(partner, lv.city, tkDates);
-    PRESENT2_STATE.dataset = savedDs;
-    const meta = p2MetaFor(partner, lv.city, mesName);
-    // Paraguas = Taxi + TukTuk (lo que la meta cubre). Delivery/Cargo quedan
-    // fuera: la meta no los incluye.
-    const ad = (aTx.lastAD || 0) + (aTk.lastAD || 0);
-    const nr = (aTx.nr || 0) + (aTk.nr || 0);
-    const sh = (aTx.sh || 0) + (aTk.sh || 0);
-    return `<tr>
-      <td class="sc-lvl"><span class="sc-dot" style="background:${lv.color}"></span>${escapeHTML(lv.label)}</td>
-      ${_scCell(ad, meta.mA  || 0, fmt)}
-      ${_scCell(nr, meta.mNR || 0, fmt)}
-      ${_scCell(sh, meta.mH  || 0, fmtSmart)}
-    </tr>`;
+  // ── Zona 1: cumplimiento por ciudad (paraguas Taxi + TukTuk) ──────────────
+  // Cada celda lleva su barra: el subrayado da el "cuán lleno" de un vistazo
+  // sin costar una fila entera de alto.
+  const celda = (real, meta, f) => {
+    if (!meta) return `<td class="rs-c rs-nm">${f(real)}<i>${es ? "sin meta" : "no target"}</i></td>`;
+    const pct = (real / meta) * 100, col = pColor(pct);
+    return `<td class="rs-c">
+      <span class="rs-v">${f(real)}</span><span class="rs-m">/ ${f(meta)}</span>
+      <span class="rs-p" style="color:${col}">${_p2PctTxt(pct)}</span>
+      <span class="rs-bar"><i style="width:${Math.min(pct,100).toFixed(1)}%;background:${col}"></i></span>
+    </td>`;
   };
+  const filasCumpl = levels.map(lv => {
+    PRESENT2_STATE.dataset = "taxi";  const a = p2ActualsMTD(partner, lv.city, taxiDates);
+    PRESENT2_STATE.dataset = "tuktuk"; const b = p2ActualsMTD(partner, lv.city, tkDates);
+    PRESENT2_STATE.dataset = savedDs;
+    const m = p2MetaFor(partner, lv.city, mesName);
+    return `<tr>
+      <td class="rs-l"><span class="rs-d" style="background:${lv.color}"></span>${escapeHTML(lv.label)}</td>
+      ${celda((a.lastAD||0)+(b.lastAD||0), m.mA||0, fmt)}
+      ${celda((a.nr||0)+(b.nr||0),         m.mNR||0, fmt)}
+      ${celda((a.sh||0)+(b.sh||0),         m.mH||0, fmtSmart)}
+    </tr>`;
+  }).join("");
 
-  // ── Zona 2: composición por vertical (Perú) ───────────────────────────────
+  // ── Zona 2: composición por vertical ─────────────────────────────────────
+  // PARTICIÓN: las 4 suman el total. Fleet NO va acá — sus autos hacen viajes
+  // de Taxi, así que es un subconjunto, no una quinta categoría: ponerlo como
+  // fila contaría esos conductores dos veces. Va en su propio bloque.
   const VERTS = [
-    { key: "taxi",     label: "Taxi",     color: "#FF0000" },
-    { key: "tuktuk",   label: "TukTuk",   color: "#f59e0b" },
-    { key: "delivery", label: "Delivery", color: "#0284c7" },
-    { key: "cargo",    label: "Cargo",    color: "#8b5cf6" }
+    { k: "taxi",     lbl: "Taxi",     col: "#FF0000" },
+    { k: "tuktuk",   lbl: "TukTuk",   col: "#f59e0b" },
+    { k: "delivery", lbl: "Delivery", col: "#0284c7" },
+    { k: "cargo",    lbl: "Cargo",    col: "#8b5cf6" }
   ];
-  const compFilas = VERTS.map(v => {
+  const comp = VERTS.map(v => {
     let t;
-    if (v.key === "taxi") {
-      PRESENT2_STATE.dataset = "taxi";  t = p2ActualsMTD(partner, null, taxiDates); t.presente = !!taxiDates.length;
-      PRESENT2_STATE.dataset = savedDs;
-    } else if (v.key === "tuktuk") {
-      PRESENT2_STATE.dataset = "tuktuk"; t = p2ActualsMTD(partner, null, tkDates); t.presente = !!tkDates.length;
+    if (v.k === "taxi" || v.k === "tuktuk") {
+      PRESENT2_STATE.dataset = v.k;
+      t = p2ActualsMTD(partner, null, v.k === "taxi" ? taxiDates : tkDates);
+      t.ad = t.lastAD; t.hay = (v.k === "taxi" ? taxiDates : tkDates).length > 0;
       PRESENT2_STATE.dataset = savedDs;
     } else {
-      t = p2VerticalTotals(p2SliceVertical(v.key), partner, null, dates);
+      t = p2VerticalTotals(p2SliceVertical(v.k), partner, null, dates);
+      t.hay = t.presente;
     }
-    const ad = t.lastAD != null ? t.lastAD : t.ad;
-    if (!t.presente && !ad && !t.nr && !t.sh) return "";   // vertical que el partner no opera
-    return `<tr>
-      <td class="sc-lvl"><span class="sc-dot" style="background:${v.color}"></span>${v.label}</td>
-      <td class="sc-num"><span class="sc-val">${fmt(ad)}</span></td>
-      <td class="sc-num"><span class="sc-val">${fmt(t.nr)}</span></td>
-      <td class="sc-num"><span class="sc-val">${fmtSmart(t.sh)}</span></td>
-    </tr>`;
-  }).filter(Boolean).join("");
+    return { ...v, ad: t.ad || 0, nr: t.nr || 0, sh: t.sh || 0, hay: t.hay };
+  }).filter(v => v.hay || v.ad || v.nr || v.sh);
+  const totAD = comp.reduce((s, v) => s + v.ad, 0) || 1;
+  const filasComp = comp.map(v => `<tr>
+      <td class="rs-l"><span class="rs-d" style="background:${v.col}"></span>${v.lbl}</td>
+      <td class="rs-c"><span class="rs-v">${fmt(v.ad)}</span><span class="rs-p rs-share">${(v.ad/totAD*100).toFixed(0)}%</span></td>
+      <td class="rs-c"><span class="rs-v">${fmt(v.nr)}</span></td>
+      <td class="rs-c"><span class="rs-v">${fmtSmart(v.sh)}</span></td>
+    </tr>`).join("");
 
-  const th = `<tr><th></th>
-    <th>${es ? "Conductores Activos" : "Active Drivers"}</th>
-    <th>${es ? "Nuevos + Reactivados" : "New + React"}</th>
-    <th>${es ? "Horas de Conexión" : "Supply Hours"}</th></tr>`;
+  // ── Zona 3: Fleet — lente sobre Taxi, no una vertical ────────────────────
+  let fleetHTML = "";
+  if (p2IsFleetMode(partner)) {
+    PRESENT2_STATE.dataset = "taxi";
+    const fs = p2FleetSeries(partner, null, taxiDates);
+    PRESENT2_STATE.dataset = savedDs;
+    const ult = arr => (arr && arr.length) ? arr[arr.length - 1] : null;
+    const m = p2MetaFor(partner, null, mesName);
+    const chips = [
+      { l: es ? "Autos propios" : "Owned cars", v: ult(fs.ownedFleetActiveCars), f: v => v == null ? "—" : fmt(v) },
+      { l: es ? "SH / auto" : "SH / car",       v: ult(fs.shCarInt),            f: v => v == null ? "—" : v.toFixed(1), meta: m.mSHcar },
+      { l: es ? "Aceptación" : "Acceptance",    v: ult(fs.accept),              f: v => v == null ? "—" : (v*100).toFixed(1)+"%", meta: m.mAcc, esPct: true },
+      { l: es ? "Utilización" : "Utilization",  v: null,                        f: () => m.mUtil != null ? fmt(m.mUtil)+"%" : "—", soloMeta: true }
+    ];
+    fleetHTML = `<div class="rs-fleet">
+      <div class="rs-h">${es ? "Fleet" : "Fleet"} <span class="rs-sub">${es ? "dentro de Taxi" : "within Taxi"}</span></div>
+      <div class="rs-chips">${chips.map(c => {
+        const val = c.f(c.v);
+        let cmp = "";
+        if (c.meta != null && c.v != null) {
+          const real = c.esPct ? c.v * 100 : c.v;
+          const pct = (real / c.meta) * 100;
+          cmp = `<i style="color:${pColor(pct)}">${_p2PctTxt(pct)} ${es ? "de meta" : "of target"}</i>`;
+        } else if (c.soloMeta) cmp = `<i>${es ? "meta · sin actual" : "target · no actual"}</i>`;
+        return `<div class="rs-chip"><span>${escapeHTML(c.l)}</span><b>${val}</b>${cmp}</div>`;
+      }).join("")}</div>
+    </div>`;
+  }
 
-  const cuerpo = noData
-    ? `<div class="agy-style-396">${es ? `Sin datos de ${escapeHTML(mesName || "")} para comparar con la meta.` : "No data for this month."}</div>`
-    : `
-      <div class="sc-zona">
-        <div class="sc-zona-tit">${es ? "Cumplimiento vs meta del mes" : "Goal attainment"}
-          <span class="sc-zona-sub">${es ? "Taxi + TukTuk — la meta cubre las dos" : "Taxi + TukTuk — the goal covers both"}</span></div>
-        <table class="sc-tbl"><thead>${th}</thead><tbody>${levels.map(filaCumpl).join("")}</tbody></table>
-      </div>
-      <div class="sc-zona">
-        <div class="sc-zona-tit">${es ? "Composición por categoría" : "Breakdown by category"}
-          <span class="sc-zona-sub">${es ? "Perú · Delivery y Cargo aún sin meta" : "Peru · Delivery and Cargo have no goal yet"}</span></div>
-        <table class="sc-tbl"><thead>${th}</thead><tbody>${compFilas}</tbody></table>
+  // ── Zona 4: criterios TukTuk, lo esencial ────────────────────────────────
+  let tkHTML = "";
+  if (p2TuktukSectionVisible(partner)) {
+    const ym = p2TkCriteriosYM();
+    const d = p2TkCriteriosDatos(partner, null, ym);
+    if (d.hay) {
+      const h = horasPorConductorBase(d.sh, d.ad, d.nuevos, d.react);
+      const meta = p2MetaFor(partner, null, mesName);
+      const mNuevos = meta.mtkNR || 0;
+      const naTxt = h.estado === "pocos_activos"
+        ? (es ? `no aplica · menos de ${TK_MIN_ACTIVOS} activos` : `n/a · under ${TK_MIN_ACTIVOS} active`)
+        : (es ? "no medible · sin base" : "n/a · no base");
+      const col1 = h.valor == null ? "#888" : (h.estado === "cumple" ? "#10b981" : "#FF0000");
+      const pct2 = mNuevos > 0 ? (d.nr / mNuevos) * 100 : null;
+      tkHTML = `<div class="rs-tk">
+        <div class="rs-h">${es ? "Criterios TukTuk" : "TukTuk criteria"}</div>
+        <div class="rs-chips">
+          <div class="rs-chip"><span>${es ? "Horas / conductor base" : "Hours / base driver"}</span>
+            <b style="color:${col1}">${h.valor == null ? "—" : h.valor.toFixed(1) + " h"}</b>
+            <i style="color:${col1}">${h.valor == null ? naTxt
+              : (h.estado === "cumple" ? (es ? "✓ cumple" : "✓ meets") : (es ? "✗ no cumple" : "✗ below")) + ` · mín ${TK_HORAS_BASE_MIN} h`}</i></div>
+          <div class="rs-chip"><span>${es ? "Nuevos + Reactivados" : "New + Reactivated"}</span>
+            <b>${fmt(d.nr)}</b>
+            <i${pct2 != null ? ` style="color:${pColor(pct2)}"` : ""}>${pct2 != null
+              ? `${_p2PctTxt(pct2)} ${es ? "de meta" : "of target"} (${fmt(mNuevos)})`
+              : (es ? "sin meta cargada" : "no target")}</i></div>
+        </div>
       </div>`;
+    }
+  }
+
+  const th = (a, b, c) => `<tr><th></th><th>${a}</th><th>${b}</th><th>${c}</th></tr>`;
+  const L = { ad: es ? "Conductores Activos" : "Active Drivers",
+              nr: es ? "Nuevos + Reactivados" : "New + React",
+              sh: es ? "Horas de Conexión" : "Supply Hours" };
 
   return `<div class="agy-style-365">
     ${p2BrandHeader(partner, (es ? "Resumen" : "Summary") + " · " + (mesName || "—"),
       es ? "Cumplimiento del mes y de dónde viene" : "Monthly attainment and where it comes from")}
-    <div class="sc-wrap">${cuerpo}</div>
+    <div class="rs-wrap">
+      <div>
+        <div class="rs-h">${es ? "Cumplimiento vs meta del mes" : "Attainment vs monthly target"}
+          <span class="rs-sub">${es ? "Taxi + TukTuk — la meta cubre las dos" : "Taxi + TukTuk"}</span></div>
+        <table class="rs-t"><thead>${th(L.ad, L.nr, L.sh)}</thead><tbody>${filasCumpl}</tbody></table>
+      </div>
+      <div class="rs-dos">
+        <div class="rs-comp">
+          <div class="rs-h">${es ? "Composición por categoría" : "Breakdown by category"}
+            <span class="rs-sub">${es ? "Perú" : "Peru"}</span></div>
+          <table class="rs-t"><thead>${th(L.ad, L.nr, L.sh)}</thead><tbody>${filasComp}</tbody></table>
+        </div>
+        ${fleetHTML}
+      </div>
+      ${tkHTML}
+    </div>
     ${p2BrandFooter(idx)}
   </div>`;
 }
-
 // ── SLIDE: CRITERIOS TUKTUK (ago 2026) ────────────────────────────────────────
 // Reemplaza el formato viejo de "Criterios del mes" (que medía adquisición
 // propia contra un 100 hardcodeado). Los criterios nuevos son dos:
@@ -1704,230 +1461,6 @@ export function p2TkCriteriosYM() {
   const ds = (STATE._tuktukMensualDates || []);
   return ds.length ? String(ds[ds.length - 1]).slice(0, 7) : "";
 }
-
-export function buildSlide2CriteriosTk(partner, idx) {
-  const es = PRESENT2_STATE.lang === "es";
-  const ym = p2TkCriteriosYM();
-  // Etiqueta del mes desde el YYYY-MM (P2_MES_NOMBRES ya está en el archivo).
-  const mesTxt = ym ? `${P2_MES_NOMBRES[+ym.slice(5, 7) - 1] || ym} ${ym.slice(0, 4)}` : "—";
-
-  const savedDs = PRESENT2_STATE.dataset;
-  PRESENT2_STATE.dataset = "tuktuk";
-  const levels = p2Levels(partner);
-  PRESENT2_STATE.dataset = savedDs;
-
-  const meta = p2MetaFor(partner, null, p2AvanceMes());
-  const metaNuevos = meta.mtkNR || 0;
-
-  const pais = p2TkCriteriosDatos(partner, null, ym);
-  const h = horasPorConductorBase(pais.sh, pais.ad, pais.nuevos, pais.react);
-
-  if (!pais.hay) {
-    return `<div class="agy-style-365">
-      ${p2BrandHeader(partner, (es ? "Criterios TukTuk" : "TukTuk Criteria") + " · " + mesTxt, "")}
-      <div class="agy-style-396">${es
-        ? "Sin datos mensuales de TukTuk para evaluar los criterios."
-        : "No monthly TukTuk data to evaluate the criteria."}</div>
-      ${p2BrandFooter(idx)}
-    </div>`;
-  }
-
-  // Criterio 1 — horas por conductor base. Los estados "no aplica" se explican
-  // en pantalla: un partner chico no puede leer un guion sin saber por qué.
-  const AVISO = {
-    pocos_activos: es
-      ? `No aplica: menos de ${TK_MIN_ACTIVOS} conductores activos en el mes (${fmt(pais.ad)}). Con esa muestra el promedio no es representativo.`
-      : `Not applicable: fewer than ${TK_MIN_ACTIVOS} active drivers this month (${fmt(pais.ad)}). The average is not representative at that size.`,
-    sin_base: es
-      ? "No medible: todos los conductores activos del mes son nuevos o reactivados, así que no hay base sobre la cual promediar."
-      : "Not measurable: every active driver this month is new or reactivated, so there is no base to average over."
-  };
-  const noAplica = h.valor == null;
-  const col1 = noAplica ? "#888" : (h.estado === "cumple" ? "#10b981" : "#FF0000");
-  const card1 = `
-    <div class="tkc-card ${noAplica ? "tkc-na" : ""}">
-      <div class="tkc-lbl">${es ? "Horas por conductor base" : "Hours per base driver"}</div>
-      <div class="tkc-val" style="color:${col1}">${noAplica ? "—" : h.valor.toFixed(1) + " h"}</div>
-      <div class="tkc-meta">${es ? "mínimo" : "minimum"} ${TK_HORAS_BASE_MIN} h</div>
-      <div class="tkc-form">${es
-        ? "horas conectadas ÷ (activos − nuevos − reactivados)"
-        : "connected hours ÷ (active − new − reactivated)"}${
-        // La base solo se muestra cuando el criterio APLICA: si no aplica puede
-        // ser negativa (base -222) y ese número no significa nada para el partner.
-        noAplica ? "" : ` · base ${fmt(h.base)}`}</div>
-      ${noAplica ? `<div class="tkc-aviso">${escapeHTML(AVISO[h.estado] || "")}</div>`
-                 : `<div class="tkc-veredicto" style="color:${col1}">${h.estado === "cumple"
-                      ? (es ? "✓ Cumple" : "✓ Meets") : (es ? "✗ No cumple" : "✗ Does not meet")}</div>`}
-    </div>`;
-
-  // Criterio 2 — nuevos + reactivados vs meta del KAM.
-  const pct2 = metaNuevos > 0 ? (pais.nr / metaNuevos) * 100 : null;
-  const col2 = pct2 == null ? "#888" : p2AvanceColor(pct2);
-  const card2 = `
-    <div class="tkc-card ${metaNuevos > 0 ? "" : "tkc-na"}">
-      <div class="tkc-lbl">${es ? "Nuevos + Reactivados" : "New + Reactivated"}</div>
-      <div class="tkc-val" style="color:${col2}">${fmt(pais.nr)}</div>
-      <div class="tkc-meta">${metaNuevos > 0
-        ? `${es ? "meta" : "target"} ${fmt(metaNuevos)}`
-        : (es ? "sin meta cargada" : "no target loaded")}</div>
-      <div class="tkc-form">${es
-        ? `${fmt(pais.nuevos)} nuevos + ${fmt(pais.react)} reactivados`
-        : `${fmt(pais.nuevos)} new + ${fmt(pais.react)} reactivated`}</div>
-      ${metaNuevos > 0
-        ? `<div class="tkc-veredicto" style="color:${col2}">${_p2PctTxt(pct2)} ${es ? "de la meta" : "of target"}</div>`
-        : `<div class="tkc-aviso">${es
-            ? "Tu KAM carga esta meta al inicio del mes. Sin meta cargada solo se muestra el volumen."
-            : "Your KAM sets this target at the start of the month. Without it, only the volume is shown."}</div>`}
-    </div>`;
-
-  // Detalle por ciudad — cada una con su propio estado (una ciudad chica puede
-  // no aplicar aunque el país sí).
-  const filas = levels.filter(lv => lv.city).map(lv => {
-    const d = p2TkCriteriosDatos(partner, lv.city, ym);
-    if (!d.hay) return "";
-    const hc = horasPorConductorBase(d.sh, d.ad, d.nuevos, d.react);
-    const na = hc.valor == null;
-    const c  = na ? "#888" : (hc.estado === "cumple" ? "#10b981" : "#FF0000");
-    const motivo = na
-      ? (hc.estado === "pocos_activos"
-          ? (es ? `menos de ${TK_MIN_ACTIVOS} activos` : `under ${TK_MIN_ACTIVOS} active`)
-          : (es ? "sin base" : "no base"))
-      : "";
-    return `<tr>
-      <td class="sc-lvl"><span class="sc-dot" style="background:${lv.color}"></span>${escapeHTML(lv.label)}</td>
-      <td class="sc-num"><span class="sc-val">${fmt(d.ad)}</span></td>
-      <td class="sc-num"><span class="sc-val">${fmt(d.nr)}</span></td>
-      <td class="sc-num">
-        <span class="sc-val" style="color:${c}">${na ? "—" : hc.valor.toFixed(1) + " h"}</span>
-        ${motivo ? `<span class="sc-sub">${escapeHTML(motivo)}</span>` : ""}
-      </td>
-    </tr>`;
-  }).filter(Boolean).join("");
-
-  return `<div class="agy-style-365">
-    ${p2BrandHeader(partner, (es ? "Criterios TukTuk" : "TukTuk Criteria") + " · " + mesTxt,
-      es ? "Esto es lo que te pedimos cada mes" : "This is what we ask for each month",
-      { text: "🛺 TUKTUK", color: "#f59e0b" })}
-    <div class="tkc-wrap">
-      <div class="tkc-cards">${card1}${card2}</div>
-      ${filas ? `<div class="sc-zona">
-        <div class="sc-zona-tit">${es ? "Detalle por ciudad" : "By city"}</div>
-        <table class="sc-tbl"><thead><tr><th></th>
-          <th>${es ? "Activos" : "Active"}</th>
-          <th>${es ? "Nuevos + React" : "New + React"}</th>
-          <th>${es ? "Horas / base" : "Hours / base"}</th></tr></thead>
-          <tbody>${filas}</tbody></table>
-      </div>` : ""}
-    </div>
-    ${p2BrandFooter(idx)}
-  </div>`;
-}
-
-// ── SLIDE: RITMO DEL MES (ago 2026) ───────────────────────────────────────────
-// Las metas son MENSUALES pero la conversación con el partner es SEMANAL, así
-// que la pregunta útil a mitad de mes no es "¿cumpliste?" sino "¿vas
-// encaminado?". Este slide compara el avance contra el calendario.
-//
-// SOLO para FLUJOS (N+R, horas). Active Drivers NO entra en el ritmo: es un
-// SNAPSHOT, no se acumula — estar al 60% del mes no significa que el AD deba ir
-// al 60% de la meta, ya debería estar cerca de su nivel final. Meterlo acá
-// mostraría un "atraso" inventado. Se muestra aparte, como nivel.
-export function buildSlide2Ritmo(partner, idx) {
-  const es = PRESENT2_STATE.lang === "es";
-  const savedDs = PRESENT2_STATE.dataset;
-  const mesName = p2AvanceMes();
-
-  PRESENT2_STATE.dataset = "taxi";
-  const taxiDates = p2MonthDates(mesName);
-  const taxiAct = p2ActualsMTD(partner, null, taxiDates);
-  PRESENT2_STATE.dataset = "tuktuk";
-  const tkDates = p2MonthDates(mesName);
-  const tkAct = p2ActualsMTD(partner, null, tkDates);
-  PRESENT2_STATE.dataset = savedDs;
-
-  const dates = taxiDates.length ? taxiDates : tkDates;
-  const lastDate = dates.length ? dates[dates.length - 1] : (p2AllDates() || []).slice(-1)[0];
-  const { daysElapsed, daysInMonth } = calcProjectionDays(lastDate);
-  const meta = p2MetaFor(partner, null, mesName);
-  const metasLoaded = !!(STATE.metasData || []).length;
-
-  if (!dates.length || !metasLoaded) {
-    return `<div class="agy-style-365">
-      ${p2BrandHeader(partner, (es ? "Ritmo del mes" : "Monthly pace") + " · " + (mesName || "—"), "")}
-      <div class="agy-style-396">${es ? "Sin datos o metas del mes para calcular el ritmo." : "No data or goals to compute pace."}</div>
-      ${p2BrandFooter(idx)}
-    </div>`;
-  }
-
-  // Paraguas Taxi + TukTuk (lo que la meta cubre).
-  const flujos = [
-    // `ent`: N+R son PERSONAS, la proyección se redondea ("cierra en 60,65
-    // conductores" no es un número que se le pueda decir a un partner).
-    { lbl: es ? "Nuevos + Reactivados" : "New + Reactivated", real: (taxiAct.nr || 0) + (tkAct.nr || 0), meta: meta.mNR || 0, f: fmt, ent: true },
-    { lbl: es ? "Horas de Conexión" : "Supply Hours",         real: (taxiAct.sh || 0) + (tkAct.sh || 0), meta: meta.mH  || 0, f: fmtSmart }
-  ];
-  const pctMesGlobal = Math.min((daysElapsed / daysInMonth) * 100, 100);
-
-  const VERD = {
-    adelantado: { txt: es ? "Adelantado" : "Ahead",     col: "#10b981" },
-    en_ritmo:   { txt: es ? "En ritmo"   : "On pace",   col: "#0284c7" },
-    atrasado:   { txt: es ? "Atrasado"   : "Behind",    col: "#FF0000" },
-    sin_meta:   { txt: es ? "Sin meta"   : "No target", col: "#888" }
-  };
-
-  const cards = flujos.map(m => {
-    const p = pacingFlujo(m.real, m.meta, daysElapsed, daysInMonth);
-    const v = VERD[p.estado];
-    if (p.estado === "sin_meta") {
-      return `<div class="rt-card rt-na">
-        <div class="rt-lbl">${escapeHTML(m.lbl)}</div>
-        <div class="rt-val">${m.f(m.real)}</div>
-        <div class="rt-sub">${es ? "sin meta cargada para el mes" : "no target loaded"}</div>
-      </div>`;
-    }
-    // Proyección al cierre por ritmo (misma regla que el resto del deck).
-    let proy = projectFlow(m.real, daysElapsed, daysInMonth - daysElapsed);
-    if (m.ent) proy = Math.round(proy);
-    const pctProy = (proy / m.meta) * 100;
-    return `<div class="rt-card">
-      <div class="rt-lbl">${escapeHTML(m.lbl)}</div>
-      <div class="rt-val">${m.f(m.real)} <span class="rt-meta">/ ${m.f(m.meta)}</span></div>
-      <div class="rt-barra">
-        <div class="rt-fill" style="width:${Math.min(p.pctMeta, 100).toFixed(1)}%;background:${v.col}"></div>
-        <div class="rt-hoy" style="left:calc(${p.pctMes.toFixed(1)}% - 1px)"></div>
-      </div>
-      <div class="rt-linea">
-        <span style="color:${v.col};font-weight:800">${v.txt}</span>
-        <span class="rt-dim">${_p2PctTxt(p.pctMeta)} ${es ? "de la meta" : "of target"} · ${p.ritmo >= 0 ? "+" : ""}${p.ritmo.toFixed(0)}pp ${es ? "vs calendario" : "vs calendar"}</span>
-      </div>
-      <div class="rt-proy">${es ? "a este ritmo cierra en" : "at this pace closes at"} <strong>${m.f(proy)}</strong> (${_p2PctTxt(pctProy)})</div>
-    </div>`;
-  }).join("");
-
-  // AD aparte: es nivel, no ritmo.
-  const adReal = (taxiAct.lastAD || 0) + (tkAct.lastAD || 0);
-  const adMeta = meta.mA || 0;
-  const adPct  = adMeta > 0 ? (adReal / adMeta) * 100 : null;
-
-  return `<div class="agy-style-365">
-    ${p2BrandHeader(partner, (es ? "Ritmo del mes" : "Monthly pace") + " · " + (mesName || "—"),
-      es ? `Día ${daysElapsed} de ${daysInMonth} · ${pctMesGlobal.toFixed(0)}% del mes transcurrido`
-         : `Day ${daysElapsed} of ${daysInMonth} · ${pctMesGlobal.toFixed(0)}% of month elapsed`)}
-    <div class="rt-wrap">
-      <div class="rt-cards">${cards}</div>
-      <div class="rt-nivel">
-        <span class="rt-nivel-lbl">${es ? "Conductores Activos" : "Active Drivers"}</span>
-        <span class="rt-nivel-val">${fmt(adReal)}${adMeta ? ` <span class="rt-meta">/ ${fmt(adMeta)}</span>` : ""}</span>
-        ${adPct != null ? `<span class="rt-nivel-pct" style="color:${p2AvanceColor(adPct)}">${_p2PctTxt(adPct)}</span>` : ""}
-        <span class="rt-nivel-nota">${es
-          ? "es un nivel, no se acumula: no aplica ritmo"
-          : "a level, not accumulated: pace does not apply"}</span>
-      </div>
-    </div>
-    ${p2BrandFooter(idx)}
-  </div>`;
-}
-
 // ── SLIDE: BENCHMARK OPERACIONAL (ago 2026) ───────────────────────────────────
 // Las 4 métricas de operación que más separan a un partner de otro y que hoy no
 // aparecen en el deck para nadie que no sea Fleet. Verificado sobre la última
@@ -1959,88 +1492,6 @@ export function p2OpsMetrics(rows) {
     ad: rows.length ? Math.max(...rows.map(r => r.activeDrivers || 0)) : 0
   };
 }
-
-export function buildSlide2Benchmark(partner, dates, idx) {
-  const es = PRESENT2_STATE.lang === "es";
-  const dset = new Set(dates || []);
-  const todas = (STATE.rawData || []).filter(r => dset.has(r.date));
-  const mias  = todas.filter(r => r.partner === partner);
-
-  if (!mias.length) {
-    return `<div class="agy-style-365">
-      ${p2BrandHeader(partner, es ? "Benchmark operacional" : "Operational benchmark", "")}
-      <div class="agy-style-396">${es ? "Sin datos del partner en el rango." : "No partner data in range."}</div>
-      ${p2BrandFooter(idx)}
-    </div>`;
-  }
-
-  const yo = p2OpsMetrics(mias);
-
-  // Cohorte = partners con >=50 activos en el rango. El corte evita que flotas
-  // de 3 conductores muevan la mediana con ratios que no son representativos.
-  const porPartner = new Map();
-  todas.forEach(r => {
-    let a = porPartner.get(r.partner);
-    if (!a) { a = []; porPartner.set(r.partner, a); }
-    a.push(r);
-  });
-  const cohorte = [...porPartner.values()].map(p2OpsMetrics).filter(m => m.ad >= 50);
-  const med = {
-    accept:  median(cohorte.map(m => m.accept)),
-    bad:     median(cohorte.map(m => m.bad)),
-    mph:     median(cohorte.map(m => m.mph)),
-    tripsHr: median(cohorte.map(m => m.tripsHr))
-  };
-
-  // `mejorEsAlto`: en "% mal calificados" mejor es MÁS BAJO — sin esta marca el
-  // semáforo diría que un partner con más viajes mal calificados va bien.
-  const DEFS = [
-    { k: "accept",  lbl: es ? "Aceptación" : "Acceptance",        f: v => (v * 100).toFixed(1) + "%", alto: true  },
-    { k: "mph",     lbl: es ? "USD por hora" : "USD per hour",    f: v => "$" + v.toFixed(2),         alto: true  },
-    { k: "tripsHr", lbl: es ? "Viajes por hora" : "Trips per hour", f: v => v.toFixed(2),             alto: true  },
-    { k: "bad",     lbl: es ? "% mal calificados" : "% badly rated", f: v => (v * 100).toFixed(1) + "%", alto: false }
-  ];
-
-  const filas = DEFS.map(d => {
-    const mio = yo[d.k], m = med[d.k];
-    if (mio == null || m == null) {
-      return `<tr><td class="sc-lvl">${escapeHTML(d.lbl)}</td>
-        <td class="sc-num"><span class="sc-val">—</span></td>
-        <td class="sc-num"><span class="sc-val" style="color:#aaa">—</span></td>
-        <td class="sc-num"><span class="sc-sub">${es ? "sin dato" : "no data"}</span></td></tr>`;
-    }
-    const mejor = d.alto ? mio >= m : mio <= m;
-    const col = mejor ? "#10b981" : "#FF0000";
-    const dif = m !== 0 ? ((mio - m) / Math.abs(m)) * 100 : 0;
-    return `<tr>
-      <td class="sc-lvl">${escapeHTML(d.lbl)}</td>
-      <td class="sc-num"><span class="sc-val" style="color:${col}">${d.f(mio)}</span></td>
-      <td class="sc-num"><span class="sc-val" style="color:#888;font-weight:700">${d.f(m)}</span></td>
-      <td class="sc-num">
-        <span class="sc-val" style="color:${col};font-size:.8rem">${dif >= 0 ? "+" : ""}${dif.toFixed(0)}%</span>
-        <span class="sc-sub">${mejor ? (es ? "mejor que la mediana" : "better than median") : (es ? "peor que la mediana" : "worse than median")}</span>
-      </td>
-    </tr>`;
-  }).join("");
-
-  return `<div class="agy-style-365">
-    ${p2BrandHeader(partner, es ? "Benchmark operacional" : "Operational benchmark",
-      es ? `Tu operación vs la mediana de ${cohorte.length} partners con 50+ conductores activos`
-         : `Your operation vs the median of ${cohorte.length} partners with 50+ active drivers`)}
-    <div class="sc-wrap">
-      <table class="sc-tbl"><thead><tr>
-        <th></th><th>${es ? "Vos" : "You"}</th>
-        <th>${es ? "Mediana del cohorte" : "Cohort median"}</th>
-        <th>${es ? "Diferencia" : "Difference"}</th>
-      </tr></thead><tbody>${filas}</tbody></table>
-      <div class="bm-nota">${es
-        ? "Estas métricas describen cómo opera tu flota y sirven para compararte. En los datos de este período NO se observó relación entre ellas y la variación de conductores activos, así que no se presentan como causa de crecimiento o caída."
-        : "These metrics describe how your fleet operates and are for comparison. In this period's data no relationship was observed between them and active-driver change, so they are not presented as a cause of growth or decline."}</div>
-    </div>
-    ${p2BrandFooter(idx)}
-  </div>`;
-}
-
 // ── SLIDE: PORTADA EJECUTIVA (ago 2026) ───────────────────────────────────────
 // La lee la GERENCIA DEL PARTNER. Si solo leen esta hoja, tiene que alcanzar:
 // veredicto arriba, los 3 KPIs con su brecha, la lectura en frases con números,
@@ -2051,7 +1502,47 @@ export function buildSlide2Benchmark(partner, dates, idx) {
 // llevo, cuánto me falta y voy a tiempo?" en un solo golpe de vista y sin
 // leyenda. Cuatro barras apiladas se comparan entre sí de inmediato; cuatro
 // gráficos distintos, no.
-export function buildSlide2Portada(partner, idx) {
+// Tira de benchmark para el pie del Ejecutivo. Antes era una hoja entera y tenía
+// poca información para ocuparla; acá cumple mejor su función porque EXPLICA el
+// veredicto: "vas al 86% y además tu aceptación está 28% bajo la mediana" es una
+// historia, los dos datos separados son dos números sueltos.
+export function p2BenchStrip(partner, dates) {
+  const es = PRESENT2_STATE.lang === "es";
+  const dset = new Set(dates || []);
+  const todas = (STATE.rawData || []).filter(r => dset.has(r.date));
+  const mias  = todas.filter(r => r.partner === partner);
+  if (!mias.length) return "";
+  const yo = p2OpsMetrics(mias);
+  const porPartner = new Map();
+  todas.forEach(r => { let a = porPartner.get(r.partner); if (!a) { a = []; porPartner.set(r.partner, a); } a.push(r); });
+  const coh = [...porPartner.values()].map(p2OpsMetrics).filter(m => m.ad >= 50);
+  if (coh.length < 3) return "";   // con menos de 3 pares la mediana no dice nada
+  const med = { accept: median(coh.map(m => m.accept)), mph: median(coh.map(m => m.mph)),
+                tripsHr: median(coh.map(m => m.tripsHr)), bad: median(coh.map(m => m.bad)) };
+  const D = [
+    { k: "accept",  l: es ? "Aceptación" : "Acceptance",     f: v => (v * 100).toFixed(1) + "%", alto: true },
+    { k: "mph",     l: es ? "USD / hora" : "USD / hour",     f: v => "$" + v.toFixed(2),          alto: true },
+    { k: "tripsHr", l: es ? "Viajes / hora" : "Trips / hour", f: v => v.toFixed(2),               alto: true },
+    { k: "bad",     l: es ? "% mal calif." : "% badly rated", f: v => (v * 100).toFixed(1) + "%", alto: false }
+  ];
+  const chips = D.map(d => {
+    const mio = yo[d.k], m = med[d.k];
+    if (mio == null || m == null) return `<div class="bs-chip"><span>${escapeHTML(d.l)}</span><b>—</b></div>`;
+    // `alto:false` en "% mal calificados": ahí mejor es MENOR. Sin esa marca el
+    // semáforo diría que más viajes mal calificados es una buena noticia.
+    const mejor = d.alto ? mio >= m : mio <= m;
+    const col = mejor ? "#10b981" : "#FF0000";
+    return `<div class="bs-chip"><span>${escapeHTML(d.l)}</span>
+      <b style="color:${col}">${d.f(mio)}</b>
+      <i>${es ? "mediana" : "median"} ${d.f(m)}</i></div>`;
+  }).join("");
+  return `<div class="bs-tira">
+    <div class="bs-h">${es ? `Tu operación vs la mediana de ${coh.length} partners comparables` : `Your operation vs the median of ${coh.length} comparable partners`}</div>
+    <div class="bs-chips">${chips}</div>
+  </div>`;
+}
+
+export function buildSlide2Portada(partner, dates, idx) {
   const es = PRESENT2_STATE.lang === "es";
   const savedDs = PRESENT2_STATE.dataset;
   const mesName = p2AvanceMes();
@@ -2065,16 +1556,16 @@ export function buildSlide2Portada(partner, idx) {
   const tkAct = p2ActualsMTD(partner, null, tkDates);
   PRESENT2_STATE.dataset = savedDs;
 
-  const dates = taxiDates.length ? taxiDates : tkDates;
+  const mesDates = taxiDates.length ? taxiDates : tkDates;   // fechas del MES de la meta (≠ `dates`, que es el rango del deck)
   const metasLoaded = !!(STATE.metasData || []).length;
-  if (!dates.length || !metasLoaded) {
+  if (!mesDates.length || !metasLoaded) {
     return `<div class="agy-style-365">
       ${p2BrandHeader(partner, (es ? "Resumen ejecutivo" : "Executive summary") + " · " + (mesName || "—"), "")}
       <div class="agy-style-396">${es ? "Sin datos o metas del mes." : "No data or targets for the month."}</div>
       ${p2BrandFooter(idx)}</div>`;
   }
 
-  const lastDate = dates[dates.length - 1];
+  const lastDate = mesDates[mesDates.length - 1];
   const { daysElapsed, daysInMonth } = calcProjectionDays(lastDate);
   const diasRestantes = Math.max(daysInMonth - daysElapsed, 0);
   const meta = p2MetaFor(partner, null, mesName);
@@ -2164,6 +1655,7 @@ export function buildSlide2Portada(partner, idx) {
         <span class="px-vtxt" style="color:${vColor}">${escapeHTML(vTxt)}</span>
       </div>
       <div class="px-barras">${barras}</div>
+      ${p2BenchStrip(partner, dates)}
       <div class="px-abajo">
         <div class="px-lectura">
           <div class="px-h">${es ? "Lectura" : "Reading"}</div>
@@ -2175,6 +1667,71 @@ export function buildSlide2Portada(partner, idx) {
         </div>` : ""}
       </div>
     </div>
+    ${p2BrandFooter(idx)}
+  </div>`;
+}
+
+// ── SLIDE: ALERTAS POR CATEGORÍA (ago 2026) ───────────────────────────────────
+// UNA hoja con las 4 verticales adentro. Antes las alertas se repetían por
+// sección (una hoja por vertical) y eso volvía a inflar el deck justo cuando el
+// objetivo era acortarlo. Además, verlas juntas es lo que permite comparar:
+// "Taxi limpio, TukTuk con 3 señales" se lee de un golpe.
+//
+// Reusa p2ComputeAlerts sin tocarla: se cambia el dataset activo y se le pide
+// las alertas de cada vertical, igual que hace el resto del deck.
+export function buildSlide2Alertas(partner, dates, idx) {
+  const es = PRESENT2_STATE.lang === "es";
+  const savedDs = PRESENT2_STATE.dataset;
+
+  const VERTS = [
+    { ds: "taxi",     lbl: "Taxi",     col: "#FF0000" },
+    { ds: "tuktuk",   lbl: "TukTuk",   col: "#f59e0b" },
+    { ds: "delivery", lbl: "Delivery", col: "#0284c7" },
+    { ds: "cargo",    lbl: "Cargo",    col: "#8b5cf6" }
+  ];
+
+  const bloques = VERTS.map(v => {
+    // Solo las verticales que el partner opera de verdad.
+    const opera = v.ds === "taxi"   ? p2HasTaxi(partner)
+                : v.ds === "tuktuk" ? p2TuktukSectionVisible(partner)
+                : p2TieneVertical(partner, v.ds);
+    if (!opera) return null;
+    PRESENT2_STATE.dataset = v.ds;
+    let als = [];
+    try { als = p2ComputeAlerts(partner, p2AllDates().filter(d => (dates || []).includes(d))) || []; }
+    catch (e) { als = []; }
+    PRESENT2_STATE.dataset = savedDs;
+    return { ...v, als };
+  }).filter(Boolean);
+
+  PRESENT2_STATE.dataset = savedDs;
+
+  const SEV = { high: { c: "#FF0000", t: es ? "Alta" : "High" },
+                mid:  { c: "#f59e0b", t: es ? "Media" : "Mid" } };
+
+  const html = bloques.map(b => {
+    const n = b.als.length;
+    return `<div class="al-bloque">
+      <div class="al-cab">
+        <span class="al-dot" style="background:${b.col}"></span>
+        <span class="al-nom">${b.lbl}</span>
+        <span class="al-n" style="color:${n ? (b.als.some(a => a.sev === "high") ? "#FF0000" : "#f59e0b") : "#10b981"}">${
+          n ? `${n} ${es ? (n === 1 ? "señal" : "señales") : (n === 1 ? "signal" : "signals")}` : (es ? "✓ sin señales" : "✓ clear")}</span>
+      </div>
+      ${n ? `<ul class="al-lista">${b.als.slice(0, 5).map(a => {
+        const s = SEV[a.sev] || SEV.mid;
+        return `<li><span class="al-sev" style="background:${s.c}"></span>
+          <b>${escapeHTML(a.title)}</b>
+          <span class="al-det">${escapeHTML(a.level)} · ${escapeHTML(a.detail)}</span></li>`;
+      }).join("")}${n > 5 ? `<li class="al-mas">${es ? `y ${n - 5} más` : `and ${n - 5} more`}</li>` : ""}</ul>` : ""}
+    </div>`;
+  }).join("");
+
+  return `<div class="agy-style-365">
+    ${p2BrandHeader(partner, es ? "Alertas por categoría" : "Alerts by category",
+      es ? "Señales automáticas del período · ordenadas por severidad"
+         : "Automatic signals for the period · sorted by severity")}
+    <div class="al-wrap">${html || `<div class="agy-style-396">${es ? "Sin categorías con datos." : "No categories with data."}</div>`}</div>
     ${p2BrandFooter(idx)}
   </div>`;
 }

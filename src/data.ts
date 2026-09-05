@@ -550,6 +550,26 @@ export function rowIsTuktuk(r) {
   return !!(STATE.CLID_IS_TUKTUK || {})[r.clid];        // fleetroom desconocido o legacy → flag CLID
 }
 
+// Construye el slice + indices de una vertical (delivery/cargo), espejando lo
+// que ya se hace a mano para tuktuk. Se llama en las TRES escalas: sin el
+// sufijo correcto, el deck cae al slice semanal en silencio estando en mensual
+// (bug real de jul 2026 con los datasets de linea).
+//   vert: "delivery" | "cargo"   suf: "" | "Mensual" | "Diario"
+export function _buildVerticalIdx(rowsFull, pred, vert, suf) {
+  const slice = (rowsFull || []).filter(pred);
+  const byCityDate = new Map();
+  slice.forEach(r => {
+    const k = `${r.city}|||${r.date}`;
+    let a = byCityDate.get(k);
+    if (!a) { a = []; byCityDate.set(k, a); }
+    a.push(r);
+  });
+  STATE[`_${vert}${suf}ByCityDate`] = byCityDate;
+  STATE[`_${vert}${suf}Partners`]   = [...new Set(slice.map(r => r.partner))].sort();
+  STATE[`_${vert}${suf}Dates`]      = [...new Set(slice.map(r => r.date))].sort();
+  return slice;
+}
+
 // TRUE si la fila debe EXCLUIRSE del calculo Taxi.
 // = es tuktuk  O  delivery  O  cargo  O  exclude_from_taxi manual.
 //
@@ -951,8 +971,8 @@ function _applyCoreData(partners, rend, frooms, flotas, opts = {}) {
     // Slices Delivery/Cargo (ago 2026): mismo criterio que TukTuk — se separan
     // de rawDataFull ANTES de la exclusión, para no perder las filas. Los
     // consume el Scorecard del deck.
-    STATE.rawDataDelivery = STATE.rawDataFull.filter(r => rowIsDelivery(r));
-    STATE.rawDataCargo    = STATE.rawDataFull.filter(r => rowIsCargo(r));
+    STATE.rawDataDelivery = _buildVerticalIdx(STATE.rawDataFull, rowIsDelivery, "delivery", "");
+    STATE.rawDataCargo    = _buildVerticalIdx(STATE.rawDataFull, rowIsCargo,    "cargo",    "");
 
     // Excluir del dataset Taxi los fleetrooms tuktuk o exclude_from_taxi (o,
     // legacy, CLIDs is_tuktuk). No contaminan otras pestañas.
@@ -1218,8 +1238,8 @@ async function _loadMensual(silent) {
     STATE._tuktukMensualDates    = [...new Set(STATE.rawDataMensualTuktuk.map(r => r.date))].sort();
 
     // Slices Delivery/Cargo mensuales (espejo del semanal, ver allá).
-    STATE.rawDataMensualDelivery = (STATE.rawDataMensualFull || STATE.rawDataMensual).filter(r => rowIsDelivery(r));
-    STATE.rawDataMensualCargo    = (STATE.rawDataMensualFull || STATE.rawDataMensual).filter(r => rowIsCargo(r));
+    STATE.rawDataMensualDelivery = _buildVerticalIdx(STATE.rawDataMensualFull, rowIsDelivery, "delivery", "Mensual");
+    STATE.rawDataMensualCargo    = _buildVerticalIdx(STATE.rawDataMensualFull, rowIsCargo,    "cargo",    "Mensual");
 
     // Excluir tuktuk/exclude_from_taxi por fleetroom (o CLID legacy).
     STATE.rawDataMensual = STATE.rawDataMensual.filter(r => !rowExcludedFromTaxi(r));
@@ -1284,8 +1304,8 @@ async function _loadDiario(silent) {
     STATE._tuktukDiarioDates    = [...new Set(STATE.rawDataDiarioTuktuk.map(r => r.date))].sort();
 
     // Slices Delivery/Cargo diarios (espejo del semanal, ver allá).
-    STATE.rawDataDiarioDelivery = (STATE.rawDataDiarioFull || STATE.rawDataDiario).filter(r => rowIsDelivery(r));
-    STATE.rawDataDiarioCargo    = (STATE.rawDataDiarioFull || STATE.rawDataDiario).filter(r => rowIsCargo(r));
+    STATE.rawDataDiarioDelivery = _buildVerticalIdx(STATE.rawDataDiarioFull, rowIsDelivery, "delivery", "Diario");
+    STATE.rawDataDiarioCargo    = _buildVerticalIdx(STATE.rawDataDiarioFull, rowIsCargo,    "cargo",    "Diario");
 
     // Excluir tuktuk/exclude_from_taxi por fleetroom (o CLID legacy).
     STATE.rawDataDiario = STATE.rawDataDiario.filter(r => !rowExcludedFromTaxi(r));
