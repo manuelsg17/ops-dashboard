@@ -71,10 +71,17 @@ export function p2Lectura(ctx) {
       : `${v.label} is down ${Math.abs(v.varPct).toFixed(0)}% in active drivers vs the prior period${suben.length ? `, while ${suben[0].label} is up ${suben[0].varPct.toFixed(0)}%` : ""}.`);
   }
 
-  // 5. Todo en orden: tampoco se rellena con elogios vacíos.
-  if (!out.length) out.push(es
-    ? "Las metas del mes están cubiertas y no hay caídas relevantes por categoría."
-    : "Monthly targets are covered and there are no relevant drops by category.");
+  // 5. Todo en orden: tampoco se rellena con elogios vacíos. Y si NO hay metas
+  //    cargadas, se dice eso — no "las metas están cubiertas", que afirmaría un
+  //    cumplimiento que nadie midió (visto en un partner sin metas del mes).
+  if (!out.length) {
+    const conMeta = kpis.filter(k => k.meta > 0).length;
+    out.push(!conMeta
+      ? (es ? "No hay metas cargadas para este mes, así que no se puede leer cumplimiento: los valores de arriba son el dato del período."
+            : "No targets are loaded for this month, so attainment cannot be read: the figures above are the period's actuals.")
+      : (es ? "Las metas del mes están cubiertas y no hay caídas relevantes por categoría."
+            : "Monthly targets are covered and there are no relevant drops by category."));
+  }
   return out;
 }
 

@@ -22,7 +22,7 @@ import { ensurePdfLibs } from "./shared/lazyLibs.js";
 // Mismo núcleo de cálculo que Metas, Rendimiento y el deck: el partner tiene que
 // ver EXACTAMENTE los números que su KAM le presenta.
 import { seriesByDate, projectFlow, ratio, weightedAvg } from "./domain/metrics.js";
-import { reportYM, MES_NOMBRES } from "./shared/mesReporte.js";
+import { reportYM, diasMesReporte, MES_NOMBRES } from "./shared/mesReporte.js";
 
 export const PORTAL_STATE = { city: "all", line: "comb" };
 
@@ -197,7 +197,10 @@ function _portalMetas(line, rows) {
   const nrAct = _sum(rowsMes, r => r.newPartner + r.newService + r.reactivated);
   const shAct = _sum(rowsMes, r => r.supplyHours);
   const adSerie = _portalSeries(rowsMes, r => r.activeDrivers).values;
-  const { daysElapsed, daysRemaining } = calcProjectionDays(last);
+  // rowsMes se arma con reportYM, así que los días también salen del mes de
+  // REPORTE: con calcProjectionDays (mes calendario) la semana del 29-jun daba
+  // los 30 días de junio bajo la meta de julio. Ver diasMesReporte.
+  const { daysElapsed, daysRemaining } = diasMesReporte(last, STATE.curMode, parseLocalDate);
 
   // Qué meta aplica según la línea. `null` = ese KPI no tiene meta cargada para
   // esta línea (distinto de meta 0).

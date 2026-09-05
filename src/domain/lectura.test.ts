@@ -66,6 +66,19 @@ describe("lectura ejecutiva: frases con número y consecuencia", () => {
     expect(t[0]).not.toMatch(/excelente|felicitaciones|buen desempeño/i);
   });
 
+  it("sin metas cargadas NO afirma que están cubiertas", () => {
+    // Visto en un partner sin metas del mes: la hoja decía "metas cubiertas"
+    // junto a tres KPIs rotulados "sin meta cargada" — afirmaba un cumplimiento
+    // que nadie midió.
+    const sinMetas = { ...base,
+      kpis: base.kpis.map(k => ({ ...k, meta: 0, pct: 0 })),
+      verticales: [{ label: "Taxi", varPct: 1 }] };
+    const t = p2Lectura(sinMetas);
+    expect(t).toHaveLength(1);
+    expect(t[0]).toMatch(/No hay metas cargadas/);
+    expect(t[0]).not.toMatch(/cubiertas/);
+  });
+
   it("con el mes cerrado no promete días que no quedan", () => {
     const t = p2Lectura({ ...base, diasRestantes: 0 }).join(" ");
     expect(t).toMatch(/mes ya cerrado/);

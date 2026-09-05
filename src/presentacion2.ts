@@ -33,7 +33,7 @@ import { projectFlow, retentionSeries, seriesByDate, snapshotValue,
          horasPorConductorBase, TK_HORAS_BASE_MIN, TK_MIN_ACTIVOS,
          pacingFlujo, median, fechasEnRango } from "./domain/metrics.js";
 import { p2Lectura, p2Accion, META_CUMPLIDA_PCT } from "./domain/lectura.js";
-import { reportYM, MES_NOMBRES } from "./shared/mesReporte.js";
+import { reportYM, diasMesReporte, MES_NOMBRES } from "./shared/mesReporte.js";
 import * as forecast from "./forecast.js";
 Object.assign(window, forecast);
 
@@ -123,6 +123,13 @@ export const P2_MES_NOMBRES = MES_NOMBRES;
 export function p2ReportYM(dateStr) {
   return reportYM(dateStr, STATE.curMode, parseLocalDate);
 }
+// Días transcurridos / restantes del MES DE REPORTE. El deck NO puede usar
+// calcProjectionDays (data.ts): ésa mide el mes CALENDARIO de la fecha y con una
+// semana que arranca el 29/30/31 devuelve los días del mes ANTERIOR al que el
+// slide dice estar mostrando. Detalle en diasMesReporte.
+export function p2DiasMes(lastDate) {
+  return diasMesReporte(lastDate, STATE.curMode, parseLocalDate);
+}
 
 // Resuelve si el partner se muestra con KPIs Fleet (SH/Auto Activo, Acceptance,
 // Carros Fleet) o Taxi (SH, Viajes). "auto" respeta el flag is_fleet de Config.
@@ -162,21 +169,24 @@ export const P2_ANEXO_VERTICAL = [
 // El deck lista los slides con un tag `ds` ("taxi"|"tuktuk"); render/PDF fijan
 // PRESENT2_STATE.dataset = entry.ds antes de build/chartFn (los accesores leen ese
 // global) → cada slide dibuja del dataset correcto sin cambiar firmas.
-// Partners tuktuk = unión de ambas escalas (semanal + mensual): así la sección
-// TukTuk del deck y el selector aparecen aunque la escala activa sea la otra.
+// Partners tuktuk = unión de las TRES escalas: así el selector ofrece al partner
+// aunque la escala activa no sea la que tiene sus datos.
 export function _p2TkPartnersAll() {
-  return [...new Set([...(STATE._tuktukPartners || []), ...(STATE._tuktukMensualPartners || [])])];
+  return [...new Set([...(STATE._tuktukPartners || []), ...(STATE._tuktukMensualPartners || []),
+                      ...(STATE._tuktukDiarioPartners || [])])];
 }
 export function p2HasTuktuk(partner) { return _p2TkPartnersAll().includes(partner); }
-// Diario NO tiene slice TukTuk propio (el export diario no trae db_id, Fase F pendiente de
-// datos): sin este guard, un partner TukTuk en escala Diaria generaba una sección "TukTuk"
-// que en realidad mostraba datos SEMANALES (p2AllDates cae a _tuktukDates) pero rotulados
-// "Diario"/"DoD"/"días" (p2ModeInfo lee STATE.curMode) — inconsistencia real de escala.
-// Predicado separado de p2HasTuktuk (que solo dice "existen datos tuktuk"): esta func decide
-// si la SECCIÓN se muestra en la escala activa. Un partner tuktuk-only en Diario cae al
-// fallback de p2Deck (body con ds="taxi", vacío pero rotulado honesto) en vez de mostrar
-// data real bajo la escala equivocada.
-export function p2TuktukSectionVisible(partner) { return STATE.curMode !== "diario" && p2HasTuktuk(partner); }
+// ¿Se muestra la SECCIÓN TukTuk en la escala activa? Distinto de p2HasTuktuk,
+// que solo dice "existen datos tuktuk en alguna escala".
+//
+// Antes esto era `curMode !== "diario"`, porque el export diario no traía db_id
+// y no había slice TukTuk diario. Eso dejó de ser cierto en jul-2026
+// (rawDataDiarioTuktuk + sus índices ya se construyen), así que el guard hoy
+// escondía una sección que SÍ tiene datos. Ahora se pregunta por el slice de la
+// escala activa — misma regla que p2TieneVertical para delivery/cargo.
+export function p2TuktukSectionVisible(partner) {
+  return (STATE[_p2TkKey("Partners")] || []).includes(partner);
+}
 export function p2HasTaxi(partner)   { return (STATE.allPartners   || []).includes(partner); }
 // Lista del SELECTOR: unión taxi + tuktuk (un partner tuktuk-only debe poder elegirse).
 export function p2PartnerList() {
@@ -266,15 +276,13 @@ export function p2ModeInfo() {
 }
 
 // Alerta de FRESCURA de datos (para el KAM — se pinta en el tab, NO va al PDF).
-// Si en la escala activa (mensual/semanal) el último período de Taxi y TukTuk no
+// Si en la escala activa el último período de Taxi y TukTuk no
 // coinciden, casi siempre significa que faltó subir uno de los dos datasets (el
 // KAM suele actualizar todo junto). Compara solo dentro de la misma granularidad.
 export function p2FreshnessWarn() {
   const es = PRESENT2_STATE.lang === "es";
-  const mensual = STATE.curMode === "mensual", semanal = STATE.curMode === "semanal";
-  if (!mensual && !semanal) return "";   // diario: no hay slice TukTuk comparable
   const taxiDates = STATE.allDates || [];
-  const tkDates   = mensual ? (STATE._tuktukMensualDates || []) : (STATE._tuktukDates || []);
+  const tkDates   = STATE[_p2TkKey("Dates")] || [];   // slice de la escala activa (las 3)
   if (!taxiDates.length || !tkDates.length) return "";   // un lado no existe → no comparo
   const taxiMax = taxiDates[taxiDates.length - 1], tkMax = tkDates[tkDates.length - 1];
   if (taxiMax === tkMax) return "";   // en sync → sin alerta
@@ -404,9 +412,9 @@ export function destroyPresent2Charts() {
 // Dataset activo (Fase 3): "taxi" = STATE.rawData/_byCityDate (comportamiento
 // idéntico a Fases 1-2); "tuktuk" = el slice paralelo (STATE.rawDataTuktuk,
 // separado por el flag manual is_tuktuk, excluido del resto del dashboard).
-// Índices tuktuk mode-aware: en mensual usa el slice MENSUAL (_tuktukMensual*),
-// en semanal/diario el semanal. Antes siempre leía el semanal → tuktuk salía en
-// BLANCO en modo mensual (buscaba claves de mes "YYYY-MM" en un índice de semanas).
+// Índices tuktuk por ESCALA (sufijo `_p2Suf`): mensual → _tuktukMensual*,
+// diario → _tuktukDiario*, semanal → _tuktuk*. Antes leía siempre el semanal →
+// tuktuk salía en BLANCO en mensual (claves "YYYY-MM" en un índice de semanas).
 // (Taxi ya es mode-aware porque _byCityDate/rawData/allDates se reconstruyen en switchMode.)
 // Bandas de cohorte para comparar al partner contra su grupo de tamaño.
 export const P2_BANDS = [
@@ -417,6 +425,9 @@ export const P2_BANDS = [
   { key: "t5",   range: [0, 5],  color: "#10b981", es: "Prom. Top 5", en: "Avg Top 5" }
 ];
 
+// Conservada solo por compatibilidad con quien la importe: los accesores del
+// dataset ya NO la usan (era el booleano-para-tres-escalas que dejaba TukTuk
+// leyendo el slice SEMANAL estando en diario). Ver _p2Suf.
 export function _p2TkMensual() { return STATE.curMode === "mensual"; }
 
 // Sufijo de escala para las claves de STATE de las verticales nuevas. El
@@ -425,30 +436,37 @@ export function _p2TkMensual() { return STATE.curMode === "mensual"; }
 // no se elige el sufijo el deck lee el slice SEMANAL estando en mensual, en
 // silencio (mismo bug que ya se arreglo en los selectores de linea).
 function _p2Suf() { return STATE.curMode === "mensual" ? "Mensual" : STATE.curMode === "diario" ? "Diario" : ""; }
+// TukTuk vive en slices paralelos igual que las verticales nuevas, con la misma
+// convención de nombres (semanal sin sufijo). Antes se resolvía con un BOOLEANO
+// (`mensual ? mensualX : semanalX`) para TRES escalas, así que en DIARIO leía el
+// slice SEMANAL en silencio: el Ejecutivo sumaba al total diario de Taxi la
+// última semana de TukTuk que cayera dentro del rango (medido: +70 AD, +7 N+R,
+// +700 h sobre el valor correcto). Los slices diarios existen desde jul-2026.
+function _p2TkKey(base) { return `_tuktuk${_p2Suf()}${base}`; }
 // Verticales que viven en un slice propio (todas menos taxi, que es el dataset base).
 const P2_VERT = { delivery: 1, cargo: 1 };
 
 export function p2CityDateIndex() {
   const ds = PRESENT2_STATE.dataset;
-  if (ds === "tuktuk") return _p2TkMensual() ? STATE._tuktukMensualByCityDate : STATE._tuktukByCityDate;
+  if (ds === "tuktuk") return STATE[_p2TkKey("ByCityDate")] || new Map();
   if (P2_VERT[ds])     return STATE[`_${ds}${_p2Suf()}ByCityDate`] || new Map();
   return STATE._byCityDate;
 }
 export function p2RawDataset() {
   const ds = PRESENT2_STATE.dataset, suf = _p2Suf();
-  if (ds === "tuktuk") return (_p2TkMensual() ? STATE.rawDataMensualTuktuk : STATE.rawDataTuktuk) || [];
+  if (ds === "tuktuk") return STATE[`rawData${suf}Tuktuk`] || [];
   if (P2_VERT[ds])     return STATE[`rawData${suf}${ds[0].toUpperCase()}${ds.slice(1)}`] || [];
   return STATE.rawData || [];
 }
 export function p2ActivePartners() {
   const ds = PRESENT2_STATE.dataset;
-  if (ds === "tuktuk") return (_p2TkMensual() ? STATE._tuktukMensualPartners : STATE._tuktukPartners) || [];
+  if (ds === "tuktuk") return STATE[_p2TkKey("Partners")] || [];
   if (P2_VERT[ds])     return STATE[`_${ds}${_p2Suf()}Partners`] || [];
   return STATE.allPartners || [];
 }
 export function p2AllDates() {
   const ds = PRESENT2_STATE.dataset;
-  if (ds === "tuktuk") return (_p2TkMensual() ? STATE._tuktukMensualDates : STATE._tuktukDates) || [];
+  if (ds === "tuktuk") return STATE[_p2TkKey("Dates")] || [];
   if (P2_VERT[ds])     return STATE[`_${ds}${_p2Suf()}Dates`] || [];
   return STATE.allDates || [];
 }
@@ -1146,7 +1164,7 @@ export function p2ActualsMTD(partner, scopeCity, monthDates) {
   return { ad, nr, sh, nrV, shV, adV: adTot, lastAD };
 }
 export function p2ProjMTD(act, lastDate) {
-  const { daysElapsed, daysRemaining } = calcProjectionDays(lastDate);
+  const { daysElapsed, daysRemaining } = p2DiasMes(lastDate);
   // AD es SNAPSHOT (nivel), no un flujo acumulado, así que NO se extrapola por
   // días restantes como N+R y las horas. Su proyección es máx del rango × 1.4
   // (POTENCIAL, regla de negocio restaurada 29-ago-2026 — historial en
@@ -1406,7 +1424,7 @@ export function buildSlide2Resumen(partner, dates, idx) {
   // ── Zona 4: criterios TukTuk, lo esencial ────────────────────────────────
   let tkHTML = "";
   if (p2TuktukSectionVisible(partner)) {
-    const ym = p2TkCriteriosYM();
+    const ym = p2TkCriteriosYM(mesName);   // MISMO mes que la meta de abajo
     const d = p2TkCriteriosDatos(partner, null, ym);
     if (d.hay) {
       const h = horasPorConductorBase(d.sh, d.ad, d.nuevos, d.react);
@@ -1489,11 +1507,36 @@ export function p2TkCriteriosDatos(partner, city, ym) {
   return { ad, nuevos, react, sh, nr: nuevos + react, hay: rows.length > 0 };
 }
 
-// Mes (YYYY-MM) sobre el que se evalúan los criterios: el del "Hasta" del
-// filtro, para que coincida con el resto del deck.
-export function p2TkCriteriosYM() {
-  const to = document.getElementById("dateTo")?.value || "";
-  if (to) return String(to).slice(0, 7);
+// Mes (YYYY-MM) sobre el que se evalúan los criterios. Sale del MES DE LA META
+// que el slide está mostrando (`mesName`, = p2AvanceMes), no del mes calendario
+// del "Hasta".
+//
+// Antes devolvía `to.slice(0,7)` y eso rompía dos veces: (1) con una semana que
+// arranca el 29/30/31 el mes de reporte es el SIGUIENTE (jueves) — el chip sumaba
+// el N+R de junio y lo dividía por la meta de julio, bajo un encabezado que dice
+// JULIO; (2) con el selector manual "Mes meta" el chip ignoraba la selección y
+// seguía en el mes del "Hasta". El actual y la meta tienen que salir del MISMO
+// mes o el % no significa nada.
+export function p2TkCriteriosYM(mesName) {
+  const ord = mesName ? _metasMesOrden(mesName) : 0;
+  const to = (typeof document !== "undefined") && document.getElementById("dateTo")
+    ? document.getElementById("dateTo").value : "";
+  const ym = (y, m) => `${y}-${String(m).padStart(2, "0")}`;
+  if (ord >= 100000) return ym(Math.floor(ord / 100), ord % 100);   // mes ISO "YYYY-MM"
+  const mn = (ord > 2000 && ord < 3000) ? ord - 2000 : 0;           // nombre de mes sin año
+  if (mn) {
+    // Año: el del "Hasta" leído como mes de REPORTE (misma regla que p2MonthDates).
+    if (to) {
+      const r = p2ReportYM(to);
+      if (r.m === mn) return ym(r.y, mn);
+    }
+    // Selección manual de un mes distinto al del "Hasta": el año más reciente con
+    // datos mensuales de TukTuk para ese mes.
+    const pool = (STATE._tuktukMensualDates || [])
+      .filter(d => parseInt(String(d).slice(5, 7), 10) === mn).sort();
+    return pool.length ? String(pool[pool.length - 1]).slice(0, 7) : "";
+  }
+  // Sin mes de meta (no hay metas cargadas): último mes con datos.
   const ds = (STATE._tuktukMensualDates || []);
   return ds.length ? String(ds[ds.length - 1]).slice(0, 7) : "";
 }
@@ -1602,7 +1645,7 @@ export function buildSlide2Portada(partner, dates, idx) {
   }
 
   const lastDate = mesDates[mesDates.length - 1];
-  const { daysElapsed, daysInMonth } = calcProjectionDays(lastDate);
+  const { daysElapsed, daysInMonth } = p2DiasMes(lastDate);
   const diasRestantes = Math.max(daysInMonth - daysElapsed, 0);
   const meta = p2MetaFor(partner, null, mesName);
 
