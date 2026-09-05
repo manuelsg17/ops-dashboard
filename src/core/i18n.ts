@@ -332,6 +332,14 @@ export const I18N: Record<string, Record<string, string>> = {
                                    en: "The sidebar date range includes no period of <strong>{mes}</strong>, the month of the selected goal.<br>Widen the range (or change the goal month) to see progress.",
                                    ru: "Диапазон дат не содержит ни одного периода за <strong>{mes}</strong> — месяц выбранной цели.<br>Расширьте диапазон (или смените месяц цели)." },
 
+  "cfg.col.logo":      { es: "Logo", en: "Logo", ru: "Логотип" },
+  "cfg.logo.subir":    { es: "Subir", en: "Upload", ru: "Загрузить" },
+  "cfg.logo.cambiar":  { es: "Cambiar", en: "Replace", ru: "Заменить" },
+  "cfg.logo.subirTip": { es: "PNG, JPG o WEBP. Se reduce a 240 px antes de guardarlo.",
+                         en: "PNG, JPG or WEBP. Resized to 240 px before saving.",
+                         ru: "PNG, JPG или WEBP. Перед сохранением уменьшается до 240 px." },
+  "cfg.logo.error":    { es: "No se pudo guardar el logo:", en: "Could not save the logo:", ru: "Не удалось сохранить логотип:" },
+
   "metas.err.admin":  { es: "Operación bloqueada: requiere rol admin.", en: "Blocked: admin role required.", ru: "Операция заблокирована: нужна роль admin." },
   "metas.err.pdf":    { es: "Error al generar PDF: ", en: "Error generating PDF: ", ru: "Ошибка при создании PDF: " },
 

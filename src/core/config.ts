@@ -107,6 +107,11 @@ export const STATE = {
   allDates:            [],
   allPartners:         [],
   partnerColors:       {} as Record<string, string>,
+  // Logo de cada partner (data URL), indexado por NOMBRE porque asi lo consume
+  // la carátula del deck. Se carga DIFERIDO (partner_logos, ver la migración):
+  // no viaja en el arranque.
+  partnerLogos:        {} as Record<string, string>,
+  _logosCargados:      false,
   CLID_MAP:            {} as Record<string, string>,
   KAM_MAP:             {} as Record<string, string>,
   KAM_PARTNERS:        {} as Record<string, Set<string>>,

@@ -180,7 +180,12 @@ export function p2DiasMes(lastDate) {
 // Resuelve si el partner se muestra con KPIs Fleet (SH/Auto Activo, Acceptance,
 // Carros Fleet) o Taxi (SH, Viajes). "auto" respeta el flag is_fleet de Config.
 export function p2IsFleetMode(partner) {
-  if (PRESENT2_STATE.dataset === "tuktuk") return false;   // TukTuk usa los 4 KPIs Taxi (Fase 6)
+  // Fleet es una LENTE SOBRE TAXI (sus autos hacen viajes de taxi), así que no
+  // aplica a ninguna otra vertical. El guard miraba solo tuktuk, así que las
+  // hojas de Delivery y Cargo de un partner marcado Fleet salían con KPIs de
+  // flota — "Owned Fleet Active Cars", "Internal Fleet SH/Auto" — todos en "—",
+  // porque esas columnas son de la operación de taxi.
+  if (PRESENT2_STATE.dataset !== "taxi") return false;
   if (PRESENT2_STATE.fleetMode === "fleet") return true;
   if (PRESENT2_STATE.fleetMode === "taxi") return false;
   return typeof isFleetPartner === "function" && isFleetPartner(partner);
@@ -401,18 +406,25 @@ export function p2FreshnessWarn() {
 // badgeOverride opcional {text, color}: para slides que no son ni Taxi ni TukTuk
 // puros (ej. Avance Combinado) — evita que el badge automático lea
 // PRESENT2_STATE.dataset (que en esos slides no representa una sola línea).
+export const P2_VERT_BADGE = {
+  taxi:     { txt: "🚕 TAXI",     color: "#FF0000" },
+  tuktuk:   { txt: "🛺 TUKTUK",   color: "#f59e0b" },
+  delivery: { txt: "📦 DELIVERY", color: "#0284c7" },
+  cargo:    { txt: "🚚 CARGO",    color: "#8b5cf6" }
+};
 export function p2BrandHeader(partner, title, sub, badgeOverride) {
   const mi = p2ModeInfo();
   const modeChip = `<span style="display:inline-block;font-size:.6rem;font-weight:800;padding:2px 9px;border-radius:10px;color:#fff;background:${mi.color};margin-top:4px;letter-spacing:.3px">📅 ${mi.label.toUpperCase()}</span>`;
-  // Badge Taxi/TukTuk: solo cuando el partner tiene AMBAS secciones (si no, no hay
-  // ambigüedad). El acento del header también cambia a ámbar en la sección TukTuk.
-  const tk = PRESENT2_STATE.dataset === "tuktuk";
+  // Badge de la VERTICAL de la hoja. Antes solo distinguía taxi/tuktuk y todo lo
+  // demás caía en "🚕 TAXI": la hoja "KPIs por Nivel · Cargo" salía rotulada TAXI
+  // en el deck que recibe el partner. Ahora cada vertical tiene el suyo.
+  const V = P2_VERT_BADGE[PRESENT2_STATE.dataset] || P2_VERT_BADGE.taxi;
   const showBadge = badgeOverride ? true : PRESENT2_STATE._showDsBadge;
-  const accent = badgeOverride ? badgeOverride.color : ((showBadge && tk) ? "#f59e0b" : "#FF0000");
+  const accent = badgeOverride ? badgeOverride.color : (showBadge ? V.color : "#FF0000");
   const badge = badgeOverride
     ? `<span style="display:inline-block;font-size:.58rem;font-weight:800;padding:2px 8px;border-radius:10px;margin-bottom:3px;color:#fff;background:${badgeOverride.color}">${escapeHTML(badgeOverride.text)}</span><br>`
     : (showBadge
-      ? `<span style="display:inline-block;font-size:.58rem;font-weight:800;padding:2px 8px;border-radius:10px;margin-bottom:3px;color:#fff;background:${tk ? "#f59e0b" : "#FF0000"}">${tk ? "🛺 TUKTUK" : "🚕 TAXI"}</span><br>`
+      ? `<span style="display:inline-block;font-size:.58rem;font-weight:800;padding:2px 8px;border-radius:10px;margin-bottom:3px;color:#fff;background:${V.color}">${escapeHTML(V.txt)}</span><br>`
       : "");
   return `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;border-bottom:2px solid ${accent};padding-bottom:7px;margin-bottom:10px;flex:0 0 auto">
     <div class="agy-style-336">

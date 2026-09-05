@@ -2386,3 +2386,86 @@ export function aggCityDatec(data, cityKey) {
   }
   return aggCityDate(data);
 }
+
+// ── LOGOS DE PARTNERS (sep 2026) ────────────────────────────────────────────
+// Carga DIFERIDA de `partner_logos`: no viaja en el arranque (ver el porqué en
+// migrations/2026-09-05_partner_logos.sql). La llaman Presentación y
+// Configuración, que son las dos únicas pantallas que los muestran.
+//
+// Indexado por NOMBRE de partner y no por CLID porque así lo consume la
+// carátula del deck, que trabaja con nombres. Un partner con varios CLIDs
+// comparte el nombre: gana el último cargado, que es lo esperable (es el mismo
+// logo).
+let _logosPromise = null;
+export function ensurePartnerLogos(force) {
+  if (force) { _logosPromise = null; STATE._logosCargados = false; }
+  if (_logosPromise) return _logosPromise;
+  _logosPromise = (async () => {
+    try {
+      const { data, error } = await sb.from("partner_logos").select("clid,data");
+      if (error) throw error;
+      const map = {};
+      (data || []).forEach(r => {
+        const nombre = STATE.CLID_MAP?.[r.clid];
+        if (nombre) map[nombre] = r.data;
+      });
+      STATE.partnerLogos = map;
+      STATE._logosCargados = true;
+    } catch (e) {
+      // Nunca bloquear el render: sin logo la carátula usa el monograma.
+      if (DEBUG) console.warn("[logos] no se pudieron cargar:", e);
+      STATE._logosCargados = true;
+    }
+  })();
+  return _logosPromise;
+}
+
+// Redimensiona en el NAVEGADOR antes de subir. Sin esto entraría el archivo tal
+// cual salió de la cámara o del diseñador (varios MB) a una tabla que se lee
+// entera; el CHECK de 400 kB de la migración lo rechazaría y el KAM vería un
+// error críptico en vez de un logo.
+export function _logoAImagen(file, maxPx = 240) {
+  return new Promise((resolve, reject) => {
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type))
+      return reject(new Error("Formato no soportado. Usá PNG, JPG o WEBP."));
+    const fr = new FileReader();
+    fr.onerror = () => reject(new Error("No se pudo leer el archivo."));
+    fr.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("El archivo no es una imagen válida."));
+      img.onload = () => {
+        const esc = Math.min(1, maxPx / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * esc));
+        const h = Math.max(1, Math.round(img.height * esc));
+        const cv = document.createElement("canvas");
+        cv.width = w; cv.height = h;
+        cv.getContext("2d").drawImage(img, 0, 0, w, h);
+        // PNG conserva la transparencia (los logos suelen venir con fondo
+        // transparente y sobre la carátula OSCURA un fondo blanco se ve como un
+        // recuadro). JPEG no la tiene, así que solo se usa si el original ya
+        // era JPEG.
+        const mime = file.type === "image/jpeg" ? "image/jpeg" : "image/png";
+        resolve({ mime, data: cv.toDataURL(mime, 0.92) });
+      };
+      img.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+
+export async function guardarLogoPartner(clid, file) {
+  const { mime, data } = await _logoAImagen(file);
+  if (data.length > 400000) throw new Error("La imagen sigue siendo muy pesada. Probá con una más simple.");
+  const { error } = await sb.from("partner_logos")
+    .upsert({ clid, mime, data, updated_at: new Date().toISOString() }, { onConflict: "clid" });
+  if (error) throw error;
+  const nombre = STATE.CLID_MAP?.[clid];
+  if (nombre) STATE.partnerLogos[nombre] = data;
+}
+
+export async function borrarLogoPartner(clid) {
+  const { error } = await sb.from("partner_logos").delete().eq("clid", clid);
+  if (error) throw error;
+  const nombre = STATE.CLID_MAP?.[clid];
+  if (nombre) delete STATE.partnerLogos[nombre];
+}

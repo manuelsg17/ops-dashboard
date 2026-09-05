@@ -1698,3 +1698,14 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 .p2chk-avisos li { font-size: var(--sl-nota); line-height: 1.45; color: #92400e; margin-bottom: 5px; }
 .p2chk-avisos li:last-child { margin-bottom: 0; }
 .p2chk-btns { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* ── CONFIGURACIÓN → PARTNERS: logo ──────────────────────────────────────────
+   El <input type=file> va oculto detrás del botón: desnudo en una tabla de 12
+   filas es ruido, y su texto ("Sin archivo seleccionado") no se puede traducir
+   ni acortar. */
+.cfg-logo-cel   { display: inline-flex; align-items: center; gap: 6px; }
+.cfg-logo-input { display: none; }
+.cfg-logo-mini  {
+  width: 26px; height: 26px; object-fit: contain; border-radius: 5px;
+  background: #f5f5f5; border: 1px solid #ececec; flex: none;
+}

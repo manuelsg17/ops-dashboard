@@ -535,6 +535,16 @@ export function switchTab(tab) {
       // las 26 columnas que el arranque NO pide (ver TX_DEFERRED_COLS en
       // data.js). Se traen solo las que faltan y se fusionan sobre las filas ya
       // cargadas; es una vez por escala y por sesión.
+      // Logos: diferidos, solo para las dos pantallas que los muestran. No
+      // bloquean el render — si tardan, la carátula usa el monograma y se
+      // re-renderiza cuando llegan.
+      if ((tab === "present2" || tab === "config") && typeof ensurePartnerLogos === "function") {
+        ensurePartnerLogos().then(() => {
+          if (STATE.curTab !== tab) return;
+          if (tab === "config" && typeof renderConfigResults === "function") renderConfigResults();
+          if (tab === "present2" && typeof renderSlide2 === "function") renderSlide2();
+        });
+      }
       if (_NEED_FULL_COLS.has(tab) && typeof ensureFullRendColumns === "function") {
         try { await ensureFullRendColumns(); } catch (e) { /* nunca bloquear el render */ }
         if (STATE._tabRenderId !== tokenAtDispatch || STATE.curTab !== tab) return;
@@ -1090,6 +1100,42 @@ function _renderConfigPartners() {
 }
 
 // Repinta SOLO contador + tabla + paginación (sin re-crear el input de búsqueda).
+// Celda de LOGO en el CRUD de partners. El input file va oculto detrás del
+// botón: un `<input type=file>` desnudo en una tabla de 12 filas es ruido, y su
+// texto ("Sin archivo seleccionado") no se puede traducir ni acortar.
+export function _cfgLogoCelda(clid, partner) {
+  const url = (STATE.partnerLogos || {})[partner];
+  const puede = STATE.isAdmin || (STATE.perms || []).includes("write:config");
+  const img = url
+    ? `<img src="${escapeHTML(url)}" alt="" class="cfg-logo-mini">`
+    : `<span class="agy-style-77">—</span>`;
+  if (!puede) return img;
+  return `<span class="cfg-logo-cel">
+    ${img}
+    <input type="file" accept="image/png,image/jpeg,image/webp" class="cfg-logo-input"
+           id="logoIn_${escapeHTML(clid)}" data-act-change="cfgSubirLogo" data-clid="${escapeHTML(clid)}">
+    <button class="crud-btn" data-act="cfgPedirLogo" data-clid="${escapeHTML(clid)}"
+            title="${escapeHTML(t("cfg.logo.subirTip"))}">${escapeHTML(url ? t("cfg.logo.cambiar") : t("cfg.logo.subir"))}</button>
+    ${url ? `<button class="crud-btn crud-btn-del" data-act="cfgBorrarLogo" data-clid="${escapeHTML(clid)}">${escapeHTML(t("cfg.eliminarBtn"))}</button>` : ""}
+  </span>`;
+}
+export function cfgPedirLogo(clid) { document.getElementById(`logoIn_${clid}`)?.click(); }
+export async function cfgSubirLogo(clid, input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  input.value = "";   // permite volver a elegir el MISMO archivo tras un error
+  try {
+    await guardarLogoPartner(clid, file);
+    renderConfigResults();
+  } catch (e) {
+    alert(t("cfg.logo.error") + " " + (e?.message || e));
+  }
+}
+export async function cfgBorrarLogo(clid) {
+  try { await borrarLogoPartner(clid); renderConfigResults(); }
+  catch (e) { alert(t("cfg.logo.error") + " " + (e?.message || e)); }
+}
+
 export function renderConfigResults() {
   const box = document.getElementById("configResults");
   if (!box) return;
@@ -1118,6 +1164,7 @@ export function renderConfigResults() {
             <th>CLID</th><th>${escapeHTML(t("calc.col.partner"))}</th><th>${escapeHTML(t("sidebar.kam"))}</th>
             <th class="agy-style-72">Fleet</th>
             <th class="agy-style-73">TukTuk</th>
+            <th class="agy-style-73">${escapeHTML(t("cfg.col.logo"))}</th>
             <th class="agy-style-74">${escapeHTML(t("cfg.col.acciones"))}</th>
           </tr>
         </thead>
@@ -1147,6 +1194,7 @@ export function renderConfigResults() {
           </td>
           <td class="agy-style-27">${isFleet ? `<span class="agy-style-76">🚗 Fleet</span>` : `<span class="agy-style-77">—</span>`}</td>
           <td class="agy-style-27">${isTuktuk ? `<span class="agy-style-78">🛺 TukTuk</span>` : `<span class="agy-style-77">—</span>`}</td>
+          <td class="agy-style-27">${_cfgLogoCelda(clid, partner)}</td>
           <td class="agy-style-27">
             <button class="crud-btn crud-btn-edit" data-act="kamMakeEditable" data-clid="${clidH}">${escapeHTML(t("cfg.editar"))}</button>
             <button class="crud-btn crud-btn-del"  data-act="kamCrudDelete" data-clid="${clidH}">${escapeHTML(t("cfg.eliminarBtn"))}</button>
@@ -1169,6 +1217,7 @@ export function renderConfigResults() {
           </td>
           <td class="agy-style-27"><input type="checkbox" id="newFleet" title="Fleet"/></td>
           <td class="agy-style-27"><input type="checkbox" id="newTuktuk" title="TukTuk"/></td>
+          <td class="agy-style-27"><span class="agy-style-77">—</span></td>
           <td class="agy-style-27">
             <button class="crud-btn crud-btn-add" data-act="kamCrudAdd">${escapeHTML(t("cfg.agregar"))}</button>
           </td>
@@ -1397,6 +1446,10 @@ export async function deleteDashboardData() {
 
 // ── ACCIONES DELEGADAS (Fase A2) ─────────────────────────────────────────────
 import { registerActions } from "./shared/actions.js";
+// Import explicito (no global): app.ts se evalua antes de que vendor.ts espeje
+// los globales, y estas se llaman desde handlers que corren despues — pero el
+// import deja la dependencia a la vista, que es el punto.
+import { guardarLogoPartner, borrarLogoPartner, ensurePartnerLogos } from "./data.js";
 import { t, setLang, getLang, aplicarI18nEstatico, selectorIdiomaHTML } from "./core/i18n";
 import { logAccess } from "./shared/accessLog.js";
 
@@ -1459,6 +1512,9 @@ registerActions({
   setDatePreset: d => setDatePreset(d.preset),
   onKAMChange, selectAll, deselectAll, toggleSidebar,
   switchMode:      d => switchMode(d.mode),
+  cfgPedirLogo:    d => cfgPedirLogo(d.clid),
+  cfgSubirLogo:    (d, el) => cfgSubirLogo(d.clid, el),
+  cfgBorrarLogo:   d => cfgBorrarLogo(d.clid),
   switchTab:       d => switchTab(d.tab),
   switchTabFromMenu: d => switchTabFromMenu(d.tab),
   toggleUploadMenu:  (d, el, e) => toggleUploadMenu(e),
