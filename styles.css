@@ -1362,45 +1362,53 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 /* ── PRESENTACIÓN: portada ejecutiva (ago 2026) ─────────────────────────────
    La lee la gerencia del partner. Jerarquía dura: veredicto → barras → texto.
    Si solo leen esta hoja, tiene que alcanzar. */
-.px-wrap { display: flex; flex-direction: column; gap: 12px; flex: 1 0 auto; }
+/* Las tarjetas de texto ABSORBEN el alto sobrante (flex:1 en .px-abajo): sin
+   eso los bloques se apilaban arriba y quedaban ~230px muertos al pie de la
+   hoja. Llenar la pagina sin agrandar la letra era justo el pedido. */
+.px-wrap { display: flex; flex-direction: column; gap: 11px; flex: 1 0 auto; }
 /* Veredicto: el titular. Va primero y en grande porque es la única línea que
    se lee sí o sí. */
+/* Veredicto compacto: es un titular, no un banner. Antes ocupaba el alto de
+   una tarjeta entera para llevar cinco palabras. */
 .px-veredicto {
-  display: flex; align-items: center; gap: 10px;
-  background: #fafafa; border-left: 4px solid; border-radius: 8px;
-  padding: 10px 14px;
+  display: flex; align-items: baseline; gap: 9px;
+  background: #fff; border-left: 4px solid; border-radius: 10px;
+  padding: 7px 13px; border: 1px solid #eee; border-left-width: 4px;
 }
+.px-vsub { font-size: var(--sl-nota); color: #aaa; font-weight: 700; margin-left: auto; }
 .px-sem  { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
 .px-vtxt { font-size: var(--sl-veredicto); font-weight: 800; letter-spacing: -.2px; }
 
-.px-barras { display: flex; flex-direction: column; gap: 9px; }
-.px-fila   { display: grid; grid-template-columns: 190px 1fr; grid-template-areas:
-             "lbl cifra" "bullet bullet" "nota nota"; gap: 2px 12px; align-items: baseline; }
-.px-fila.px-na { opacity: .6; }
-.px-lbl   { grid-area: lbl; font-size: var(--sl-lbl); font-weight: 800; color: #555;
+/* Tres KPIs en TARJETAS lado a lado. A ancho completo la barra se comía el
+   slide y empujaba el texto al pie; en columnas cada una mide un tercio. */
+.px-kpis { display: flex; gap: 10px; }
+.px-kpi  {
+  flex: 1 1 0; min-width: 0; background: #fff; border: 1px solid #eee;
+  border-radius: 10px; padding: 13px 15px; display: flex; flex-direction: column; gap: 3px;
+  justify-content: center;
+}
+.px-kpi.px-na { opacity: .55; }
+.px-lbl   { font-size: var(--sl-th); font-weight: 800; color: #666;
             text-transform: uppercase; letter-spacing: .5px;
             min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.px-cifra { grid-area: cifra; display: flex; align-items: baseline; gap: 6px; }
+.px-cifra { display: flex; align-items: baseline; gap: 5px; }
 .px-val   { font-size: var(--sl-val); font-weight: 800; letter-spacing: -.3px; }
 .px-meta  { font-size: var(--sl-nota); font-weight: 700; color: #aaa; }
-.px-pct   { font-size: var(--sl-val2); font-weight: 800; margin-left: auto; }
-/* Bullet chart: avance + marca de calendario. La marca solo va en los FLUJOS —
-   en un snapshot (AD) el calendario no dice nada, ver buildSlide2Ritmo. */
-.px-bullet { grid-area: bullet; position: relative; height: 9px; background: #eee;
-             border-radius: 5px; margin-top: 3px; }
-.px-fill   { position: absolute; top: 0; left: 0; height: 100%; border-radius: 5px; }
-.px-hoy    { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #111; opacity: .6; }
-.px-nota   { grid-area: nota; font-size: var(--sl-nota); color: #888; }
+.px-pct   { font-size: var(--sl-val2); font-weight: 800; }
+.px-bullet { position: relative; height: 7px; background: #eee; border-radius: 4px; margin: 3px 0 1px; }
+.px-fill   { position: absolute; top: 0; left: 0; height: 100%; border-radius: 4px; }
+.px-hoy    { position: absolute; top: -2px; bottom: -2px; width: 2px; background: #111; opacity: .55; }
+.px-nota   { font-size: var(--sl-nota); color: #888; }
 
-.px-abajo   { display: flex; gap: 12px; align-items: stretch; }
+.px-abajo   { display: flex; gap: 10px; align-items: stretch; flex: 1 1 auto; min-height: 0; }
+.px-card    { background: #fff; border: 1px solid #eee; border-radius: 10px; padding: 9px 12px; }
 .px-lectura { flex: 1 1 auto; min-width: 0; }
 .px-h       { font-size: var(--sl-th); font-weight: 800; color: #888;
               text-transform: uppercase; letter-spacing: .8px; margin-bottom: 4px; }
-.px-lectura ul { margin: 0; padding-left: 16px; }
+.px-lectura ul { margin: 0; padding-left: 15px; }
 .px-lectura li { font-size: var(--sl-val2); color: #333; line-height: 1.45; margin-bottom: 3px; }
 /* La acción va aparte y destacada: es lo único que se le pide hacer. */
-.px-accion  { flex: 0 0 34%; background: #fff5f5; border: 1px solid #fecaca;
-              border-radius: 8px; padding: 10px 12px; }
+.px-accion  { flex: 0 0 34%; background: #fff5f5; border-color: #fecaca; }
 .px-h-acc   { color: #b91c1c; }
 .px-atxt    { font-size: var(--sl-val2); color: #7f1d1d; font-weight: 600; line-height: 1.45; }
 
@@ -1486,3 +1494,28 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
                 overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bs-chip b    { font-size: var(--sl-val2); font-weight: 800; }
 .bs-chip i    { font-size: var(--sl-nota); font-style: normal; color: #bbb; }
+
+/* ══ HOJAS DEL DECK: TARJETAS SOBRE FONDO TENUE ════════════════════════════
+   Lenguaje visual del Fleetroom (la herramienta que el partner ya usa): fondo
+   gris suave y bloques blancos. El contraste hace de separador — antes los
+   bloques eran del mismo blanco que la hoja y la información se leía como una
+   lista continua, sin saber dónde empieza y termina cada cosa.
+   Se aplica SOLO a las hojas con bloques (Ejecutivo, Resumen, Alertas); las de
+   gráficas y Data Raw quedan en blanco porque son una sola pieza. */
+/* Doble clase a proposito: .agy-style-365 (la hoja) trae su propio fondo
+   blanco con la MISMA especificidad, y vive en otro archivo que puede
+   cargarse despues — con una sola clase gana el blanco. */
+.agy-style-365.p2-hoja-cards { background: #f4f4f5; }
+.p2-hoja-cards .rs-card,
+.p2-hoja-cards .al-bloque { background: #fff; border: 1px solid #ececec; }
+
+/* Resumen: cada bloque es una tarjeta con NÚMERO — el orden de lectura deja de
+   ser una suposición del que mira. */
+.rs-card { border-radius: 10px; padding: 9px 12px; }
+.rs-n {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 15px; height: 15px; border-radius: 50%; margin-right: 6px;
+  background: #111; color: #fff; font-size: .52rem; font-weight: 800; flex: 0 0 auto;
+}
+.rs-tk .rs-chip { background: #fffbeb; }
+.rs-fleet .rs-chip { background: #f6f9ff; }

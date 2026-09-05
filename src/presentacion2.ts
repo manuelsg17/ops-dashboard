@@ -32,7 +32,7 @@ window.Chart = Chart;
 import { projectFlow, retentionSeries, seriesByDate, snapshotValue,
          horasPorConductorBase, TK_HORAS_BASE_MIN, TK_MIN_ACTIVOS,
          pacingFlujo, median } from "./domain/metrics.js";
-import { p2Lectura, p2Accion } from "./domain/lectura.js";
+import { p2Lectura, p2Accion, META_CUMPLIDA_PCT } from "./domain/lectura.js";
 import { reportYM, MES_NOMBRES } from "./shared/mesReporte.js";
 import * as forecast from "./forecast.js";
 Object.assign(window, forecast);
@@ -1343,12 +1343,17 @@ export function buildSlide2Resumen(partner, idx) {
     </tr>`).join("");
 
   // ── Zona 3: Fleet — lente sobre Taxi, no una vertical ────────────────────
+  // Fleet se muestra SIEMPRE que el partner tenga autos propios, sin importar
+  // el selector Auto/Taxi/Fleet de la barra de filtros: ese selector cambia la
+  // VISTA del KAM, y el Resumen es una foto completa del partner que no debe
+  // moverse segun donde quedo un toggle.
   let fleetHTML = "";
-  if (p2IsFleetMode(partner)) {
+  {
     PRESENT2_STATE.dataset = "taxi";
     const fs = p2FleetSeries(partner, null, taxiDates);
     PRESENT2_STATE.dataset = savedDs;
     const ult = arr => (arr && arr.length) ? arr[arr.length - 1] : null;
+    const tieneFleet = (fs.ownedFleetActiveCars || []).some(v => v > 0);
     const m = p2MetaFor(partner, null, mesName);
     const chips = [
       { l: es ? "Autos propios" : "Owned cars", v: ult(fs.ownedFleetActiveCars), f: v => v == null ? "—" : fmt(v) },
@@ -1356,8 +1361,8 @@ export function buildSlide2Resumen(partner, idx) {
       { l: es ? "Aceptación" : "Acceptance",    v: ult(fs.accept),              f: v => v == null ? "—" : (v*100).toFixed(1)+"%", meta: m.mAcc, esPct: true },
       { l: es ? "Utilización" : "Utilization",  v: null,                        f: () => m.mUtil != null ? fmt(m.mUtil)+"%" : "—", soloMeta: true }
     ];
-    fleetHTML = `<div class="rs-fleet">
-      <div class="rs-h">${es ? "Fleet" : "Fleet"} <span class="rs-sub">${es ? "dentro de Taxi" : "within Taxi"}</span></div>
+    if (tieneFleet) fleetHTML = `<div class="rs-card rs-fleet">
+      <div class="rs-h"><span class="rs-n">3</span>Fleet <span class="rs-sub">${es ? "dentro de Taxi" : "within Taxi"}</span></div>
       <div class="rs-chips">${chips.map(c => {
         const val = c.f(c.v);
         let cmp = "";
@@ -1385,8 +1390,9 @@ export function buildSlide2Resumen(partner, idx) {
         : (es ? "no medible · sin base" : "n/a · no base");
       const col1 = h.valor == null ? "#888" : (h.estado === "cumple" ? "#10b981" : "#FF0000");
       const pct2 = mNuevos > 0 ? (d.nr / mNuevos) * 100 : null;
-      tkHTML = `<div class="rs-tk">
-        <div class="rs-h">${es ? "Criterios TukTuk" : "TukTuk criteria"}</div>
+      tkHTML = `<div class="rs-card rs-tk">
+        <div class="rs-h"><span class="rs-n">4</span>${es ? "Criterios TukTuk" : "TukTuk criteria"}
+          <span class="rs-sub">${es ? "lo que te pedimos cada mes" : "what we ask each month"}</span></div>
         <div class="rs-chips">
           <div class="rs-chip"><span>${es ? "Horas / conductor base" : "Hours / base driver"}</span>
             <b style="color:${col1}">${h.valor == null ? "—" : h.valor.toFixed(1) + " h"}</b>
@@ -1407,19 +1413,19 @@ export function buildSlide2Resumen(partner, idx) {
               nr: es ? "Nuevos + Reactivados" : "New + React",
               sh: es ? "Horas de Conexión" : "Supply Hours" };
 
-  return `<div class="agy-style-365">
+  return `<div class="agy-style-365 p2-hoja-cards">
     ${p2BrandHeader(partner, (es ? "Resumen" : "Summary") + " · " + (mesName || "—"),
       es ? "Cumplimiento del mes y de dónde viene" : "Monthly attainment and where it comes from")}
     <div class="rs-wrap">
-      <div>
-        <div class="rs-h">${es ? "Cumplimiento vs meta del mes" : "Attainment vs monthly target"}
+      <div class="rs-card">
+        <div class="rs-h"><span class="rs-n">1</span>${es ? "¿Cumplo la meta del mes?" : "Am I meeting the target?"}
           <span class="rs-sub">${es ? "Taxi + TukTuk — la meta cubre las dos" : "Taxi + TukTuk"}</span></div>
         <table class="rs-t"><thead>${th(L.ad, L.nr, L.sh)}</thead><tbody>${filasCumpl}</tbody></table>
       </div>
       <div class="rs-dos">
-        <div class="rs-comp">
-          <div class="rs-h">${es ? "Composición por categoría" : "Breakdown by category"}
-            <span class="rs-sub">${es ? "Perú" : "Peru"}</span></div>
+        <div class="rs-card rs-comp">
+          <div class="rs-h"><span class="rs-n">2</span>${es ? "¿De dónde viene?" : "Where does it come from?"}
+            <span class="rs-sub">${es ? "Perú · las 4 suman el total" : "Peru · the 4 sum to total"}</span></div>
           <table class="rs-t"><thead>${th(L.ad, L.nr, L.sh)}</thead><tbody>${filasComp}</tbody></table>
         </div>
         ${fleetHTML}
@@ -1559,7 +1565,7 @@ export function buildSlide2Portada(partner, dates, idx) {
   const mesDates = taxiDates.length ? taxiDates : tkDates;   // fechas del MES de la meta (≠ `dates`, que es el rango del deck)
   const metasLoaded = !!(STATE.metasData || []).length;
   if (!mesDates.length || !metasLoaded) {
-    return `<div class="agy-style-365">
+    return `<div class="agy-style-365 p2-hoja-cards">
       ${p2BrandHeader(partner, (es ? "Resumen ejecutivo" : "Executive summary") + " · " + (mesName || "—"), "")}
       <div class="agy-style-396">${es ? "Sin datos o metas del mes." : "No data or targets for the month."}</div>
       ${p2BrandFooter(idx)}</div>`;
@@ -1610,7 +1616,7 @@ export function buildSlide2Portada(partner, dates, idx) {
 
   // Veredicto: cuántas metas cumplen. Es el titular de la hoja.
   const conMeta = kpis.filter(k => k.meta > 0);
-  const cumplen = conMeta.filter(k => k.pct >= 100).length;
+  const cumplen = conMeta.filter(k => k.pct >= META_CUMPLIDA_PCT).length;
   const vColor = !conMeta.length ? "#888"
                : cumplen === conMeta.length ? "#10b981"
                : cumplen === 0 ? "#FF0000" : "#f59e0b";
@@ -1620,28 +1626,32 @@ export function buildSlide2Portada(partner, dates, idx) {
 
   const pctMes = Math.min((daysElapsed / daysInMonth) * 100, 100);
 
+  // Tres TARJETAS lado a lado, no tres filas a lo ancho de la hoja. A ancho
+  // completo la barra de progreso se volvia el elemento mas grande del slide y
+  // empujaba la lectura y la accion al pie, dejando la mitad de abajo vacia.
+  // En columnas cada barra mide un tercio, los tres KPIs se comparan de un
+  // vistazo y sobra espacio para el texto, que es lo que hay que leer.
   const barras = kpis.map(k => {
-    if (!k.meta) return `<div class="px-fila px-na">
+    if (!k.meta) return `<div class="px-kpi px-na">
       <div class="px-lbl">${escapeHTML(k.lbl)}</div>
       <div class="px-val">${k.fmt(k.real)}</div>
       <div class="px-nota">${es ? "sin meta cargada" : "no target"}</div></div>`;
     const col = pColor(k.pct);
     const falta = k.meta - k.real;
-    return `<div class="px-fila">
+    return `<div class="px-kpi">
       <div class="px-lbl">${escapeHTML(k.lbl)}</div>
       <div class="px-cifra">
         <span class="px-val" style="color:${col}">${k.fmt(k.real)}</span>
         <span class="px-meta">/ ${k.fmt(k.meta)}</span>
-        <span class="px-pct" style="color:${col}">${_p2PctTxt(k.pct)}</span>
       </div>
+      <div class="px-pct" style="color:${col}">${_p2PctTxt(k.pct)}</div>
       <div class="px-bullet">
         <div class="px-fill" style="width:${Math.min(k.pct, 100).toFixed(1)}%;background:${col}"></div>
-        ${k.flujo ? `<div class="px-hoy" style="left:calc(${pctMes.toFixed(1)}% - 1px)" title="${es ? "dónde debería ir hoy" : "expected today"}"></div>` : ""}
+        ${k.flujo ? `<div class="px-hoy" style="left:calc(${pctMes.toFixed(1)}% - 1px)"></div>` : ""}
       </div>
       <div class="px-nota">${falta > 0
         ? (es ? `faltan ${k.fmt(falta)}` : `${k.fmt(falta)} to go`)
-        : (es ? `+${k.fmt(-falta)} sobre la meta` : `+${k.fmt(-falta)} over target`)}${
-        k.flujo ? (es ? ` · el calendario va en ${pctMes.toFixed(0)}%` : ` · calendar at ${pctMes.toFixed(0)}%`) : ""}</div>
+        : (es ? `+${k.fmt(-falta)} sobre la meta` : `+${k.fmt(-falta)} over`)}</div>
     </div>`;
   }).join("");
 
@@ -1653,19 +1663,20 @@ export function buildSlide2Portada(partner, dates, idx) {
       <div class="px-veredicto" style="border-left-color:${vColor}">
         <span class="px-sem" style="background:${vColor}"></span>
         <span class="px-vtxt" style="color:${vColor}">${escapeHTML(vTxt)}</span>
+        <span class="px-vsub">${es ? `${diasRestantes ? `quedan ${diasRestantes} días` : "mes cerrado"}` : `${diasRestantes ? `${diasRestantes} days left` : "month closed"}`}</span>
       </div>
-      <div class="px-barras">${barras}</div>
-      ${p2BenchStrip(partner, dates)}
+      <div class="px-kpis">${barras}</div>
       <div class="px-abajo">
-        <div class="px-lectura">
+        <div class="px-card px-lectura">
           <div class="px-h">${es ? "Lectura" : "Reading"}</div>
           <ul>${lectura.map(l => `<li>${escapeHTML(l)}</li>`).join("")}</ul>
         </div>
-        ${accion ? `<div class="px-accion">
+        ${accion ? `<div class="px-card px-accion">
           <div class="px-h px-h-acc">${es ? "Acción prioritaria" : "Priority action"}</div>
           <div class="px-atxt">${escapeHTML(accion)}</div>
         </div>` : ""}
       </div>
+      ${p2BenchStrip(partner, dates)}
     </div>
     ${p2BrandFooter(idx)}
   </div>`;
@@ -1676,6 +1687,10 @@ export function buildSlide2Portada(partner, dates, idx) {
 // sección (una hoja por vertical) y eso volvía a inflar el deck justo cuando el
 // objetivo era acortarlo. Además, verlas juntas es lo que permite comparar:
 // "Taxi limpio, TukTuk con 3 señales" se lee de un golpe.
+//
+// Se muestran TODAS las señales, sin cortar. Un "y 1 más…" en un PDF es texto
+// muerto: no se puede clickear y esconde justo lo que el partner tiene que ver.
+// La hoja crece si hace falta (ver el ajuste al contenido en renderSlide2).
 //
 // Reusa p2ComputeAlerts sin tocarla: se cambia el dataset activo y se le pide
 // las alertas de cada vertical, igual que hace el resto del deck.
@@ -1718,16 +1733,16 @@ export function buildSlide2Alertas(partner, dates, idx) {
         <span class="al-n" style="color:${n ? (b.als.some(a => a.sev === "high") ? "#FF0000" : "#f59e0b") : "#10b981"}">${
           n ? `${n} ${es ? (n === 1 ? "señal" : "señales") : (n === 1 ? "signal" : "signals")}` : (es ? "✓ sin señales" : "✓ clear")}</span>
       </div>
-      ${n ? `<ul class="al-lista">${b.als.slice(0, 5).map(a => {
+      ${n ? `<ul class="al-lista">${b.als.map(a => {
         const s = SEV[a.sev] || SEV.mid;
         return `<li><span class="al-sev" style="background:${s.c}"></span>
           <b>${escapeHTML(a.title)}</b>
           <span class="al-det">${escapeHTML(a.level)} · ${escapeHTML(a.detail)}</span></li>`;
-      }).join("")}${n > 5 ? `<li class="al-mas">${es ? `y ${n - 5} más` : `and ${n - 5} more`}</li>` : ""}</ul>` : ""}
+      }).join("")}</ul>` : ""}
     </div>`;
   }).join("");
 
-  return `<div class="agy-style-365">
+  return `<div class="agy-style-365 p2-hoja-cards">
     ${p2BrandHeader(partner, es ? "Alertas por categoría" : "Alerts by category",
       es ? "Señales automáticas del período · ordenadas por severidad"
          : "Automatic signals for the period · sorted by severity")}

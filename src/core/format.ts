@@ -73,25 +73,26 @@ export function d2s(d) { return d ? d.split("-").reverse().join("/") : "--"; }
 // extremos, y estos informes los lee la gerencia del partner:
 //
 //   - 80% pintaba VERDE. Un partner 20% corto se leia como cumplido: falso
-//     positivo justo en la zona donde hay que actuar. Ahora verde = CUMPLIO.
+//     positivo justo en la zona donde hay que actuar. Ahora verde = CUMPLIO,
+//     y CUMPLIO arranca en 95% — es el umbral que usa el negocio.
 //   - 101% y 208% pintaban IGUAL (morado). Duplicar la meta no es un triunfo,
 //     es una meta mal calibrada, y el informe la celebraba en vez de
 //     señalarla. Ahora el morado empieza en 150% y significa "revisar meta".
 //
 // Cuatro estados con significado propio:
 //   morado >150  meta desalineada (revisar con el KAM)
-//   verde  >=100 cumplio
+//   verde  >=95  cumplio (umbral de negocio de Manuel, no 100)
 //   ambar  >=80  cerca, falta poco
 //   rojo   <80   atrasado
-export function pColor(p) { return p > 150 ? "#8b5cf6" : p >= 100 ? "#10b981" : p >= 80 ? "#f59e0b" : "#FF0000"; }
+export function pColor(p) { return p > 150 ? "#8b5cf6" : p >= 95 ? "#10b981" : p >= 80 ? "#f59e0b" : "#FF0000"; }
 
 // Etiqueta del estado de cumplimiento, en el MISMO corte que pColor — asi el
 // color y la palabra nunca pueden contradecirse.
 export function pEstado(p) {
-  return p > 150 ? "meta_desalineada" : p >= 100 ? "cumplio" : p >= 80 ? "cerca" : "atrasado";
+  return p > 150 ? "meta_desalineada" : p >= 95 ? "cumplio" : p >= 80 ? "cerca" : "atrasado";
 }
 
-export function semCls(p) { return p >= 100 ? "sem-g" : p >= 80 ? "sem-y" : "sem-r"; }
+export function semCls(p) { return p >= 95 ? "sem-g" : p >= 80 ? "sem-y" : "sem-r"; }
 
 // Trend over last 3 periods
 export function trendI(vals) {

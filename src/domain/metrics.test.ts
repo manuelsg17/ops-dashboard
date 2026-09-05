@@ -340,10 +340,12 @@ describe("escala de cumplimiento (pColor/pEstado)", () => {
   // Vive en core/format pero la regla es de NEGOCIO: define qué se le muestra
   // en verde a la gerencia del partner. Se testea acá para que un cambio de
   // umbral sea deliberado y no un ajuste suelto.
-  it("verde significa CUMPLIÓ, no 'casi'", () => {
-    // Antes 80% era verde: un partner 20% corto se leía como cumplido.
+  it("verde = CUMPLIÓ, y cumplir arranca en 95% (umbral del negocio)", () => {
+    // 95 y no 100: es la regla que usa Manuel. Antes 80% era verde y un
+    // partner 20% corto se leía como cumplido.
     expect(pEstado(80)).toBe("cerca");
-    expect(pEstado(99.9)).toBe("cerca");
+    expect(pEstado(94.9)).toBe("cerca");
+    expect(pEstado(95)).toBe("cumplio");
     expect(pEstado(100)).toBe("cumplio");
   });
 
@@ -362,7 +364,7 @@ describe("escala de cumplimiento (pColor/pEstado)", () => {
   it("el color y la etiqueta usan el MISMO corte (no pueden contradecirse)", () => {
     const verde = "#10b981", ambar = "#f59e0b", rojo = "#FF0000", morado = "#8b5cf6";
     const esperado = { cumplio: verde, cerca: ambar, atrasado: rojo, meta_desalineada: morado };
-    for (const p of [0, 50, 79.9, 80, 99.9, 100, 150, 150.1, 208, 400]) {
+    for (const p of [0, 50, 79.9, 80, 94.9, 95, 99.9, 100, 150, 150.1, 208, 400]) {
       expect(pColor(p)).toBe(esperado[pEstado(p)]);
     }
   });

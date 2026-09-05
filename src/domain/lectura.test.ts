@@ -73,6 +73,25 @@ describe("lectura ejecutiva: frases con número y consecuencia", () => {
   });
 });
 
+describe("umbral de meta cumplida = 95%", () => {
+  it("un 96% NO se reporta como faltante: ya cumplió", () => {
+    // Con el corte en 100 este caso decia "faltan X" mientras la barra estaba
+    // verde — el informe se contradecia solo.
+    // verticales sin movimiento: aisla la regla del KPI (si no, la caída de
+    // TukTuk que trae `base` dispara otra frase y el test mide otra cosa).
+    const casi = { ...base, verticales: [{ label: "Taxi", varPct: 1 }],
+      kpis: [{ key: "ad", lbl: "Conductores Activos", real: 960, meta: 1000, pct: 96, fmt }] };
+    expect(p2Lectura(casi)[0]).toMatch(/cubiertas/);
+    expect(p2Accion(casi)).toBeNull();
+  });
+
+  it("un 94% sí es faltante", () => {
+    const corto = { ...base, kpis: [{ key: "ad", lbl: "Conductores Activos", real: 940, meta: 1000, pct: 94, fmt }] };
+    expect(p2Lectura(corto).join(" ")).toContain("60");
+    expect(p2Accion(corto)).not.toBeNull();
+  });
+});
+
 describe("acción ejecutiva: UNA sola palanca", () => {
   it("elige el KPI más atrasado y lo aterriza en la ciudad que más pesa", () => {
     const a = p2Accion(base)!;

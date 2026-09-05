@@ -14,13 +14,19 @@
 // no se inventa: se dice que no hay nada para señalar.
 //
 // PURA: recibe los números ya calculados y devuelve strings. Sin STATE, sin DOM.
+// Umbral de meta cumplida: 95%, no 100. Es una regla de negocio de Manuel
+// (ago 2026) y tiene que ser LA MISMA que usa el color (pColor/pEstado) — si
+// el texto dice "faltan X" mientras la barra ya esta verde, el informe se
+// contradice solo.
+export const META_CUMPLIDA_PCT = 95;
+
 export function p2Lectura(ctx) {
   const { es, kpis, ciudades, verticales, diasRestantes, diasMes } = ctx;
   const out = [];
 
   // 1. La brecha más grande, con cuánto falta y cuánto tiempo queda. Es la
   //    frase que contesta "¿qué me falta y me da el tiempo?".
-  const cortos = kpis.filter(k => k.meta > 0 && k.pct < 100).sort((a, b) => a.pct - b.pct);
+  const cortos = kpis.filter(k => k.meta > 0 && k.pct < META_CUMPLIDA_PCT).sort((a, b) => a.pct - b.pct);
   if (cortos.length) {
     const k = cortos[0];
     const falta = k.meta - k.real;
@@ -77,7 +83,7 @@ export function p2Lectura(ctx) {
 // ninguna.
 export function p2Accion(ctx) {
   const { es, kpis, ciudades } = ctx;
-  const cortos = kpis.filter(k => k.meta > 0 && k.pct < 100).sort((a, b) => a.pct - b.pct);
+  const cortos = kpis.filter(k => k.meta > 0 && k.pct < META_CUMPLIDA_PCT).sort((a, b) => a.pct - b.pct);
   if (!cortos.length) return null;
   const k = cortos[0];
   const falta = k.meta - k.real;
