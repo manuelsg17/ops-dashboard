@@ -1,0 +1,23 @@
+-- ============================================================================
+-- Baja del respaldo de las semanas duplicadas. Sucede a
+-- 2026-09-05_rls_backup_dup_martes.sql, que le habia puesto RLS al descubrir
+-- que estaba expuesto; ese archivo se conserva porque documenta la exposicion
+-- y como se genero, aunque la tabla ya no exista.
+--
+-- QUE SE BORRA: `rendimiento_dup_martes_20260903` — 696 filas, 76 CLIDs, las
+-- tres semanas mal fechadas por el cron (martes 04, 11 y 18 de agosto de 2026)
+-- que se sacaron de `rendimiento` el 03-sep. Manuel confirma que no se van a
+-- restaurar.
+--
+-- VERIFICADO ANTES DEL DROP: ninguna vista depende de ella, ninguna FK la
+-- referencia, el codigo de la app no la nombra, y las tres fechas siguen fuera
+-- de `rendimiento` (0 filas) — o sea que borrar el respaldo no revive ni
+-- duplica nada. Despues del DROP el advisor de seguridad queda sin errores.
+--
+-- PARA LA PROXIMA: `CREATE TABLE ... AS SELECT` hereda los privilegios por
+-- defecto del esquema (que incluyen `anon`, porque PostgREST expone `public`)
+-- pero NO hereda el RLS de la tabla de origen. Cualquier respaldo creado asi
+-- nace legible con la anon key. Si vuelve a hacer falta uno, crearlo con RLS
+-- habilitado y sin politicas en la MISMA transaccion.
+-- ============================================================================
+DROP TABLE IF EXISTS public.rendimiento_dup_martes_20260903;
