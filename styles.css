@@ -1391,3 +1391,29 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
    leía como un bloque de dígitos sin jerarquía. */
 .sc-pct  { display: block; font-size: .72rem; font-weight: 800; margin-top: 1px; }
 .sc-nometa .sc-sub { display: block; font-size: .6rem; color: #aaa; font-weight: 600; margin-top: 1px; }
+
+/* ── PRESENTACIÓN: slide Criterios TukTuk (ago 2026) ────────────────────────
+   Dos tarjetas grandes (el veredicto del mes) + detalle por ciudad. Los
+   estados "no aplica" van en gris con el motivo escrito: un partner chico que
+   ve un guion sin explicación asume que incumplió. */
+.tkc-wrap  { display: flex; flex-direction: column; gap: 14px; flex: 1; min-height: 0; }
+.tkc-cards { display: flex; gap: 12px; }
+.tkc-card {
+  flex: 1 1 0; min-width: 0; background: #fafafa; border-radius: 10px;
+  padding: 14px 16px; display: flex; flex-direction: column; gap: 3px;
+}
+.tkc-card.tkc-na { background: #f5f5f5; border: 1px dashed #e5e5e5; }
+.tkc-lbl {
+  font-size: .66rem; font-weight: 800; color: #666;
+  text-transform: uppercase; letter-spacing: .5px;
+}
+.tkc-val  { font-size: 1.7rem; font-weight: 800; letter-spacing: -.3px; line-height: 1.1; }
+.tkc-meta { font-size: .72rem; font-weight: 700; color: #888; }
+.tkc-form { font-size: .62rem; color: #aaa; margin-top: 2px; }
+.tkc-veredicto { font-size: .78rem; font-weight: 800; margin-top: 4px; }
+/* El aviso de "no aplica" tiene que leerse, no esconderse: fondo propio y
+   ancho completo de la tarjeta. */
+.tkc-aviso {
+  font-size: .64rem; color: #92400e; background: #fffbeb;
+  border-radius: 6px; padding: 6px 8px; margin-top: 5px; line-height: 1.35;
+}

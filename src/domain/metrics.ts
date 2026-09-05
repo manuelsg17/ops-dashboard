@@ -95,6 +95,41 @@ export function projectFlow(total: number, daysElapsed: number, daysRemaining: n
   return (total * (daysElapsed + daysRemaining)) / daysElapsed;
 }
 
+// ── Criterios TukTuk (ago 2026) ─────────────────────────────────────────────
+// Reemplazan a las metas TukTuk de AD/N+R/SH, que quedaron obsoletas: ahora
+// TukTuk se evalua con DOS criterios del mes (decision de Manuel):
+//   1. Horas por conductor BASE >= 24h
+//   2. Meta de nuevos (N+R) que el KAM comunica a inicio de mes
+export const TK_HORAS_BASE_MIN = 24;   // umbral del criterio 1
+export const TK_MIN_ACTIVOS    = 50;   // abajo de esto el ratio no es representativo
+
+/**
+ * Horas de conexion por conductor BASE = SH / (activos - nuevos - reactivados).
+ *
+ * El denominador son los conductores que YA estaban, no los que entraron este
+ * mes — por eso se restan nuevos y reactivados. NO es SH/activos: con la
+ * division por activos PIAGGIO daba 20,9h (incumplia) y por base da 43,7h
+ * (cumple), asi que la eleccion decide el veredicto y esta fijada aca.
+ *
+ * Devuelve un ESTADO, no solo un numero, porque hay dos formas legitimas de no
+ * poder medir y ninguna significa "incumple":
+ *   - `pocos_activos`: menos de TK_MIN_ACTIVOS → la muestra es muy chica y el
+ *     ratio se dispara; el criterio no aplica.
+ *   - `sin_base`: todos los activos son nuevos/reactivados (base <= 0) → no hay
+ *     conductores base sobre los cuales promediar.
+ * Ojo con la escala: hay que alimentarlo con datos MENSUALES. En semanal el AD
+ * es un snapshot y N+R acumula, asi que la base se va a negativo (verificado
+ * contra produccion: YevoGo -6, PIAGGIO -65).
+ */
+export function horasPorConductorBase(sh: number, ad: number, nuevos: number, reactivados: number) {
+  const activos = ad || 0;
+  const base = activos - (nuevos || 0) - (reactivados || 0);
+  if (activos < TK_MIN_ACTIVOS) return { valor: null, base, estado: "pocos_activos" as const };
+  if (base <= 0)                return { valor: null, base, estado: "sin_base" as const };
+  const valor = (sh || 0) / base;
+  return { valor, base, estado: (valor >= TK_HORAS_BASE_MIN ? "cumple" : "no_cumple") as "cumple" | "no_cumple" };
+}
+
 // ── Tasas ponderadas ────────────────────────────────────────────────────────
 
 /**

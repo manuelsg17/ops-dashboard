@@ -29,7 +29,8 @@ window.Chart = Chart;
 // PARTNER, así que es justo donde menos puede haber una fórmula propia: si Metas
 // dice "proyectamos 210" y el deck dice 120 para el mismo partner y el mismo mes,
 // el problema no es cosmético, es de credibilidad delante del cliente.
-import { projectFlow, retentionSeries, seriesByDate, snapshotValue } from "./domain/metrics.js";
+import { projectFlow, retentionSeries, seriesByDate, snapshotValue,
+         horasPorConductorBase, TK_HORAS_BASE_MIN, TK_MIN_ACTIVOS } from "./domain/metrics.js";
 import { reportYM, MES_NOMBRES } from "./shared/mesReporte.js";
 import * as forecast from "./forecast.js";
 Object.assign(window, forecast);
@@ -180,6 +181,10 @@ export const P2_DIVIDER = { es: "TukTuk", en: "TukTuk", charts: false, build: (p
 // que se le pide. Ver TK_META_NUEVOS_MES en rendimiento.ts (misma constante, una
 // sola definición) y buildSlide2TkCriterios abajo para por qué Full Timers no está.
 export const P2_TK_CRITERIOS_SLIDE = { es: "Criterios del mes", en: "Monthly criteria", charts: false, build: (p, d, i) => buildSlide2TkCriterios(p, i) };
+// ✨ Criterios TukTuk (ago 2026): formato NUEVO — 24h por conductor base + meta
+// de nuevos (N+R). Convive con el viejo mientras Manuel compara; cuando valide,
+// el de arriba se retira en un commit puramente de borrado.
+export const P2_TK_CRITERIOS2_SLIDE = { es: "✨ Criterios TukTuk", en: "✨ TukTuk Criteria", charts: false, build: (p, d, i) => buildSlide2CriteriosTk(p, i) };
 // Slide de Seguimiento (Fase 3, render-only): solo si el partner tiene tareas cargadas.
 // Va al final del deck y entra al PDF automáticamente (no es noPdf). Definida en seguimiento.js.
 export const P2_SEG_SLIDE = { es: "Seguimiento", en: "Follow-up", charts: false, build: (p, d, i) => buildSlide2Seguimiento(p, i) };
@@ -207,6 +212,7 @@ export function p2Deck(partner) {
   if (showTk) {
     deck.push({ def: P2_DIVIDER, ds: "tuktuk" });
     deck.push({ def: P2_TK_CRITERIOS_SLIDE, ds: "tuktuk" });
+    deck.push({ def: P2_TK_CRITERIOS2_SLIDE, ds: "tuktuk" });
     body.forEach(def => deck.push({ def, ds: "tuktuk" }));
   }
   // Seguimiento (Fase 3): al final del deck, solo si el partner tiene tareas.
@@ -1657,6 +1663,157 @@ export function buildSlide2Resumen(partner, idx) {
     ${p2BrandHeader(partner, (es ? "Resumen" : "Summary") + " · " + (mesName || "—"),
       es ? "Cumplimiento del mes y de dónde viene" : "Monthly attainment and where it comes from")}
     <div class="sc-wrap">${cuerpo}</div>
+    ${p2BrandFooter(idx)}
+  </div>`;
+}
+
+// ── SLIDE: CRITERIOS TUKTUK (ago 2026) ────────────────────────────────────────
+// Reemplaza el formato viejo de "Criterios del mes" (que medía adquisición
+// propia contra un 100 hardcodeado). Los criterios nuevos son dos:
+//   1. Horas por conductor BASE >= 24h  (umbral fijo, igual para todos)
+//   2. Nuevos + Reactivados vs la meta que el KAM carga (meta_tk_nr)
+//
+// SIEMPRE se calcula sobre datos MENSUALES, sea cual sea la escala en la que el
+// KAM esté navegando: en semanal el AD es un snapshot y N+R acumula, así que la
+// base (activos - nuevos - reactivados) se va a negativo — verificado contra
+// producción (YevoGo -6, PIAGGIO -65). Por eso se lee rawDataMensualTuktuk y no
+// el dataset activo.
+export function p2TkCriteriosDatos(partner, city, ym) {
+  const rows = (STATE.rawDataMensualTuktuk || []).filter(r =>
+    r.partner === partner && (!city || r.city === city) && (!ym || String(r.date).slice(0, 7) === ym));
+  let ad = 0, nuevos = 0, react = 0, sh = 0;
+  for (const r of rows) {
+    ad     += r.activeDrivers || 0;
+    nuevos += (r.newPartner || 0) + (r.newService || 0);
+    react  += r.reactivated || 0;
+    sh     += r.supplyHours || 0;
+  }
+  return { ad, nuevos, react, sh, nr: nuevos + react, hay: rows.length > 0 };
+}
+
+// Mes (YYYY-MM) sobre el que se evalúan los criterios: el del "Hasta" del
+// filtro, para que coincida con el resto del deck.
+export function p2TkCriteriosYM() {
+  const to = document.getElementById("dateTo")?.value || "";
+  if (to) return String(to).slice(0, 7);
+  const ds = (STATE._tuktukMensualDates || []);
+  return ds.length ? String(ds[ds.length - 1]).slice(0, 7) : "";
+}
+
+export function buildSlide2CriteriosTk(partner, idx) {
+  const es = PRESENT2_STATE.lang === "es";
+  const ym = p2TkCriteriosYM();
+  // Etiqueta del mes desde el YYYY-MM (P2_MES_NOMBRES ya está en el archivo).
+  const mesTxt = ym ? `${P2_MES_NOMBRES[+ym.slice(5, 7) - 1] || ym} ${ym.slice(0, 4)}` : "—";
+
+  const savedDs = PRESENT2_STATE.dataset;
+  PRESENT2_STATE.dataset = "tuktuk";
+  const levels = p2Levels(partner);
+  PRESENT2_STATE.dataset = savedDs;
+
+  const meta = p2MetaFor(partner, null, p2AvanceMes());
+  const metaNuevos = meta.mtkNR || 0;
+
+  const pais = p2TkCriteriosDatos(partner, null, ym);
+  const h = horasPorConductorBase(pais.sh, pais.ad, pais.nuevos, pais.react);
+
+  if (!pais.hay) {
+    return `<div class="agy-style-365">
+      ${p2BrandHeader(partner, (es ? "Criterios TukTuk" : "TukTuk Criteria") + " · " + mesTxt, "")}
+      <div class="agy-style-396">${es
+        ? "Sin datos mensuales de TukTuk para evaluar los criterios."
+        : "No monthly TukTuk data to evaluate the criteria."}</div>
+      ${p2BrandFooter(idx)}
+    </div>`;
+  }
+
+  // Criterio 1 — horas por conductor base. Los estados "no aplica" se explican
+  // en pantalla: un partner chico no puede leer un guion sin saber por qué.
+  const AVISO = {
+    pocos_activos: es
+      ? `No aplica: menos de ${TK_MIN_ACTIVOS} conductores activos en el mes (${fmt(pais.ad)}). Con esa muestra el promedio no es representativo.`
+      : `Not applicable: fewer than ${TK_MIN_ACTIVOS} active drivers this month (${fmt(pais.ad)}). The average is not representative at that size.`,
+    sin_base: es
+      ? "No medible: todos los conductores activos del mes son nuevos o reactivados, así que no hay base sobre la cual promediar."
+      : "Not measurable: every active driver this month is new or reactivated, so there is no base to average over."
+  };
+  const noAplica = h.valor == null;
+  const col1 = noAplica ? "#888" : (h.estado === "cumple" ? "#10b981" : "#FF0000");
+  const card1 = `
+    <div class="tkc-card ${noAplica ? "tkc-na" : ""}">
+      <div class="tkc-lbl">${es ? "Horas por conductor base" : "Hours per base driver"}</div>
+      <div class="tkc-val" style="color:${col1}">${noAplica ? "—" : h.valor.toFixed(1) + " h"}</div>
+      <div class="tkc-meta">${es ? "mínimo" : "minimum"} ${TK_HORAS_BASE_MIN} h</div>
+      <div class="tkc-form">${es
+        ? "horas conectadas ÷ (activos − nuevos − reactivados)"
+        : "connected hours ÷ (active − new − reactivated)"}${
+        // La base solo se muestra cuando el criterio APLICA: si no aplica puede
+        // ser negativa (base -222) y ese número no significa nada para el partner.
+        noAplica ? "" : ` · base ${fmt(h.base)}`}</div>
+      ${noAplica ? `<div class="tkc-aviso">${escapeHTML(AVISO[h.estado] || "")}</div>`
+                 : `<div class="tkc-veredicto" style="color:${col1}">${h.estado === "cumple"
+                      ? (es ? "✓ Cumple" : "✓ Meets") : (es ? "✗ No cumple" : "✗ Does not meet")}</div>`}
+    </div>`;
+
+  // Criterio 2 — nuevos + reactivados vs meta del KAM.
+  const pct2 = metaNuevos > 0 ? (pais.nr / metaNuevos) * 100 : null;
+  const col2 = pct2 == null ? "#888" : p2AvanceColor(pct2);
+  const card2 = `
+    <div class="tkc-card ${metaNuevos > 0 ? "" : "tkc-na"}">
+      <div class="tkc-lbl">${es ? "Nuevos + Reactivados" : "New + Reactivated"}</div>
+      <div class="tkc-val" style="color:${col2}">${fmt(pais.nr)}</div>
+      <div class="tkc-meta">${metaNuevos > 0
+        ? `${es ? "meta" : "target"} ${fmt(metaNuevos)}`
+        : (es ? "sin meta cargada" : "no target loaded")}</div>
+      <div class="tkc-form">${es
+        ? `${fmt(pais.nuevos)} nuevos + ${fmt(pais.react)} reactivados`
+        : `${fmt(pais.nuevos)} new + ${fmt(pais.react)} reactivated`}</div>
+      ${metaNuevos > 0
+        ? `<div class="tkc-veredicto" style="color:${col2}">${_p2PctTxt(pct2)} ${es ? "de la meta" : "of target"}</div>`
+        : `<div class="tkc-aviso">${es
+            ? "Tu KAM carga esta meta al inicio del mes. Sin meta cargada solo se muestra el volumen."
+            : "Your KAM sets this target at the start of the month. Without it, only the volume is shown."}</div>`}
+    </div>`;
+
+  // Detalle por ciudad — cada una con su propio estado (una ciudad chica puede
+  // no aplicar aunque el país sí).
+  const filas = levels.filter(lv => lv.city).map(lv => {
+    const d = p2TkCriteriosDatos(partner, lv.city, ym);
+    if (!d.hay) return "";
+    const hc = horasPorConductorBase(d.sh, d.ad, d.nuevos, d.react);
+    const na = hc.valor == null;
+    const c  = na ? "#888" : (hc.estado === "cumple" ? "#10b981" : "#FF0000");
+    const motivo = na
+      ? (hc.estado === "pocos_activos"
+          ? (es ? `menos de ${TK_MIN_ACTIVOS} activos` : `under ${TK_MIN_ACTIVOS} active`)
+          : (es ? "sin base" : "no base"))
+      : "";
+    return `<tr>
+      <td class="sc-lvl"><span class="sc-dot" style="background:${lv.color}"></span>${escapeHTML(lv.label)}</td>
+      <td class="sc-num"><span class="sc-val">${fmt(d.ad)}</span></td>
+      <td class="sc-num"><span class="sc-val">${fmt(d.nr)}</span></td>
+      <td class="sc-num">
+        <span class="sc-val" style="color:${c}">${na ? "—" : hc.valor.toFixed(1) + " h"}</span>
+        ${motivo ? `<span class="sc-sub">${escapeHTML(motivo)}</span>` : ""}
+      </td>
+    </tr>`;
+  }).filter(Boolean).join("");
+
+  return `<div class="agy-style-365">
+    ${p2BrandHeader(partner, (es ? "Criterios TukTuk" : "TukTuk Criteria") + " · " + mesTxt,
+      es ? "Esto es lo que te pedimos cada mes" : "This is what we ask for each month",
+      { text: "🛺 TUKTUK", color: "#f59e0b" })}
+    <div class="tkc-wrap">
+      <div class="tkc-cards">${card1}${card2}</div>
+      ${filas ? `<div class="sc-zona">
+        <div class="sc-zona-tit">${es ? "Detalle por ciudad" : "By city"}</div>
+        <table class="sc-tbl"><thead><tr><th></th>
+          <th>${es ? "Activos" : "Active"}</th>
+          <th>${es ? "Nuevos + React" : "New + React"}</th>
+          <th>${es ? "Horas / base" : "Hours / base"}</th></tr></thead>
+          <tbody>${filas}</tbody></table>
+      </div>` : ""}
+    </div>
     ${p2BrandFooter(idx)}
   </div>`;
 }

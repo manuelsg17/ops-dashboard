@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   snapshotValue, flowValue, projectSnapshot, projectFlow,
   weightedAvg, ratio, attainmentPct, sumKpis, groupSum, seriesByDate, retentionSeries,
-  AD_PROJECTION_FACTOR
+  AD_PROJECTION_FACTOR, horasPorConductorBase, TK_HORAS_BASE_MIN, TK_MIN_ACTIVOS
 } from "./metrics.js";
 
 // Estos tests no son de cobertura: cada uno fija una regla de NEGOCIO que ya se
@@ -234,5 +234,60 @@ describe("meta paraguas: AD/N+R/SH de Taxi YA incluyen TukTuk", () => {
     expect(inflada).toBe(3785);
     expect(avanceMalo).toBeCloseTo(60.2, 1);
     expect(avanceMalo).toBeLessThan(70);   // el error se ve como incumplimiento
+  });
+});
+
+describe("criterios TukTuk: horas por conductor base", () => {
+  // Denominador = conductores que YA estaban (activos - nuevos - reactivados).
+  // La elección de denominador decide el veredicto, así que va fijada por test.
+
+  it("divide por la BASE, no por los activos — con datos reales de PIAGGIO", () => {
+    // PIAGGIO, agosto 2026 (mensual): sh 3363, ad 161, n+r 84 → base 77.
+    // Por base:    3363/77  = 43,7h → CUMPLE
+    // Por activos: 3363/161 = 20,9h → habría incumplido. No es lo mismo.
+    const r = horasPorConductorBase(3363, 161, 84, 0);
+    expect(r.base).toBe(77);
+    expect(r.valor!).toBeCloseTo(43.7, 1);
+    expect(r.estado).toBe("cumple");
+    expect(3363 / 161).toBeCloseTo(20.9, 1);   // el otro denominador, para dejarlo a la vista
+  });
+
+  it("Lizzo y TRANSPOTAXI de agosto cumplen", () => {
+    expect(horasPorConductorBase(102866, 1437, 348, 0).valor!).toBeCloseTo(94.5, 1);
+    expect(horasPorConductorBase(79154, 1370, 465, 0).valor!).toBeCloseTo(87.5, 1);
+  });
+
+  it("bajo TK_MIN_ACTIVOS el criterio NO aplica: valor null y estado propio", () => {
+    // No es "incumple" — es que la muestra es muy chica para que el ratio
+    // signifique algo. La UI tiene que decir por qué, no mostrar un 0.
+    const r = horasPorConductorBase(1200, 49, 5, 5);
+    expect(r.estado).toBe("pocos_activos");
+    expect(r.valor).toBeNull();
+    expect(TK_MIN_ACTIVOS).toBe(50);
+  });
+
+  it("exactamente TK_MIN_ACTIVOS activos SÍ aplica (el umbral es inclusivo)", () => {
+    expect(horasPorConductorBase(1200, 50, 5, 5).estado).not.toBe("pocos_activos");
+  });
+
+  it("base <= 0 no es incumplimiento: es no medible", () => {
+    // Todos los activos entraron este mes → no hay conductores base.
+    // Caso real en escala semanal (YevoGo base -6): sin este guard saldría un
+    // ratio negativo gigante en pantalla.
+    const r = horasPorConductorBase(8256, 81, 87, 0);
+    expect(r.base).toBeLessThan(0);
+    expect(r.estado).toBe("sin_base");
+    expect(r.valor).toBeNull();
+  });
+
+  it("el umbral de 24h es inclusivo", () => {
+    expect(horasPorConductorBase(24 * 100, 200, 100, 0).estado).toBe("cumple");
+    expect(horasPorConductorBase(23.9 * 100, 200, 100, 0).estado).toBe("no_cumple");
+    expect(TK_HORAS_BASE_MIN).toBe(24);
+  });
+
+  it("no explota con ceros", () => {
+    expect(horasPorConductorBase(0, 0, 0, 0).estado).toBe("pocos_activos");
+    expect(horasPorConductorBase(0, 100, 0, 0).valor).toBe(0);
   });
 });
