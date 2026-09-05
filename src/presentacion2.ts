@@ -1498,7 +1498,7 @@ export function buildSlide2Resumen(partner, dates, idx) {
       { l: P2T("Utilización", "Utilization", "Загрузка"),  v: null,                        f: () => m.mUtil != null ? fmt(m.mUtil)+"%" : "—", soloMeta: true }
     ];
     if (tieneFleet) fleetHTML = `<div class="rs-card rs-fleet">
-      <div class="rs-h"><span class="rs-n">3</span>Fleet <span class="rs-sub">${P2T("dentro de Taxi", "within Taxi", "внутри Такси")}</span></div>
+      <div class="rs-h"><span class="rs-n">#</span>Fleet <span class="rs-sub">${P2T("dentro de Taxi", "within Taxi", "внутри Такси")}</span></div>
       <div class="rs-chips">${chips.map(c => {
         const val = c.f(c.v);
         let cmp = "";
@@ -1527,7 +1527,7 @@ export function buildSlide2Resumen(partner, dates, idx) {
       const col1 = h.valor == null ? "#888" : (h.estado === "cumple" ? "#10b981" : "#FF0000");
       const pct2 = mNuevos > 0 ? (d.nr / mNuevos) * 100 : null;
       tkHTML = `<div class="rs-card rs-tk">
-        <div class="rs-h"><span class="rs-n">4</span>${P2T("Criterios TukTuk", "TukTuk criteria", "Критерии ТукТук")}
+        <div class="rs-h"><span class="rs-n">#</span>${P2T("Criterios TukTuk", "TukTuk criteria", "Критерии ТукТук")}
           <span class="rs-sub">${P2T("lo que te pedimos cada mes", "what we ask each month", "что мы просим каждый месяц")}</span></div>
         <div class="rs-chips">
           <div class="rs-chip"><span>${P2T("Horas / conductor base", "Hours / base driver", "Часов / базовый водитель")}</span>
@@ -1544,12 +1544,24 @@ export function buildSlide2Resumen(partner, dates, idx) {
     }
   }
 
+  // colgroup + table-layout:fixed (styles.css): las dos tablas comparten grilla,
+  // así los encabezados de una caen exactamente sobre los de la otra.
+  const cols = `<colgroup><col class="rs-c1"><col class="rs-cm"><col class="rs-cm"><col class="rs-cm"></colgroup>`;
   const th = (a, b, c) => `<tr><th></th><th>${a}</th><th>${b}</th><th>${c}</th></tr>`;
   const L = { ad: P2T("Conductores Activos", "Active Drivers", "Активные водители"),
               nr: P2T("Nuevos + Reactivados", "New + React", "Новые + реакт."),
               sh: P2T("Horas de Conexión", "Supply Hours", "Часы на линии") };
 
-  return `<div class="agy-style-365 p2-hoja-cards">
+  // Numeración de las zonas: CORRELATIVA sobre las que de verdad se muestran, y
+  // en el ORDEN EN QUE APARECEN. Estaba fija (1,2,3,4) y un partner sin Fleet
+  // recibía "1, 2, 4" — se lee como que falta un bloque, no como que no aplica.
+  // Se renumera sobre el HTML ya armado y no con un contador al construir cada
+  // bloque, porque Fleet y TukTuk se arman ANTES que las dos zonas de arriba: un
+  // contador les habría dado 1 y 2.
+  let _z = 0;
+  const numerar = html => html.replace(/<span class="rs-n">#<\/span>/g, () => `<span class="rs-n">${++_z}</span>`);
+
+  return numerar(`<div class="agy-style-365 p2-hoja-cards">
     ${p2BrandHeader(partner, (P2T("Resumen", "Summary", "Итоги")) + " · " + p2MesLabel(mesName),
       P2T("Cumplimiento del mes y de dónde viene", "Monthly attainment and where it comes from", "Выполнение месяца и его источники"))}
     <div class="rs-wrap">
@@ -1557,22 +1569,19 @@ export function buildSlide2Resumen(partner, dates, idx) {
         ? `El rango filtrado cubre <b>${mesDates.length} de ${todasDelMes.length}</b> períodos del mes: <b>Nuevos + Reactivados</b> y <b>Horas de Conexión</b> acumulan solo esos, así que su % contra la meta <b>mensual</b> queda corto por el recorte del rango, no por desempeño.`
         : `The filtered range covers <b>${mesDates.length} of ${todasDelMes.length}</b> periods of the month: <b>New + Reactivated</b> and <b>Supply Hours</b> accumulate only those, so their % against a <b>monthly</b> target falls short due to the range cut, not performance.`}</div>` : ""}
       <div class="rs-card">
-        <div class="rs-h"><span class="rs-n">1</span>${P2T("¿Cumplo la meta del mes?", "Am I meeting the target?", "Выполняю ли я цель месяца?")}
+        <div class="rs-h"><span class="rs-n">#</span>${P2T("¿Cumplo la meta del mes?", "Am I meeting the target?", "Выполняю ли я цель месяца?")}
           <span class="rs-sub">${P2T("Taxi + TukTuk — la meta cubre las dos", "Taxi + TukTuk", "Такси + ТукТук — цель покрывает обе линии")}</span></div>
-        <table class="rs-t"><thead>${th(L.ad, L.nr, L.sh)}</thead><tbody>${filasCumpl}</tbody></table>
+        <table class="rs-t">${cols}<thead>${th(L.ad, L.nr, L.sh)}</thead><tbody>${filasCumpl}</tbody></table>
       </div>
-      <div class="rs-dos">
-        <div class="rs-card rs-comp">
-          <div class="rs-h"><span class="rs-n">2</span>${P2T("¿De dónde viene?", "Where does it come from?", "Откуда это берётся?")}
-            <span class="rs-sub">${P2T("Perú · las 4 suman el total", "Peru · the 4 sum to total", "Перу · четыре в сумме дают итог")}</span></div>
-          <table class="rs-t"><thead>${th(L.ad, L.nr, L.sh)}</thead><tbody>${filasComp}</tbody></table>
-        </div>
-        ${fleetHTML}
+      <div class="rs-card rs-comp">
+        <div class="rs-h"><span class="rs-n">#</span>${P2T("¿De dónde viene?", "Where does it come from?", "Откуда это берётся?")}
+          <span class="rs-sub">${P2T("Perú · las 4 suman el total", "Peru · the 4 sum to total", "Перу · четыре в сумме дают итог")}</span></div>
+        <table class="rs-t">${cols}<thead>${th(L.ad, L.nr, L.sh)}</thead><tbody>${filasComp}</tbody></table>
       </div>
-      ${tkHTML}
+      ${fleetHTML || tkHTML ? `<div class="rs-dos">${fleetHTML}${tkHTML}</div>` : ""}
     </div>
     ${p2BrandFooter(idx)}
-  </div>`;
+  </div>`);
 }
 // ── SLIDE: CRITERIOS TUKTUK (ago 2026) ────────────────────────────────────────
 // Reemplaza el formato viejo de "Criterios del mes" (que medía adquisición

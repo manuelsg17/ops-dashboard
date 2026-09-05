@@ -1438,7 +1438,14 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
   display: flex; align-items: baseline; gap: 7px;
 }
 .rs-sub { font-size: var(--sl-nota); font-weight: 600; color: #aaa; text-transform: none; letter-spacing: 0; }
-.rs-t { width: 100%; border-collapse: collapse; }
+/* GRILLA FIJA. Las dos tablas del Resumen tienen las MISMAS 4 columnas y van una
+   debajo de la otra; con el ancho automático cada una se medía por su propio
+   contenido y los encabezados quedaban corridos ~19px entre sí — un desalineado
+   chico pero que el ojo agarra de inmediato. Con table-layout fijo y anchos
+   declarados, "Conductores Activos" cae exactamente sobre "Conductores Activos". */
+.rs-t { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.rs-t col.rs-c1 { width: 22%; }
+.rs-t col.rs-cm { width: 26%; }
 .rs-t th {
   font-size: var(--sl-th); font-weight: 800; color: #888; text-transform: uppercase;
   letter-spacing: .5px; text-align: right; padding: 0 8px 4px; border-bottom: 1px solid #e5e5e5;
@@ -1459,12 +1466,20 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 .rs-nm { color: #aaa; font-size: var(--sl-val2); }
 .rs-nm i { display: block; font-size: var(--sl-nota); font-style: normal; color: #bbb; }
 
-.rs-dos   { display: flex; gap: 12px; align-items: flex-start; }
-.rs-comp  { flex: 1 1 auto; min-width: 0; }
-.rs-fleet { flex: 0 0 38%; }
-.rs-chips { display: flex; gap: 7px; }
+/* Fila de bloques de chips (Fleet / Criterios TukTuk) al pie: reparto en partes
+   IGUALES, así con uno solo ocupa el ancho completo y con dos quedan simétricos.
+   Antes Fleet iba al costado de "¿De dónde viene?" con un 38% suelto: su borde
+   no caía sobre nada de arriba y las dos tablas quedaban de anchos distintos. */
+.rs-dos   { display: flex; gap: 10px; align-items: stretch; }
+.rs-dos > * { flex: 1 1 0; min-width: 0; }
+.rs-comp  { min-width: 0; }
+/* Los chips ENVUELVEN en dos filas antes que truncar la etiqueta: con Fleet y
+   TukTuk compartiendo la fila, los 4 chips de Fleet caían a ~85px y "Autos
+   propios" quedaba como "AUTOS PRO…". Una etiqueta cortada obliga a adivinar
+   qué métrica se está mirando. */
+.rs-chips { display: flex; gap: 7px; flex-wrap: wrap; }
 .rs-chip  {
-  flex: 1 1 0; min-width: 0; background: #fafafa; border-radius: 7px; padding: 6px 8px;
+  flex: 1 1 calc(50% - 7px); min-width: 0; background: #fafafa; border-radius: 7px; padding: 6px 8px;
   display: flex; flex-direction: column; gap: 1px;
 }
 .rs-chip span { font-size: var(--sl-th); font-weight: 700; color: #888;
@@ -1596,7 +1611,11 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 .px-col { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
 .px-col .px-lectura { flex: 0 0 auto; }
 .px-col .px-accion  { flex: 0 0 auto; }
-.px-embudo { flex: 0 0 36%; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+/* ANCHO = una tarjeta de KPI, no un 36% suelto: arriba hay 3 tarjetas con 10px
+   de gap, asi que una vale (100% - 20px)/3. Con eso el borde izquierdo del
+   embudo cae EXACTO sobre el de "Horas de Conexion" y el de la columna de texto
+   sobre el de "Nuevos + Reactivados". Un porcentaje a ojo nunca alinea. */
+.px-embudo { flex: 0 0 calc((100% - 20px) / 3); min-width: 0; display: flex; flex-direction: column; gap: 5px; }
 .px-abajo-solo .px-col { flex: 1 1 100%; }
 .eb-top   { font-size: var(--sl-nota); color: #888; }
 .eb-tabla { display: flex; flex-direction: column; gap: 5px; margin: 2px 0 1px; }
