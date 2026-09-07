@@ -517,6 +517,8 @@ export const I18N: Record<string, Record<string, string>> = {
 
   "calc.generandoImagen":   { es: "Generando imagen...", en: "Generating image...", ru: "Создание изображения…" },
   "calc.imagenDescargada":  { es: "Imagen descargada", en: "Image downloaded", ru: "Изображение скачано" },
+  "calc.generandoImagenN":  { es: "Generando {n}/{total}: {p}...", en: "Generating {n}/{total}: {p}...", ru: "Создание {n}/{total}: {p}…" },
+  "calc.imagenesDescargadas": { es: "{n} imagen(es) descargada(s)", en: "{n} image(s) downloaded", ru: "Скачано изображений: {n}" },
   "calc.errorGuardarMetas": { es: "Error al guardar metas: ", en: "Error saving goals: ", ru: "Ошибка сохранения целей: " },
   "calc.error":             { es: "Error: ", en: "Error: ", ru: "Ошибка: " },
   "calc.guardandoMetas":    { es: "Guardando metas...", en: "Saving goals...", ru: "Сохранение целей…" },

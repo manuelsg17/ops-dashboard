@@ -18,8 +18,16 @@
 name: Fleet Externo — Sync semanal
 
 on:
-  schedule:
-    - cron: "0 7 * * 1"   # Todos los lunes 07:00 UTC (~02:00 hora Perú)
+  # Cron DESACTIVADO (sep 2026): Fleet Externo sigue pausado (ver CLAUDE.md,
+  # "Fleet Externo — PAUSADO, retomar con cuidado") — el secret
+  # FLEET_SOURCE_DB_URL nunca se terminó de configurar, así que esta corrida
+  # fallaba cada lunes en el paso de pg_dump contra el proyecto del colega.
+  # Comentado y no borrado para que retomarlo sea descomentar una línea, no
+  # rehacer el workflow. workflow_dispatch queda vivo: el botón "Sincronizar
+  # ahora" del dashboard y la pestaña Actions lo siguen pudiendo disparar a mano
+  # si alguna vez hace falta probar el pipeline con las credenciales puestas.
+  # schedule:
+  #   - cron: "0 7 * * 1"   # Todos los lunes 07:00 UTC (~02:00 hora Perú)
   workflow_dispatch: {}    # Permite disparo manual (botón "Sincronizar ahora" del dashboard, o desde la pestaña Actions)
 
 # Evita que dos corridas se pisen si el botón se aprieta mientras el cron ya está corriendo.

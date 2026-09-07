@@ -1559,6 +1559,7 @@ export function _calcSec5_exportPartner(agg, totals, lastMonth) {
           <div class="agy-style-172">${langBtns}</div>
         </div>
         <button class="agy-style-173" data-act="calcDownloadPartnerImage">📥 Descargar Imagen</button>
+        <button class="calc-btn-outline" data-act="calcDownloadAllPartnerImages" title="Descarga una imagen por cada partner de la cartera de ${escapeHTML(CALC_STATE.kam === "all" ? "un KAM (elegilo primero)" : CALC_STATE.kam)}, en el idioma elegido arriba">📦 Descargar todas (${partners.length})</button>
       </div>
 
       <div id="calcExportCard" class="agy-style-174">
@@ -2122,24 +2123,84 @@ export async function calcDeleteMetasKam() {
   }
 }
 
+// Captura #calcExportCard tal cual está en el DOM en ese instante y dispara la
+// descarga del PNG. Compartido por la descarga de UNA tarjeta y por "todas".
+async function _calcCapturarYDescargar(card, nombrePartner) {
+  const canvas = await html2canvas(card, { scale: 2, useCORS: true, backgroundColor: "#fff" });
+  const a = document.createElement("a");
+  a.href = canvas.toDataURL("image/png");
+  a.download = `meta_${nombrePartner || "partner"}.png`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
 export async function calcDownloadPartnerImage() {
   const card = document.getElementById("calcExportCard");
   if (!card) return;
   showLoad(true, t("calc.generandoImagen"));
   try {
     await ensureHtml2Canvas();
-    const canvas = await html2canvas(card, { scale: 2, useCORS: true, backgroundColor: "#fff" });
-    const imgData = canvas.toDataURL("image/png");
-    const a = document.createElement("a");
-    a.href = imgData;
-    a.download = `meta_${CALC_STATE.selPartnerExport || "partner"}.png`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    await _calcCapturarYDescargar(card, CALC_STATE.selPartnerExport);
     showBanner(true, t("calc.imagenDescargada"));
   } catch (err) {
     alert(t("calc.error") + err.message);
   } finally {
+    showLoad(false);
+  }
+}
+
+// Descarga UNA imagen por cada partner de la cartera del KAM activo, en el
+// idioma que ya está elegido en el toggle ES/EN/ES-EN/RU — no hace falta
+// tocar nada más, la tarjeta siempre lee CALC_STATE.exportLang.
+//
+// Por qué partner por partner y no una sola captura larga: cada tarjeta es lo
+// que se le manda a UN partner puntual; juntarlas en una imagen mezclaría la
+// meta de uno con la de otro, exactamente lo que el diseño de la tarjeta evita
+// a propósito ("sin mezclar otros partners").
+//
+// Secuencial, no en paralelo: disparar muchos `a.click()` de descarga seguidos
+// activa el bloqueo de "este sitio quiere descargar varios archivos" del
+// navegador, y generar todos los canvas a la vez es innecesariamente pesado en
+// memoria. Una pausa corta entre cada una alcanza para que el navegador las
+// procese sin bloquearlas.
+export async function calcDownloadAllPartnerImages() {
+  if (CALC_STATE.kam === "all") { alert("Elige un KAM específico (no \"Todos los KAMs\") para descargar sus tarjetas."); return; }
+  const m = _calcComputeModel();
+  // MISMO universo que arma la tarjeta individual (_calcSec5_exportPartner):
+  // los partners con datos del KAM en el último mes. No el universo más amplio
+  // del buscador (que además suma partners TukTuk de una ventana más larga) —
+  // ahí sí podría tocar un partner sin nada que mostrar este mes.
+  const partners = [...new Set([...m.aggLast1.values()].map(e => e.partner))].sort();
+  if (!partners.length) { alert(t("calc.sinPartnersKam")); return; }
+
+  const selOriginal = CALC_STATE.selPartnerExport;
+  let n = 0;
+  try {
+    await ensureHtml2Canvas();
+    for (const p of partners) {
+      showLoad(true, t("calc.generandoImagenN", { n: n + 1, total: partners.length, p }));
+      CALC_STATE.selPartnerExport = p;
+      renderCalculator();
+      // Un frame para que el card recién reasignado termine de pintar antes
+      // de capturarlo — sin esto, html2canvas puede capturar el partner
+      // ANTERIOR todavía en pantalla.
+      await new Promise(r => requestAnimationFrame(r));
+      const card = document.getElementById("calcExportCard");
+      // Sin ninguna tabla adentro = "Sin datos para este partner" (caso raro:
+      // un partner que entró a `agg` sin que ninguna de sus filas tenga
+      // actividad ni meta calculable). Saltarlo, no descargar una imagen vacía.
+      if (!card || !card.querySelector("table")) continue;
+      await _calcCapturarYDescargar(card, p);
+      n++;
+      await new Promise(r => setTimeout(r, 350));
+    }
+    showBanner(true, t("calc.imagenesDescargadas", { n }));
+  } catch (err) {
+    alert(t("calc.error") + err.message);
+  } finally {
+    CALC_STATE.selPartnerExport = selOriginal;
+    renderCalculator();
     showLoad(false);
   }
 }
@@ -2229,6 +2290,7 @@ registerActions({
   calcSetTab:        d => calcSetTab(d.key),
   calcOnKamChange:   (d, el) => calcOnKamChange(el.value),
   calcApplyChanges, calcSaveMetas, calcExportExcel, calcResetEdits, calcDownloadPartnerImage,
+  calcDownloadAllPartnerImages,
   calcSetSaveMode:     d => calcSetSaveMode(d.mode),
   calcDeleteMetasKam,
   calcOnKamGoalChange: (d, el) => calcOnKamGoalChange(d.metric, el.value),

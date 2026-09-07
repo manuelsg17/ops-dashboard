@@ -14,6 +14,14 @@ Dashboard para KAMs (partner performance): modulos **TypeScript** bundleados con
 
 ## Estado actual
 
+### Sesión Septiembre 2026 (cont.) — Descargar todas las tarjetas del KAM + cron de Fleet Externo desactivado
+
+- **`calcDownloadAllPartnerImages`**: botón "📦 Descargar todas (N)" junto a "Descargar Imagen" en la Calculadora. Descarga una imagen por cada partner de la cartera del KAM activo, **respetando el idioma ya elegido** (la tarjeta siempre lee `CALC_STATE.exportLang`, no hace falta tocar nada más). Universo = el mismo que arma la tarjeta individual (`agg.values()` del último mes), no el más amplio del buscador — evita tocar un partner sin nada que mostrar ese mes.
+  - **Secuencial, no en paralelo**: cada partner se selecciona, se re-renderiza el card, se espera UN frame (`requestAnimationFrame`) para que el DOM realmente cambie antes de capturarlo con `html2canvas`, y hay una pausa de 350ms entre descargas — disparar muchos `a.click()` de descarga seguidos activa el bloqueo de "este sitio quiere descargar varios archivos" del navegador.
+  - Salta partners sin ninguna tabla en el card (edge case: entró a `agg` sin actividad ni meta calculable). Restaura `selPartnerExport` al partner que estaba antes de empezar, al terminar (éxito o error).
+  - **Trampa de verificación propia**: probar el guard de "sin KAM elegido" mutando `CALC_STATE.kam = "all"` directo (sin pasar por el `<select>`) no dispara el aviso — el auto-select por login (`debePreseleccionarKam`, sesión anterior) lo revierte solo porque `_kamTouched` sigue en `false`. Hay que simular la interacción real (`dispatchEvent("change")` sobre el select) para que quede marcado como tocado, igual que un click real.
+- **Cron de "Fleet Externo — Sync semanal" desactivado** (comentado, no borrado, en `.github/workflows/fleet-sync.yml`): corría cada lunes y fallaba en el paso de `pg_dump` porque el secret `FLEET_SOURCE_DB_URL` nunca se terminó de configurar (ver sección "Fleet Externo — PAUSADO" más abajo). `workflow_dispatch` queda vivo — el botón "Sincronizar ahora" del dashboard lo sigue pudiendo disparar a mano.
+
 ### Sesión Septiembre 2026 (cont.) — Bug real: meta_tk_* podía superar a la meta paraguas al guardar
 
 Encontrado en un pase de auditoría propio (no lo pidió el usuario para este caso puntual, pero calzaba con la rutina: "probar como KAM real, cazar bugs"), reproduciendo un escenario legítimo: un KAM ajusta el total de una meta a mano en una sesión, y en una sesión POSTERIOR cambia la meta global sin resetear. Resultado en una unidad 100% TukTuk: `meta_active_drivers=371` (el ajuste manual viejo) pero `meta_tk_ad=573` (el desglose recién calculado, sin pasar por ese ajuste) — **el desglose superaba al total en la base real**, justo el dato que `domain/metasGuard.ts` existe para evitar.
