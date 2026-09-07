@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { repartirPorLinea, pesoNaturalTk } from "./repartoLinea.js";
+import { repartirPorLinea, pesoNaturalTk, splitPorFraccion } from "./repartoLinea.js";
 
 // La regla de negocio que estos tests fijan: el % de TukTuk que el KAM reporta
 // al Loyalty Program y el que efectivamente reparte entre sus partners tienen
@@ -146,5 +146,52 @@ describe("peso natural", () => {
       { key: "a", valTotal: 6714 - 309, valTk: 0 },
       { key: "b", valTotal: 309,        valTk: 309 }
     ])!).toBeCloseTo(0.046, 3);
+  });
+});
+
+describe("splitPorFraccion — la mitad 'mostrar' del carve-out", () => {
+  // Fija exactamente el bug real: la tarjeta del partner mostraba "2.414,64
+  // conductores" en la fila que se partía, porque el total (3.613, ya entero)
+  // se multiplicaba por la fracción TukTuk sin redondear el resultado.
+  it("el caso real que rompía: total entero × fracción no entera", () => {
+    const r = splitPorFraccion(3613, 1199 / 3613);
+    expect(Number.isInteger(r.principal)).toBe(true);
+    expect(Number.isInteger(r.secundario)).toBe(true);
+    expect(r.principal + r.secundario).toBe(3613);
+  });
+
+  it("principal + secundario === total, SIEMPRE — la invariante que importa", () => {
+    // No "aproximadamente": la tarjeta de un partner con 3 líneas de negocio
+    // tiene que sumar exacto o el KAM no puede reconciliarla contra la meta
+    // que ya vio en la tabla de reparto.
+    for (const [total, f] of [[3613, 0.3318], [1, 0.5], [7, 0.14], [10000, 0.999], [999999, 1/3]]) {
+      const r = splitPorFraccion(total, f);
+      expect(r.principal + r.secundario).toBe(total);
+    }
+  });
+
+  it("fracción 0: todo queda en principal", () => {
+    expect(splitPorFraccion(3613, 0)).toEqual({ principal: 3613, secundario: 0 });
+  });
+
+  it("fracción 1: todo pasa a secundario", () => {
+    expect(splitPorFraccion(3613, 1)).toEqual({ principal: 0, secundario: 3613 });
+  });
+
+  it("total 0: ambos lados en 0, no NaN", () => {
+    expect(splitPorFraccion(0, 0.5)).toEqual({ principal: 0, secundario: 0 });
+  });
+
+  it("fracción fuera de 0..1 se recorta, nunca invierte el signo del split", () => {
+    // No debería llegar así desde repartirPorLinea, pero un dato corrupto no
+    // tiene que producir un secundario mayor que el total ni un principal negativo.
+    expect(splitPorFraccion(100, 1.5)).toEqual({ principal: 0, secundario: 100 });
+    expect(splitPorFraccion(100, -0.5)).toEqual({ principal: 100, secundario: 0 });
+  });
+
+  it("nunca da un principal negativo", () => {
+    for (let f = 0; f <= 1; f += 0.05) {
+      expect(splitPorFraccion(3613, f).principal).toBeGreaterThanOrEqual(0);
+    }
   });
 });

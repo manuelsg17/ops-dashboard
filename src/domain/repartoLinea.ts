@@ -137,3 +137,31 @@ export function pesoNaturalTk(unidades: UnidadReparto[]): number | null {
   const tk = (unidades || []).reduce((s, u) => s + (+u.valTk || 0), 0);
   return tk / tot;
 }
+
+export interface SplitResultado {
+  /** La parte que queda después de sacar `secundario` — nunca negativa. */
+  principal: number;
+  /** `round(total × fracción)`. */
+  secundario: number;
+}
+
+/**
+ * Divide un total YA CALCULADO en dos partes según una fracción conocida —
+ * esta es la mitad "mostrar" del carve-out, la contraparte de repartirPorLinea
+ * (que es la mitad "repartir"). Sirve para la tarjeta del partner: cuando el
+ * KAM ajusta a mano el total de una meta, la porción TukTuk tiene que re-partir
+ * ESE número nuevo con la misma proporción, no quedar pegada al valor de antes
+ * del ajuste.
+ *
+ * REDONDEA EL SECUNDARIO PRIMERO Y RESTA PARA EL PRINCIPAL — nunca al revés.
+ * Redondear los dos lados por separado puede no sumar el total exacto (fue un
+ * bug real: una tarjeta mostrando "2.414,64 conductores" en la fila partida,
+ * porque el total ya venía entero pero el producto por la fracción no). Con
+ * esta construcción, `principal + secundario === total` SIEMPRE, sin excepción.
+ */
+export function splitPorFraccion(total: number, fraccion: number): SplitResultado {
+  const t = +total || 0;
+  const f = Math.min(Math.max(+fraccion || 0, 0), 1);
+  const secundario = Math.round(t * f);
+  return { principal: t - secundario, secundario };
+}

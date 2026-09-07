@@ -2,7 +2,7 @@
 import { ensureHtml2Canvas } from "./shared/lazyLibs.js";
 import { t } from "./core/i18n";
 import { validarMetas, mensajeMetasInvalidas } from "./domain/metasGuard";
-import { repartirPorLinea, pesoNaturalTk } from "./domain/repartoLinea.js";
+import { repartirPorLinea, pesoNaturalTk, splitPorFraccion } from "./domain/repartoLinea.js";
 import { hayProgresoSinGuardar, draftAplica, debePreseleccionarKam } from "./domain/calcDraft.js";
 import { SIN_KAM } from "./core/config.js";
 import { logAccess } from "./shared/accessLog.js";
@@ -1463,15 +1463,13 @@ export function _calcSec5_exportPartner(agg, totals, lastMonth) {
       const nrGoal = _calcGoalFor(e.partner, e.city, "nr", b.nr);
       const nr = e.np + e.ns + e.re;
 
-      const fAd = b.ad > 0 ? b.adTk / b.ad : 0;
-      const fSh = b.sh > 0 ? b.shTk / b.sh : 0;
-      const fNr = b.nr > 0 ? b.nrTk / b.nr : 0;
-      // Redondeado ACÁ, no después: adGoal/shGoal/nrGoal ya son enteros
-      // (_calcGoalFor los redondea), pero multiplicarlos por una fracción no lo
-      // es — sin este redondeo la tarjeta mostraba "2.414,64 conductores" en
-      // vez de un entero, en la fila que sí se partió.
-      const adTkGoal = Math.round(adGoal * fAd), shTkGoal = Math.round(shGoal * fSh), nrTkGoal = Math.round(nrGoal * fNr);
-      const adTaxiGoal = adGoal - adTkGoal, shTaxiGoal = shGoal - shTkGoal, nrTaxiGoal = nrGoal - nrTkGoal;
+      // splitPorFraccion (domain/repartoLinea.ts) redondea el secundario
+      // (TukTuk) primero y resta para el principal — nunca al revés, porque
+      // redondear los dos lados por separado puede no sumar el total exacto
+      // (así se vio, en pantalla, "2.414,64 conductores" en la fila partida).
+      const { principal: adTaxiGoal, secundario: adTkGoal } = splitPorFraccion(adGoal, b.ad > 0 ? b.adTk / b.ad : 0);
+      const { principal: shTaxiGoal, secundario: shTkGoal } = splitPorFraccion(shGoal, b.sh > 0 ? b.shTk / b.sh : 0);
+      const { principal: nrTaxiGoal, secundario: nrTkGoal } = splitPorFraccion(nrGoal, b.nr > 0 ? b.nrTk / b.nr : 0);
 
       const adTkAct = e.adTk || 0, shTkAct = e.shTk || 0, nrTkAct = e.nrTk || 0;
       const adTaxiAct = e.ad - adTkAct, shTaxiAct = e.sh - shTkAct, nrTaxiAct = nr - nrTkAct;
@@ -1748,9 +1746,12 @@ export function _calcBuildMetaRows(m) {
     if (!clid) continue;
     const b = _calcAggMetaBases(e, g, m.distTot1, repartoSave);
     const r = getRow(e.partner, e.city, clid);
-    r.meta_active_drivers = _calcGoalFor(e.partner, e.city, "ad", b.ad);
-    r.meta_supply_hours   = _calcGoalFor(e.partner, e.city, "sh", b.sh);
-    r.meta_nr             = _calcGoalFor(e.partner, e.city, "nr", b.nr);
+    const adGoal = _calcGoalFor(e.partner, e.city, "ad", b.ad);
+    const shGoal = _calcGoalFor(e.partner, e.city, "sh", b.sh);
+    const nrGoal = _calcGoalFor(e.partner, e.city, "nr", b.nr);
+    r.meta_active_drivers = adGoal;
+    r.meta_supply_hours   = shGoal;
+    r.meta_nr             = nrGoal;
 
     // META TUKTUK (meta_tk_*): la PORCIÓN TukTuk de la cuota, no una meta aparte.
     //
@@ -1760,13 +1761,28 @@ export function _calcBuildMetaRows(m) {
     // Programs. Sumarlas daría doble conteo; ese error ya se cometió una vez
     // (ver metasGuard) y por eso queda escrito acá.
     //
+    // BUG REAL corregido acá (encontrado probando el guardado, no en los tests):
+    // esto escribía `Math.round(b.adTk)` — el desglose CALCULADO sin pasar por
+    // `_calcGoalFor` — mientras el paraguas de arriba SÍ respeta un edit manual.
+    // Si el KAM ajustaba el total a mano por DEBAJO de lo calculado (ej. una
+    // unidad 100% TukTuk cuyo total se corrigió de 573 a 371), el desglose
+    // quedaba en 573: **`meta_tk_ad > meta_active_drivers` en la base real**,
+    // justo la clase de dato que `domain/metasGuard` existe para evitar. Ahora
+    // se parte el `adGoal` YA RESUELTO (con el edit si lo hay) por la misma
+    // proporción que calculó el reparto — mismo criterio que la tarjeta del
+    // partner (splitPorFraccion, domain/repartoLinea.ts): el desglose nunca
+    // puede superar al total porque sale de partir ESE número, no de uno viejo.
+    //
     // Solo se escribe si el KAM declaró un %: sin carve-out no hay una porción
     // TukTuk identificable, y escribir un 0 se leería como "la meta TukTuk es
     // cero" en vez de "no se declaró".
     if (repartoSave) {
-      if (b.adTk > 0) r.meta_tk_ad = Math.round(b.adTk);
-      if (b.nrTk > 0) r.meta_tk_nr = Math.round(b.nrTk);
-      if (b.shTk > 0) r.meta_tk_sh = Math.round(b.shTk);
+      const { secundario: adTk } = splitPorFraccion(adGoal, b.ad > 0 ? b.adTk / b.ad : 0);
+      const { secundario: shTk } = splitPorFraccion(shGoal, b.sh > 0 ? b.shTk / b.sh : 0);
+      const { secundario: nrTk } = splitPorFraccion(nrGoal, b.nr > 0 ? b.nrTk / b.nr : 0);
+      if (adTk > 0) r.meta_tk_ad = adTk;
+      if (nrTk > 0) r.meta_tk_nr = nrTk;
+      if (shTk > 0) r.meta_tk_sh = shTk;
     }
   }
   // Fleet KPIs (solo partners fleet, solo si el KAM cargó algún valor).
@@ -1792,16 +1808,21 @@ export function _calcBuildMetaRows(m) {
 // ── EXPORTS ───────────────────────────────────────────────────────────────────
 // Plantilla CSV (Agregador + Fleet). Headers alineados con uploadMetas → se puede
 // resubir en Configuración → Metas. Blanks donde no aplica.
-// Las columnas META TK * ya no se exportan: TukTuk dejó de tener meta propia. Si el
-// archivo no las trae, uploadMetas simplemente no toca esas columnas en BD (detecta
-// headers opcionales), así que el histórico no se pisa con vacíos.
+// Las columnas META TK * SÍ se exportan (sep 2026, carve-out de TukTuk): un KAM
+// que declaró el % de PnL y bajó este CSV para revisarlo antes de subirlo en
+// Configuración → Metas tiene que poder volver a subirlo sin perder ese
+// desglose. `uploadMetas` ya sabe leer estos headers (opcionales) desde antes
+// — el hueco real estaba acá, en que esta plantilla nunca los escribía, así
+// que ida y vuelta por CSV borraba en silencio lo que el botón de guardado
+// directo sí preservaba.
 export function calcExportExcel() {
   logAccess("download_csv", "calculadora");
   const m = _calcComputeModel();
   const { rows, mesName, mesYear } = _calcBuildMetaRows(m);
   const header = ["CLID", "PARTNER", "CIUDAD", "MES", "AÑO",
     "ACTIVE DRIVERS", "N+R", "SUPPLY HOURS",
-    "META SH/AUTO", "META ACEPTACION", "META UTILIZACION"];
+    "META SH/AUTO", "META ACEPTACION", "META UTILIZACION",
+    "META TK AD", "META TK N+R", "META TK SH"];
   const q   = s => `"${String(s == null ? "" : s).replace(/"/g, '""')}"`;
   const num = v => (v == null ? "" : v);
   const lines = [header.join(",")];
@@ -1809,7 +1830,8 @@ export function calcExportExcel() {
     lines.push([
       q(r.clid), q(r.partner), q(r.city), q(r.mes), num(r.mes_year),
       num(r.meta_active_drivers), num(r.meta_nr), num(r.meta_supply_hours),
-      num(r.meta_sh_car), num(r.meta_acceptance), num(r.meta_utilization)
+      num(r.meta_sh_car), num(r.meta_acceptance), num(r.meta_utilization),
+      num(r.meta_tk_ad), num(r.meta_tk_nr), num(r.meta_tk_sh)
     ].join(","));
   });
   const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
