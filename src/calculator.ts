@@ -2,6 +2,9 @@
 import { ensureHtml2Canvas } from "./shared/lazyLibs.js";
 import { t } from "./core/i18n";
 import { validarMetas, mensajeMetasInvalidas } from "./domain/metasGuard";
+import { repartirPorLinea, pesoNaturalTk } from "./domain/repartoLinea.js";
+import { hayProgresoSinGuardar, draftAplica, debePreseleccionarKam } from "./domain/calcDraft.js";
+import { SIN_KAM } from "./core/config.js";
 import { logAccess } from "./shared/accessLog.js";
 // calculator.js — Calculadora de Metas (flujo por PESTAÑAS de línea de negocio)
 // El KAM ingresa su meta TOTAL por línea y se reparte (disgrega) a cada partner+ciudad
@@ -21,6 +24,14 @@ export const CALC_STATE = {
   _utilSeeded: {},
   // Metas KAM input manual (formato Yango con pesos) + metas TukTuk (Fase 7)
   kamGoals:   { ad: 0, sh: 0, nr: 0, otherProj: 0, fleetA2: 0 },
+  // % DECLARADO de la meta que corresponde a TukTuk, por KPI (0-100).
+  //
+  // Viene de la tabla que baja PnL junto con las metas del mes ("% Metas TukTuk"
+  // por KAM). NO se deriva del fact a propósito: es el número que el KAM declara
+  // en los Loyalty Programs, así que manda sobre el peso natural (decisión de
+  // Manuel, sep 2026). La pantalla muestra los dos y la brecha entre ellos.
+  // 0 en los tres = cartera sin TukTuk (caso Álvaro), reparto de un solo pozo.
+  tkPct:      { ad: 0, sh: 0, nr: 0 },
   // Idioma de la tarjeta compartible: "es" | "en" | "es-en" (bilingüe, default)
   exportLang: "es-en",
 
@@ -40,8 +51,65 @@ export const CALC_STATE = {
   //             ajuste puntual no debe reescribir el reparto entero.
   //   "full"  → el reparto completo (comportamiento histórico), para cuando se
   //             arma el mes desde cero con un goal de KAM.
-  saveMode:   "edits"
+  saveMode:   "edits",
+
+  // ── PRESELECCIÓN DE KAM Y DRAFT ENTRE RECARGAS (sep 2026) ──────────────────
+  // true en cuanto el usuario TOCA el selector de KAM (a mano, o confirma un
+  // cambio) — a partir de ahí el auto-select de STATE.myKam deja de escribir
+  // CALC_STATE.kam en cada render. Sin este freno, cada re-render (dispara con
+  // cada tecla, ver _calcScheduleRerender) revertiría al KAM logueado apenas el
+  // usuario mirara la meta de otro.
+  _kamTouched: false,
+  // "MES-AÑO" del mes objetivo del render más reciente (lo fija renderCalculator
+  // junto a _calcSeedGuardadas). Clave del draft de abajo: sin el mes, un
+  // borrador de julio reaparecería sobre agosto y pisaría números de otro ciclo.
+  _mesKey:     "",
+  // true tras el primer intento de cargar el draft de localStorage en esta
+  // carga de página. Ver _calcCargarDraftSiAplica: el draft solo debe aplicarse
+  // UNA vez, para sobrevivir un F5 — no en cada re-render, donde pisaría lo que
+  // el usuario esté escribiendo en ese momento.
+  _draftIntentado: false
 };
+
+// Única llave de localStorage para "lo que el KAM cargó y todavía no guardó":
+// meta global (kamGoals) + % TukTuk (tkPct). UN solo borrador, no uno por KAM —
+// ver _calcResetParaNuevoKam: cambiar de KAM lo borra a propósito ("empezar de
+// cero con el perfil del otro KAM", pedido explícito de Manuel), así que no hace
+// falta (ni conviene) mantener una gaveta por persona.
+const CALC_DRAFT_KEY = "yangoCalcDraft";
+
+// Guarda kamGoals + tkPct para sobrevivir un F5. Se llama desde los dos
+// handlers de input (calcOnKamGoalChange / calcOnTkPctChange) — no hay que
+// esperar a "Recalcular" ni a guardar en BD, un F5 a mitad de tipear no debería
+// borrar lo ya escrito.
+export function _calcGuardarDraft() {
+  if (CALC_STATE.kam === "all" || !CALC_STATE._mesKey) return;   // nada que atar al draft
+  lsSet(CALC_DRAFT_KEY, JSON.stringify({
+    kam: CALC_STATE.kam, mesKey: CALC_STATE._mesKey,
+    kamGoals: CALC_STATE.kamGoals, tkPct: CALC_STATE.tkPct
+  }));
+}
+
+export function _calcBorrarDraft() {
+  try { localStorage.removeItem(CALC_DRAFT_KEY); } catch {}
+}
+
+// Aplica el draft guardado, si corresponde. Solo una vez por carga de página
+// (_draftIntentado) — la REGLA de si corresponde (mismo KAM, mismo mes, nada
+// tecleado todavía) vive en domain/calcDraft.ts, con tests.
+export function _calcCargarDraftSiAplica() {
+  if (CALC_STATE._draftIntentado) return;
+  CALC_STATE._draftIntentado = true;
+  let d;
+  try { d = JSON.parse(lsGet(CALC_DRAFT_KEY) || "null"); } catch { return; }
+  if (!draftAplica(d, CALC_STATE.kam, CALC_STATE._mesKey)) return;
+  // Si YA hay algo cargado en memoria (llegó acá por otro camino que no sea un
+  // reload) no pisar nada: el draft es solo para sobrevivir una recarga, nunca
+  // para revertir una edición en curso.
+  if (hayProgresoSinGuardar(CALC_STATE.kamGoals, CALC_STATE.tkPct, 0)) return;
+  if (d.kamGoals) CALC_STATE.kamGoals = { ...CALC_STATE.kamGoals, ...d.kamGoals };
+  if (d.tkPct)    CALC_STATE.tkPct    = { ...CALC_STATE.tkPct,    ...d.tkPct };
+}
 
 // Pesos Yango (formato KAM-level)
 export const KAM_WEIGHTS = {
@@ -96,12 +164,24 @@ export function _calcAggByPartnerCity(rows, monthsSet) {
     if (!e) {
       e = { clid: r.clid || "", partner: r.partner, city: r.city, kam: r.kam,
             trips: 0, sh: 0, ad: 0, np: 0, ns: 0, re: 0, bcars: 0,
-            acceptW: 0, intSh: 0, ownedCars: 0, _adByDate: {}, _bcarsByDate: {} };
+            // Porción TUKTUK de la unidad, aparte del total. NO es una bandera:
+            // hay partners que operan Taxi Y TukTuk en la MISMA ciudad (Lizzo,
+            // ArequipaGo y YEGO en Lima, verificado contra la BD), así que la
+            // unidad (partner, ciudad) no se puede clasificar de un solo lado.
+            // Lo consume el carve-out de domain/repartoLinea.ts.
+            adTk: 0, shTk: 0, nrTk: 0,
+            acceptW: 0, intSh: 0, ownedCars: 0, _adByDate: {}, _bcarsByDate: {}, _adTkByDate: {} };
       out.set(k, e);
     }
     if (!e.clid && r.clid) e.clid = r.clid;
+    const esTk = typeof rowIsTuktuk === "function" && rowIsTuktuk(r);
     e.trips += r.trips || 0;
     e.sh    += r.supplyHours || 0;
+    if (esTk) {
+      e.shTk += r.supplyHours || 0;
+      e.nrTk += (r.newPartner || 0) + (r.newService || 0) + (r.reactivated || 0);
+      e._adTkByDate[r.date] = (e._adTkByDate[r.date] || 0) + (r.activeDrivers || 0);
+    }
     // AD y branded cars son SNAPSHOT: los fleetrooms (db_id distintos) de la MISMA
     // fecha se SUMAN (son conductores/autos distintos) y se toma el MÁX entre fechas.
     // Antes se hacía max sobre TODAS las filas → sub-contaba partners multi-fleetroom
@@ -124,7 +204,12 @@ export function _calcAggByPartnerCity(rows, monthsSet) {
     const ads = Object.values(e._adByDate), bcs = Object.values(e._bcarsByDate);
     e.ad    = ads.length ? Math.max(...ads) : 0;
     e.bcars = bcs.length ? Math.max(...bcs) : 0;
-    delete e._adByDate; delete e._bcarsByDate;
+    // El AD TukTuk se colapsa con el MISMO criterio que el total (máx entre
+    // fechas de la suma por fecha). Tomar otra cosa —por ejemplo la suma— haría
+    // que la porción superara al total y el reparto le robaría peso al resto.
+    const adTk = Object.values(e._adTkByDate);
+    e.adTk = adTk.length ? Math.max(...adTk) : 0;
+    delete e._adByDate; delete e._bcarsByDate; delete e._adTkByDate;
   }
   return out;
 }
@@ -176,22 +261,99 @@ export function _calcCityTotals(month, rows) {
   }
   return byCity;
 }
+// KAM efectivo de una fila para el filtro de la Calculadora.
+//
+// ORDEN IMPORTANTE: `partners` PRIMERO (getKAMForPartner), el kam de la fila
+// después. Estaba al revés —`r.kam || getKAMForPartner(...)`— y eso hacía que un
+// partner cuyo KAM se hubiera vaciado en Configuración siguiera repartiéndose
+// bajo su KAM anterior, porque la fila de rendimiento conserva el valor viejo
+// del Excel hasta la próxima ingesta. Mismo criterio que `_lineKamOf` de
+// Rendimiento; el fallback final es SIN_KAM para que ninguna fila quede fuera de
+// todos los grupos (si no, sus números aparecen en el total del país sin
+// pertenecer a nadie y la suma de los KAMs no cierra).
+export function _calcKamDe(r) {
+  return getKAMForPartner(r.partner) || (r.kam || "").trim() || SIN_KAM;
+}
+// KAM que se escribe en `metas.kam`. Nunca SIN_KAM: ese es un bucket de la UI
+// para poder VER y filtrar a los partners sin responsable, no un nombre válido.
+export function _calcKamGuardar(partner) {
+  const k = CALC_STATE.kam === "all" ? (getKAMForPartner(partner) || "") : CALC_STATE.kam;
+  return k === SIN_KAM ? "" : k;
+}
 export function _calcShare(val, tot) { return tot > 0 ? val / tot : 0; }
 export function _calcIsFleet(partner) { return typeof isFleetPartner === "function" && isFleetPartner(partner); }
+
+// Unidades de reparto de un KPI, con su porción TukTuk separada.
+const _CALC_KPI_VALS = {
+  ad: e => ({ valTotal: e.ad, valTk: e.adTk || 0 }),
+  sh: e => ({ valTotal: e.sh, valTk: e.shTk || 0 }),
+  nr: e => ({ valTotal: e.np + e.ns + e.re, valTk: e.nrTk || 0 })
+};
+export function _calcUnidades(agg, kpi) {
+  const val = _CALC_KPI_VALS[kpi];
+  return [...agg.values()].map(e => ({ key: `${e.partner}|||${e.city}`, ...val(e) }));
+}
+
+// ¿Hay algún % de TukTuk declarado? Si no, el carve-out NO se aplica.
+//
+// ESTO NO ES UN DETALLE: con el carve-out activo y 0% declarado, las unidades
+// TukTuk recibirían meta CERO y su cuota se repartiría entre las de Taxi. Para
+// un KAM que todavía no cargó la tabla de PnL eso cambiaría sus metas sin que
+// hubiera pedido nada. Sin declarar, se mantiene el reparto histórico de un solo
+// pozo sobre la base combinada, donde TukTuk se lleva su peso natural.
+export function _calcTieneTkPct() {
+  const p = CALC_STATE.tkPct || {};
+  return (+p.ad > 0) || (+p.sh > 0) || (+p.nr > 0);
+}
+
+// Cuotas por unidad con carve-out de TukTuk. `null` = sin % declarado → los
+// llamadores usan la matemática histórica.
+export function _calcRepartoDe(agg, g) {
+  if (!_calcTieneTkPct()) return null;
+  const p = CALC_STATE.tkPct || {};
+  const out = new Map();
+  const avisos = [];
+  ["ad", "sh", "nr"].forEach(kpi => {
+    const r = repartirPorLinea(+g[kpi] || 0, (+p[kpi] || 0) / 100, _calcUnidades(agg, kpi));
+    r.avisos.forEach(a => { if (!avisos.includes(a)) avisos.push(a); });
+    r.cuotas.forEach(c => {
+      let o = out.get(c.key);
+      if (!o) { o = {}; out.set(c.key, o); }
+      o[kpi] = c.total;
+      o[kpi + "Tk"] = c.tk;
+    });
+  });
+  out._avisos = avisos;
+  return out;
+}
 
 // Bases distribuidas de AGREGADOR (AD/SH/N+R) para un partner-ciudad.
 // Los partners Fleet SÍ se reparten con la MISMA ecuación (goal × share) y el
 // denominador incluye a TODOS (cartTotals) → así no se sobre-exige a los no-fleet.
 // `fleet` queda solo como badge. `noAct` marca partners sin actividad Taxi el último
 // mes (share 0 → meta 0): se resaltan para fijar la meta a mano (decisión del KAM).
-export function _calcAggMetaBases(e, g, cartTotals) {
+//
+// `reparto` (opcional): mapa de cuotas con carve-out de TukTuk (ver
+// _calcRepartoDe). Cuando viene, manda — el % declarado por PnL tiene prioridad
+// sobre el peso natural. Cuando no, se usa el reparto histórico de un solo pozo.
+export function _calcAggMetaBases(e, g, cartTotals, reparto) {
   const fleet = _calcIsFleet(e.partner);
   const nr = e.np + e.ns + e.re;
   const noAct = (e.ad + e.sh + nr) === 0;
+  const cuota = reparto && reparto.get(`${e.partner}|||${e.city}`);
+  if (cuota) {
+    return {
+      ad: cuota.ad || 0, sh: cuota.sh || 0, nr: cuota.nr || 0,
+      // Porción TukTuk de cada cuota → se guarda en meta_tk_* para el Loyalty Program.
+      adTk: cuota.adTk || 0, shTk: cuota.shTk || 0, nrTk: cuota.nrTk || 0,
+      fleet, noAct
+    };
+  }
   return {
     ad: (+g.ad || 0) * _calcShare(e.ad, cartTotals.ad),
     sh: (+g.sh || 0) * _calcShare(e.sh, cartTotals.sh),
     nr: (+g.nr || 0) * _calcShare(nr,  cartTotals.nr),
+    adTk: 0, shTk: 0, nrTk: 0,
     fleet, noAct
   };
 }
@@ -241,6 +403,21 @@ export function _calcSeedGuardadas(mesName, mesYear) {
   Object.keys(CALC_STATE.saved).forEach(k => {
     if (CALC_STATE.edits[k] === undefined) CALC_STATE.edits[k] = CALC_STATE.saved[k];
   });
+
+  // MODO DE GUARDADO POR DEFECTO, según si el mes ya existe o se arma de cero.
+  //
+  // EL CALLEJÓN SIN SALIDA QUE ESTO EVITA: "Solo lo que cambié" escribe
+  // únicamente las celdas que el KAM TECLEÓ a mano (a propósito — ver
+  // _calcFiltrarSoloCambios). Pero el camino natural para armar el mes es cargar
+  // la meta global, apretar "Recalcular" y guardar, SIN tocar ninguna celda.
+  // Con "edits" fijo por defecto, ese recorrido terminaba en "No hay cambios
+  // para guardar" y no se guardaba nada, después de haber hecho todo bien.
+  //
+  // Mes SIN metas en BD  → no hay nada que proteger → "Reparto completo".
+  // Mes CON metas        → "Solo lo que cambié", que es el freno que evita pisar
+  //                        el reparto entero por un ajuste puntual.
+  // El KAM puede cambiarlo con los radios; esto solo elige el punto de partida.
+  CALC_STATE.saveMode = Object.keys(CALC_STATE.saved).length ? "edits" : "full";
 }
 
 // ¿Este (partner,ciudad,métrica) ya tiene meta guardada en BD para el mes?
@@ -287,7 +464,7 @@ export function _calcComputeModel() {
 
   const filteredRows = CALC_STATE.kam === "all"
     ? rows
-    : rows.filter(r => (r.kam || getKAMForPartner(r.partner)) === CALC_STATE.kam);
+    : rows.filter(r => _calcKamDe(r) === CALC_STATE.kam);
 
   // Agregados TAXI: 3M para el promedio y las refs fleet; ÚLTIMO MES para
   // representación y reparto (así el % que se ve = el que reparte). distTot1 excluye fleet.
@@ -330,8 +507,9 @@ export function _calcMetricCuadre(sum, target) {
 // como el resto) → Σ(todos) = meta KAM y el cuadre balancea.
 export function _calcAggDistSums(agg, distTotals, g) {
   let sumAD = 0, sumSH = 0, sumNR = 0;
+  const reparto = _calcRepartoDe(agg, g);
   for (const e of agg.values()) {
-    const b = _calcAggMetaBases(e, g, distTotals);
+    const b = _calcAggMetaBases(e, g, distTotals, reparto);
     sumAD += _calcGoalFor(e.partner, e.city, "ad", b.ad);
     sumSH += _calcGoalFor(e.partner, e.city, "sh", b.sh);
     sumNR += _calcGoalFor(e.partner, e.city, "nr", b.nr);
@@ -516,6 +694,19 @@ export function renderCalculator() {
   }
 
   const allKAMs = [...new Set(Object.values(STATE.KAM_MAP).map(k => (k || "").trim()).filter(Boolean))].sort();
+
+  // PRESELECCIONAR el KAM logueado (STATE.myKam, ver auth.ts), UNA sola vez por
+  // sesión: apenas el usuario toca el selector a mano (_kamTouched, incluido un
+  // cambio confirmado vía calcOnKamChange) esto deja de correr para siempre. Sin
+  // el freno, cada re-render — dispara con cada tecla — revertiría al KAM del
+  // login apenas alguien mirara la meta de otro. Antes de esta pantalla el
+  // selector arrancaba en "Todos los KAMs" y guardar exigía elegir uno a mano
+  // en cada sesión; con logins por persona (uno por KAM) esto ya se puede
+  // resolver solo. Un admin sin `myKam` sigue viendo "Todos los KAMs" como hoy.
+  if (debePreseleccionarKam(CALC_STATE._kamTouched, STATE.myKam, CALC_STATE.kam, allKAMs)) {
+    CALC_STATE.kam = STATE.myKam;
+  }
+
   const m = _calcComputeModel();
 
   // Sembrar lo que YA está guardado en BD para el mes objetivo, antes que
@@ -523,7 +714,12 @@ export function renderCalculator() {
   // reales (y qué partners ya tienen) en vez de una tabla en 0.
   {
     const { name: _mn, year: _my } = _calcNextMonthName(m.lastMonth || "");
+    CALC_STATE._mesKey = `${_mn}-${_my}`;
     _calcSeedGuardadas(_mn, _my);
+    // Restaura kamGoals/tkPct de un F5 — solo si el KAM y el mes coinciden
+    // exactamente con el draft guardado, y solo la primera vez en esta carga
+    // de página (ver _calcCargarDraftSiAplica).
+    _calcCargarDraftSiAplica();
   }
 
   // Sembrar Utilización Fleet = 85 (default estándar) una vez por partner-ciudad fleet,
@@ -600,6 +796,7 @@ export function _calcAggGoalsBlock(m) {
         ${_kamGoalInput("sh", t("calc.supplyHours"), KAM_WEIGHTS.sh, g.sh)}
         ${_kamGoalInput("nr", t("calc.newReact"), KAM_WEIGHTS.nr, g.nr)}
       </div>
+      ${_calcTkPctBlock(m)}
       <details class="agy-style-108">
         <summary class="agy-style-109">${escapeHTML(t("calc.metasPctKam"))}</summary>
         <div class="agy-style-110">
@@ -623,6 +820,81 @@ export function _calcTabReview(m) {
     ${_calcSecActions()}
     ${_calcSec5_exportPartner(m.aggLast1, m.distTot1, m.lastMonth)}
     ${_calcSec2_promedio3m(m.aggLast3, m.last3)}`;
+}
+
+// ── % TUKTUK DECLARADO POR PnL ───────────────────────────────────────────────
+// Junto con las metas del mes, PnL baja qué PORCENTAJE de cada KPI corresponde a
+// TukTuk. Ese número se declara en los Loyalty Programs, así que MANDA sobre el
+// peso natural de la cartera (decisión de Manuel, sep 2026).
+//
+// La pantalla muestra los DOS —declarado y real— porque la brecha es información:
+// medida contra producción en agosto son ~0,3pp para Manuel, que sobre 15.473 AD
+// son 46 conductores. Si la brecha fuera grande, casi seguro falta taggear un
+// fleetroom como TukTuk, y eso hay que ver antes de repartir, no después.
+//
+// Vacío (0 en los tres) = no declarado → reparto histórico de un solo pozo, donde
+// TukTuk se lleva su peso natural. Así un KAM que todavía no cargó la tabla no ve
+// cambiar sus metas sin haber pedido nada.
+export function _calcTkPctBlock(m) {
+  const p = CALC_STATE.tkPct || {};
+  const g = CALC_STATE.kamGoals || {};
+  const activo = _calcTieneTkPct();
+  // MISMO ORDEN que la fila de metas de arriba (AD, SH, N+R), no el de la tabla
+  // de PnL. Son dos filas de tres campos con las MISMAS etiquetas, una debajo de
+  // la otra: con órdenes distintos, quien copia los números de arriba abajo
+  // cruza AD con SH y no hay nada en pantalla que lo delate.
+  // fmt y NO fmtSmart en los tres: este número se copia al Loyalty Program, y
+  // "101.0K" no se puede declarar. Va exacto aunque ocupe más.
+  const kpis = [
+    { k: "ad", lbl: t("calc.activeDrivers"), fmtFn: fmt },
+    { k: "sh", lbl: t("calc.supplyHours"),   fmtFn: fmt },
+    { k: "nr", lbl: t("calc.newReact"),      fmtFn: fmt }
+  ];
+  const fila = kpi => {
+    const nat = pesoNaturalTk(_calcUnidades(m.aggLast1, kpi.k));
+    const decl = +p[kpi.k] || 0;
+    // Sin base medible se muestra "—", no 0,0%: un cero acá invita a declarar un
+    // cero que nadie midió.
+    const natTxt = nat == null ? "—" : (nat * 100).toFixed(1) + "%";
+    const gap = (nat == null || !decl) ? null : decl - nat * 100;
+    const gapTxt = gap == null ? ""
+      : `<span class="agy-style-89" title="${escapeHTML(t("calc.tkPctBrechaTip"))}">${gap >= 0 ? "+" : ""}${gap.toFixed(1)} pp</span>`;
+    // El ABSOLUTO que sale de ese %. Es el número que el KAM declara en el
+    // Loyalty Program, y además desambigua el campo: viendo "17 % = 1.701
+    // conductores" nadie escribe 1701 donde va 17.
+    const abs = decl > 0 && +g[kpi.k] > 0
+      ? `<div class="calc-tkpct-abs">= ${escapeHTML(kpi.fmtFn(Math.round(+g[kpi.k] * decl / 100)))}</div>`
+      : "";
+    return `
+      <div>
+        <label class="agy-style-114">${escapeHTML(kpi.lbl)} <span class="agy-style-89">(%)</span></label>
+        <div class="calc-tkpct-campo">
+          <input type="number" step="0.1" min="0" max="100" value="${decl || ""}"
+            placeholder="0.0"
+            data-act-change="calcOnTkPctChange" data-act-input="calcOnTkPctChange" data-metric="${kpi.k}"
+            class="sb-inp agy-style-115"/>
+          <span class="calc-tkpct-pct">%</span>
+        </div>
+        ${abs}
+        <div class="agy-style-111">${escapeHTML(t("calc.tkPctReal", { v: natTxt }))} ${gapTxt}</div>
+      </div>`;
+  };
+  // Los avisos del reparto (pozo TukTuk sin dónde caer, % fuera de rango) se
+  // muestran ACÁ, al lado del input que los causa. Un aviso que solo existe en
+  // el objeto de retorno no es un aviso.
+  const rep = activo ? _calcRepartoDe(m.aggLast1, CALC_STATE.kamGoals) : null;
+  const avisos = (rep && rep._avisos) || [];
+  const avisosHtml = avisos.length
+    ? `<div class="calc-tkpct-aviso">${avisos.map(a => `⚠️ ${escapeHTML(a)}`).join("<br>")}</div>`
+    : "";
+  return `
+    <details class="agy-style-108"${activo ? " open" : ""}>
+      <summary class="agy-style-109">${escapeHTML(t("calc.tkPctTitulo"))}${
+        activo ? "" : ` <span class="agy-style-89">${escapeHTML(t("calc.tkPctInactivo"))}</span>`}</summary>
+      <div class="agy-style-107">${kpis.map(fila).join("")}</div>
+      ${avisosHtml}
+      <div class="agy-style-111">${escapeHTML(t("calc.tkPctSub"))}</div>
+    </details>`;
 }
 
 export function _kamGoalInput(metric, label, weight, val) {
@@ -779,9 +1051,13 @@ export function _calcSec4_distribucion(agg, distTotals, monthLabel) {
     : `<td class="tn agy-style-129">${tot > 0 ? ((val / tot) * 100).toFixed(1) + "%" : "—"}</td>`;
 
   let sumAD = 0, sumSH = 0, sumNR = 0, nManual = 0;
+  // El reparto se calcula sobre `agg` (la cartera COMPLETA), no sobre `items`
+  // (que puede venir ordenado/recortado para la tabla): los pozos y los pesos
+  // tienen que salir del universo entero o las cuotas no suman la meta.
+  const reparto = _calcRepartoDe(agg, g);
   const rowsHtml = items.map(e => {
     const nr = e.np + e.ns + e.re;
-    const b = _calcAggMetaBases(e, g, distTotals);
+    const b = _calcAggMetaBases(e, g, distTotals, reparto);
     const ad = _calcGoalFor(e.partner, e.city, "ad", b.ad);
     const sh = _calcGoalFor(e.partner, e.city, "sh", b.sh);
     const nrg = _calcGoalFor(e.partner, e.city, "nr", b.nr);
@@ -794,16 +1070,23 @@ export function _calcSec4_distribucion(agg, distTotals, monthLabel) {
     const guardada = _calcFilaGuardada(e.partner, e.city)
       ? ` <span class="calc-badge-saved" title="${escapeHTML(t("calc.yaTieneMetaTip"))}">${escapeHTML(t("calc.yaTieneMeta"))}</span>` : "";
     const rowStyle = b.noAct ? ' class="agy-style-132"' : (b.fleet ? ' class="agy-style-133"' : '');
+    // Cuánto de esta meta es TukTuk. Es EL número que el KAM carga en el Loyalty
+    // Program de ese partner, así que tiene que estar acá y no solo en el total:
+    // sin esto la tabla dice "RUTA SUR Lima: 3.613" y el KAM no tiene forma de
+    // saber que 1.199 de esos son TukTuk. Solo aparece con % declarado y en las
+    // unidades que tienen porción TukTuk — en las demás sería ruido.
+    const tkSub = k => (reparto && b[k + "Tk"] > 0)
+      ? `<div class="calc-tk-sub" title="${escapeHTML(t("calc.tkDeEsta"))}">🛺 ${escapeHTML(fmt(Math.round(b[k + "Tk"])))}</div>` : "";
     return `
       <tr${rowStyle}>
         <td class="agy-style-116">${escapeHTML(e.partner)}${badge}${manual}${guardada}</td>
         <td class="agy-style-117">${escapeHTML(e.city)}</td>
         ${_pctCell(e.ad, distTotals.ad, b.noAct)}
-        <td>${_input(e.partner, e.city, "ad", b.ad)}</td>
+        <td>${_input(e.partner, e.city, "ad", b.ad)}${tkSub("ad")}</td>
         ${_pctCell(e.sh, distTotals.sh, b.noAct)}
-        <td>${_input(e.partner, e.city, "sh", b.sh)}</td>
+        <td>${_input(e.partner, e.city, "sh", b.sh)}${tkSub("sh")}</td>
         ${_pctCell(nr, distTotals.nr, b.noAct)}
-        <td>${_input(e.partner, e.city, "nr", b.nr)}</td>
+        <td>${_input(e.partner, e.city, "nr", b.nr)}${tkSub("nr")}</td>
       </tr>`;
   }).join("");
 
@@ -980,6 +1263,29 @@ export function _calcContarCambios() {
   return n;
 }
 
+// Como _calcContarCambios, pero SIN el 85 de Utilización Fleet auto-sembrado.
+//
+// POR QUÉ HACE FALTA UNA VERSIÓN DISTINTA. Ese 85 SIEMPRE aparece como "cambio"
+// para cualquier KAM con partners Fleet sin utilización guardada — es un
+// default reproducible (`_calcRefreshStatus`/renderCalculator lo vuelve a
+// sembrar solo con verlo), no algo que el usuario tecleó. Contarlo en el badge
+// "cuadre en vivo" y al guardar es CORRECTO (para eso existe: "que el 85
+// visible en la tarjeta llegue al guardado"). Pero para decidir si avisar antes
+// de cambiar de KAM es un falso positivo: se detectó probando el flujo real —
+// entrar como un KAM con Fleet, sin tocar nada, disparaba el aviso de "vas a
+// perder tu progreso" por un valor que ni siquiera se veía en pantalla.
+export function _calcContarCambiosReales() {
+  let n = 0;
+  Object.keys(CALC_STATE.edits).forEach(k => {
+    if (CALC_STATE._utilSeeded[k]) return;
+    const v = CALC_STATE.edits[k];
+    if (v === undefined || v === "") return;
+    const sv = CALC_STATE.saved[k];
+    if (sv === undefined || +sv !== +v) n++;
+  });
+  return n;
+}
+
 export function calcSetSaveMode(mode) {
   if (mode !== "edits" && mode !== "full") return;
   CALC_STATE.saveMode = mode;
@@ -1079,6 +1385,10 @@ export function _calcSec5_exportPartner(agg, totals, lastMonth) {
   CALC_STATE.selPartnerExport = sel;
 
   const taxiItems = [...agg.values()].filter(e => e.partner === sel);
+  // OJO: el reparto se calcula sobre `agg` COMPLETO y no sobre `taxiItems`. Esta
+  // tarjeta muestra UN partner, pero su cuota sale de su peso dentro de toda la
+  // cartera. Calcularlo sobre el filtro le daría el 100% del pozo a ese partner.
+  const repartoExp = _calcRepartoDe(agg, g);
 
   const editVal = (e, k) => CALC_STATE.edits[`${e.partner}|||${e.city}|||${k}`];
   const _th = t => `<th style="text-align:${t.a || "right"};padding:8px 12px;font-size:.74rem">${t.h}</th>`;
@@ -1086,7 +1396,7 @@ export function _calcSec5_exportPartner(agg, totals, lastMonth) {
   // Bloque Taxi (AD/SH/N+R con crecimiento vs último mes)
   const taxiBlock = taxiItems.length ? (() => {
     const rows = taxiItems.map(e => {
-      const b = _calcAggMetaBases(e, g, totals);
+      const b = _calcAggMetaBases(e, g, totals, repartoExp);
       const adGoal = _calcGoalFor(e.partner, e.city, "ad", b.ad);
       const shGoal = _calcGoalFor(e.partner, e.city, "sh", b.sh);
       const nrGoal = _calcGoalFor(e.partner, e.city, "nr", b.nr);
@@ -1201,10 +1511,42 @@ export function calcSetTab(tab) {
   renderCalculator();
 }
 
-export function calcOnKamChange(v) {
-  CALC_STATE.kam = v;
-  CALC_STATE.tab = "agg";               // vuelve a la pestaña base (evita quedar en una que desaparece)
+// ¿Hay algo en pantalla que se perdería si el KAM cambia ahora? La REGLA vive
+// en domain/calcDraft.ts (con tests); acá solo se le pasan los tres datos que
+// necesita de CALC_STATE.
+export function _calcTieneProgresoSinGuardar() {
+  return hayProgresoSinGuardar(CALC_STATE.kamGoals, CALC_STATE.tkPct, _calcContarCambiosReales());
+}
+
+// Empezar de cero con el perfil del otro KAM (pedido explícito de Manuel, sep
+// 2026): todo lo que es volátil de la SESIÓN se limpia. Lo que ya está en BD no
+// se toca —_calcSeedGuardadas lo vuelve a traer para el KAM nuevo apenas
+// savedKey se invalida— así que nada de esto borra una meta ya guardada.
+export function _calcResetParaNuevoKam() {
+  CALC_STATE.kamGoals  = { ad: 0, sh: 0, nr: 0, otherProj: 0, fleetA2: 0 };
+  CALC_STATE.tkPct     = { ad: 0, sh: 0, nr: 0 };
+  CALC_STATE.edits     = {};
+  CALC_STATE._utilSeeded = {};
+  CALC_STATE.saved     = {};
+  CALC_STATE.savedKey  = "";     // fuerza a _calcSeedGuardadas a releer la BD del KAM nuevo
+  CALC_STATE.tab       = "agg";
   CALC_STATE.selPartnerExport = null;
+  _calcBorrarDraft();
+}
+
+export function calcOnKamChange(v) {
+  if (v === CALC_STATE.kam) return;
+  if (_calcTieneProgresoSinGuardar() && !confirm(t("calc.confirmCambioKam"))) {
+    // El <select> nativo ya actualizó su texto visible antes de disparar el
+    // evento change; si el usuario se arrepiente hay que devolverlo a mano o
+    // quedaría mostrando un KAM distinto del que sigue activo en CALC_STATE.
+    const sel = document.getElementById("calcKamSel");
+    if (sel) sel.value = CALC_STATE.kam;
+    return;
+  }
+  CALC_STATE._kamTouched = true;   // a partir de acá, el auto-select por login no vuelve a pisar la elección
+  CALC_STATE.kam = v;
+  _calcResetParaNuevoKam();
   renderCalculator();
 }
 
@@ -1242,7 +1584,22 @@ export function calcOnGoalEdit(input) {
 
 export function calcOnKamGoalChange(metric, val) {
   CALC_STATE.kamGoals[metric] = parseFloat(val) || 0;
+  // Persistido en cada tecla, no solo al recalcular/guardar: un F5 a mitad de
+  // tipear las tres metas no debería obligar a escribirlas de nuevo.
+  _calcGuardarDraft();
   // No re-render por keystroke: se aplica con "Recalcular distribución" / cambio de pestaña.
+  _calcRefreshStatus();
+}
+
+export function calcOnTkPctChange(metric, val) {
+  // Se recorta acá además de en repartirPorLinea: el input tiene min/max pero el
+  // atributo HTML no impide escribir cualquier cosa a mano ni pegar un valor.
+  const v = parseFloat(val);
+  CALC_STATE.tkPct[metric] = Number.isFinite(v) ? Math.min(Math.max(v, 0), 100) : 0;
+  _calcGuardarDraft();
+  // Mismo criterio que el goal del KAM: no re-render por tecla. Se aplica con
+  // "↻ Recalcular distribución" — así el KAM ve el cambio cuando lo pide, y no
+  // salta la tabla entera mientras escribe "17".
   _calcRefreshStatus();
 }
 
@@ -1292,21 +1649,42 @@ export function _calcBuildMetaRows(m) {
     let r = byKey.get(k);
     if (!r) {
       r = { clid, partner,
-            kam: CALC_STATE.kam === "all" ? (getKAMForPartner(partner) || "") : CALC_STATE.kam,
+            // SIN_KAM es un bucket de la UI, no un KAM real: a la BD va "" para
+            // que `metas.kam` siga significando "persona a cargo" y no aparezca
+            // un KAM llamado "No KAM" en los reportes.
+            kam: _calcKamGuardar(partner),
             city, mes: mesName, mes_year: mesYear };
       byKey.set(k, r);
     }
     return r;
   };
   // Agregador (último mes): Fleet incluido en el reparto (denominador = todos).
+  const repartoSave = _calcRepartoDe(m.aggLast1, g);
   for (const e of m.aggLast1.values()) {
     const clid = e.clid || _calcLookupClid(e.partner, e.city);
     if (!clid) continue;
-    const b = _calcAggMetaBases(e, g, m.distTot1);
+    const b = _calcAggMetaBases(e, g, m.distTot1, repartoSave);
     const r = getRow(e.partner, e.city, clid);
     r.meta_active_drivers = _calcGoalFor(e.partner, e.city, "ad", b.ad);
     r.meta_supply_hours   = _calcGoalFor(e.partner, e.city, "sh", b.sh);
     r.meta_nr             = _calcGoalFor(e.partner, e.city, "nr", b.nr);
+
+    // META TUKTUK (meta_tk_*): la PORCIÓN TukTuk de la cuota, no una meta aparte.
+    //
+    // La meta paraguas (meta_active_drivers/_nr/_supply_hours) sigue cubriendo
+    // Taxi + TukTuk JUNTOS — no se le suma nada. `meta_tk_*` es un DESGLOSE de
+    // ese mismo número, y existe porque es lo que se declara en los Loyalty
+    // Programs. Sumarlas daría doble conteo; ese error ya se cometió una vez
+    // (ver metasGuard) y por eso queda escrito acá.
+    //
+    // Solo se escribe si el KAM declaró un %: sin carve-out no hay una porción
+    // TukTuk identificable, y escribir un 0 se leería como "la meta TukTuk es
+    // cero" en vez de "no se declaró".
+    if (repartoSave) {
+      if (b.adTk > 0) r.meta_tk_ad = Math.round(b.adTk);
+      if (b.nrTk > 0) r.meta_tk_nr = Math.round(b.nrTk);
+      if (b.shTk > 0) r.meta_tk_sh = Math.round(b.shTk);
+    }
   }
   // Fleet KPIs (solo partners fleet, solo si el KAM cargó algún valor).
   for (const e of m.aggLast3.values()) {
@@ -1476,6 +1854,14 @@ export async function calcSaveMetas() {
       `¿Confirmar?`
     : `Guardar el REPARTO COMPLETO de ${CALC_STATE.kam} para ${mesName} ${mesYear}\n\n` +
       `• Agregador (Taxi + TukTuk): ${nAgg} partner-ciudad · AD ${fmt(a.sumAD)} · SH ${fmt(a.sumSH)} · N+R ${fmt(a.sumNR)}\n` +
+      // El desglose TukTuk también se escribe, así que también se confirma: es
+      // lo que el KAM va a declarar en los Loyalty Programs y no debería
+      // enterarse después de haber apretado guardar.
+      (_calcTieneTkPct()
+        ? `• De eso, TukTuk: AD ${fmt(Math.round(a.sumAD * (+CALC_STATE.tkPct.ad || 0) / 100))}` +
+          ` · SH ${fmt(Math.round(a.sumSH * (+CALC_STATE.tkPct.sh || 0) / 100))}` +
+          ` · N+R ${fmt(Math.round(a.sumNR * (+CALC_STATE.tkPct.nr || 0) / 100))}\n`
+        : "") +
       (nFleet ? `• Fleet: ${nFleet} partner-ciudad con meta\n` : "") +
       `\nTotal filas: ${rows.length}\n\n` +
       `⚠️ Esto REEMPLAZA las metas de ${mesName} ${mesYear} de TODOS los partners del\n` +
@@ -1727,7 +2113,7 @@ export function _calcCurrentAgg() {
   const last3Set = new Set(last3);
   const filteredRows = CALC_STATE.kam === "all"
     ? rows
-    : rows.filter(r => (r.kam || getKAMForPartner(r.partner)) === CALC_STATE.kam);
+    : rows.filter(r => _calcKamDe(r) === CALC_STATE.kam);
   return _calcAggByPartnerCity(filteredRows, last3Set);
 }
 
@@ -1741,6 +2127,7 @@ registerActions({
   calcSetSaveMode:     d => calcSetSaveMode(d.mode),
   calcDeleteMetasKam,
   calcOnKamGoalChange: (d, el) => calcOnKamGoalChange(d.metric, el.value),
+  calcOnTkPctChange:   (d, el) => calcOnTkPctChange(d.metric, el.value),
   calcOnGoalEdit:      (d, el) => calcOnGoalEdit(el),
   calcSetExportLang:   d => calcSetExportLang(d.code),
   calcFilterExportPartners: (d, el) => calcFilterExportPartners(el.value),

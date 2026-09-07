@@ -355,6 +355,13 @@ export async function switchMode(mode) {
   // pantalla dice una escala y los numeros son de otra.
   invalidarPanelesDeEscala();
 
+  // El badge de frescura responde POR ESCALA ("¿hasta cuándo llegan los datos
+  // de lo que estoy mirando?"), así que su respuesta cambia acá aunque el dato
+  // de la ingesta sea el mismo. Sin esto seguiría mostrando el veredicto de la
+  // escala anterior — que es exactamente el error que el badge existe para
+  // evitar: una escala al día y la otra atrasada, con el mismo cartel.
+  if (typeof renderFrescura === "function") renderFrescura();
+
   // Otro yield antes del render pesado para que el browser pinte el spinner
   await new Promise(r => requestAnimationFrame(r));
 
@@ -692,11 +699,25 @@ export function rerenderSidebarPresets() {
 }
 
 // ── SIDEBAR: KAM ─────────────────────────────────────────────────────────────
+// El desplegable sale de KAM_PARTNERS (los grupos que REALMENTE existen), no de
+// los valores crudos de KAM_MAP.
+//
+// BUG QUE ESTO ARREGLA: KAM_MAP tiene "" como valor para los partners sin KAM,
+// así que el Set incluía la cadena vacía y el `.sort()` la dejaba PRIMERA →
+// había una opción en blanco arriba de todo. Al elegirla, onKAMChange buscaba
+// STATE.KAM_PARTNERS[""] (undefined) y deseleccionaba TODOS los partners: la
+// pantalla quedaba vacía sin explicar por qué. Ahora ese mismo caso es la
+// opción "No KAM" y selecciona exactamente los partners sin KAM asignado.
+//
+// SIN_KAM va ÚLTIMO: es un pendiente de configuración, no un KAM más, y
+// ordenado alfabéticamente ("No KAM") caería en medio de la lista de personas.
 export function popKAM() {
-  const kams = [...new Set(Object.values(STATE.KAM_MAP))].sort();
+  const kams = Object.keys(STATE.KAM_PARTNERS || {}).filter(k => k && k !== SIN_KAM).sort();
+  if (STATE.KAM_PARTNERS?.[SIN_KAM]?.size) kams.push(SIN_KAM);
+  const n = k => (k === SIN_KAM ? ` (${STATE.KAM_PARTNERS[k].size})` : "");
   document.getElementById("kamFilter").innerHTML =
     `<option value="all">${escapeHTML(t("sidebar.todos"))}</option>` +
-    kams.map(k => `<option value="${escapeHTML(k)}">${escapeHTML(k)}</option>`).join("");
+    kams.map(k => `<option value="${escapeHTML(k)}">${escapeHTML(k + n(k))}</option>`).join("");
 }
 
 // ── SIDEBAR: PARTNERS ────────────────────────────────────────────────────────
@@ -1451,6 +1472,7 @@ import { registerActions } from "./shared/actions.js";
 // import deja la dependencia a la vista, que es el punto.
 import { guardarLogoPartner, borrarLogoPartner, ensurePartnerLogos } from "./data.js";
 import { t, setLang, getLang, aplicarI18nEstatico, selectorIdiomaHTML } from "./core/i18n";
+import { SIN_KAM } from "./core/config.js";
 import { logAccess } from "./shared/accessLog.js";
 
 // ── i18n de la interfaz ──────────────────────────────────────────────────────

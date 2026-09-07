@@ -23,6 +23,7 @@ import { ensurePdfLibs } from "./shared/lazyLibs.js";
 // ver EXACTAMENTE los números que su KAM le presenta.
 import { seriesByDate, projectFlow, ratio, weightedAvg } from "./domain/metrics.js";
 import { reportYM, diasMesReporte, MES_NOMBRES } from "./shared/mesReporte.js";
+import { datasetLinea } from "./shared/escala.js";
 
 export const PORTAL_STATE = { city: "all", line: "comb" };
 
@@ -39,19 +40,10 @@ export const PORTAL_LINES = [
 ];
 
 function _portalDataset(line) {
-  // Slice por ESCALA (3, no 2): antes un booleano `mensual ?` hacía que diario
-  // cayera al slice semanal en silencio.
-  const _sl = base => {
-    const m = STATE.curMode;
-    if (m === "mensual") return STATE["rawDataMensual" + base] || [];
-    if (m === "diario")  return STATE["rawDataDiario"  + base] || [];
-    return STATE["rawData" + base] || [];
-  };
-  const tk = _sl("Tuktuk");
-  if (line === "fleet") return _sl("Fleet");
-  if (line === "tk")    return tk;
-  if (line === "comb")  return (STATE.rawData || []).concat(tk);
-  return STATE.rawData || [];
+  // Slice por ESCALA (3, no 2) — resuelto en shared/escala.ts, con tests.
+  // Acá importa el doble: el portal es lo que ve el PARTNER, así que un slice de
+  // otra escala es un número equivocado mostrado fuera de la empresa.
+  return datasetLinea(STATE, line);
 }
 
 // Línea activa, degradada si la elegida no tiene datos (o si la escala diaria no

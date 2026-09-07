@@ -125,6 +125,13 @@ export const STATE = {
   curSummaries:     [],
   curTab:           "rend",
   curMode:          "semanal",
+  // KAM al que pertenece ESTE login (app_metadata.kam del JWT, ver auth.ts).
+  // Null para cuentas sin ese campo (admin, o un kam sin asignar todavía). Solo
+  // se usa como DEFAULT de conveniencia (ej. preseleccionar en la Calculadora,
+  // ver calculator.ts) — nunca para filtrar datos: los roles acá son de
+  // PERMISOS, no de scoping (decisión de Manuel, jul 2026); un KAM logueado
+  // sigue viendo todos los partners igual que antes.
+  myKam:            null as string | null,
   rendLine:         "comb",
   metasLine:        "comb",
   declineThreshold: 3,
@@ -162,8 +169,30 @@ export const STATE = {
   })()
 };
 
+// Bucket para los partners que NO tienen KAM asignado.
+//
+// POR QUE EXISTE. Antes, un partner sin KAM simplemente no entraba a
+// KAM_PARTNERS: no aparecía bajo ningún KAM del filtro y no había forma de
+// verlo agrupado. Eso lo volvía INVISIBLE justo para la persona que tenía que
+// arreglarlo — para asignarle un KAM en Configuración primero hay que saber que
+// existe. En producción (sep 2026) eran 12 partners con fila en `partners` y
+// KAM vacío, más 16 CLIDs con datos que ni siquiera tienen fila en `partners`.
+//
+// NO SE TRADUCE, a propósito. Este string es una CLAVE: es el `value` de la
+// opción del filtro, la clave de KAM_PARTNERS y el valor que devuelve
+// getKAMForPartner, y todo eso se compara por igualdad. Traducirlo haría que al
+// cambiar de idioma el filtro dejara de matchear en silencio — exactamente la
+// clase de bug que este archivo ya arrastró con las escalas.
+export const SIN_KAM = "No KAM";
+
 export function rebuildKAMPartners() {
   STATE.KAM_PARTNERS = {};
+  const agregar = (kam, partner) => {
+    if (!partner) return;
+    const k = (kam || "").trim() || SIN_KAM;
+    if (!STATE.KAM_PARTNERS[k]) STATE.KAM_PARTNERS[k] = new Set();
+    STATE.KAM_PARTNERS[k].add(partner);
+  };
   // FUENTE DE VERDAD: tabla `partners` (CLID_MAP + KAM_MAP). `flotas` solo aporta
   // cuando el CLID NO está en partners.
   Object.entries(STATE.KAM_MAP).forEach(([clid, kam]) => {
@@ -171,18 +200,23 @@ export function rebuildKAMPartners() {
     if (!p) return;
     const f = STATE.flotasMap && STATE.flotasMap[clid];
     if (f && f.activo === false) return;
-    const kamT = (kam || "").trim();
-    if (!kamT) return;
-    if (!STATE.KAM_PARTNERS[kamT]) STATE.KAM_PARTNERS[kamT] = new Set();
-    STATE.KAM_PARTNERS[kamT].add(p);
+    // Sin KAM ya NO se descarta: cae al bucket SIN_KAM (ver arriba).
+    agregar(kam, p);
   });
   if (STATE.flotasMap) {
     Object.entries(STATE.flotasMap).forEach(([clid, f]) => {
-      if (!f || !f.kam || !f.nombre_asignado) return;
+      // `nombre_asignado` sigue siendo obligatorio: sin nombre no hay nada que
+      // listar. El KAM vacío, en cambio, ahora es un caso válido.
+      if (!f || !f.nombre_asignado) return;
       if (f.activo === false) return;
       if (STATE.CLID_MAP && STATE.CLID_MAP[clid]) return;
-      if (!STATE.KAM_PARTNERS[f.kam]) STATE.KAM_PARTNERS[f.kam] = new Set();
-      STATE.KAM_PARTNERS[f.kam].add(f.nombre_asignado);
+      // MISMA precedencia que _buildPartnerKAM (data.ts): `partners` → `flotas`
+      // → el kam que traía la fila. Sin el último escalón, el sidebar mandaba a
+      // "No KAM" a partners que las demás pantallas sí atribuían a alguien, y
+      // los mismos números aparecían en dos grupos distintos según la pantalla.
+      // En producción 15 de los 16 CLIDs sueltos tienen la fila vacía y caen en
+      // "No KAM" igual; el escalón importa para el que sí trae KAM.
+      agregar(f.kam || STATE._partnerKAM?.get(f.nombre_asignado), f.nombre_asignado);
     });
   }
 }

@@ -372,6 +372,29 @@ SELECT m.clid, max(m.partner), max(m.kam), m.city,
    AND m.mes >= '2026-06'
  GROUP BY m.clid, m.city, m.mes, f.fac;
 
+-- ── PARTNERS SIN KAM (fixture del bucket "No KAM") ──────────────────────────
+-- VA AL FINAL A PROPOSITO: la generacion de datos de arriba hace JOIN contra
+-- `partners`, asi que borrar una fila antes dejaria a ese CLID sin ninguna fila
+-- de rendimiento — y el caso B necesita justamente lo contrario, un CLID CON
+-- datos y SIN fila en `partners`.
+--
+-- Produccion tiene DOS poblaciones de partners huerfanos, distintas entre si, y
+-- las dos tienen que existir aca o el bucket "No KAM" queda sin probar:
+--
+--   Caso A (12 en produccion, sep 2026): fila en `partners` con `kam` VACIO.
+--   Caso B (16 en produccion): CLID con datos y SIN fila en `partners`. El
+--          nombre sale de `flotas.nombre_asignado`; sin eso la UI mostraria el
+--          numero crudo de CLID (pasa hoy con dos CLIDs reales).
+--
+-- Antes del bucket, ninguno de los dos aparecia bajo ningun KAM del filtro:
+-- eran invisibles justo para la persona que tenia que asignarles uno.
+UPDATE public.partners SET kam = '' WHERE clid = '900000000007';   -- Caso A: VIA RAPIDA
+
+INSERT INTO public.flotas (clid, nombre_asignado, kam, ciudad, activo)
+VALUES ('900000000005', 'NORTE SEGURO', '', 'TRUJILLO', true)
+ON CONFLICT (clid) DO UPDATE SET nombre_asignado = EXCLUDED.nombre_asignado, kam = '';
+DELETE FROM public.partners WHERE clid = '900000000005';           -- Caso B: NORTE SEGURO
+
 COMMIT;
 
 -- ── QUE TIENE QUE DAR (invariantes, no numeros fijos) ───────────────────────

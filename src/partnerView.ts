@@ -6,6 +6,8 @@
 // Import explícito (no el espejo en window): ApexCharts es lazy y este módulo
 // necesita la MISMA promesa cacheada que usa charts.js, no una copia.
 import { ensureApex } from "./charts.js";
+import { datasetLinea } from "./shared/escala.js";
+import { SIN_KAM } from "./core/config.js";
 
 export const PARTNER_VIEW_STATE = {
   partner: null,
@@ -374,20 +376,8 @@ export function _pvLine() {
   return line;
 }
 export function _pvLineDataset() {
-  const line = _pvLine();
-  if (line === "agg") return STATE.rawData;
-  // Slice por ESCALA (3, no 2): antes un booleano `mensual ?` hacía que diario
-  // cayera al slice semanal en silencio.
-  const _sl = base => {
-    const m = STATE.curMode;
-    if (m === "mensual") return STATE["rawDataMensual" + base] || [];
-    if (m === "diario")  return STATE["rawDataDiario"  + base] || [];
-    return STATE["rawData" + base] || [];
-  };
-  const tk = _sl("Tuktuk");
-  if (line === "fleet") return _sl("Fleet");
-  if (line === "comb")  return STATE.rawData.concat(tk);
-  return tk;
+  // Slice por ESCALA (3, no 2) — resuelto en shared/escala.ts, con tests.
+  return datasetLinea(STATE, _pvLine());
 }
 export function _pvLineToggleHTML() {
   const line   = _pvLine();
@@ -551,7 +541,7 @@ export function renderPartnerView() {
   // Ciudades donde opera este partner (>= 1 row con datos)
   const partnerRows = STATE._byPartner?.get(partner) || STATE.rawData.filter(r => r.partner === partner);
   const citiesOf = [...new Set(partnerRows.map(r => r.city).filter(Boolean))].sort();
-  const kam = getKAMForPartner(partner) || partnerRows[0]?.kam || "Sin KAM";
+  const kam = getKAMForPartner(partner) || partnerRows[0]?.kam || SIN_KAM;
 
   // Detectar si recibe leads Yango (algún new_from_service > 0 históricamente)
   const recibeLeads = partnerRows.some(r => r.newService > 0);

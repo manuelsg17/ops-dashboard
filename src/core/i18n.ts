@@ -392,6 +392,23 @@ export const I18N: Record<string, Record<string, string>> = {
   "calc.metasPctKamSub":{ es: "Metas % a nivel KAM (referencia); no se distribuyen por partner ni van al CSV.",
                           en: "% goals at KAM level (reference only); not split by partner and not exported to CSV.",
                           ru: "% цели на уровне KAM (справочно); не распределяются по партнёрам и не идут в CSV." },
+  // % TukTuk declarado por PnL (ver _calcTkPctBlock en calculator.ts).
+  "calc.tkPctTitulo":   { es: "% de la meta que es TukTuk",
+                          en: "% of the goal that is TukTuk",
+                          ru: "% цели, приходящийся на TukTuk" },
+  "calc.tkPctInactivo": { es: "— sin declarar: se usa el peso real —",
+                          en: "— not declared: actual weight is used —",
+                          ru: "— не указано: используется фактический вес —" },
+  "calc.tkPctReal":     { es: "peso real: {v}", en: "actual weight: {v}", ru: "факт. вес: {v}" },
+  "calc.tkDeEsta":      { es: "De esta meta, cuánto es TukTuk. Es el número que va al Loyalty Program de este partner.",
+                          en: "How much of this goal is TukTuk. This is the number for this partner's Loyalty Program.",
+                          ru: "Какая часть этой цели приходится на TukTuk. Это число идёт в Loyalty Program партнёра." },
+  "calc.tkPctBrechaTip":{ es: "Diferencia entre el % declarado por PnL y el peso real de tu cartera. Una brecha grande suele significar que falta taggear un fleetroom como TukTuk.",
+                          en: "Gap between the % declared by PnL and your portfolio's actual weight. A large gap usually means a fleetroom is missing its TukTuk tag.",
+                          ru: "Разница между % от PnL и фактическим весом портфеля. Большой разрыв обычно означает, что у автопарка не проставлен тег TukTuk." },
+  "calc.tkPctSub":      { es: "Cargá el % que te pasó PnL. Es un DESGLOSE de la meta de arriba, no se suma: de tus metas totales, esta parte es la que va a TukTuk y la que declarás en los Loyalty Programs.",
+                          en: "Enter the % PnL sent you. It is a BREAKDOWN of the goal above, not an addition: of your total goals, this share goes to TukTuk and is what you declare in the Loyalty Programs.",
+                          ru: "Введите %, присланный PnL. Это РАСШИФРОВКА цели выше, а не добавка: эта доля ваших общих целей приходится на TukTuk и указывается в Loyalty Programs." },
   "calc.activeDrivers": { es: "Active Drivers", en: "Active Drivers", ru: "Активные водители" },
   "calc.supplyHours":   { es: "Supply Hours", en: "Supply Hours", ru: "Часы на линии" },
   "calc.newReact":      { es: "New + Reactivated", en: "New + Reactivated", ru: "Новые + реактивированные" },
@@ -468,9 +485,13 @@ export const I18N: Record<string, Record<string, string>> = {
   "calc.modoFullDesc":   { es: "Escribe la meta de TODOS los partners del reparto, incluidos los que no tocaste. Para armar el mes desde cero.",
                            en: "Writes goals for ALL partners in the distribution, including untouched ones. For building the month from scratch.",
                            ru: "Записывает цели ВСЕМ партнёрам распределения, включая нетронутых. Для создания месяца с нуля." },
-  "calc.sinCambiosParaGuardar": { es: "No hay nada que actualizar: ningún valor difiere de lo que ya está guardado.",
-                                  en: "Nothing to update: no value differs from what is already saved.",
-                                  ru: "Нечего обновлять: ни одно значение не отличается от сохранённого." },
+  // Dice CÓMO SALIR, no solo que no pasó nada: el caso típico es un KAM que
+  // cargó la meta global y recalculó sin tocar ninguna celda, así que en modo
+  // "Solo lo que cambié" no hay nada que escribir y sin esta pista el recorrido
+  // termina en un callejón.
+  "calc.sinCambiosParaGuardar": { es: "No hay nada que actualizar: ningún valor difiere de lo que ya está guardado.\n\nSi querías guardar el reparto que ves en pantalla, elegí «Reparto completo» arriba: «Solo lo que cambié» escribe únicamente las celdas que edites a mano.",
+                                  en: "Nothing to update: no value differs from what is already saved.\n\nIf you meant to save the distribution on screen, pick “Full distribution” above: “Only what I changed” writes only the cells you edit by hand.",
+                                  ru: "Нечего обновлять: ни одно значение не отличается от сохранённого.\n\nЕсли вы хотели сохранить распределение на экране, выберите «Полное распределение» выше: «Только изменённое» записывает лишь ячейки, отредактированные вручную." },
   "calc.btnBorrarKam":   { es: "🗑️ Eliminar metas del KAM", en: "🗑️ Delete KAM goals", ru: "🗑️ Удалить цели КАМ" },
   "calc.btnBorrarKamDe": { es: "🗑️ Eliminar metas de {k}", en: "🗑️ Delete {k}'s goals", ru: "🗑️ Удалить цели {k}" },
   "calc.borrarKamNeedKam": { es: "Elegí un KAM específico arriba para borrar solo sus metas.",
@@ -505,6 +526,13 @@ export const I18N: Record<string, Record<string, string>> = {
                                 en: "Pick a specific KAM (not \"All KAMs\") to save their goals.",
                                 ru: "Выберите конкретного KAM (не «Все KAM»), чтобы сохранить его цели." },
   "calc.sinPermisosGuardar": { es: "No tienes permisos para guardar metas (requiere admin).", en: "You don't have permission to save goals (admin required).", ru: "У вас нет прав на сохранение целей (нужен admin)." },
+  // Aviso ANTES de cambiar de KAM en la Calculadora, si hay meta/% cargados o
+  // ediciones sin guardar. Aclara qué se pierde (lo de esta pantalla) y qué NO
+  // (lo que ya está en la base) — sin esa distinción suena a que se borra todo.
+  "calc.confirmCambioKam": {
+    es: "Vas a cambiar de KAM.\n\nLa meta que cargaste y el % de TukTuk de esta pantalla se van a borrar para que empieces de cero con la cartera del otro KAM. Lo que ya guardaste en la base de datos NO se toca.\n\n¿Continuar?",
+    en: "You're about to switch KAM.\n\nThe goal and TukTuk % you loaded on this screen will be cleared so you start fresh with the other KAM's portfolio. Anything already saved to the database is untouched.\n\nContinue?",
+    ru: "Вы собираетесь сменить KAM.\n\nЦель и % TukTuk на этом экране будут очищены, чтобы вы начали заново с портфелем другого KAM. То, что уже сохранено в базе, не затрагивается.\n\nПродолжить?" },
   "calc.errorRed":          { es: "No se guardó nada: falló la conexión con la base de datos.\n\nSe reintentó una vez automáticamente. Revisa tu conexión y vuelve a intentar — como no llegó a escribirse, tus metas actuales están intactas.",
                               en: "Nothing was saved: the connection to the database failed.\n\nOne automatic retry was attempted. Check your connection and try again — since nothing was written, your current goals are untouched.",
                               ru: "Ничего не сохранено: не удалось подключиться к базе данных.\n\nБыла одна автоматическая попытка повтора. Проверьте соединение и попробуйте снова — запись не прошла, ваши текущие цели не тронуты." },
@@ -923,7 +951,18 @@ export const I18N: Record<string, Record<string, string>> = {
   "estado.haceMin":   { es: "hace {n} min", en: "{n} min ago", ru: "{n} мин назад" },
   "estado.haceHoras": { es: "hace {n} h",   en: "{n}h ago",    ru: "{n} ч назад" },
   "estado.haceDias":  { es: "hace {n} día(s)", en: "{n} day(s) ago", ru: "{n} дн. назад" },
-  "estado.justoAhora": { es: "recién",     en: "just now",    ru: "только что" }
+  "estado.justoAhora": { es: "recién",     en: "just now",    ru: "только что" },
+  // Frescura POR ESCALA (ver renderFrescura en data.ts). "datos hasta" responde
+  // una pregunta distinta de "BD actualizada": la segunda dice cuándo corrió la
+  // ingesta, la primera hasta dónde llegan los datos que estás por presentar.
+  "estado.datosHasta":   { es: "datos hasta {p}", en: "data through {p}", ru: "данные по {p}" },
+  "estado.faltanDias":   { es: "faltan {n} día(s)",    en: "{n} day(s) missing",   ru: "не хватает {n} дн." },
+  "estado.faltanSemanas":{ es: "falta(n) {n} semana(s)", en: "{n} week(s) missing", ru: "не хватает {n} нед." },
+  "estado.faltanMeses":  { es: "falta(n) {n} mes(es)",  en: "{n} month(s) missing", ru: "не хватает {n} мес." },
+  "estado.frescuraDetalle": {
+    es: "El último período cerrado es {e} y cerró hace {d} día(s). La ingesta debería haberlo cargado.",
+    en: "The last closed period is {e}, closed {d} day(s) ago. Ingestion should have loaded it.",
+    ru: "Последний закрытый период — {e}, закрыт {d} дн. назад. Загрузка должна была его получить." }
 };
 
 let _lang = "es";

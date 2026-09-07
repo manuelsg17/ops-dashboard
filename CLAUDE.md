@@ -14,6 +14,77 @@ Dashboard para KAMs (partner performance): modulos **TypeScript** bundleados con
 
 ## Estado actual
 
+### Sesión Septiembre 2026 (cont.) — Las 3 fricciones restantes de la Calculadora
+
+- **Preselección de KAM (`STATE.myKam`)**: viaja en el MISMO JWT que el rol —`app_metadata.kam`—, sin tabla nueva ni RPC extra (mismo mecanismo que `role`, confirmado empíricamente contra el Supabase local que `updateUserById` hace MERGE de `app_metadata`, no reemplazo: setear `kam` no pisa `role`). Asignación por SQL, mismo patrón que "Promover otro admin" (ver Comandos comunes) — case-sensitive contra `partners.kam`. Un admin sin `kam` declarado sigue viendo "Todos los KAMs", sin cambios.
+  - `debePreseleccionarKam` (domain/calcDraft.ts) se apaga apenas el usuario toca el selector a mano (`CALC_STATE._kamTouched`), para siempre en esa sesión — si no, cada re-render (dispara con cada tecla) revertiría al KAM del login apenas alguien mirara la meta de otro.
+- **Aviso + reset al cambiar de KAM** (pedido explícito: "que le aparezca un aviso... para que inicie de cero con el perfil del otro KAM"): `calcOnKamChange` pregunta antes de aplicar el cambio; si cancela, revierte el `<select>` a mano (el DOM nativo ya había cambiado el texto visible antes del evento `change`). Si confirma, `_calcResetParaNuevoKam` limpia SOLO lo volátil de la sesión (kamGoals, tkPct, edits, draft) — lo que ya está en BD no se toca, `_calcSeedGuardadas` lo vuelve a traer para el KAM nuevo.
+  - **Falso positivo real, encontrado probando el flujo** (no en los tests unitarios): el aviso disparaba SIEMPRE que el KAM tenía partners Fleet sin utilización guardada, aunque nadie hubiera tocado nada — el 85% default de Utilización Fleet se auto-siembra en `edits` en cada render y `_calcContarCambios()` lo cuenta como "cambio pendiente" (correcto para ESE propósito: que el 85 llegue al guardado). Para "¿hay algo que se perdería?" es un falso positivo — un default reproducible no es progreso del usuario. Nueva `_calcContarCambiosReales()` (excluye las claves en `_utilSeeded`) para esta pregunta específica; `_calcContarCambios()` sigue igual donde ya se usaba.
+- **Draft persistido entre recargas** (`localStorage["yangoCalcDraft"]`, UN solo slot): `kamGoals` + `tkPct` (no los edits por partner — no se pidió y complica el re-seed contra BD). Se ata a `(kam, mesKey)` exactos — la REGLA de si aplica vive en `domain/calcDraft.ts` (`draftAplica`), pura y testeada, no en el archivo `@ts-nocheck`. Se borra al cambiar de KAM (consistente con "se perderán") y al hacer logout (por si otra persona usa el mismo navegador).
+- **`domain/calcDraft.ts` + 20 tests**: toda la lógica de decisión de este bloque (progreso sin guardar, aplica el draft, corresponde preseleccionar) es pura, sin STATE ni DOM — mismo patrón que `repartoLinea.ts`/`escala.ts`/`frescura.ts` de esta misma sesión. `calculator.ts` queda como una capa fina de I/O alrededor.
+- **Verificado en el entorno local con un login de KAM real** (`kam@local.test`, `app_metadata.kam="Ana"`, sesión emitida de verdad — no un mock): preselección al abrir, F5 real con metas + % restaurados exactos, cancelar el cambio de KAM revierte el `<select>` visualmente, confirmar lo resetea y borra el draft, y un cambio sin nada cargado no interrumpe con ningún diálogo.
+
+### Sesión Septiembre 2026 (cont.) — Recorrido de UX de la Calculadora + precedencia del KAM
+
+Recorrido completo de la Calculadora *como si fuera un KAM armando sus metas*, en el entorno local con sesión real. Ocho fricciones encontradas y corregidas; dos bugs de fondo que el recorrido destapó.
+
+**BUG 1 — el guardado terminaba en un callejón sin salida.** El camino natural (elegir KAM → cargar la meta global → Recalcular → Guardar) terminaba en **"No hay nada que actualizar"** sin guardar NADA. Causa: el modo por defecto era `"edits"`, que escribe SOLO las celdas tecleadas a mano (eso es correcto y deliberado — evita el incidente del 13-ago-2026), pero armar el mes no implica teclear ninguna celda. Ahora `_calcSeedGuardadas` elige el default según el estado del mes: **sin metas en BD → "Reparto completo"; con metas → "Solo lo que cambié"**. El freno se conserva justo donde hay algo que proteger. El mensaje además dice CÓMO salir.
+
+**BUG 2 — dos definiciones del KAM de un partner** (encontrado por el barrido numérico, no a ojo). `rebuildKAMPartners` lo derivaba de `partners` y `updateIndexes` del `kam` de la FILA. Coincidían mientras `partners.kam` estuviera cargado; divergían justo cuando está VACÍO, porque la fila conserva el KAM viejo del Excel. Resultado: el mismo partner bajo "No KAM" en el sidebar y bajo su KAM anterior en Rendimiento, Metas y la Calculadora — sus números contados en dos grupos según la pantalla. Unificado en **`_buildPartnerKAM`** con la precedencia del contrato: **`partners` → `flotas` → fila**. La Calculadora lo leía al revés (`r.kam || getKAMForPartner(...)`) y ahora usa `_calcKamDe`. `rebuildKAMPartners` se rehace DESPUÉS de armar el mapa (antes corría antes y el fallback quedaba vacío en la primera carga). Invariante verificado en vivo: **cero desacuerdos** entre los grupos del sidebar y lo que ven las vistas. 10 tests en `domain/kamDePartner.test.ts`.
+- **SIN_KAM nunca se escribe en la BD** (`_calcKamGuardar`): es un bucket de UI, no una persona. Sin eso aparecía un KAM llamado "No KAM" en `metas`.
+
+**Fricciones de UX corregidas** (todas verificadas en pantalla):
+1. **La trampa más seria**: las metas iban en orden AD/SH/N+R y los % TukTuk en SH/AD/N+R — dos filas de tres campos, mismas etiquetas, apiladas, en orden distinto. Quien copia de arriba abajo cruza AD con SH y nada lo delata. Mismo orden ahora.
+2. Los campos de % no se distinguían de los de meta → `(%)` en la etiqueta y `%` dentro del campo. Sin eso alguien escribe 2.630 donde va 17.
+3. Se agregó el ABSOLUTO bajo cada % (`= 2.630`): es el número que va al Loyalty Program y de paso confirma que el campo es un porcentaje.
+4. La tabla de reparto no mostraba **cuánto de cada meta es TukTuk** — justo lo que hay que declarar por partner. Sub-línea 🛺 bajo cada meta, solo en las unidades que tienen porción.
+5. El texto de ayuda le hablaba al KAM de `meta_tk_*` (nombre de columna). Reescrito.
+6. El absoluto de SH usaba `fmtSmart` → "101.0K", que no se puede declarar. Ahora exacto.
+7. El diálogo de confirmación no decía que también se escribe el desglose TukTuk. Ahora lo lista.
+8. Los avisos del reparto no se mostraban en pantalla.
+
+**Cuadre numérico**: 15 combinaciones (5 KAMs × 3 escenarios de %) contra la base local. Cero fallos en: el paraguas suma la meta (tolerancia = redondeo por fila), el desglose TukTuk nunca supera al paraguas, ninguna meta negativa, y el % resultante = el declarado. Guardado real verificado contra la BD: 8 filas, `meta_tk_*` NULL donde no hay porción TukTuk (no 0).
+
+**Fricciones detectadas y NO cambiadas** (decisión del usuario): el selector arranca en "Todos los KAMs" y guardar exige elegir uno; las metas cargadas persisten al cambiar de KAM (se podría repartir la meta de uno sobre la cartera de otro); ni las metas ni los % sobreviven a una recarga.
+
+**TRAMPA de verificación**: una captura de pantalla puede ir ATRASADA respecto del DOM. Tecleé en un campo, la captura mostró el placeholder y parecía que el input no registraba; `document.activeElement.value` ya decía `"17"`. Antes de declarar roto un input en automatización, leer el valor del DOM.
+
+### Sesión Septiembre 2026 (cont.) — Carve-out de TukTuk en la Calculadora
+
+**El pedido**: PnL empezó a bajar, junto con la meta mensual de cada KAM, el **% de cada KPI que corresponde a TukTuk** (tres porcentajes distintos: para Manuel SH 20,2% / AD 17,0% / N+R 15,6%). Ese número se declara en los **Loyalty Programs**.
+
+**Hallazgo que definió el diseño**: los % del jefe **NO son una reasignación** — son la foto del peso que TukTuk YA tiene en cada cartera. Medido contra producción (agosto 2026, `rendimiento_mensual` + `fleetrooms.is_tuktuk`), coinciden al décimo para los seis KAMs: Rodo 4,6/4,6 · Andrea 6,9/6,9 · Mati 9,6/9,6 · Migue 16,1/16,1 · Álvaro 0/0. Manuel es el único con diferencia (declarado 17,0 vs real 16,70).
+- **Verificación cruzada que conviene repetir**: la suma de las metas de los 6 KAMs da EXACTO los "P. Ops Goals" del país (AD 55.723, N+R 14.442, SH 3.324.180) y las 3 ciudades dan el mismo AD. Si no cierra, se leyó mal la estructura. **Diego queda afuera** (no tiene cuentas asignadas).
+
+**Decisión de Manuel: manda el % DECLARADO**, no el peso natural — lo que reporta al Loyalty y lo que asigna a sus partners tienen que ser el mismo número. La brecha de 0,3pp sobre 15.473 son 46 conductores.
+
+- **`src/domain/repartoLinea.ts` + 16 tests**: reparto en DOS pozos (`meta × pct` para TukTuk, el resto para Taxi), cada uno repartido por peso DENTRO de su línea. Antes había un solo pozo sobre la base combinada y TukTuk se llevaba su peso natural — con un solo pozo la diferencia es imposible de cerrar.
+- **La unidad NO se puede clasificar con un booleano**: hay partners con Taxi Y TukTuk en la MISMA ciudad (Lizzo, ArequipaGo y YEGO en Lima, verificado contra la BD). Por eso cada unidad (partner, ciudad) lleva `valTk` aparte de `valTotal`, y `_calcAggByPartnerCity` acumula `adTk/shTk/nrTk`. El AD TukTuk se colapsa con el MISMO criterio que el total (máx entre fechas de la suma por fecha); con otro criterio la porción podría superar al total y el reparto le robaría peso al resto.
+- **Sin % declarado el carve-out NO se aplica** (`_calcTieneTkPct` → `_calcRepartoDe` devuelve `null`). Con el carve-out activo y 0% declarado, las unidades TukTuk recibirían meta CERO: un KAM que todavía no cargó la tabla de PnL vería cambiar sus metas sin haber pedido nada.
+- **`meta_tk_*` es un DESGLOSE de la meta paraguas, NO una meta aparte.** Solo se escribe si hay % declarado (un 0 se leería como "la meta TukTuk es cero" en vez de "no se declaró"). La migración `2026-07-18_meta_tk_sh.sql` justificaba la columna diciendo que había que SUMAR `meta_supply_hours + meta_tk_sh` — eso era el doble conteo que después costó seis partners con el plan inflado (TRANSPOTAXI +42% AD). **Se le agregó una nota de corrección al archivo**; el DDL no cambió.
+- Los avisos del reparto (pozo TukTuk sin dónde caer = falta taggear un fleetroom) se muestran **en pantalla**, al lado del input que los causa.
+
+**Verificado en el entorno local con sesión real** (el seed sintético reproduce el caso: ANDINA MOVILIDAD y RUTA SUR con Taxi + TukTuk en Lima, y Ana operando en 3 ciudades). Declarando 17,0/20,2/15,6 sobre una meta de 10.000 AD: paraguas 10.000 exacto, desglose TukTuk 17,01% / 20,20% / 15,59%, y las unidades de Trujillo/Arequipa reciben su cuota por peso. Peso natural local 24,5% → el carve-out mueve el número de verdad.
+
+### Sesión Septiembre 2026 — Escala compartida, "No KAM" y frescura por escala
+
+- **`src/shared/escala.ts` + 13 tests**: la resolución de slices por escala estaba COPIADA en 4 archivos (`rendimiento`, `partnerView`, `partnerPortal`, `metas` vía el anterior) y escrita inline en `data.ts`. Ahora hay una sola `sliceEscala()`/`datasetLinea()`. **El bug que cierra apareció TRES veces**: un booleano `mensual ? x : y` para TRES escalas, que en diario devuelve el slice SEMANAL en silencio.
+  - **Nuevo chequeo en `check:drift` (`escala-binaria`)**: falla el CI si vuelve a aparecer el patrón. **Verificado que dispara** inyectando la línea mala a propósito — un chequeo que nunca dispara no es un control. NO prohíbe todo ternario con `mensual`: los de ROTULADO ("último mes" vs "última semana") son legítimos y abundantes; solo los que eligen un `rawData*`.
+- **Bucket `SIN_KAM = "No KAM"` (`core/config.ts`)**: producción tiene DOS poblaciones de partners huérfanos y ninguna era visible en el filtro — 12 con fila en `partners` y `kam` vacío, y 16 CLIDs con datos y SIN fila en `partners` (nombre vía `flotas.nombre_asignado`). Eran invisibles justo para quien tenía que asignarles un KAM.
+  - **NO se traduce a propósito**: es una CLAVE (`value` de la opción, clave de `KAM_PARTNERS`, retorno de `getKAMForPartner`) y todo eso se compara por igualdad. Traducirla rompería el filtro al cambiar de idioma, en silencio.
+  - **`getKAMForPartner` ahora tiene TRES resultados, no dos**: el KAM, `"No KAM"` (está en `partners`, kam vacío — es un hecho conocido) y `""` (no está en `partners` — falta información, el llamador debe caer a `flotas`/Excel). Colapsarlos le robaría el KAM a los que sí lo tienen en `flotas`.
+  - Un mismo NOMBRE de partner puede tener varios CLIDs: **un KAM real siempre le gana a `SIN_KAM`**, sin importar el orden de las claves. Sin esa regla el resultado dependía del orden de iteración.
+  - **Bug latente que esto arregló**: `popKAM` salía de `Object.values(KAM_MAP)`, que incluye `""` → había una **opción en blanco primera** en el desplegable, y elegirla deseleccionaba TODOS los partners sin explicar nada. Ahora sale de `KAM_PARTNERS`.
+- **Badge de frescura POR ESCALA (`src/shared/frescura.ts` + 17 tests)**: antes mostraba cuándo corrió la ingesta (`ingest_log`). Esa no es la pregunta. En sep 2026 decía "BD actualizada hace 3 días" —cierto— con la escala **diaria parada en el 31-ago**; presentar en diario ese día mandaba datos de casi una semana atrás rotulados como del día, **mientras la semanal estaba al día**. Un badge global no puede expresar eso. Ahora dice "datos hasta X · ⚠ faltan N períodos" y se recalcula en `switchMode`.
+  - `faltan` y `atrasado` son distintos A PROPÓSITO: el lunes la semana ya cerró pero la ingesta corre el martes → falta 1 y NO está atrasado. Marcar rojo todos los lunes entrena a ignorar el indicador.
+  - `diasDesdeCierre` se mide desde el **primer** período faltante, no el último: con la escala parada hace una semana, el último faltante cerró ayer y ocultaría la gravedad.
+  - Todo en UTC: los períodos son strings sin hora, y en hora local el veredicto dependería del huso de quien mira.
+- **Fixture "No KAM" en `seed_synthetic.sql`**, con los DOS casos de producción. **Va al final del archivo a propósito**: la generación de datos hace `JOIN partners`, así que borrar la fila antes dejaría al CLID sin ninguna fila de rendimiento — justo lo contrario del caso que hay que reproducir.
+
+**TRAMPA de verificación (costó media hora, anotarla)**: con el panel del navegador OCULTO, `document.hidden === true` y **`requestAnimationFrame` NO dispara**. `switchMode` hace `await new Promise(r => requestAnimationFrame(r))` ANTES de reasignar `STATE.rawData`, así que se queda colgado para siempre y el síntoma es idéntico a un bug real: `curMode` dice "mensual" y `rawData` sigue siendo semanal. **No es un bug de producción.** Se confirmó midiendo rAF aislado y se sorteó parcheando `requestAnimationFrame` SOLO en la sesión de prueba. Antes de eso se verificó contra `git stash` que el síntoma también aparecía en `main` — que es lo que hizo sospechar del entorno y no del cambio.
+
+**Datos de producción al 6-sep-2026** (para no volver a medirlo): **0 metas de septiembre** cargadas (97 en agosto) → todos los decks del mes caen en "sin meta cargada". Semanal y mensual al día; **diario 6 días atrás** (último 31-ago). 16 CLIDs sin fila en `partners`, 12 partners con `kam` vacío.
+
 ### Sesión Agosto 2026 (cont.) — Velocidad de carga: medido, no supuesto
 
 Tres commits: `cd7965d` (login), `9e934ec` (precarga + payload), `1587eb8` (caché).
@@ -342,6 +413,16 @@ SELECT tablename, policyname, cmd, roles
 UPDATE auth.users
    SET raw_app_meta_data = coalesce(raw_app_meta_data,'{}'::jsonb)
                          || jsonb_build_object('role','admin')
+ WHERE email = '...@...';
+
+# Asignar el KAM de un login (para que la Calculadora lo preseleccione solo —
+# ver STATE.myKam en core/config.ts / auth.ts). Mismo mecanismo que el rol
+# (app_metadata, se hornea en el JWT → RE-LOGUEARSE). El valor tiene que ser
+# EXACTO al que aparece en `partners.kam` (case-sensitive) o no va a matchear
+# ningun grupo de KAM_PARTNERS.
+UPDATE auth.users
+   SET raw_app_meta_data = coalesce(raw_app_meta_data,'{}'::jsonb)
+                         || jsonb_build_object('kam','Ana')
  WHERE email = '...@...';
 
 # Quien cambio que (auditoria)

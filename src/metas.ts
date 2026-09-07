@@ -10,6 +10,7 @@ import {
   weightedAvg, ratio, sumKpis
 } from "./domain/metrics.js";
 import { reportYM, diasMesReporte } from "./shared/mesReporte.js";
+import { SIN_KAM } from "./core/config.js";
 import { parseLocalDate } from "./core/dates";
 // metas.js — Pestaña Metas
 
@@ -576,7 +577,7 @@ function _renderMetasLineView(cfg) {
   // ── 3. Por KAM ────────────────────────────────────────────────────────────
   const byKam = new Map();
   units.forEach(u => {
-    const k = u.m.kam || "Sin KAM";
+    const k = (u.m.kam || "").trim() || SIN_KAM;
     if (!byKam.has(k)) byKam.set(k, []);
     byKam.get(k).push(u);
   });
@@ -958,7 +959,7 @@ export function _renderMetasImpl() {
     .filter(p => selSet.has(p) && !partnersWithMetaSet.has(p));
 
   partnersInPerf.forEach(p => {
-    const partnerKam = getKAMForPartner(p) || "Sin KAM";
+    const partnerKam = getKAMForPartner(p) || SIN_KAM;
     // Si el usuario filtra por KAM, excluir partners sin meta de otros KAMs
     if (kamFilter !== "all" && partnerKam !== kamFilter) return;
     const r = getRPC(p, cityFilter === "all" ? "all" : cityFilter);

@@ -17,6 +17,9 @@ import { snapshotLoad, snapshotSave, snapshotClear } from "./data/cache.js";
 import { t } from "./core/i18n";
 // Formulas de proyeccion: una sola definicion para todo el dashboard.
 import { projectFlow, projectSnapshot, dropDuplicatePeriods } from "./domain/metrics.js";
+import { sliceEscala, normEscala } from "./shared/escala.js";
+import { evaluarFrescura } from "./shared/frescura.js";
+import { SIN_KAM } from "./core/config.js";
 
 
 // ── PARSER DE TAXIPARKS ─────────────────────────────────────────────────────
@@ -294,11 +297,8 @@ export async function fetchAllPeriods(scale) {
 
 // Última carga exitosa de la ingesta automática (RPC get_last_ingest_at,
 // SECURITY DEFINER — expone SOLO ese timestamp, ingest_log en sí sigue
-// admin-only). Pinta el badge #dbLastUpdate del topbar. Fire-and-forget desde
-// initApp(); nunca bloquea nada si falla.
+// admin-only). Fire-and-forget desde initApp(); nunca bloquea nada si falla.
 export async function fetchAndRenderLastIngest() {
-  const el = document.getElementById("dbLastUpdate");
-  if (!el) return;
   try {
     const token = await _authToken();
     const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_last_ingest_at`, {
@@ -313,18 +313,58 @@ export async function fetchAndRenderLastIngest() {
     if (!res.ok) return;
     const iso = await res.json();
     if (!iso) return;
-    const ms = Date.now() - new Date(iso).getTime();
-    const min = Math.round(ms / 60000);
-    let label;
-    if (min < 1)        label = t("estado.justoAhora");
-    else if (min < 60)  label = t("estado.haceMin",   { n: min });
-    else if (min < 1440) label = t("estado.haceHoras", { n: Math.round(min / 60) });
-    else                 label = t("estado.haceDias",  { n: Math.round(min / 1440) });
-    el.textContent = t("estado.bdActualizada", { t: label });
-    el.title = new Date(iso).toLocaleString("es-PE");
-    el.classList.toggle("stale", min > 60 * 24 * 8); // >8 días: la ingesta semanal dejó de correr
-    el.style.display = "";
+    STATE._lastIngestISO = iso;
   } catch (_) { /* indicador informativo, nunca debe tumbar el arranque */ }
+  finally { renderFrescura(); }
+}
+
+// Badge #dbLastUpdate. Responde DOS preguntas distintas, y esa distinción es el
+// punto del indicador:
+//
+//   1. ¿Cuándo corrió la ingesta?  → el timestamp de ingest_log.
+//   2. ¿HASTA CUÁNDO llegan los datos de la escala que estoy mirando?
+//
+// Antes solo mostraba (1), y (1) puede verse perfectamente sana mientras (2)
+// está rota: en sep 2026 el badge decía "hace 3 días" —cierto, la tarea había
+// corrido— con la escala DIARIA parada en el 31-ago. Quien presentaba en diario
+// ese día mandaba datos de casi una semana atrás rotulados como del día.
+//
+// Por eso la advertencia es por ESCALA: la semanal estaba al día ese mismo día.
+// Un badge global no puede expresar "una escala sí y la otra no".
+//
+// Se re-renderiza al cambiar de escala (switchMode) porque su respuesta cambia
+// con la escala, aunque el dato de la ingesta sea el mismo.
+export function renderFrescura() {
+  const el = document.getElementById("dbLastUpdate");
+  if (!el) return;
+  const escala = normEscala(STATE.curMode);
+  const f = evaluarFrescura(escala, STATE.allDates, new Date());
+
+  const partes = [];
+  if (STATE._lastIngestISO) {
+    const min = Math.round((Date.now() - new Date(STATE._lastIngestISO).getTime()) / 60000);
+    const label = min < 1    ? t("estado.justoAhora")
+                : min < 60   ? t("estado.haceMin",   { n: min })
+                : min < 1440 ? t("estado.haceHoras", { n: Math.round(min / 60) })
+                :              t("estado.haceDias",  { n: Math.round(min / 1440) });
+    partes.push(t("estado.bdActualizada", { t: label }));
+  }
+  if (f.ultimo) partes.push(t("estado.datosHasta", { p: f.ultimo }));
+
+  if (f.atrasado) {
+    // El texto dice CUÁNTOS períodos faltan, no "hace mucho": un número que se
+    // puede contrastar con el calendario es accionable, "desactualizado" no.
+    partes.push("⚠ " + t(
+      escala === "mensual" ? "estado.faltanMeses" : escala === "diario" ? "estado.faltanDias" : "estado.faltanSemanas",
+      { n: f.faltan }
+    ));
+  }
+  if (!partes.length) return;
+
+  el.textContent = partes.join(" · ");
+  el.title = f.atrasado ? t("estado.frescuraDetalle", { e: f.esperado, d: f.diasDesdeCierre }) : "";
+  el.classList.toggle("stale", f.atrasado);
+  el.style.display = "";
 }
 
 // Desde qué período cargar datos. Toma los últimos LOAD_WINDOW períodos, pero
@@ -2098,10 +2138,7 @@ export function updateIndexes() {
   // en la ventana mensual/diaria pero ausente de la ventana semanal (o al
   // revés) no entraba al sidebar en esa escala → reaparece la misma clase del
   // bug PIAGGIO, pero solo al mirar mensual/diario.
-  const _tkSliceEscala = STATE.curMode === "mensual" ? STATE.rawDataMensualTuktuk
-                        : STATE.curMode === "diario"  ? STATE.rawDataDiarioTuktuk
-                        : STATE.rawDataTuktuk;
-  const _tkOnly = (_tkSliceEscala || [])
+  const _tkOnly = sliceEscala(STATE, "Tuktuk")
     .map(r => r.partner)
     .filter(p => p && !STATE.allPartners.includes(p));
   STATE.sidebarPartners = [...new Set([...STATE.allPartners, ..._tkOnly])].sort();
@@ -2114,8 +2151,8 @@ export function updateIndexes() {
   STATE._byPartner  = new Map();
   STATE._byCity     = new Map();
   STATE._byCityDate = new Map();
-  STATE._partnerKAM = new Map();
   STATE._partnerIsFleet = new Map();
+  const _kamDeFilas = new Map();   // partner -> kam que venía en la fila (fallback)
   STATE.rawData.forEach(r => {
     // _byDate
     let a = STATE._byDate.get(r.date);
@@ -2134,10 +2171,10 @@ export function updateIndexes() {
     let d = STATE._byCityDate.get(cdKey);
     if (!d) { d = []; STATE._byCityDate.set(cdKey, d); }
     d.push(r);
-    // _partnerKAM (primer kam no vacío gana)
-    if (r.kam && !STATE._partnerKAM.has(r.partner)) {
-      STATE._partnerKAM.set(r.partner, r.kam);
-    }
+    // KAM que trae la FILA. Se junta acá pero NO se escribe todavía en
+    // _partnerKAM: es solo el fallback de menor prioridad (ver _buildPartnerKAM
+    // al final de la función). Primer valor no vacío gana.
+    if (r.kam && !_kamDeFilas.has(r.partner)) _kamDeFilas.set(r.partner, r.kam);
     // _partnerIsFleet: true si ALGUNA fila del partner es Fleet. Usa rowIsFleet
     // (flag del fleetroom por db_id, o del CLID como fallback), NO solo CLID_IS_FLEET,
     // para cubrir partners marcados Fleet SOLO a nivel fleetroom (p.ej. KINGO).
@@ -2145,6 +2182,17 @@ export function updateIndexes() {
       STATE._partnerIsFleet.set(r.partner, true);
     }
   });
+  // Se arma DESPUÉS del recorrido para que `partners` tenga prioridad sobre el
+  // kam de la fila (ver _buildPartnerKAM). Escribirlo dentro del loop era lo que
+  // hacía que un partner sin KAM en `partners` siguiera contándose bajo su KAM
+  // viejo en todas las vistas menos el sidebar.
+  STATE._partnerKAM = _buildPartnerKAM(_kamDeFilas);
+  // Y se rehace KAM_PARTNERS con el mapa ya armado. El rebuild anterior corre
+  // ANTES de este punto (junto al override de flotas), cuando _partnerKAM todavía
+  // es el de la carga previa o null — sin esta segunda pasada, los grupos del
+  // sidebar y el KAM que ven las vistas podían discrepar en la primera carga.
+  // Es barato: recorre KAM_MAP y flotasMap, no las filas.
+  if (typeof rebuildKAMPartners === "function") rebuildKAMPartners();
   STATE._apdFull = null;   // dataset cambió → invalidar agregado completo
   clearAggCache();
 }
@@ -2157,20 +2205,58 @@ export function ensureIndexes() {
   if (!STATE._byCity || !STATE._byDate) updateIndexes();
 }
 
+// Construye el mapa partner -> KAM con la precedencia del CONTRATO del proyecto:
+// la tabla `partners` es la FUENTE DE VERDAD; el `kam` que viene en la fila de
+// rendimiento es solo un fallback para CLIDs que no están en `partners`.
+//
+// BUG QUE ESTO ARREGLA (sep 2026). Había DOS definiciones del mismo dato:
+// `rebuildKAMPartners` lo derivaba de `partners` y `updateIndexes` lo derivaba
+// del `kam` de la fila. Coincidían mientras `partners.kam` estuviera cargado,
+// porque el loader ya hace `kam: KAM_MAP[clid] || r.kam`. Divergían justo cuando
+// `partners.kam` está VACÍO: ahí la fila conserva el KAM viejo que venía en el
+// Excel, así que el sidebar mostraba el partner bajo "No KAM" mientras
+// Rendimiento, Metas y la Calculadora lo seguían contando bajo su KAM anterior.
+// Con una sola definición eso no puede volver a pasar.
+//
+// `kamDeFilas` es opcional: cuando updateIndexes ya recorrió las filas lo pasa
+// armado; el camino lazy lo omite y se queda solo con `partners`.
+export function _buildPartnerKAM(kamDeFilas) {
+  const map = new Map();
+  Object.entries(STATE.KAM_MAP || {}).forEach(([clid, kam]) => {
+    const p = STATE.CLID_MAP[clid];
+    if (!p) return;
+    const kamT = (kam || "").trim();
+    // Un mismo NOMBRE de partner puede tener varios CLIDs (uno por ciudad, o por
+    // razón social). Un KAM real siempre le gana a SIN_KAM, sin importar el
+    // orden de las claves del objeto.
+    const previo = map.get(p);
+    if (previo && previo !== SIN_KAM) return;
+    if (previo === SIN_KAM && !kamT) return;
+    map.set(p, kamT || SIN_KAM);
+  });
+  // Fallback SOLO para partners que no están en `partners` (los 16 CLIDs sueltos
+  // de producción): ahí el kam de la fila es la única información que hay.
+  (kamDeFilas || new Map()).forEach((kam, partner) => {
+    if (!map.has(partner) && kam) map.set(partner, kam);
+  });
+  return map;
+}
+
+// KAM de un partner. TRES resultados distintos, no dos:
+//
+//   "Manuel"  → está en `partners` y tiene KAM asignado.
+//   "No KAM"  → está en `partners` y su KAM está VACÍO. Es un hecho conocido,
+//               no una ausencia de información: hay que poder filtrarlo.
+//   ""        → no está en `partners`. Acá SÍ falta información, y el llamador
+//               tiene que poder caer a `flotas` o al KAM del Excel antes de
+//               darlo por huérfano. Devolver "No KAM" en este caso taparía ese
+//               fallback y le robaría el KAM a partners que sí lo tienen en
+//               `flotas`.
 export function getKAMForPartner(partner) {
   if (STATE._partnerKAM?.has(partner)) return STATE._partnerKAM.get(partner);
   // Lazy-build _partnerKAM si fue invalidado o aun no construido (O(n) una sola vez,
   // luego O(1) en lookups subsecuentes). Evita el find() lineal en hot paths.
-  if (!STATE._partnerKAM) {
-    STATE._partnerKAM = new Map();
-    Object.entries(STATE.KAM_MAP).forEach(([clid, kam]) => {
-      const p = STATE.CLID_MAP[clid];
-      const kamT = (kam || "").trim();
-      if (p && kamT && !STATE._partnerKAM.has(p)) {
-        STATE._partnerKAM.set(p, kamT);
-      }
-    });
-  }
+  if (!STATE._partnerKAM) STATE._partnerKAM = _buildPartnerKAM();
   return STATE._partnerKAM.get(partner) || "";
 }
 

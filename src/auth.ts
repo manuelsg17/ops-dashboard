@@ -68,6 +68,10 @@ export function _setRoleFromUser(user) {
   const role = (user && user.app_metadata && user.app_metadata.role) || "viewer";
   STATE.userRole  = role;
   STATE.isAdmin   = role === "admin";
+  // KAM de este login (app_metadata.kam) — ver el comentario en core/config.ts.
+  // Viaja en el MISMO JWT que el rol, así que llega sin ninguna llamada extra:
+  // ni ronda de red ni tabla nueva, el mismo patrón que ya usa `role`.
+  STATE.myKam = (user && user.app_metadata && user.app_metadata.kam) || null;
   if (!STATE.perms) STATE.perms = new Set();
   _recomputeCanWrite();
   _applyRoleGate();
@@ -273,6 +277,7 @@ export function _clearStateAndLocalStorage() {
   STATE.userRole        = null;
   STATE.userEmail       = null;
   STATE.userId          = null;
+  STATE.myKam           = null;
   STATE.isAdmin         = false;
   STATE.canWrite        = false;
   if (STATE.perms) STATE.perms = new Set();
@@ -287,6 +292,10 @@ export function _clearStateAndLocalStorage() {
     localStorage.removeItem("yangoFilters");
     localStorage.removeItem("yangoDecline");
     localStorage.removeItem("yangoFleetExtConfig");
+    // Borrador de la Calculadora (meta global + % TukTuk sin guardar aún): si
+    // otra persona usa el mismo navegador después, no debería heredar metas de
+    // otro KAM a medio cargar.
+    localStorage.removeItem("yangoCalcDraft");
   } catch {}
   // Caché de datos en IndexedDB (data/cache.js): cerrar sesión tiene que borrar
   // la DATA, no solo el token — si no, quien use después ese navegador podría

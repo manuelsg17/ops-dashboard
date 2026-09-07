@@ -230,14 +230,56 @@ function mapaTaxiparks() {
   return o;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. Un BOOLEANO para TRES escalas
+//
+// El bug más caro y más repetido del proyecto: escribir
+//
+//     const src = mensual ? rawDataMensual : rawData;
+//
+// para elegir entre semanal / mensual / DIARIO. En diario el ternario da false
+// y devuelve el slice SEMANAL. No hay error de consola ni fila faltante: son
+// números de otra escala con el rótulo de la escala elegida. Apareció TRES
+// veces (Fleet/TukTuk en diario, el sidebar de solo-TukTuk, los slices del
+// portal) porque arreglar una copia no arregla las otras.
+//
+// La forma correcta es shared/escala.ts (sliceEscala/datasetLinea), que tiene
+// tests. Este chequeo existe para que la forma incorrecta no pueda volver a
+// entrar sin que alguien lo note.
+//
+// Detecta el patrón "elegir un rawData* con una condición de mensual que NO
+// menciona diario". Deliberadamente NO prohíbe todo ternario con `mensual`:
+// los de ROTULADO ("último mes" vs "última semana") son legítimos y abundantes.
+// ─────────────────────────────────────────────────────────────────────────────
+function chequearEscalaBinaria() {
+  const RE = /(?:mensual|curMode\s*===\s*"mensual")\s*\?[^;\n]*rawData/;
+  for (const f of listarSrc()) {
+    if (f.endsWith("shared/escala.ts") || f.endsWith(".test.ts")) continue;
+    const lineas = leer(f).split("\n");
+    lineas.forEach((ln, i) => {
+      if (!RE.test(ln)) return;
+      // Si la MISMA expresión contempla diario, es un ternario de tres ramas
+      // bien escrito (o el arranque de uno). Solo nos importan los de dos.
+      const ventana = lineas.slice(i, i + 3).join(" ");
+      if (/diario/i.test(ventana)) return;
+      fallo("escala-binaria",
+        `${f}:${i + 1} elige un slice de datos con un booleano de "mensual" y no menciona "diario".\n` +
+        `      En escala DIARIA esto devuelve el slice SEMANAL en silencio.\n` +
+        `      Usar sliceEscala()/datasetLinea() de src/shared/escala.ts.\n` +
+        `      → ${ln.trim().slice(0, 120)}`);
+    });
+  }
+}
+
 // ── main ─────────────────────────────────────────────────────────────────────
 chequearAcciones();
 chequearColumnas();
 chequearI18n();
+chequearEscalaBinaria();
 
 if (problemas.length) {
   console.error(`\n✗ ${problemas.length} problema(s) de deriva:\n`);
   for (const p of problemas) console.error(`  [${p.chequeo}] ${p.msg}\n`);
   process.exit(1);
 }
-console.log("✓ deriva: acciones, columnas e i18n consistentes");
+console.log("✓ deriva: acciones, columnas, i18n y escalas consistentes");

@@ -3,6 +3,8 @@
 
 // Núcleo de cálculo compartido (ver domain/metrics.ts).
 import { ratio } from "./domain/metrics.js";
+import { sliceEscala, datasetLinea } from "./shared/escala.js";
+import { SIN_KAM } from "./core/config.js";
 import { t } from "./core/i18n";
 
 // ── LÍNEA DE NEGOCIO (Agregador / Fleet / TukTuk / Combinado) ─────────────────
@@ -20,23 +22,13 @@ export function _rendLine() {
   return STATE.rendLine || "comb";
 }
 // Dataset completo (todas las fechas) de la línea activa para la escala actual.
-// Slice de una línea para la ESCALA ACTIVA. Antes esto era un booleano
-// `mensual ? ... : ...`, que en diario caía silenciosamente al slice SEMANAL.
-// Ahora las tres escalas tienen sus propios slices (ver loadDiarioIfNeeded).
-function _sliceEscala(base) {
-  const m = STATE.curMode;
-  if (m === "mensual") return STATE["rawDataMensual" + base] || [];
-  if (m === "diario")  return STATE["rawDataDiario"  + base] || [];
-  return STATE["rawData" + base] || [];
-}
+// La resolución por escala vive en shared/escala.ts (con tests): estuvo copiada
+// en cuatro archivos y en todos estuvo mal a la vez — un booleano para TRES
+// escalas, que en diario devolvía el slice SEMANAL sin decir nada.
+const _sliceEscala = base => sliceEscala(STATE, base);
 
 export function _rendLineDataset() {
-  const line = _rendLine();
-  if (line === "agg") return STATE.rawData;
-  const tk = _sliceEscala("Tuktuk");
-  if (line === "fleet") return _sliceEscala("Fleet");
-  if (line === "comb")  return STATE.rawData.concat(tk);
-  return tk;
+  return datasetLinea(STATE, _rendLine());
 }
 // ¿Este partner está incluido en la selección del sidebar?
 //
@@ -62,9 +54,14 @@ export function _lineSelHas(selSet, sidebarSet, partner) {
 
 // KAM efectivo de una fila. `partners`/`flotas` mandan (getKAMForPartner); el KAM
 // que vino en el Excel es solo fallback.
+//
+// El último fallback es SIN_KAM y no "": una fila sin KAM por ningún lado tiene
+// que caer en un grupo REAL para que el filtro pueda alcanzarla. Con "" quedaba
+// fuera de todos los grupos y solo se la veía en "Todos", así que sus números
+// aparecían en el total del país sin pertenecer a nadie.
 export function _lineKamOf(row) {
   const k = (typeof getKAMForPartner === "function" && getKAMForPartner(row.partner)) || "";
-  return k || row.kam || "";
+  return k || (row.kam || "").trim() || SIN_KAM;
 }
 
 // Filas de la línea filtradas por ciudad/fecha/partner/KAM (espeja getFiltered()).

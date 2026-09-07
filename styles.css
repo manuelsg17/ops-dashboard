@@ -1047,6 +1047,35 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
   font-size: 0.58rem; font-weight: 800; letter-spacing: .02em;
   color: #065f46; background: #d1fae5; border-radius: 10px; vertical-align: middle;
 }
+/* El campo lleva un "%" pegado adentro: sin él, dos filas de inputs numéricos
+   con las mismas etiquetas (metas arriba, porcentajes abajo) se confunden y
+   alguien escribe 1701 donde va 17. */
+.calc-tkpct-campo { position: relative; }
+.calc-tkpct-campo .sb-inp { padding-right: 26px; }
+.calc-tkpct-pct {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  font-size: .78rem; font-weight: 700; color: #9ca3af; pointer-events: none;
+}
+/* El absoluto que sale del %: es el número que se declara en el Loyalty Program,
+   y de paso confirma que el campo de arriba es un porcentaje. */
+.calc-tkpct-abs {
+  margin-top: 4px; font-size: .76rem; font-weight: 800; color: #0f766e;
+}
+/* Porción TukTuk de la meta de una fila. Debajo del input y en teal, no como
+   otra columna: son 3 números más por fila y la tabla ya tiene 8 columnas. */
+.calc-tk-sub {
+  margin-top: 3px; text-align: right;
+  font-size: .68rem; font-weight: 700; color: #0f766e; white-space: nowrap;
+}
+/* Aviso del carve-out de TukTuk (pozo sin dónde caer, % fuera de rango).
+   Ámbar y no rojo a propósito: el reparto SÍ se hizo y la meta cierra — lo que
+   avisa es que probablemente falte taggear un fleetroom, no que algo falló. */
+.calc-tkpct-aviso {
+  margin-top: 10px; padding: 8px 10px;
+  font-size: .72rem; line-height: 1.45;
+  color: #92400e; background: #fffbeb;
+  border: 1px solid #fcd34d; border-radius: 8px;
+}
 /* Ámbar = distinto de lo que hay en la base; al guardar se sobrescribe. */
 .calc-inp-dirty {
   border-color: #f59e0b !important;
