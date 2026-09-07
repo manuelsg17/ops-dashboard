@@ -14,6 +14,17 @@ Dashboard para KAMs (partner performance): modulos **TypeScript** bundleados con
 
 ## Estado actual
 
+### Sesión Septiembre 2026 (cont.) — Tarjeta compartible: Taxi/TukTuk separados + ruso
+
+**Pedido**: en la tarjeta que se le manda al partner, TukTuk vuelve a ser una fila separada ("Meta Taxi" / "Meta TukTuk" / "Meta Fleet si es que tiene") — se había combinado en ago-2026 porque en ese momento no existía forma de partir el total sin inventar un número. El carve-out de esta misma sesión (`_calcRepartoDe`) ahora sí tiene una porción TukTuk fiel por partner-ciudad, así que separar dejó de requerir una estimación.
+
+- **Solo se separa cuando el KAM declaró el % de PnL** (`splitActivo = !!repartoExp`). Sin declarar, sigue el combinado de siempre ("🚕 Meta Taxi + TukTuk") — la alternativa (partir por el peso NATURAL cuando no hay % declarado) se descartó a propósito: le mostraría al partner un número TukTuk que ni siquiera queda respaldado en `meta_tk_*` (NULL sin declarar), inventando una tercera cifra que no coincide con nada guardado.
+- **El goal se separa proporcional al split que YA calculó el carve-out** (`adTk / ad` de la unidad), no con una fórmula nueva — así si el KAM ajusta a mano el total en la tabla de distribución, la porción TukTuk escala con él en vez de quedar pegada al valor de antes del ajuste. **El actual (línea de abajo, "resultado del último mes") usa la cifra REAL medida** de cada línea, no la misma proporción — para el actual sí hay un dato fiel, no hace falta estimarlo.
+- **Trampa de redondeo encontrada probando el resultado, no en los tests**: `adGoal` ya viene redondeado (`_calcGoalFor`), pero `adGoal × fracción` no — sin redondear la porción ANTES de restar, la tarjeta mostraba "2.414,64 conductores". Fix: redondear `adTkGoal`/`shTkGoal`/`nrTkGoal` primero, Taxi = entero − entero.
+- **"Si es que tiene" aplica ciudad por ciudad, no solo partner por partner**: una ciudad 100% TukTuk no aparece en la tabla Taxi (y viceversa) — una fila en cero es ruido que el partner tendría que descartar a ojo.
+- **Ruso agregado a la tarjeta compartible** (antes solo ES/EN/ES-EN): `CALC_EXPORT_STR` pasa a `{es,en,ru}`, `_calcLab`/`_calcMonthLabel`/`_calcExportLegend` con rama rusa explícita (cae a inglés ante un hueco, nunca a español — mismo criterio que `P2T` del deck). RU nunca se combina con nada (cirílico + otro alfabeto en la misma línea es ilegible); ES/EN conservan su combo bilingüe de siempre. Verificado en pantalla con RUTA SUR: "Цель Такси" / "Цель TukTuk" / "Активные водители", números idénticos a la versión en español.
+- Verificado que Taxi+TukTuk+Fleet conviven sin pisarse (ANDINA MOVILIDAD, que tiene las tres líneas) y que el split cuadra exacto contra el total ya verificado del reparto (2.415 + 1.198 = 3.613).
+
 ### Sesión Septiembre 2026 (cont.) — Las 3 fricciones restantes de la Calculadora
 
 - **Preselección de KAM (`STATE.myKam`)**: viaja en el MISMO JWT que el rol —`app_metadata.kam`—, sin tabla nueva ni RPC extra (mismo mecanismo que `role`, confirmado empíricamente contra el Supabase local que `updateUserById` hace MERGE de `app_metadata`, no reemplazo: setear `kam` no pisa `role`). Asignación por SQL, mismo patrón que "Promover otro admin" (ver Comandos comunes) — case-sensitive contra `partners.kam`. Un admin sin `kam` declarado sigue viendo "Todos los KAMs", sin cambios.

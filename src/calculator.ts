@@ -1295,6 +1295,13 @@ export function calcSetSaveMode(mode) {
 // ── Vista compartible: i18n ES/EN + crecimiento vs último mes ─────────────────
 export const CALC_MES_EN = ["January","February","March","April","May","June",
   "July","August","September","October","November","December"];
+// El ruso NO cae a español ante un mes faltante (no debería pasar nunca, los 12
+// están completos) — cae a inglés, igual que el resto de la tarjeta: un texto
+// en español dentro de una tarjeta rusa se lee como un error de datos, uno en
+// inglés se lee como un idioma puente aceptable. Mismo criterio que P2T en
+// presentacion2.ts.
+export const CALC_MES_RU = ["Январь","Февраль","Март","Апрель","Май","Июнь",
+  "Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
 export function _calcMonthLabel(iso, lang) {
   if (!iso || !/^\d{4}-\d{2}$/.test(iso)) return "";
   const [y, mm] = iso.split("-").map(Number);
@@ -1303,32 +1310,48 @@ export function _calcMonthLabel(iso, lang) {
   const en  = CALC_MES_EN[mm - 1] || "";
   if (lang === "es") return `${es} ${y}`;
   if (lang === "en") return `${en} ${y}`;
+  if (lang === "ru") return `${CALC_MES_RU[mm - 1] || en} ${y}`;
   return es === en ? `${es} ${y}` : `${es} ${y} / ${en} ${y}`;
 }
 
-// Etiquetas de la tarjeta. lang: "es" | "en" | "es-en" (bilingüe → une con " / ").
+// Etiquetas de la tarjeta. lang: "es" | "en" | "ru" | "es-en" (bilingüe → une
+// con " / "; el ruso nunca se combina, siempre va solo — mezclar cirílico con
+// otro alfabeto en la misma línea es ilegible, a diferencia de ES/EN que
+// comparten alfabeto).
 export const CALC_EXPORT_STR = {
-  proposal:   { es: "Metas Yango — Propuesta", en: "Yango Goals — Proposal" },
-  city:       { es: "Ciudad", en: "City" },
-  ad:         { es: "Active Drivers", en: "Active Drivers" },
-  sh:         { es: "Supply Hours", en: "Supply Hours" },
-  nr:         { es: "N+R", en: "N+R" },
-  cars:       { es: "Brandeados", en: "Branded" },
-  shcar:      { es: "SH/Auto", en: "SH/Car" },
-  accept:     { es: "Aceptación", en: "Acceptance" },
-  util:       { es: "Utilización", en: "Utilization" },
-  fleetKpi:   { es: "Fleet · KPIs de calidad", en: "Fleet · quality KPIs" },
-  newBadge:   { es: "nuevo", en: "new" },
-  generated:  { es: "Propuesta generada", en: "Proposal generated" },
-  legendGoal: { es: "Número grande = meta propuesta", en: "Large number = proposed goal" },
-  legendLast: { es: "debajo = resultado del último mes y crecimiento pedido",
-                en: "below = last month result and requested growth" }
+  proposal:    { es: "Metas Yango — Propuesta", en: "Yango Goals — Proposal", ru: "Цели Yango — Предложение" },
+  city:        { es: "Ciudad", en: "City", ru: "Город" },
+  ad:          { es: "Active Drivers", en: "Active Drivers", ru: "Активные водители" },
+  sh:          { es: "Supply Hours", en: "Supply Hours", ru: "Часы на линии" },
+  nr:          { es: "N+R", en: "N+R", ru: "Новые+реактив." },
+  cars:        { es: "Brandeados", en: "Branded", ru: "Брендированные" },
+  shcar:       { es: "SH/Auto", en: "SH/Car", ru: "Часы/авто" },
+  accept:      { es: "Aceptación", en: "Acceptance", ru: "Принятие заказов" },
+  util:        { es: "Utilización", en: "Utilization", ru: "Утилизация" },
+  // Los tres títulos de bloque comparten estructura ("Meta <línea>") a propósito:
+  // son lo primero que el partner lee de cada tabla, y tienen que dejar clara la
+  // línea de negocio ANTES de cualquier número — es la razón de ser de este pedido
+  // (separar Taxi/TukTuk/Fleet en vez de un combinado que hay que desarmar a mano).
+  taxiTitle:   { es: "Meta Taxi", en: "Taxi Goal", ru: "Цель Такси" },
+  tuktukTitle: { es: "Meta TukTuk", en: "TukTuk Goal", ru: "Цель TukTuk" },
+  // Combinado sigue existiendo para el KAM que TODAVÍA no declaró el % de PnL
+  // (ver splitActivo en _calcSec5_exportPartner) — sin split no hay de dónde
+  // sacar dos números fieles, así que se mantiene el título que ya tenía.
+  combinedTitle: { es: "Meta Taxi + TukTuk", en: "Taxi + TukTuk Goal", ru: "Цель Такси + TukTuk" },
+  fleetKpi:    { es: "Meta Fleet · KPIs de calidad", en: "Fleet Goal · quality KPIs", ru: "Цель Fleet · KPI качества" },
+  newBadge:    { es: "nuevo", en: "new", ru: "новое" },
+  generated:   { es: "Propuesta generada", en: "Proposal generated", ru: "Предложение создано" },
+  legendGoal:  { es: "Número grande = meta propuesta", en: "Large number = proposed goal", ru: "Крупное число = предложенная цель" },
+  legendLast:  { es: "debajo = resultado del último mes y crecimiento pedido",
+                 en: "below = last month result and requested growth",
+                 ru: "ниже = результат прошлого месяца и запрошенный рост" }
 };
 export function _calcLab(key, lang) {
   const s = CALC_EXPORT_STR[key];
   if (!s) return key;
   if (lang === "es") return s.es;
   if (lang === "en") return s.en;
+  if (lang === "ru") return s.ru || s.en;
   return s.es === s.en ? s.es : `${s.es} / ${s.en}`;
 }
 
@@ -1364,6 +1387,7 @@ export function _calcExportLegend(lang) {
   const style = "margin-top:10px;font-size:.62rem;color:#9ca3af;line-height:1.5";
   if (lang === "es") return `<div style="${style}">${line("es")}</div>`;
   if (lang === "en") return `<div style="${style}">${line("en")}</div>`;
+  if (lang === "ru") return `<div style="${style}">${line("ru")}</div>`;
   return `<div style="${style}">${line("es")}<br>${line("en")}</div>`;
 }
 
@@ -1392,9 +1416,28 @@ export function _calcSec5_exportPartner(agg, totals, lastMonth) {
 
   const editVal = (e, k) => CALC_STATE.edits[`${e.partner}|||${e.city}|||${k}`];
   const _th = t => `<th style="text-align:${t.a || "right"};padding:8px 12px;font-size:.74rem">${t.h}</th>`;
+  const _tabla = (titulo, filas) => `
+    <div class="agy-style-158">${titulo}</div>
+    <table class="agy-style-159">
+      <thead><tr class="agy-style-160">${[{h:_calcLab("city",lang),a:"left"},{h:_calcLab("ad",lang)},{h:_calcLab("sh",lang)},{h:_calcLab("nr",lang)}].map(_th).join("")}</tr></thead>
+      <tbody>${filas}</tbody>
+    </table>`;
 
-  // Bloque Taxi (AD/SH/N+R con crecimiento vs último mes)
-  const taxiBlock = taxiItems.length ? (() => {
+  // ¿Hay una porción TukTuk REAL para separar? Solo cuando el KAM declaró el %
+  // de PnL (repartoExp !== null, ver _calcRepartoDe): ahí SÍ hay dos números
+  // fieles que mostrar. Sin declarar, cualquier separación sería una estimación
+  // inventada para la tarjeta que ni siquiera coincide con lo que se guardaría
+  // en `meta_tk_*` (NULL sin declarar) — mejor mostrar el combinado de siempre
+  // antes que un número que no está respaldado por ningún lado.
+  const splitActivo = !!repartoExp;
+
+  let taxiBlock = "", tkBlock = "";
+  if (taxiItems.length && !splitActivo) {
+    // Sin % declarado: comportamiento histórico, un solo combinado.
+    // Desde ago-2026 estas cifras incluyen TukTuk: la etiqueta tiene que
+    // decirlo. Esta tarjeta se le manda al partner — si dice "Taxi" y el
+    // número trae TukTuk adentro, el partner recibe una meta que no puede
+    // reconciliar.
     const rows = taxiItems.map(e => {
       const b = _calcAggMetaBases(e, g, totals, repartoExp);
       const adGoal = _calcGoalFor(e.partner, e.city, "ad", b.ad);
@@ -1403,17 +1446,49 @@ export function _calcSec5_exportPartner(agg, totals, lastMonth) {
       const nr = e.np + e.ns + e.re;
       return `<tr><td class="agy-style-157">${escapeHTML(e.city)}</td>${_calcGoalCell(adGoal, e.ad, fmt, lang)}${_calcGoalCell(shGoal, e.sh, fmtSmart, lang)}${_calcGoalCell(nrGoal, nr, fmt, lang)}</tr>`;
     }).join("");
-    const heads = [{h:_calcLab("city",lang),a:"left"},{h:_calcLab("ad",lang)},{h:_calcLab("sh",lang)},{h:_calcLab("nr",lang)}].map(_th).join("");
-    return `
-      <!-- Desde ago-2026 estas cifras incluyen TukTuk: la etiqueta tiene que decirlo.
-           Esta tarjeta se le manda al partner — si dice "Taxi" y el numero trae
-           TukTuk adentro, el partner recibe una meta que no puede reconciliar. -->
-      <div class="agy-style-158">🚕 Taxi + 🛺 TukTuk</div>
-      <table class="agy-style-159">
-        <thead><tr class="agy-style-160">${heads}</tr></thead>
-        <tbody>${rows}</tbody>
-      </table>`;
-  })() : "";
+    taxiBlock = _tabla(`🚕 ${_calcLab("combinedTitle", lang)}`, rows);
+  } else if (taxiItems.length) {
+    // Con % declarado: DOS tablas fieles, no una estimación. El goal se separa
+    // en la MISMA proporción que calculó el carve-out (repartoLinea.ts) — así
+    // si el KAM ajusta a mano el total en la tabla de distribución, la parte
+    // TukTuk escala con él en vez de quedar pegada al número de antes del
+    // ajuste. El actual (línea de abajo, "resultado del último mes") usa la
+    // cifra REAL de cada línea — no una proporción — porque para eso sí hay un
+    // dato fiel: cuánto hizo TukTuk el mes pasado se mide, no se estima.
+    const filasTaxi = [], filasTk = [];
+    taxiItems.forEach(e => {
+      const b = _calcAggMetaBases(e, g, totals, repartoExp);
+      const adGoal = _calcGoalFor(e.partner, e.city, "ad", b.ad);
+      const shGoal = _calcGoalFor(e.partner, e.city, "sh", b.sh);
+      const nrGoal = _calcGoalFor(e.partner, e.city, "nr", b.nr);
+      const nr = e.np + e.ns + e.re;
+
+      const fAd = b.ad > 0 ? b.adTk / b.ad : 0;
+      const fSh = b.sh > 0 ? b.shTk / b.sh : 0;
+      const fNr = b.nr > 0 ? b.nrTk / b.nr : 0;
+      // Redondeado ACÁ, no después: adGoal/shGoal/nrGoal ya son enteros
+      // (_calcGoalFor los redondea), pero multiplicarlos por una fracción no lo
+      // es — sin este redondeo la tarjeta mostraba "2.414,64 conductores" en
+      // vez de un entero, en la fila que sí se partió.
+      const adTkGoal = Math.round(adGoal * fAd), shTkGoal = Math.round(shGoal * fSh), nrTkGoal = Math.round(nrGoal * fNr);
+      const adTaxiGoal = adGoal - adTkGoal, shTaxiGoal = shGoal - shTkGoal, nrTaxiGoal = nrGoal - nrTkGoal;
+
+      const adTkAct = e.adTk || 0, shTkAct = e.shTk || 0, nrTkAct = e.nrTk || 0;
+      const adTaxiAct = e.ad - adTkAct, shTaxiAct = e.sh - shTkAct, nrTaxiAct = nr - nrTkAct;
+
+      // "Si es que tiene": una ciudad 100% TukTuk no aparece en la tabla Taxi
+      // (y viceversa) — una fila en 0 no es información, es ruido que el
+      // partner tiene que descartar a ojo.
+      if (adTaxiGoal > 0 || adTaxiAct > 0 || shTaxiGoal > 0 || shTaxiAct > 0 || nrTaxiGoal > 0 || nrTaxiAct > 0) {
+        filasTaxi.push(`<tr><td class="agy-style-157">${escapeHTML(e.city)}</td>${_calcGoalCell(adTaxiGoal, adTaxiAct, fmt, lang)}${_calcGoalCell(shTaxiGoal, shTaxiAct, fmtSmart, lang)}${_calcGoalCell(nrTaxiGoal, nrTaxiAct, fmt, lang)}</tr>`);
+      }
+      if (adTkGoal > 0 || adTkAct > 0 || shTkGoal > 0 || shTkAct > 0 || nrTkGoal > 0 || nrTkAct > 0) {
+        filasTk.push(`<tr><td class="agy-style-157">${escapeHTML(e.city)}</td>${_calcGoalCell(adTkGoal, adTkAct, fmt, lang)}${_calcGoalCell(shTkGoal, shTkAct, fmtSmart, lang)}${_calcGoalCell(nrTkGoal, nrTkAct, fmt, lang)}</tr>`);
+      }
+    });
+    if (filasTaxi.length) taxiBlock = _tabla(`🚕 ${_calcLab("taxiTitle", lang)}`, filasTaxi.join(""));
+    if (filasTk.length)   tkBlock   = _tabla(`🛺 ${_calcLab("tuktukTitle", lang)}`, filasTk.join(""));
+  }
 
   // Bloque Fleet (SH/Auto, Aceptación, Utilización) — SOLO si el partner (o alguna de
   // sus subflotas) está marcado Fleet. Se muestran las 3 KPIs siempre; meta editada en
@@ -1447,14 +1522,22 @@ export function _calcSec5_exportPartner(agg, totals, lastMonth) {
       </table>`;
   })() : "";
 
-  // El bloque TukTuk separado se retiró (ago 2026): esas filas ahora vienen dentro
-  // de `agg`, así que el partner ve UNA sola meta combinada en vez de dos tablas
-  // que había que sumar mentalmente.
-  const hasData  = !!(taxiBlock || fleetBlock);
+  // Bloque TukTuk separado (sep 2026, pedido explícito): vuelve a existir en
+  // paralelo al combinado — se muestra UNO u OTRO según `splitActivo`, nunca
+  // los dos (ver arriba). "Si es que tiene" aplica a las tres líneas por igual:
+  // Fleet ya era condicional (isFleetCard), TukTuk ahora lo es de la misma forma.
+  const hasData  = !!(taxiBlock || tkBlock || fleetBlock);
   const refMonth = _calcMonthLabel(lastMonth || "", lang);
-  const subLabel = { es: "Meta vs último mes", en: "Goal vs last month", "es-en": "Meta vs último mes / Goal vs last month" }[lang];
-  const genDate  = new Date().toLocaleDateString(lang === "en" ? "en-US" : "es-PE");
-  const langBtns = [["es","ES"],["en","EN"],["es-en","ES/EN"]].map(([code, txt]) => {
+  const subLabel = {
+    es: "Meta vs último mes", en: "Goal vs last month", ru: "Цель vs прошлый месяц",
+    "es-en": "Meta vs último mes / Goal vs last month"
+  }[lang] || "Meta vs último mes";
+  const genDate  = new Date().toLocaleDateString(
+    lang === "ru" ? "ru-RU" : lang === "en" ? "en-US" : "es-PE");
+  // RU no se combina con nada (ver el comentario de CALC_EXPORT_STR): cirílico
+  // mezclado con otro alfabeto en la misma línea es ilegible, a diferencia de
+  // ES/EN que comparten alfabeto y sí tienen su combo bilingüe de siempre.
+  const langBtns = [["es","ES"],["en","EN"],["es-en","ES/EN"],["ru","RU"]].map(([code, txt]) => {
     const on = lang === code;
     return `<button data-act="calcSetExportLang" data-code="${escapeHTML(code)}" style="padding:7px 12px;font-size:.74rem;font-weight:700;border:none;cursor:pointer;background:${on?"#10b981":"#fff"};color:${on?"#fff":"#555"}">${txt}</button>`;
   }).join("");
@@ -1490,7 +1573,7 @@ export function _calcSec5_exportPartner(agg, totals, lastMonth) {
             <div class="agy-style-178">${escapeHTML(sel)}</div>
           </div>
         </div>
-        ${taxiBlock}${fleetBlock}
+        ${taxiBlock}${tkBlock}${fleetBlock}
         ${hasData ? _calcExportLegend(lang) : `<div class="agy-style-156">Sin datos para este partner.</div>`}
         <div class="agy-style-179">
           ${_calcLab("generated", lang)}: ${genDate}
