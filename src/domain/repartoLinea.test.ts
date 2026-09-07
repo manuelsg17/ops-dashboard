@@ -160,6 +160,20 @@ describe("splitPorFraccion — la mitad 'mostrar' del carve-out", () => {
     expect(r.principal + r.secundario).toBe(3613);
   });
 
+  it("CASO REAL sep 2026: el desglose NUNCA puede superar al total en la BD", () => {
+    // El bug que esto fija: `_calcBuildMetaRows` partía b.adTk (el valor CRUDO
+    // del reparto, 573) en vez del total YA AJUSTADO a mano (371, un edit de
+    // una sesión anterior con una meta global menor). Se guardó
+    // meta_tk_ad=573 > meta_active_drivers=371 en la base real — justo lo que
+    // domain/metasGuard existe para evitar. La fracción de una unidad 100%
+    // TukTuk es 1.0 (fAd = b.adTk/b.ad = 573/573); partir el total EDITADO por
+    // esa fracción tiene que dar el total editado, no el valor viejo.
+    const r = splitPorFraccion(371, 1.0);
+    expect(r.secundario).toBe(371);
+    expect(r.secundario).toBeLessThanOrEqual(371);
+    expect(r.principal).toBe(0);
+  });
+
   it("principal + secundario === total, SIEMPRE — la invariante que importa", () => {
     // No "aproximadamente": la tarjeta de un partner con 3 líneas de negocio
     // tiene que sumar exacto o el KAM no puede reconciliarla contra la meta

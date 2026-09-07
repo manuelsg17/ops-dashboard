@@ -14,6 +14,17 @@ Dashboard para KAMs (partner performance): modulos **TypeScript** bundleados con
 
 ## Estado actual
 
+### Sesión Septiembre 2026 (cont.) — Bug real: meta_tk_* podía superar a la meta paraguas al guardar
+
+Encontrado en un pase de auditoría propio (no lo pidió el usuario para este caso puntual, pero calzaba con la rutina: "probar como KAM real, cazar bugs"), reproduciendo un escenario legítimo: un KAM ajusta el total de una meta a mano en una sesión, y en una sesión POSTERIOR cambia la meta global sin resetear. Resultado en una unidad 100% TukTuk: `meta_active_drivers=371` (el ajuste manual viejo) pero `meta_tk_ad=573` (el desglose recién calculado, sin pasar por ese ajuste) — **el desglose superaba al total en la base real**, justo el dato que `domain/metasGuard.ts` existe para evitar.
+
+**Causa raíz**: dos caminos distintos calculaban el mismo desglose con bases distintas. La tarjeta del partner (`_calcSec5_exportPartner`) partía el `adGoal` YA RESUELTO (con el `_calcGoalFor` que respeta un edit manual). `_calcBuildMetaRows` (lo que realmente se guarda en BD) partía `b.adTk` directo — el valor crudo del reparto, ignorando cualquier ajuste manual del total.
+
+- **Fix**: `domain/repartoLinea.ts#splitPorFraccion(total, fraccion)` — la mitad "mostrar" del carve-out (contraparte de `repartirPorLinea`, que es la mitad "repartir"). Redondea el SECUNDARIO (TukTuk) primero y resta para el PRINCIPAL, nunca al revés — extraído porque la tarjeta ya tenía este bug de redondeo una vez ("2.414,64 conductores") y la fórmula estaba duplicada tres veces sin tests. La invariante `principal + secundario === total` y `secundario <= total` sale gratis por construcción (7 tests). El fix de la base fue una línea, reusando esa función — la inversión de sacar la lógica a `domain/` ya se pagó sola.
+- **De paso**: el CSV de la Calculadora (`calcExportExcel`) no exportaba `META TK AD/N+R/SH`, aunque `uploadMetas` ya sabía leerlas (headers opcionales, de una sesión anterior). Bajar el CSV y volver a subirlo en Configuración → Metas perdía el % declarado en silencio. Agregado.
+- **Verificado**: reproducido el escenario exacto (edit manual + meta global nueva) contra la base local, confirmado `tk_ad <= ad` tras el fix; barrido de 9 combinaciones (3 KAMs × 3 escenarios de %) sin la invariante rota.
+- **Pendiente, señalado y NO resuelto** (decisión de producto, no bug): si un KAM declara %, guarda, y LUEGO des-declara (% a 0) y vuelve a guardar, el `meta_tk_*` VIEJO queda en la BD sin borrarse — el merge `{...ex, ...r}` de `calcSaveMetas` rellena desde lo existente cuando la fila nueva no toca esas columnas, a propósito desde antes del carve-out (preservar histórico). Con el carve-out activo esto puede dejar un desglose desalineado del % actual. No se tocó porque revierte una decisión ya tomada con una razón válida.
+
 ### Sesión Septiembre 2026 (cont.) — Tarjeta compartible: Taxi/TukTuk separados + ruso
 
 **Pedido**: en la tarjeta que se le manda al partner, TukTuk vuelve a ser una fila separada ("Meta Taxi" / "Meta TukTuk" / "Meta Fleet si es que tiene") — se había combinado en ago-2026 porque en ese momento no existía forma de partir el total sin inventar un número. El carve-out de esta misma sesión (`_calcRepartoDe`) ahora sí tiene una porción TukTuk fiel por partner-ciudad, así que separar dejó de requerir una estimación.
