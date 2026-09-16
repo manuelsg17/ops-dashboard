@@ -654,9 +654,14 @@ export async function segSave() {
       const { error } = await sb.from("seguimiento").insert(toInsert);
       if (error) throw error;
     }
-    await loadFromSupabase();
+    const refrescoOk = await loadFromSupabase();
     _segLoadDraft(partner);
-    showBanner(true, `Seguimiento de ${partner} guardado (${rows.length} tarea${rows.length === 1 ? "" : "s"})`);
+    // Mismo criterio que calcSaveMetas: el guardado ya está confirmado, pero si
+    // el refresco falló hay que decirlo — un banner verde sobre una pantalla sin
+    // los cambios invita a guardar de nuevo sin necesidad.
+    showBanner(refrescoOk, refrescoOk
+      ? `Seguimiento de ${partner} guardado (${rows.length} tarea${rows.length === 1 ? "" : "s"})`
+      : `Seguimiento de ${partner} GUARDADO en la base de datos (${rows.length} tarea${rows.length === 1 ? "" : "s"}), pero no se pudo refrescar la pantalla. Recarga la página.`);
     renderSeguimiento();
   } catch (err) {
     const msg = (err && err.message) || String(err);

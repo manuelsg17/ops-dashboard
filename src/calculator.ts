@@ -2040,13 +2040,20 @@ export async function calcSaveMetas() {
     const { error } = await _conReintento(() =>
       sb.from("metas").upsert(payload, { onConflict: "clid,city,mes" }));
     if (error) throw error;
-    await loadFromSupabase();
+    const refrescoOk = await loadFromSupabase();
     // Forzar la re-lectura de lo guardado: si no, `saved` queda con el estado
     // ANTERIOR y la próxima comparación "¿cambió?" daría cambios fantasma.
     CALC_STATE.savedKey = "";
-    showBanner(true, soloCambios
-      ? `${payload.length} meta(s) actualizadas · ${CALC_STATE.kam} · ${mesName} ${mesYear}`
-      : `Metas de ${CALC_STATE.kam} guardadas para ${mesName} ${mesYear} (${payload.length} filas)`);
+    // El upsert YA se confirmó arriba, así que el guardado está bien pase lo que
+    // pase acá. Si el refresco falló, decirlo en vez de pintar el verde de
+    // siempre: con el banner verde sobre una pantalla que no muestra las metas,
+    // lo razonable es concluir "no se guardó" y volver a guardar — que es
+    // justamente lo que pasó (reporte de Manuel, 15-sep-2026).
+    showBanner(refrescoOk, refrescoOk
+      ? (soloCambios
+        ? `${payload.length} meta(s) actualizadas · ${CALC_STATE.kam} · ${mesName} ${mesYear}`
+        : `Metas de ${CALC_STATE.kam} guardadas para ${mesName} ${mesYear} (${payload.length} filas)`)
+      : `Metas GUARDADAS en la base de datos (${payload.length} filas · ${mesName} ${mesYear}), pero no se pudo refrescar la pantalla. Recarga la página para verlas — no vuelvas a guardar.`);
     renderCalculator();
     if (STATE.curTab === "metas" && typeof renderMetas === "function") renderMetas();
   } catch (err) {
@@ -2109,9 +2116,11 @@ export async function calcDeleteMetasKam() {
     if (mesYear != null) q = q.eq("mes_year", mesYear);
     const { error } = await _conReintento(() => q);
     if (error) throw error;
-    await loadFromSupabase();
+    const refrescoOk = await loadFromSupabase();
     CALC_STATE.savedKey = "";   // re-leer lo guardado (ahora vacío para este KAM)
-    showBanner(true, `Metas de ${CALC_STATE.kam} eliminadas para ${mesName} ${mesYear} (${afectadas.length} filas)`);
+    showBanner(refrescoOk, refrescoOk
+      ? `Metas de ${CALC_STATE.kam} eliminadas para ${mesName} ${mesYear} (${afectadas.length} filas)`
+      : `Metas ELIMINADAS de la base de datos (${afectadas.length} filas · ${mesName} ${mesYear}), pero no se pudo refrescar la pantalla. Recarga la página.`);
     renderCalculator();
     if (STATE.curTab === "metas" && typeof renderMetas === "function") renderMetas();
   } catch (err) {

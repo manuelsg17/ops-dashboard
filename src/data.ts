@@ -499,6 +499,39 @@ async function _pgFetch(table, query, extraHeaders = {}) {
   return res.json();
 }
 
+// Sentinel para distinguir "la tabla está vacía" de "la petición falló". Nació
+// del bug real (sep-2026): metas/proyectos/seguimiento se pedían con
+// `.catch(() => [])` — un timeout transitorio (compiten por conexión con las
+// otras 6 peticiones de loadFromSupabase, justo lo más probable AL TOQUE de
+// guardar metas, con la BD bajo más carga que de costumbre) vaciaba
+// STATE.metasData en SILENCIO aunque el guardado en BD hubiera salido bien: el
+// KAM guardaba, la Calculadora/Metas/Presentación se quedaban sin nada que
+// mostrar, y parecía que el guardado no había servido. Ver
+// _applyMetasProyectosSeguimiento, que usa este sentinel para NO pisar los
+// datos buenos que ya había en memoria.
+const _FETCH_FAILED = Symbol("fetchFailed");
+
+// Un reintento antes de rendirse — y sin disfrazar un fallo de "tabla vacía".
+//
+// CON ESPERA, NO AL INSTANTE: la causa más probable del fallo es contención
+// (estas 3 peticiones compiten con las otras 4 de la misma llamada, y el caso
+// que destapó el bug es justo después de un upsert grande de metas). Reintentar
+// en el mismo instante cae en el mismo pozo que acaba de fallar. Los 900ms son
+// los mismos que ya usaba _conReintento en calculator.ts, que nació del mismo
+// tipo de incidente.
+async function _pgFetchConReintento(table, query) {
+  try { return await _pgFetch(table, query); }
+  catch (e1) {
+    try {
+      await new Promise(r => setTimeout(r, 900));
+      return await _pgFetch(table, query);
+    } catch (e2) {
+      console.error(`Error al recargar ${table}:`, e2);
+      return _FETCH_FAILED;
+    }
+  }
+}
+
 // ── PAGINACIÓN PARALELA ───────────────────────────────────────────────────────
 // Descarga todas las páginas de una tabla en paralelo (sin esperar página a
 // página). `opts.gte` = { col, value } aplica un filtro de rango EN EL SERVIDOR
@@ -667,44 +700,62 @@ export function dropLegacyAggregateRows(rows) {
 // junto a `critical`/`deferred` ahí). Requiere CLID_MAP/KAM_MAP/flotasMap ya
 // listos (el caller garantiza el orden — ver `deferred.then(...)`).
 function _applyMetasProyectosSeguimiento(metas, proyectos, seguimiento) {
-  STATE.metasData = (metas || []).map(m => ({
-    // `clid` NO se copiaba (bug encontrado en la auditoría de ago 2026): sin
-    // él, el applyFlotasOverride de más abajo hacía `map[undefined]` y era un
-    // NO-OP silencioso — las metas de flotas marcadas `activo=false` seguían
-    // sumando al plan aunque su rendimiento SÍ estuviera excluido por ese mismo
-    // override, dejando meta sin fact posible (hunde el % de cumplimiento).
-    clid:    (m.clid || "").trim(),
-    partner: STATE.CLID_MAP[m.clid] || m.partner,
-    kam:     STATE.KAM_MAP[m.clid] || m.kam || "",
-    city:    normCity(m.city),
-    // Normalizar mes a UPPERCASE en cliente: la BD tiene mezcla de "mayo",
-    // "Mayo", "MAYO" por uploads viejos. Sin esto, m.mes !== mesName falla
-    // por casing y los %% de cumplimiento salen inflados/incompletos.
-    mes:     (m.mes || "").trim().toUpperCase(),
-    mYear:   m.mes_year != null ? +m.mes_year : null,
-    mA:      +m.meta_active_drivers,
-    mNR:     +m.meta_nr,
-    mH:      +m.meta_supply_hours,
-    // Fleet + TukTuk (nullable): NULL = el partner no tiene esa línea. Se
-    // conserva null (no 0) para distinguir "sin meta" de "meta cero".
-    mSHcar:  m.meta_sh_car      != null ? +m.meta_sh_car      : null,
-    mAcc:    m.meta_acceptance  != null ? +m.meta_acceptance  : null,
-    mUtil:   m.meta_utilization != null ? +m.meta_utilization : null,
-    mtkAD:   m.meta_tk_ad       != null ? +m.meta_tk_ad       : null,
-    mtkNR:   m.meta_tk_nr       != null ? +m.meta_tk_nr       : null,
-    mtkCars: m.meta_tk_cars     != null ? +m.meta_tk_cars     : null,
-    mtkSH:   m.meta_tk_sh       != null ? +m.meta_tk_sh       : null
-  }));
-  STATE.metasData = applyFlotasOverride(STATE.metasData);
-  STATE.proyectosData = proyectos || [];
-  STATE.seguimientoData = seguimiento || [];
+  let huboFallo = false;
+  if (metas === _FETCH_FAILED) {
+    huboFallo = true;   // conserva STATE.metasData tal cual estaba — ver _FETCH_FAILED
+  } else {
+    STATE.metasData = (metas || []).map(m => ({
+      // `clid` NO se copiaba (bug encontrado en la auditoría de ago 2026): sin
+      // él, el applyFlotasOverride de más abajo hacía `map[undefined]` y era un
+      // NO-OP silencioso — las metas de flotas marcadas `activo=false` seguían
+      // sumando al plan aunque su rendimiento SÍ estuviera excluido por ese mismo
+      // override, dejando meta sin fact posible (hunde el % de cumplimiento).
+      clid:    (m.clid || "").trim(),
+      partner: STATE.CLID_MAP[m.clid] || m.partner,
+      kam:     STATE.KAM_MAP[m.clid] || m.kam || "",
+      city:    normCity(m.city),
+      // Normalizar mes a UPPERCASE en cliente: la BD tiene mezcla de "mayo",
+      // "Mayo", "MAYO" por uploads viejos. Sin esto, m.mes !== mesName falla
+      // por casing y los %% de cumplimiento salen inflados/incompletos.
+      mes:     (m.mes || "").trim().toUpperCase(),
+      mYear:   m.mes_year != null ? +m.mes_year : null,
+      mA:      +m.meta_active_drivers,
+      mNR:     +m.meta_nr,
+      mH:      +m.meta_supply_hours,
+      // Fleet + TukTuk (nullable): NULL = el partner no tiene esa línea. Se
+      // conserva null (no 0) para distinguir "sin meta" de "meta cero".
+      mSHcar:  m.meta_sh_car      != null ? +m.meta_sh_car      : null,
+      mAcc:    m.meta_acceptance  != null ? +m.meta_acceptance  : null,
+      mUtil:   m.meta_utilization != null ? +m.meta_utilization : null,
+      mtkAD:   m.meta_tk_ad       != null ? +m.meta_tk_ad       : null,
+      mtkNR:   m.meta_tk_nr       != null ? +m.meta_tk_nr       : null,
+      mtkCars: m.meta_tk_cars     != null ? +m.meta_tk_cars     : null,
+      mtkSH:   m.meta_tk_sh       != null ? +m.meta_tk_sh       : null
+    }));
+    STATE.metasData = applyFlotasOverride(STATE.metasData);
+  }
+  if (proyectos === _FETCH_FAILED) huboFallo = true;
+  else STATE.proyectosData = proyectos || [];
+  if (seguimiento === _FETCH_FAILED) huboFallo = true;
+  else STATE.seguimientoData = seguimiento || [];
+
+  // Aviso visible en vez de silencio. Redacción NEUTRA a propósito: esta función
+  // corre en TODA carga (arranque incluido), no solo después de guardar — dar
+  // por hecho que hubo un guardado sería mentirle a quien solo abrió la app. El
+  // caller que sí sabe que venía de guardar (calcSaveMetas y compañía) usa el
+  // valor de retorno para decir la frase precisa de SU caso.
+  if (huboFallo) {
+    showBanner(false, "No se pudieron refrescar metas/proyectos/seguimiento (falla de red pasajera). Lo que ves puede estar desactualizado — recarga la página.");
+  }
 
   // Re-render solo si el usuario ya está parado en un tab que depende de esto
   // y no se pintó en el dispatch inmediato de loadFromSupabase (porque estos
   // datos todavía no habían llegado).
-  if (STATE.userRole === "partner") return;   // el portal no usa nada de esto
-  if (STATE.curTab === "metas"       && STATE.rawData.length)                        renderMetas();
-  if (STATE.curTab === "seguimiento" && typeof renderSeguimiento === "function")      renderSeguimiento();
+  if (STATE.userRole !== "partner") {          // el portal no usa nada de esto
+    if (STATE.curTab === "metas"       && STATE.rawData.length)                      renderMetas();
+    if (STATE.curTab === "seguimiento" && typeof renderSeguimiento === "function")   renderSeguimiento();
+  }
+  return !huboFallo;                           // ← lo consume loadFromSupabase
 }
 
 // ── CACHÉ LOCAL: arranque instantáneo (stale-while-revalidate) ───────────────
@@ -761,7 +812,14 @@ async function _hydrateFromCache() {
 }
 
 // ── LOAD FROM SUPABASE ────────────────────────────────────────────────────────
+// Devuelve TRUE si la carga quedó completa, FALSE si algo no se pudo refrescar
+// (ver _FETCH_FAILED). Quien llama después de ESCRIBIR algo (calcSaveMetas,
+// seguimiento) tiene que mirar este valor antes de cantar victoria: el guardado
+// puede haber salido perfecto y el refresco de la pantalla no, y pintar un
+// banner verde ahí deja al usuario mirando una pantalla sin sus datos y sin
+// ninguna explicación — que es exactamente el bug que reportó Manuel.
 export async function loadFromSupabase(opts = {}) {
+  let refrescoCompleto = true;
   // El caché solo aplica al arranque limpio. Un re-load tras un upload o un
   // ensanche de ventana (opts.from) DEBE ir a la red sí o sí — mostrarle a
   // alguien el snapshot viejo justo después de subir un Excel sería el peor
@@ -842,9 +900,9 @@ export async function loadFromSupabase(opts = {}) {
     // importar si `critical` ya terminó — condición de carrera real si
     // metas/proyectos/seguimiento resuelven más rápido que partners/rendimiento.
     const deferred = Promise.all([
-      _pgFetch("metas", "?select=*").catch(() => []),
-      _pgFetch("proyectos", "?select=*&order=semana.desc").catch(() => []),
-      _pgFetch("seguimiento", "?select=*&order=partner.asc,sort_order.asc,start_date.asc").catch(() => [])
+      _pgFetchConReintento("metas", "?select=*"),
+      _pgFetchConReintento("proyectos", "?select=*&order=semana.desc"),
+      _pgFetchConReintento("seguimiento", "?select=*&order=partner.asc,sort_order.asc,start_date.asc")
     ]);
     const [partners, rend, frooms, flotas] = await critical;
     _applyCoreData(partners, rend, frooms, flotas, { resetLine: !_paintedFromCache });
@@ -864,22 +922,31 @@ export async function loadFromSupabase(opts = {}) {
     // igual que antes — el ÚNICO cambio real es que Rendimiento ya no espera a
     // estas 3 tablas para poder pintarse.
     const [metas, proyectos, seguimiento] = await deferred;
-    _applyMetasProyectosSeguimiento(metas, proyectos, seguimiento);
+    refrescoCompleto = _applyMetasProyectosSeguimiento(metas, proyectos, seguimiento);
 
     // Guardar el snapshot para el próximo arranque (ver _hydrateFromCache).
     // Fire-and-forget a propósito: si IndexedDB falla o está lleno, la app
     // funciona igual — el caché es una optimización, nunca una dependencia.
-    snapshotSave({
-      periodos: periodosSem, winStart,
-      partners, rend, frooms, flotas, metas, proyectos, seguimiento
-    });
+    // Si metas/proyectos/seguimiento falló (ver _FETCH_FAILED arriba), NO se
+    // persiste nada: un snapshot con esa tabla vacía "de mentira" corrompería
+    // también el PRÓXIMO arranque instantáneo (_hydrateFromCache pinta desde
+    // acá, no desde la red) — mejor perder el arranque rápido de una vez que
+    // encadenar el bug a la siguiente sesión.
+    if (refrescoCompleto) {
+      snapshotSave({
+        periodos: periodosSem, winStart,
+        partners, rend, frooms, flotas, metas, proyectos, seguimiento
+      });
+    }
 
   } catch (err) {
+    refrescoCompleto = false;
     showBanner(false, "Error al cargar: " + err.message);
     console.error(err);
   }
   showLoad(false);
   _setRefreshing(false);
+  return refrescoCompleto;
 }
 
 // Construye TODO el STATE derivado a partir de las 4 respuestas crudas del
