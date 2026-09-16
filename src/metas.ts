@@ -459,6 +459,21 @@ export function _metasCoberturaAviso(cob, mesName) {
     </div>
   </div>`;
 }
+// Aviso de cuentas con actividad y SIN meta cargada. Su actual sí se cuenta en
+// los agregados (para que el total cuadre con Rendimiento), pero no aportan
+// meta — así que el % de cumplimiento queda algo inflado y hay que decirlo:
+// ese % es justo lo que se presenta.
+export function _metasSinMetaAviso(n, mesName) {
+  if (!n) return "";
+  return `<div class="metas-escala-aviso">
+    <span class="mea-ico">📋</span>
+    <div>
+      <strong>${escapeHTML(t("metas.sinMeta.titulo"))}</strong>
+      ${t("metas.sinMeta.cuerpo", { n, mes: escapeHTML(mesLabel(mesName)) })}
+      <span class="mea-hint">${escapeHTML(t("metas.sinMeta.hint"))}</span>
+    </div>
+  </div>`;
+}
 export function _metasSinPeriodosHTML(mesName) {
   return t("metas.cobertura.sinPeriodos", { mes: escapeHTML(mesLabel(mesName)) });
 }
@@ -526,6 +541,29 @@ function _renderMetasLineView(cfg) {
   // actual si existe. Se indexa por (partner, ciudad) — la misma granularidad
   // en la que se cargan las metas.
   const units = metaRows.map(m => ({ m, a: act.get(`${m.partner}|||${m.city}`) || null }));
+
+  // …Y TAMBIÉN las cuentas que tienen ACTIVIDAD pero NINGUNA meta cargada este
+  // mes. Antes quedaban fuera por completo, y por eso el "actual" de Metas no
+  // cuadraba con el de Rendimiento (reportado por Manuel, sep-2026: 27.200 acá
+  // vs 27.324 allá, −124 conductores; N+R 5.608 vs 5.632). Rendimiento parte de
+  // la actividad real, Metas partía del plan: dos universos distintos mostrando
+  // cifras que se leen como si fueran la misma.
+  //
+  // `m` sintético (sin ninguna m* de meta) en vez de `m: null`: así las cuatro
+  // secciones de abajo —que agrupan por m.city / m.kam y pintan m.partner— siguen
+  // funcionando sin tocarlas, y `_metasAggKpi` ya descarta las metas con su
+  // `mv != null` (un campo ausente da undefined, que no pasa ese filtro).
+  // Resultado: SUMAN al actual, NO suman a la meta.
+  const conMeta = new Set(metaRows.map(m => `${m.partner}|||${m.city}`));
+  act.forEach((a, key) => {
+    if (conMeta.has(key)) return;
+    const sep     = key.lastIndexOf("|||");
+    const partner = key.slice(0, sep);
+    const city    = key.slice(sep + 3);
+    units.push({ m: { partner, city, kam: getKAMForPartner(partner) || SIN_KAM, _sinMeta: true }, a });
+  });
+  const nSinMeta = units.length - metaRows.length;
+  html += _metasSinMetaAviso(nSinMeta, mesName);
 
   // ── 1. General (Perú) ─────────────────────────────────────────────────────
   html += `<div class="section"><div class="metric-row agy-style-226">`;
@@ -618,7 +656,12 @@ function _renderMetasLineView(cfg) {
     kpis.forEach(k => {
       const mv = k.meta(m);
       const av = a ? k.act(a) : null;
-      rows += _metaLineRow(k.label, mv != null ? av : null, mv, k.fmtFn, k.note);
+      // El `mv != null ? av : null` de siempre evita mostrar el actual de un KPI
+      // que este partner no tiene en esta línea. Para las cuentas SIN NINGUNA
+      // meta (las que se suman arriba) hay que exceptuarlo: si no, su tarjeta
+      // saldría vacía y no habría forma de ver a quién le falta cargar meta.
+      // _metaLineRow ya sabe pintar ese caso ("1.234 · sin meta").
+      rows += _metaLineRow(k.label, (m._sinMeta || mv != null) ? av : null, mv, k.fmtFn, k.note);
     });
     html += `
       <div class="pcard" style="border-left-color:${col}">
@@ -632,7 +675,7 @@ function _renderMetasLineView(cfg) {
           ${escapeHTML(m.kam)} &nbsp;·&nbsp; ${escapeHTML(m.city)}
         </div>
         ${rows}
-        ${cfg.partnerFoot ? cfg.partnerFoot(m, a) : ""}
+        ${cfg.partnerFoot && !m._sinMeta ? cfg.partnerFoot(m, a) : ""}
       </div>`;
   });
   html += `</div></div>`;

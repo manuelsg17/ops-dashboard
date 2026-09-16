@@ -332,6 +332,16 @@ export const I18N: Record<string, Record<string, string>> = {
                                    en: "The sidebar date range includes no period of <strong>{mes}</strong>, the month of the selected goal.<br>Widen the range (or change the goal month) to see progress.",
                                    ru: "Диапазон дат не содержит ни одного периода за <strong>{mes}</strong> — месяц выбранной цели.<br>Расширьте диапазон (или смените месяц цели)." },
 
+  "metas.sinMeta.titulo": { es: "Hay cuentas con actividad y sin meta cargada.",
+                            en: "Some accounts have activity but no goal loaded.",
+                            ru: "Есть аккаунты с активностью, но без загруженной цели." },
+  "metas.sinMeta.cuerpo": { es: "<strong>{n}</strong> cuenta(s) de {mes} operaron sin meta cargada. Su actual <strong>SÍ</strong> se cuenta acá (por eso el total cuadra con Rendimiento), pero no suman nada a la meta, así que el <strong>% de cumplimiento queda algo más alto</strong> de lo que sería con todas las metas cargadas.",
+                            en: "<strong>{n}</strong> account(s) in {mes} operated with no goal loaded. Their actual <strong>IS</strong> counted here (so the total matches Performance), but they add nothing to the goal, so the <strong>attainment % reads slightly higher</strong> than it would with every goal loaded.",
+                            ru: "<strong>{n}</strong> аккаунт(ов) за {mes} работали без загруженной цели. Их факт <strong>учитывается</strong> здесь (поэтому итог совпадает с «Результатами»), но они не добавляют ничего к цели, поэтому <strong>% выполнения немного выше</strong> реального." },
+  "metas.sinMeta.hint":   { es: "Se marcan como «sin meta» en las tarjetas de partner de abajo. Cargales la meta del mes en la Calculadora para que el cumplimiento sea exacto.",
+                            en: "They are flagged as “no goal” in the partner cards below. Load their monthly goal in the Calculator for exact attainment.",
+                            ru: "Они помечены как «без цели» в карточках партнёров ниже. Загрузите их цель месяца в Калькуляторе для точного расчёта." },
+
   "cfg.col.logo":      { es: "Logo", en: "Logo", ru: "Логотип" },
   "cfg.logo.subir":    { es: "Subir", en: "Upload", ru: "Загрузить" },
   "cfg.logo.cambiar":  { es: "Cambiar", en: "Replace", ru: "Заменить" },
