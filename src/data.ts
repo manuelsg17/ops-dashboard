@@ -1259,10 +1259,22 @@ async function _fetchFullRendColumns(mode, rows, getSelf) {
     // filas quedarían sin su complemento, en silencio.
     let desde = null;
     for (const r of rows) if (r.date && (desde === null || r.date < desde)) desde = r.date;
-    const extra = await fetchAllPages(tabla, dateCol, {
-      gte: desde ? { col: dateCol, value: desde } : null,
-      columns: cols
-    });
+    // Un reintento con espera antes de rendirse, igual que _pgFetchCritico: un
+    // fallo acá no rompe la vista pero SÍ deforma números (ver el catch abajo),
+    // así que conviene gastar un segundo en no llegar a ese estado.
+    let extra;
+    try {
+      extra = await fetchAllPages(tabla, dateCol, {
+        gte: desde ? { col: dateCol, value: desde } : null,
+        columns: cols
+      });
+    } catch (e1) {
+      await new Promise(r => setTimeout(r, 900));
+      extra = await fetchAllPages(tabla, dateCol, {
+        gte: desde ? { col: dateCol, value: desde } : null,
+        columns: cols
+      });
+    }
     const byKey = new Map();
     (extra || []).forEach(e => {
       byKey.set(
@@ -1283,8 +1295,19 @@ async function _fetchFullRendColumns(mode, rows, getSelf) {
     });
     if (DEBUG) console.log(`[cols] ${mode}: ${aplicadas}/${rows.length} filas completadas`);
   } catch (err) {
-    // Si falla, se deja reintentar: las columnas quedan en null y las vistas que
-    // las usan muestran "—", pero nada se rompe.
+    // Si falla, se deja reintentar (la próxima llamada rehace el fetch) y NO se
+    // bloquea el render: la vista base (AD, trips, horas) es válida sin estas
+    // columnas, así que tumbar la pantalla entera sería desproporcionado.
+    //
+    // PERO SÍ SE AVISA. El comentario que estaba acá decía que las vistas
+    // "muestran —, pero nada se rompe", y eso NO es cierto en general: `fmt()`
+    // hace `(n || 0)`, así que un null se pinta como 0. Peor todavía en los
+    // promedios ponderados del bloque Fleet del deck y de Vista Partner, donde
+    // el numerador suma `(tasa || 0) * trips` contra un denominador que cuenta
+    // TODOS los trips: sin estas columnas la aceptación no sale "—", sale 0% —
+    // un número que parece real. Con DEBUG=false (producción) no quedaba ni
+    // rastro en consola. El aviso existe sobre todo por el deck: exportar un PDF
+    // para el partner en ese estado manda tasas deformadas.
     //
     // OJO: solo limpiar si `_colsFull[mode]` sigue siendo ESTA promesa. Si entre
     // que arrancó este fetch y que falló hubo un resetFullRendColumns() + un
@@ -1293,7 +1316,8 @@ async function _fetchFullRendColumns(mode, rows, getSelf) {
     // lanzaría un fetch duplicado en paralelo. Inofensivo en los datos (merge
     // keyed e idempotente) pero red duplicada.
     if (_colsFull[mode] === getSelf()) _colsFull[mode] = null;
-    if (DEBUG) console.warn("ensureFullRendColumns falló:", err);
+    console.error("ensureFullRendColumns falló:", err);
+    showBanner(false, "Faltan métricas de detalle (aceptación, funnel, ratios de flota): no se pudieron cargar y aparecen en 0. Recarga la página antes de exportar un PDF o un deck.");
   }
 }
 
