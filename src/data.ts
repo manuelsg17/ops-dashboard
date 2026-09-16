@@ -511,24 +511,35 @@ async function _pgFetch(table, query, extraHeaders = {}) {
 // datos buenos que ya había en memoria.
 const _FETCH_FAILED = Symbol("fetchFailed");
 
-// Un reintento antes de rendirse — y sin disfrazar un fallo de "tabla vacía".
+// Un reintento antes de rendirse. CON ESPERA, NO AL INSTANTE: la causa más
+// probable del fallo es contención (estas peticiones compiten entre sí dentro de
+// la misma llamada, y el caso que destapó el bug es justo después de un upsert
+// grande de metas). Reintentar en el mismo instante cae en el mismo pozo que
+// acaba de fallar. Los 900ms son los mismos que ya usaba _conReintento en
+// calculator.ts, que nació del mismo tipo de incidente.
 //
-// CON ESPERA, NO AL INSTANTE: la causa más probable del fallo es contención
-// (estas 3 peticiones compiten con las otras 4 de la misma llamada, y el caso
-// que destapó el bug es justo después de un upsert grande de metas). Reintentar
-// en el mismo instante cae en el mismo pozo que acaba de fallar. Los 900ms son
-// los mismos que ya usaba _conReintento en calculator.ts, que nació del mismo
-// tipo de incidente.
-async function _pgFetchConReintento(table, query) {
+// PROPAGA el error si el reintento también falla: es la variante para las tablas
+// CRÍTICAS (partners/fleetrooms/flotas), donde un vacío falso no degrada la
+// vista sino que la CORROMPE — ver el comentario de `pFleetrooms` en
+// loadFromSupabase. El caller (loadFromSupabase) lo captura, avisa y no pinta.
+async function _pgFetchCritico(table, query) {
   try { return await _pgFetch(table, query); }
   catch (e1) {
-    try {
-      await new Promise(r => setTimeout(r, 900));
-      return await _pgFetch(table, query);
-    } catch (e2) {
-      console.error(`Error al recargar ${table}:`, e2);
-      return _FETCH_FAILED;
-    }
+    await new Promise(r => setTimeout(r, 900));
+    return await _pgFetch(table, query);
+  }
+}
+
+// Variante para las tablas DIFERIDAS (metas/proyectos/seguimiento): mismo
+// reintento, pero nunca lanza — devuelve el sentinel para que el caller conserve
+// lo que ya tenía en memoria en vez de pisarlo con vacío. Acá sí tiene sentido
+// seguir adelante: que no se refresquen las metas no ensucia ningún número de
+// las otras vistas, solo las deja desactualizadas (y se avisa).
+async function _pgFetchConReintento(table, query) {
+  try { return await _pgFetchCritico(table, query); }
+  catch (e) {
+    console.error(`Error al recargar ${table}:`, e);
+    return _FETCH_FAILED;
   }
 }
 
@@ -848,9 +859,26 @@ export async function loadFromSupabase(opts = {}) {
     // se disparan JUNTO con la RPC de períodos en vez de esperarla. Antes el
     // `await fetchAllPeriods` las bloqueaba: ~116ms de RPC + el round-trip a
     // us-east, pagados en serie por tres requests que no los necesitaban.
+    // fleetrooms/flotas son CRÍTICAS aunque parezcan accesorias: definen el
+    // tagging por sub-flota (TukTuk/Fleet/Delivery/Cargo) y los overrides de
+    // nombre/KAM/activo. Tenían `.catch(() => [])` por un motivo que ya no
+    // aplica ("por si la tabla todavía no existe", de cuando eran nuevas), y ese
+    // catch convertía un fallo pasajero en números MAL con banner verde —
+    // medido en local forzando un 503: el tagging pasa de 24 fleetrooms a 0, el
+    // slice Fleet de 21 a 84 filas y el de TukTuk de 28 a 7, y la app igual
+    // decía "Datos cargados". Peor que el bug de metas: ahí faltaban datos a la
+    // vista, acá los números quedan mal y parecen legítimos.
+    //
+    // Un rol SIN permiso sobre estas tablas NO necesita el catch: RLS devuelve
+    // 200 con `[]` (verificado con el rol partner contra el stack local), no un
+    // error. O sea que el catch solo tapaba fallos reales (5xx/red).
+    //
+    // Ahora: reintento y, si falla, se propaga al catch de abajo → banner de
+    // error y NO se aplica nada, que en un re-load deja intacto el tagging bueno
+    // que ya estaba en memoria. Mejor no pintar que pintar mal.
     const pPartners   = _pgFetch("partners", "?select=*");
-    const pFleetrooms = _pgFetch("fleetrooms", "?select=*").catch(() => []);
-    const pFlotas     = _pgFetch("flotas", "?select=*").catch(() => []);
+    const pFleetrooms = _pgFetchCritico("fleetrooms", "?select=*");
+    const pFlotas     = _pgFetchCritico("flotas", "?select=*");
 
     const periodosSem = await fetchAllPeriods("semanal");
     if (periodosSem.length) STATE._allPeriods.semanal = periodosSem;
@@ -980,7 +1008,10 @@ function _applyCoreData(partners, rend, frooms, flotas, opts = {}) {
     STATE._partnerKAM = null;
 
     // Fleetrooms: tagging por sub-flota (keyed by db_id). Ya resuelto en el
-    // Promise.all de arriba (con fallback a [] si la tabla no existe aún).
+    // Promise.all de arriba. Un `[]` que llega acá es un vacío LEGÍTIMO (tabla
+    // sin filas, o rol sin permiso → RLS devuelve 200 []), así que vaciar los
+    // mapas es lo correcto: un fallo de red ya no llega hasta acá, se propaga
+    // antes (ver _pgFetchCritico).
     // Debe procesarse ANTES de construir rawData (usa FLEETROOM_NAME) y antes de
     // los filtros de slicing (rowIsTuktuk/rowExcludedFromTaxi).
     STATE.FLEETROOM_IS_TUKTUK    = {};
