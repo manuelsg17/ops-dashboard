@@ -38,7 +38,7 @@ const isoYM = (dt: Date) => dt.toISOString().slice(0, 7);
  * semanas de este dashboard arrancan LUNES (verificado contra la serie real de
  * `rendimiento`: todos los períodos semanales caen en lunes).
  */
-function lunesDe(dt: Date): Date {
+export function lunesDe(dt: Date): Date {
   const d = new Date(dt.getTime());
   const dow = d.getUTCDay();
   d.setUTCDate(d.getUTCDate() - (dow === 0 ? 6 : dow - 1));

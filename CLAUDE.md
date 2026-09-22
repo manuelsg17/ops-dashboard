@@ -14,6 +14,15 @@ Dashboard para KAMs (partner performance): modulos **TypeScript** bundleados con
 
 ## Estado actual
 
+### Sesión Septiembre 2026 (cont.) — `dashboard_dates` fuera del camino crítico del arranque
+
+**Resuelve el "Pendiente evaluado y no hecho" de agosto 2026** (ver "Velocidad de carga"). Antes: RPC de períodos → `computeWindowStart` → recién ahí el fetch de `rendimiento`, 3 round-trips en serie. Ahora el fetch sale en el acto con un inicio estimado por calendario y la RPC corre en paralelo. Ahorro esperado: ~400 ms en el primer arranque (285-315 ms de red + ~116 ms de servidor). Con caché, ese ahorro va al refresco de fondo.
+- **`src/shared/ventanaCarga.ts` + 16 tests** (puro, UTC): `LOAD_WINDOW` y `computeWindowStart` se movieron acá y `data.ts` los re-exporta (misma API). `inicioVentanaSemanalCalendario(hoy)` = lunes UTC de hoy − 7·(N+1+HOLGURA), con N=6 y `HOLGURA_SEMANAS=2`. `planVentanaSemanal(inicioCal, periodos)` reconcilia cuando llega la RPC.
+- **El invariante (nunca cargar un período de menos) sale de la reconciliación, no de la holgura**: si el inicio real es posterior al del calendario, se recortan las filas sobrantes; si es anterior (ingesta atrasada 3+ semanas o muchos huecos), se pide el complemento `[real, calendario)` apenas llega la RPC, en paralelo con la ventana; si la RPC falla, se pide todo lo anterior al calendario (= la tabla entera, como antes) con `_loadedFrom=null`. La holgura solo evita el complemento en los casos comunes. Tests: cada día de tres tramos de fechas (incluido cruce de año), huecos, semana sin ingestar, borde UTC domingo/lunes, y una simulación de 2000 escenarios al azar contra el camino viejo. Se probó que los tests muerden: con HOLGURA=1 fallan 4.
+- `fetchAllPages` acepta `opts.lt` (cota superior exclusiva, con `append` para no pisar el `gte` de la misma columna). `STATE._loadedFrom` se asigna después de `await critical`, con lo cargado de verdad. `opts.from` conserva el flujo anterior. `lunesDe` de `shared/frescura.ts` pasó a exportarse.
+- **Verificado en local contra el camino viejo reproducido a mano**: mismas 7 semanas, mismas 168 filas crudas, mismo `_loadedFrom` (2026-06-15), sin `unhandledrejection`. Justo se ejercitó la rama del complemento, porque el seed termina en julio. Con la RPC forzada a 503: la tabla entera (17 semanas) y `_loadedFrom=null`, igual que antes.
+- **Costo a vigilar**: metas/proyectos/seguimiento ahora arrancan junto con la RPC en vez de ~400 ms después, así que son ~8 requests simultáneos en el tier free. Los fallos pasajeros ya no son silenciosos (reintento + aviso, ver el fix de los catch), pero si aparecen banners de "no se pudo refrescar" justo al arrancar, empezar por acá. En el caso normal se bajan ~2 semanas de más (~350 filas) que se descartan.
+
 ### Sesión Septiembre 2026 (cont.) — Promedios ponderados de tasas: una fila sin dato ya no diluye
 
 **Resuelve el punto 1 de "Dos cosas señaladas y NO tocadas"** (barrido de catch silenciosos, más abajo). Patrón viejo: `num += (tasa || 0) * peso; den += peso`. Una fila sin la tasa entraba como 0% con todo su peso, así que una tasa real R se mostraba como R·(1−F), con F = fracción del peso sin dato.
@@ -194,7 +203,7 @@ Tres commits: `cd7965d` (login), `9e934ec` (precarga + payload), `1587eb8` (cach
 
 **São Paulo: recomendación RETIRADA.** Con el caché arreglado el arranque pinta en decenas de ms y la red revalida por detrás, así que migrar región solo mejora el primer login en un dispositivo nuevo. No paga un proyecto nuevo + migración manual de hashes de `auth.users`. (Además el plan gratuito no soporta cambio de región.)
 
-**Pendiente evaluado y no hecho**: la RPC `dashboard_dates` sigue en el camino crítico (el fetch de rendimiento espera `winStart`). Se podría derivar del calendario como hace diario y disparar ambas en paralelo — ~285 ms del primer arranque, a cambio de traer algún período de más. Con el caché arreglado no parece pagar el riesgo.
+**~~Pendiente evaluado y no hecho~~ HECHO 22-sep-2026 (ver "`dashboard_dates` fuera del camino crítico")**: la RPC `dashboard_dates` sigue en el camino crítico (el fetch de rendimiento espera `winStart`). Se podría derivar del calendario como hace diario y disparar ambas en paralelo — ~285 ms del primer arranque, a cambio de traer algún período de más. Con el caché arreglado no parece pagar el riesgo.
 
 ### Sesión Agosto 2026 — Entorno local con sesión real (Supabase en Docker)
 

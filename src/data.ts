@@ -19,6 +19,7 @@ import { t } from "./core/i18n";
 import { projectFlow, projectSnapshot, dropDuplicatePeriods } from "./domain/metrics.js";
 import { sliceEscala, normEscala } from "./shared/escala.js";
 import { evaluarFrescura } from "./shared/frescura.js";
+import { LOAD_WINDOW, computeWindowStart, inicioVentanaSemanalCalendario, planVentanaSemanal } from "./shared/ventanaCarga.js";
 import { SIN_KAM } from "./core/config.js";
 
 
@@ -263,11 +264,9 @@ export function txRowExtra(r) {
 // Consolida `m` dentro de `target` (suma counts, ultima-con-valor gana en ratios).
 
 // ── VENTANA DE CARGA (Fase A3: paginación por rango de fechas) ────────────────
-// Cuántos períodos se traen por defecto en cada escala. El objetivo es que el
-// payload quede acotado por la VENTANA y no por el tamaño de la tabla — que
-// crece ~180 filas/semana para siempre. El usuario puede pedir más hacia atrás
-// (el sidebar ofrece TODOS los períodos vía dashboard_dates) y ahí se re-fetchea.
-export const LOAD_WINDOW = { semanal: 6, mensual: 6, diario: 90 };
+// LOAD_WINDOW y computeWindowStart viven en shared/ventanaCarga.ts (puros, con
+// tests contra el calendario); se re-exportan acá para no cambiar la API.
+export { LOAD_WINDOW, computeWindowStart };
 
 // Columna de período por escala (cada tabla la nombra distinto).
 export const DATE_COL = { semanal: "fecha", mensual: "mes", diario: "date" };
@@ -368,20 +367,6 @@ export function renderFrescura() {
   el.title = f.atrasado ? t("estado.frescuraDetalle", { e: f.esperado, d: f.diasDesdeCierre }) : "";
   el.classList.toggle("stale", f.atrasado);
   el.style.display = "";
-}
-
-// Desde qué período cargar datos. Toma los últimos LOAD_WINDOW períodos, pero
-// respeta `wantFrom` si el usuario tenía guardado un rango más viejo (así no se
-// le "corta" su vista al recargar). Siempre suma UN período extra hacia atrás:
-// las comparativas WoW/MoM del primer período de la ventana necesitan el
-// anterior para calcular su badge — sin él, el primer período mostraría "NEW".
-export function computeWindowStart(allPeriods, scale, wantFrom) {
-  if (!allPeriods || !allPeriods.length) return null;
-  const n   = LOAD_WINDOW[scale] || 16;
-  let start = allPeriods[Math.max(0, allPeriods.length - n)];
-  if (wantFrom && wantFrom < start) start = wantFrom;
-  const si = allPeriods.indexOf(start);
-  return si > 0 ? allPeriods[si - 1] : allPeriods[0];
 }
 
 // Ventana wall-clock para mensual/diario — a diferencia de semanal (que usa
@@ -555,11 +540,17 @@ async function _pgFetchConReintento(table, query) {
 // columnas completas aunque el parser solo lee ~35-38 (REND_CORE_COLS +
 // TX_NEW_COLS). Tablas chicas (partners, metas, flotas, conversion_pais) no
 // pasan `columns` y siguen en `select("*")` — no vale la pena auditarlas 1x1.
+// `opts.lt` = { col, value }: cota superior EXCLUSIVA (la usa el complemento de
+// la ventana semanal, ver _fetchRendSemanal). Va con `append`, no `set`: sobre
+// la misma columna que `gte` son dos parámetros repetidos, que PostgREST combina
+// con AND (`fecha=gte.X&fecha=lt.Y`); `set` pisaría el primero.
 export async function fetchAllPages(table, orderCol, opts = {}) {
   const gte = opts.gte;
+  const lt  = opts.lt;
   const cols = opts.columns || "*";
   const params = new URLSearchParams({ select: cols, order: `${orderCol}.asc` });
   if (gte && gte.value) params.set(gte.col, `gte.${gte.value}`);
+  if (lt && lt.value)   params.append(lt.col, `lt.${lt.value}`);
   const query = `?${params.toString()}`;
 
   const PAGE = 1000;
@@ -825,6 +816,58 @@ async function _hydrateFromCache() {
   }
 }
 
+// ── RENDIMIENTO SEMANAL: ventana por calendario + reconciliación con la RPC ──
+// Antes: `await fetchAllPeriods` → computeWindowStart → recién ahí el fetch de
+// rendimiento. La RPC (~116 ms + round-trip Lima→us-east) iba EN SERIE delante
+// de la tabla más pesada del arranque. Ahora el fetch sale en el acto con un
+// inicio estimado por calendario (con holgura) y la RPC corre en paralelo; al
+// llegar, planVentanaSemanal decide si recortar lo que sobró o pedir lo que
+// faltó. En memoria queda EXACTAMENTE lo que dejaba el camino anterior cuando
+// la RPC responde, y lo mismo que antes (tabla entera) cuando falla. Detalle y
+// tests del invariante en shared/ventanaCarga.ts.
+//
+// Devuelve { rows, periodos, loadedFrom } — `loadedFrom` es lo que va a
+// STATE._loadedFrom y al snapshot (desde dónde hay datos DE VERDAD).
+async function _fetchRendSemanal(pPeriodos, from) {
+  const traer = (desde, hasta) => fetchAllPages("rendimiento", "fecha", {
+    gte: desde ? { col: "fecha", value: desde } : null,
+    lt:  hasta ? { col: "fecha", value: hasta } : null,
+    columns: REND_COLS_SEMANAL
+  });
+
+  // Ventana ensanchada a pedido (ensureRangeLoaded): no es el camino del
+  // arranque, así que se conserva tal cual el flujo anterior (RPC → ventana).
+  // computeWindowStart con un `from` que no está en la lista cae a la tabla
+  // entera, algo que el calendario no puede anticipar.
+  if (from) {
+    const periodos = await pPeriodos;
+    const winStart = computeWindowStart(periodos, "semanal", from);
+    return { rows: await traer(winStart, null), periodos, loadedFrom: winStart };
+  }
+
+  const inicioCal = inicioVentanaSemanalCalendario(new Date());
+  const pVentana = traer(inicioCal, null);
+  // El complemento se decide y se dispara APENAS llega la RPC, sin esperar a
+  // que termine la ventana principal: en el caso raro en que haga falta, corre
+  // en paralelo con ella en vez de encadenarse detrás.
+  const pComplemento = pPeriodos.then(periodos => {
+    const plan = planVentanaSemanal(inicioCal, periodos);
+    const c = plan.complemento;
+    return c ? traer(c.desde, c.hasta).then(rows => ({ plan, rows }))
+             : { plan, rows: [] };
+  });
+  // Las tres promesas quedan observadas por este Promise.all en el mismo tick
+  // en que se crean (no hay ningún await antes): si pVentana o el complemento
+  // rechazan, el rechazo tiene handler y llega al catch de loadFromSupabase.
+  const [periodos, ventana, { plan, rows: extra }] = await Promise.all([pPeriodos, pVentana, pComplemento]);
+  const desde = plan.recortarDesde;
+  let rows = desde ? ventana.filter(r => r.fecha >= desde) : ventana;
+  // El complemento es todo < inicioCal y la ventana todo >= inicioCal: van
+  // concatenados en ese orden y el resultado sigue ordenado por fecha asc.
+  if (extra.length) rows = extra.concat(rows);
+  return { rows, periodos, loadedFrom: plan.loadedFrom };
+}
+
 // ── LOAD FROM SUPABASE ────────────────────────────────────────────────────────
 // Devuelve TRUE si la carga quedó completa, FALSE si algo no se pudo refrescar
 // (ver _FETCH_FAILED). Quien llama después de ESCRIBIR algo (calcSaveMetas,
@@ -852,10 +895,11 @@ export async function loadFromSupabase(opts = {}) {
   try {
     // ── Ventana de carga (Fase A3) ─────────────────────────────────────────
     // Antes se traía la tabla ENTERA (crece ~180 filas/semana, sin techo) y se
-    // filtraba en el navegador. Ahora: se pide la lista de períodos (RPC, 37
-    // filas) y con eso se calcula desde dónde traer DATOS. `opts.from` permite
-    // pedir explícitamente una ventana más vieja (lo usa ensureRangeLoaded
-    // cuando el usuario elige un "Desde" fuera de lo cargado).
+    // filtraba en el navegador. Ahora se trae una VENTANA de períodos: por
+    // defecto estimada desde el calendario y reconciliada con la RPC de
+    // períodos cuando llega (ver _fetchRendSemanal). `opts.from` permite pedir
+    // explícitamente una ventana más vieja (lo usa ensureRangeLoaded cuando el
+    // usuario elige un "Desde" fuera de lo cargado).
     if (!STATE._allPeriods) STATE._allPeriods = {};
 
     // partners / fleetrooms / flotas NO dependen de la ventana de fechas, así que
@@ -883,8 +927,16 @@ export async function loadFromSupabase(opts = {}) {
     const pFleetrooms = _pgFetchCritico("fleetrooms", "?select=*");
     const pFlotas     = _pgFetchCritico("flotas", "?select=*");
 
-    const periodosSem = await fetchAllPeriods("semanal");
-    if (periodosSem.length) STATE._allPeriods.semanal = periodosSem;
+    // La RPC de períodos (dashboard_dates) YA NO bloquea a `rendimiento`: corre
+    // en paralelo y solo se la espera para reconciliar la ventana (y para
+    // STATE._allPeriods, que alimenta los selectores de fecha). Se asigna a
+    // STATE en cuanto llega, igual que antes. fetchAllPeriods nunca rechaza
+    // (devuelve [] ante error), así que esta promesa no puede quedar como
+    // rechazo sin handler.
+    const pPeriodos = fetchAllPeriods("semanal").then(p => {
+      if (p.length) STATE._allPeriods.semanal = p;
+      return p;
+    });
 
     // `opts.from` (NO localStorage) es la única forma de pedir una ventana más
     // vieja que el default — la usa needsWiderRange()/applyFilters() cuando el
@@ -900,8 +952,9 @@ export async function loadFromSupabase(opts = {}) {
     // ventana por defecto a 6 semanas. Ahora cada login SIEMPRE arranca con el
     // default; ensanchar el rango es una acción explícita de la sesión actual,
     // no algo que se herede silenciosamente de la anterior.
-    const winStart   = computeWindowStart(periodosSem, "semanal", opts.from);
-    STATE._loadedFrom = winStart;   // desde qué período hay datos en memoria
+    // Ya no hay ningún `await` entre crear estas promesas y juntarlas en
+    // `critical`: si una rechaza temprano, ya tiene quien la observe.
+    const pRend = _fetchRendSemanal(pPeriodos, opts.from);
 
     // 1. Partners + Rendimiento semanal (ventaneado) + fleetrooms + flotas EN
     // PARALELO — son las únicas 4 tablas que Rendimiento (el tab por defecto al
@@ -918,8 +971,7 @@ export async function loadFromSupabase(opts = {}) {
     // Seguimiento cuando resuelvan, se re-renderiza esa vista.
     const critical = Promise.all([
       pPartners,
-      // La ÚNICA que necesitaba winStart, y por eso la única que espera la RPC.
-      fetchAllPages("rendimiento", "fecha", { gte: { col: "fecha", value: winStart }, columns: REND_COLS_SEMANAL }),
+      pRend,
       pFleetrooms,
       pFlotas
     ]);
@@ -935,7 +987,9 @@ export async function loadFromSupabase(opts = {}) {
       _pgFetchConReintento("proyectos", "?select=*&order=semana.desc"),
       _pgFetchConReintento("seguimiento", "?select=*&order=partner.asc,sort_order.asc,start_date.asc")
     ]);
-    const [partners, rend, frooms, flotas] = await critical;
+    const [partners, rendSem, frooms, flotas] = await critical;
+    const { rows: rend, periodos: periodosSem, loadedFrom: winStart } = rendSem;
+    STATE._loadedFrom = winStart;   // desde dónde hay datos en memoria DE VERDAD
     _applyCoreData(partners, rend, frooms, flotas, { resetLine: !_paintedFromCache });
     _indexCoreData();
 
