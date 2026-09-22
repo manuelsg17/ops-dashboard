@@ -4,6 +4,7 @@ import { t } from "./core/i18n";
 import { validarMetas, mensajeMetasInvalidas } from "./domain/metasGuard";
 import { repartirPorLinea, pesoNaturalTk, splitPorFraccion } from "./domain/repartoLinea.js";
 import { hayProgresoSinGuardar, draftAplica, debePreseleccionarKam } from "./domain/calcDraft.js";
+import { detectarCambiosTk, hayCambiosTk, mensajeCambiosTk, claveFila, TK_PARAGUAS } from "./domain/desgloseTk.js";
 import { SIN_KAM } from "./core/config.js";
 import { logAccess } from "./shared/accessLog.js";
 // calculator.js — Calculadora de Metas (flujo por PESTAÑAS de línea de negocio)
@@ -1801,8 +1802,9 @@ export function _calcBuildMetaRows(m) {
     if (util   !== undefined && util   !== "") r.meta_utilization = +util;
   }
   // TukTuk YA NO tiene meta propia (ago 2026): su volumen entró al reparto del
-  // agregador de arriba. Las columnas meta_tk_* quedan en la tabla para no perder
-  // el histórico, pero la calculadora deja de escribirlas.
+  // agregador de arriba. Desde sep-2026 meta_tk_ad/_nr/_sh vuelven a escribirse,
+  // pero como DESGLOSE de la meta paraguas (bloque de arriba), y al guardar se
+  // alinean con lo que ve el KAM previa confirmación (domain/desgloseTk.ts).
   return { rows: [...byKey.values()], mesName, mesYear };
 }
 
@@ -1907,6 +1909,14 @@ export function _calcFiltrarSoloCambios(rows) {
       if (ev === undefined || ev === "") return;
       const sv = CALC_STATE.saved[k];
       if (sv === undefined || +sv !== +ev) { keep[col] = +ev; hay = true; }
+    });
+    // Desglose TukTuk de los totales que SÍ viajan: sale de la fila completa
+    // (split del MISMO total tecleado, ver _calcBuildMetaRows), así la base
+    // queda igual a lo que el KAM ve. Solo el del total que cambió — el de un
+    // total que no se reescribe partiría un número que no es el de la base.
+    // Qué pasa con lo que ya estaba guardado lo decide domain/desgloseTk.ts.
+    Object.keys(TK_PARAGUAS).forEach(tk => {
+      if (keep[TK_PARAGUAS[tk]] !== undefined && r[tk] !== undefined) keep[tk] = r[tk];
     });
     if (hay) out.push(keep);
   });
@@ -2015,19 +2025,41 @@ export async function calcSaveMetas() {
     const { data: existing, error: selErr } = await _conReintento(() => sb.from("metas")
       .select("*").in("clid", clids).ilike("mes", mesName));
     if (selErr) throw selErr;
-    const exMap = new Map((existing || []).map(x => [`${x.clid}|||${normCity(x.city)}`, x]));
+    const exMap = new Map((existing || []).map(x => [claveFila(x.clid, normCity(x.city)), x]));
+
+    // DESGLOSE TUKTUK: ¿este guardado BORRA o REESCRIBE uno ya guardado?
+    // (decisión de Manuel: avisar y pedir confirmación). La regla vive en
+    // domain/desgloseTk.ts; acá solo el I/O.
+    //
+    // POR QUÉ ACÁ y no antes del confirm del resumen: hace falta lo que hay en
+    // la base, y este select es una LECTURA — el aviso sigue saliendo antes de
+    // cualquier escritura. Dejarlo dentro de este try conserva el reintento
+    // (_conReintento) y la clasificación de errores sin duplicarlos, y compara
+    // contra la base lo más cerca posible del upsert (otro KAM/admin pudo haber
+    // guardado mientras este tenía la pantalla abierta).
+    const tkPct = _calcTieneTkPct();
+    const cambiosTk = detectarCambiosTk(rows, exMap, tkPct);
+    if (hayCambiosTk(cambiosTk)) {
+      showLoad(false);
+      if (!confirm(mensajeCambiosTk(cambiosTk,
+        { kam: CALC_STATE.kam, mes: mesName, anio: mesYear, hayPctDeclarado: tkPct }, fmt))) return;
+      showLoad(true, t("calc.guardandoMetas"));
+    }
     // Payload homogéneo (mismas claves en todas las filas) → sin sorpresas de union en
     // PostgREST. r (computado) pisa; ex rellena columnas de otras líneas no tocadas.
-    // meta_tk_* siguen en la lista A PROPÓSITO aunque la calculadora ya no las
-    // escriba: el merge las rellena desde `ex` (lo que ya está en BD), así que el
-    // histórico de TukTuk se preserva en vez de quedar en NULL al reguardar.
+    // meta_tk_*: el merge las rellena desde `ex` (lo que ya está en BD) SALVO las
+    // que están en alcance de `cambiosTk.aplicar` (su total paraguas viaja en esta
+    // fila): esas quedan con el valor que ve el KAM, NULL incluido — con la
+    // confirmación de arriba si pisan algo. `meta_tk_cars` la calculadora no la
+    // toca nunca: siempre se preserva.
     const COLS = ["clid", "partner", "kam", "city", "mes", "mes_year",
       "meta_active_drivers", "meta_nr", "meta_supply_hours",
       "meta_sh_car", "meta_acceptance", "meta_utilization",
       "meta_tk_ad", "meta_tk_nr", "meta_tk_cars", "meta_tk_sh"];
     const payload = rows.map(r => {
-      const ex = exMap.get(`${r.clid}|||${r.city}`) || {};
-      const merged = { ...ex, ...r };
+      const clave = claveFila(r.clid, r.city);
+      const ex = exMap.get(clave) || {};
+      const merged = { ...ex, ...r, ...cambiosTk.aplicar.get(clave) };
       // Conservar el CASING del `mes` ya existente en BD: la UNIQUE
       // (clid,city,mes) es case-sensitive, así que escribir "SEPTIEMBRE"
       // sobre una fila "Septiembre" no conflictuaba → fila duplicada que el
