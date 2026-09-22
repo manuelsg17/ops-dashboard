@@ -8,6 +8,7 @@
 import { ensureApex } from "./charts.js";
 import { datasetLinea } from "./shared/escala.js";
 import { SIN_KAM } from "./core/config.js";
+import { tasaAcum, sumarTasa, unirTasa, leerTasa } from "./domain/metrics.js";
 
 export const PARTNER_VIEW_STATE = {
   partner: null,
@@ -329,7 +330,8 @@ export function _pvSeriesByPartnerCity(partner, city, dates) {
     date: d, _present: present, ad: 0, nr: 0, sh: 0,
     trips: 0, commission: 0, gmv: 0,
     npPartner: 0, npService: 0, reactivated: 0,
-    activeCars: 0, _shCarW: 0, _acceptW: 0, shCar: 0, accept: 0
+    // Tasas en null (no 0): una fecha sin filas no tiene tasa, no tiene 0%.
+    activeCars: 0, _shCarT: tasaAcum(), _acceptT: tasaAcum(), shCar: null, accept: null
   });
   rows.forEach(r => {
     if (!byDate[r.date]) byDate[r.date] = _blank(r.date, true);
@@ -350,14 +352,15 @@ export function _pvSeriesByPartnerCity(partner, city, dates) {
     e.gmv        += r.gmv || 0;
     // Tasas (NO se suman): sh_per_active_car es dato del export (no se recalcula
     // sh/cars: usa otro denominador), se pondera por active cars; acceptance (0-1)
-    // se pondera por viajes. Se derivan abajo a partir de los acumuladores.
+    // se pondera por viajes. Se derivan abajo a partir de los acumuladores; una
+    // fila sin la tasa no entra ni al numerador ni al denominador (no diluye).
     e.activeCars += r.activeCars || 0;
-    e._shCarW    += (r.shPerActiveCar || 0) * (r.activeCars || 0);
-    e._acceptW   += (r.acceptanceRate || 0) * (r.trips || 0);
+    sumarTasa(e._shCarT, r.shPerActiveCar, r.activeCars);
+    sumarTasa(e._acceptT, r.acceptanceRate, r.trips);
   });
   Object.values(byDate).forEach(e => {
-    e.shCar  = e.activeCars > 0 ? e._shCarW / e.activeCars : 0;
-    e.accept = e.trips > 0 ? e._acceptW / e.trips : 0;
+    e.shCar  = leerTasa(e._shCarT);
+    e.accept = leerTasa(e._acceptT);
   });
   return dates.map(d => byDate[d] || _blank(d, false));
 }
@@ -1734,16 +1737,16 @@ export function _pvScopeSeries(partner, scopeCity, dates) {
     const cities = [...new Set(rows.map(r => r.city).filter(Boolean))];
     const per = cities.map(c => _pvSeriesByPartnerCity(partner, c, dates));
     out = dates.map((d, i) => {
-      const o = { date: d, ad: 0, nr: 0, sh: 0, trips: 0, commission: 0, gmv: 0, npPartner: 0, npService: 0, reactivated: 0, activeCars: 0, _shCarW: 0, _acceptW: 0, shCar: 0, accept: 0 };
+      const o = { date: d, ad: 0, nr: 0, sh: 0, trips: 0, commission: 0, gmv: 0, npPartner: 0, npService: 0, reactivated: 0, activeCars: 0, _shCarT: tasaAcum(), _acceptT: tasaAcum(), shCar: null, accept: null };
       per.forEach(ser => {
         const e = ser[i]; if (!e) return;
         o.ad += e.ad; o.sh += e.sh; o.trips += e.trips; o.commission += e.commission; o.gmv += e.gmv || 0;
         o.npPartner += e.npPartner; o.npService += e.npService; o.reactivated += e.reactivated;
-        o.activeCars += e.activeCars || 0; o._shCarW += e._shCarW || 0; o._acceptW += e._acceptW || 0;
+        o.activeCars += e.activeCars || 0; unirTasa(o._shCarT, e._shCarT); unirTasa(o._acceptT, e._acceptT);
       });
       o.nr = o.npPartner + o.npService + o.reactivated;
-      o.shCar  = o.activeCars > 0 ? o._shCarW / o.activeCars : 0;
-      o.accept = o.trips > 0 ? o._acceptW / o.trips : 0;
+      o.shCar  = leerTasa(o._shCarT);
+      o.accept = leerTasa(o._acceptT);
       o._present = per.some(ser => ser[i] && ser[i]._present);
       return o;
     });
@@ -1857,7 +1860,11 @@ export function _pvCohortAvg(cohortPartners, scopeCity, dates, getter) {
     let s = 0, count = 0;
     seriesArr.forEach(ser => {
       const e = ser[i];
-      if (e && e._present) { s += getter(e) || 0; count++; }
+      if (!e || !e._present) return;
+      // Una TASA sin dato (null) no es 0%: ese miembro queda fuera del promedio.
+      const v = getter(e);
+      if (v === null) return;
+      s += v || 0; count++;
     });
     return count > 0 ? s / count : null;   // sin miembros con dato esa fecha → hueco (no punto 0 falso)
   });
@@ -2054,8 +2061,8 @@ export function _pvBuildScopeCharts(partner, scopeCity, idPrefix, dates, recibeL
   _pvCmpLine(`pvs_${idPrefix}_gmv`, labels, { name: "GMV", data: series.map(s => s.gmv) }, lines(s => s.gmv), "#f59e0b", fmtSmart, true);
   // SH por auto activo (horas, 1 decimal) y Tasa de aceptación (fracción 0-1 → %). Cohorte =
   // promedio SIMPLE de la tasa de cada partner (s.shCar/s.accept), no ponderado (decisión del KAM).
-  _pvCmpLine(`pvs_${idPrefix}_shcar`, labels, { name: _t("shPerCar"), data: series.map(s => s.shCar) }, lines(s => s.shCar), "#0284c7", v => (v || 0).toFixed(1));
-  _pvCmpLine(`pvs_${idPrefix}_accept`, labels, { name: _t("acceptRate"), data: series.map(s => s.accept) }, lines(s => s.accept), "#db2777", v => ((v || 0) * 100).toFixed(1) + "%");
+  _pvCmpLine(`pvs_${idPrefix}_shcar`, labels, { name: _t("shPerCar"), data: series.map(s => s.shCar) }, lines(s => s.shCar), "#0284c7", v => v == null ? "—" : v.toFixed(1));
+  _pvCmpLine(`pvs_${idPrefix}_accept`, labels, { name: _t("acceptRate"), data: series.map(s => s.accept) }, lines(s => s.accept), "#db2777", v => v == null ? "—" : (v * 100).toFixed(1) + "%");
   const tbl = document.getElementById(`pvs_${idPrefix}_nr_tbl`);
   if (tbl) tbl.innerHTML = _pvNRTable(series, dates, recibeLeads);
   const leg = document.getElementById(`pvs_${idPrefix}_legend`);

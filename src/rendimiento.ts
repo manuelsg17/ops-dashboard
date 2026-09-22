@@ -2,7 +2,7 @@
 // rendimiento.js — Pestaña Rendimiento
 
 // Núcleo de cálculo compartido (ver domain/metrics.ts).
-import { ratio } from "./domain/metrics.js";
+import { ratio, tasaAcum, sumarTasa, leerTasa } from "./domain/metrics.js";
 import { sliceEscala, datasetLinea } from "./shared/escala.js";
 import { SIN_KAM } from "./core/config.js";
 import { t } from "./core/i18n";
@@ -863,42 +863,48 @@ export function _rendKpiCard(label, icon, val, prev, color, fmtFn, subLabel, bad
 // % SH externo) SÍ son shares sin numerador/denominador propio en la BD → se ponderan
 // por trips (o por gmv en el caso de subsidio) igual que Aceptación.
 export function _rendFleetAgg(rows) {
-  let owned = 0, intSh = 0, extSh = 0, trips = 0, accW = 0, branded = 0, actCars = 0,
-      gmv = 0, commission = 0,
-      fraudW = 0, badRatedW = 0, complW = 0, supportW = 0, subsidyW = 0;
+  let owned = 0, intSh = 0, extSh = 0, trips = 0, branded = 0, actCars = 0,
+      gmv = 0, commission = 0;
+  // Tasas: una fila sin el dato queda fuera del numerador Y del denominador
+  // (ver tasaAcum en domain/metrics) — si no, diluye el promedio hacia 0.
+  const acc = tasaAcum(), fraud = tasaAcum(), badRated = tasaAcum(),
+        compl = tasaAcum(), support = tasaAcum(), subsidy = tasaAcum();
   rows.forEach(r => {
     owned      += r.ownedFleetActiveCars || 0;
     intSh      += r.internalFleetSh || 0;
     extSh      += r.externalFleetSh || 0;
     trips      += r.trips || 0;
-    accW       += (r.acceptanceRate || 0) * (r.trips || 0);
     branded    += r.brandedActiveCars || 0;
     actCars    += r.activeCars || 0;
     gmv        += r.gmv || 0;
     commission += r.commission || 0;
-    fraudW     += (r.fraudTripsShare || 0) * (r.trips || 0);
-    badRatedW  += (r.badRatedTripsShare || 0) * (r.trips || 0);
-    complW     += (r.completionRate || 0) * (r.trips || 0);
-    supportW   += (r.driverSupportRequestsShare || 0) * (r.trips || 0);
-    subsidyW   += (r.driverSubsidiesByGmv || 0) * (r.gmv || 0);
+    sumarTasa(acc,      r.acceptanceRate,             r.trips);
+    sumarTasa(fraud,    r.fraudTripsShare,            r.trips);
+    sumarTasa(badRated, r.badRatedTripsShare,         r.trips);
+    sumarTasa(compl,    r.completionRate,             r.trips);
+    sumarTasa(support,  r.driverSupportRequestsShare, r.trips);
+    sumarTasa(subsidy,  r.driverSubsidiesByGmv,       r.gmv);
   });
   const totalSh = intSh + extSh;
+  // Sin base → null ("—" en pantalla), no 0: un 0 se lee como un dato real.
+  const div = (n, d) => d > 0 ? n / d : null;
+  const pct = a => { const v = leerTasa(a); return v == null ? null : v * 100; };
   return {
     owned, branded, actCars, gmv, commission,
-    shCar:            owned > 0   ? intSh / owned : 0,
-    accept:           trips > 0   ? (accW / trips) * 100 : 0,
-    pctBranded:       owned > 0   ? (branded / owned) * 100 : 0,
-    gmvPerCar:        owned > 0   ? gmv / owned : 0,
-    commissionPerCar: owned > 0   ? commission / owned : 0,
-    tripsPerCar:      owned > 0   ? trips / owned : 0,
-    tripsPerHour:     totalSh > 0 ? trips / totalSh : 0,
-    moneyPerHour:     totalSh > 0 ? gmv / totalSh : 0,
-    externalShShare:  totalSh > 0 ? (extSh / totalSh) * 100 : 0,
-    fraudShare:       trips > 0   ? (fraudW / trips) * 100 : 0,
-    badRatedShare:    trips > 0   ? (badRatedW / trips) * 100 : 0,
-    completionRate:   trips > 0   ? (complW / trips) * 100 : 0,
-    supportReqShare:  trips > 0   ? (supportW / trips) * 100 : 0,
-    subsidyByGmv:     gmv > 0     ? (subsidyW / gmv) * 100 : 0
+    shCar:            div(intSh, owned),
+    accept:           pct(acc),
+    pctBranded:       owned > 0 ? (branded / owned) * 100 : null,
+    gmvPerCar:        div(gmv, owned),
+    commissionPerCar: div(commission, owned),
+    tripsPerCar:      div(trips, owned),
+    tripsPerHour:     div(trips, totalSh),
+    moneyPerHour:     div(gmv, totalSh),
+    externalShShare:  totalSh > 0 ? (extSh / totalSh) * 100 : null,
+    fraudShare:       pct(fraud),
+    badRatedShare:    pct(badRated),
+    completionRate:   pct(compl),
+    supportReqShare:  pct(support),
+    subsidyByGmv:     pct(subsidy)
   };
 }
 // Agrega KPIs Fleet por fecha (Peru total, todas las ciudades) — mismas fórmulas
@@ -917,7 +923,8 @@ export const _FLEET_TREND_LABEL = {
   gmvPerCar: "GMV / Auto", externalShShare: "% SH Externo"
 };
 export function buildFleetTrendLine(elId, dates, byDate, key, color) {
-  const data = dates.map(d => (byDate[d] ? byDate[d][key] : 0) || 0);
+  // null (tasa sin base) queda como hueco en la línea, no como un punto en 0.
+  const data = dates.map(d => { const v = byDate[d] ? byDate[d][key] : 0; return v == null ? null : (v || 0); });
   buildLineChart(elId, dates, [{ name: _FLEET_TREND_LABEL[key] || key, data }], [color]);
 }
 // Donut "Owned Cars por Partner" — snapshot del último período, Top 6 + Otros.
@@ -1056,21 +1063,23 @@ export function _renderFleetView(lastRows, prevRows, lastDate, prevDate) {
   return html;
 }
 export function _rendFleetCardsBody(c, p) {
-  const pct = v => fmt(v) + "%";
+  // Las tasas/ratios pueden venir en null (sin base): "—", nunca "0".
+  const num = v => v == null ? "—" : fmt(v);
+  const pct = v => v == null ? "—" : fmt(v) + "%";
   // 10 tarjetas: el grid de 3 columnas de .metric-row se sobre-escribe inline con
   // auto-fit (no tocar la clase global — la usa también el Agregador con 3 cards).
   // auto-fit/minmax evita que se aplasten en pantallas angostas (envuelve a 2 filas).
   return `<div class="section"><div class="metric-row agy-style-226">
       ${_rendKpiCard(t("rend.kpi.ownedCars"),   "🚗", c.owned,      p.owned,      "#0284c7", fmt)}
-      ${_rendKpiCard(t("rend.kpi.shAuto"), "⏱️", c.shCar,      p.shCar,      "#8b5cf6", fmt)}
+      ${_rendKpiCard(t("rend.kpi.shAuto"), "⏱️", c.shCar,      p.shCar,      "#8b5cf6", num)}
       ${_rendKpiCard(t("rend.kpi.aceptacion"),          "✅", c.accept,     p.accept,     "#10b981", pct)}
       ${_rendKpiCard(t("rend.kpi.brandedCars"), "🏷️", c.branded,    p.branded,    "#f59e0b", fmt)}
       ${_rendKpiCard(t("rend.kpi.pctBrand"),         "🎯", c.pctBranded, p.pctBranded, "#7e22ce", pct)}
-      ${_rendKpiCard(t("rend.kpi.gmvAuto"),          "💰", c.gmvPerCar,        p.gmvPerCar,        "#059669", fmt)}
-      ${_rendKpiCard(t("rend.kpi.comAuto"),     "💵", c.commissionPerCar, p.commissionPerCar, "#059669", fmt)}
-      ${_rendKpiCard(t("rend.kpi.viajesAuto"),       "🧭", c.tripsPerCar,      p.tripsPerCar,      "#0284c7", fmt)}
-      ${_rendKpiCard("Viajes / Hora",       "⚡", c.tripsPerHour,     p.tripsPerHour,     "#0284c7", fmt)}
-      ${_rendKpiCard(t("rend.kpi.gmvHora"),          "📈", c.moneyPerHour,     p.moneyPerHour,     "#059669", fmt)}
+      ${_rendKpiCard(t("rend.kpi.gmvAuto"),          "💰", c.gmvPerCar,        p.gmvPerCar,        "#059669", num)}
+      ${_rendKpiCard(t("rend.kpi.comAuto"),     "💵", c.commissionPerCar, p.commissionPerCar, "#059669", num)}
+      ${_rendKpiCard(t("rend.kpi.viajesAuto"),       "🧭", c.tripsPerCar,      p.tripsPerCar,      "#0284c7", num)}
+      ${_rendKpiCard("Viajes / Hora",       "⚡", c.tripsPerHour,     p.tripsPerHour,     "#0284c7", num)}
+      ${_rendKpiCard(t("rend.kpi.gmvHora"),          "📈", c.moneyPerHour,     p.moneyPerHour,     "#059669", num)}
     </div></div>`;
 }
 // Scorecard compacto: filas label+valor+badge WoW/MoM apiladas en 1 tarjeta (a
@@ -1082,14 +1091,15 @@ export function _rendFleetScorecard(items) {
     ${items.map(it => `
       <div class="city-kpi">
         <span class="city-kpi-label">${it.label}</span>
-        <div class="city-kpi-right"><span class="city-kpi-val">${it.fmtFn(it.val)}</span>${bdgMode(it.val, it.prev, "mb-badge")}</div>
+        <div class="city-kpi-right"><span class="city-kpi-val">${it.val == null ? "—" : it.fmtFn(it.val)}</span>${bdgMode(it.val, it.prev, "mb-badge")}</div>
       </div>`).join("")}
   </div>`;
 }
 export function _rendFleetCityKpi(label, val, prev, fmtFn) {
+  // val null = tasa/ratio sin base: "—", no el "0" que daría fmt(null).
   return `<div class="city-kpi">
     <span class="city-kpi-label">${label}</span>
-    <div class="city-kpi-right"><span class="city-kpi-val">${fmtFn(val)}</span>${bdgMode(val, prev, "mb-badge")}</div>
+    <div class="city-kpi-right"><span class="city-kpi-val">${val == null ? "—" : fmtFn(val)}</span>${bdgMode(val, prev, "mb-badge")}</div>
   </div>`;
 }
 export function _rendFleetPartnerTable(lastRows, prevRows) {
@@ -1107,6 +1117,8 @@ export function _rendFleetPartnerTable(lastRows, prevRows) {
   if (!rows.length) return `<div class="agy-style-531">Sin partners Fleet en el filtro actual.</div>`;
   // Delta inline junto al valor (mismo patrón que _rendFleetCityKpi) en vez de una
   // sola columna "WoW Cars" — así cada métrica trae su propio WoW/MoM.
+  const num = v => v == null ? "—" : fmt(v);
+  const pct = v => v == null ? "—" : fmt(v) + "%";
   let h = `<table class="dtbl"><thead><tr>
     <th>Partner</th><th>KAM</th><th>Owned Cars</th><th>SH/Auto</th><th>Aceptación</th><th>Branded</th><th>% Brandeado</th><th>GMV/Auto</th><th>Comisión/Auto</th></tr></thead><tbody>`;
   rows.forEach(r => {
@@ -1115,12 +1127,12 @@ export function _rendFleetPartnerTable(lastRows, prevRows) {
       <td>${escapeHTML(r.partner)}</td>
       <td><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${kc};margin-right:4px"></span>${escapeHTML(r.kam)}</td>
       <td class="tn">${fmt(r.owned)} ${bdgMode(r.owned, r.prev.owned, "tbadge")}</td>
-      <td class="tn">${fmt(r.shCar)} ${bdgMode(r.shCar, r.prev.shCar, "tbadge")}</td>
-      <td class="tn">${fmt(r.accept)}% ${bdgMode(r.accept, r.prev.accept, "tbadge")}</td>
+      <td class="tn">${num(r.shCar)} ${bdgMode(r.shCar, r.prev.shCar, "tbadge")}</td>
+      <td class="tn">${pct(r.accept)} ${bdgMode(r.accept, r.prev.accept, "tbadge")}</td>
       <td class="tn">${fmt(r.branded)}</td>
-      <td class="tn">${fmt(r.pctBranded)}% ${bdgMode(r.pctBranded, r.prev.pctBranded, "tbadge")}</td>
-      <td class="tn">${fmt(r.gmvPerCar)} ${bdgMode(r.gmvPerCar, r.prev.gmvPerCar, "tbadge")}</td>
-      <td class="tn">${fmt(r.commissionPerCar)} ${bdgMode(r.commissionPerCar, r.prev.commissionPerCar, "tbadge")}</td>
+      <td class="tn">${pct(r.pctBranded)} ${bdgMode(r.pctBranded, r.prev.pctBranded, "tbadge")}</td>
+      <td class="tn">${num(r.gmvPerCar)} ${bdgMode(r.gmvPerCar, r.prev.gmvPerCar, "tbadge")}</td>
+      <td class="tn">${num(r.commissionPerCar)} ${bdgMode(r.commissionPerCar, r.prev.commissionPerCar, "tbadge")}</td>
     </tr>`;
   });
   h += `</tbody></table>`;

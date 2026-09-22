@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   snapshotValue, flowValue, projectSnapshot, projectFlow,
-  weightedAvg, ratio, attainmentPct, sumKpis, groupSum, seriesByDate, retentionSeries,
+  weightedAvg, tasaAcum, sumarTasa, unirTasa, leerTasa, tasaPonderada, ratio, attainmentPct, sumKpis, groupSum, seriesByDate, retentionSeries,
   AD_PROJECTION_FACTOR, horasPorConductorBase, TK_HORAS_BASE_MIN, TK_MIN_ACTIVOS,
   pacingFlujo, median, dropDuplicatePeriods, fechasEnRango
 } from "./metrics.js";
@@ -130,6 +130,38 @@ describe("tasas", () => {
     expect(weightedAvg([[90, 0]])).toBe(0);
     expect(weightedAvg([])).toBe(0);
     expect(ratio(5, 0)).toBe(0);
+  });
+
+  it("una fila SIN tasa queda fuera del numerador y del denominador (no diluye)", () => {
+    // 90% sobre 1000 viajes + 1000 viajes sin dato. El patrón viejo
+    // `(tasa || 0) * trips / Σ trips` daba 45% — la mitad del valor real.
+    expect(tasaPonderada([[0.9, 1000], [null, 1000]])).toBeCloseTo(0.9, 10);
+    expect(tasaPonderada([[0.9, 1000], [undefined, 1000], [NaN, 500]])).toBeCloseTo(0.9, 10);
+    const acc = sumarTasa(sumarTasa(tasaAcum(), 0.9, 1000), null, 1000);
+    expect(acc).toEqual({ num: 900, den: 1000 });
+  });
+
+  it("todas las filas sin tasa → null, no 0", () => {
+    expect(tasaPonderada([[null, 1000], [undefined, 50]])).toBeNull();
+    expect(tasaPonderada([])).toBeNull();
+    expect(leerTasa(tasaAcum())).toBeNull();
+    expect(leerTasa(null)).toBeNull();
+  });
+
+  it("peso cero → null (sin base), nunca NaN; peso ausente cuenta como 0", () => {
+    expect(tasaPonderada([[0.8, 0]])).toBeNull();
+    expect(tasaPonderada([[0.8, null], [0.6, 10]])).toBeCloseTo(0.6, 10);
+  });
+
+  it("caso mixto: pondera solo las filas con dato; un 0 real SÍ cuenta", () => {
+    // 0.9×100 + 0×100 (tasa 0 declarada, es un dato) + sin dato×800
+    expect(tasaPonderada([[0.9, 100], [0, 100], [null, 800]])).toBeCloseTo(0.45, 10);
+    // Re-agregar por partes da lo mismo que agregar todo junto.
+    const a = sumarTasa(tasaAcum(), 0.9, 100);
+    const b = sumarTasa(sumarTasa(tasaAcum(), 0.5, 300), null, 999);
+    expect(leerTasa(unirTasa(unirTasa(tasaAcum(), a), b)))
+      .toBeCloseTo(tasaPonderada([[0.9, 100], [0.5, 300], [null, 999]]) as number, 10);
+    expect(unirTasa(tasaAcum(), null)).toEqual({ num: 0, den: 0 });
   });
 
   it("el % de cumplimiento con meta 0 es 0, no Infinity", () => {

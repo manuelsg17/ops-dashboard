@@ -277,6 +277,57 @@ export function weightedAvg(pairs: Array<[value: number, weight: number]>): numb
   return den > 0 ? num / den : 0;
 }
 
+/**
+ * Acumulador de una TASA ponderada (aceptación, completion, fraude…) sobre filas
+ * que pueden NO traer el dato.
+ *
+ * Distinto de `weightedAvg` en dos cosas, ambas a propósito:
+ *  - Una fila sin la tasa (null/undefined/NaN) queda fuera del numerador Y del
+ *    denominador. El patrón viejo `(tasa || 0) * peso / Σ peso` la contaba como
+ *    0% con todo su peso y DILUÍA el promedio: con una fracción F del peso sin
+ *    dato, una tasa real R se mostraba como R·(1−F).
+ *  - Sin base (denominador 0) devuelve `null` ("sin dato"), no 0: un 0% se lee
+ *    como un número real.
+ *
+ * Se expone como acumulador (y no solo como función sobre pares) porque varios
+ * llamadores re-agregan después (ciudad → partner, unidad → KAM/país) y para eso
+ * necesitan el numerador y el denominador crudos.
+ */
+export interface TasaAcum { num: number; den: number }
+
+export function tasaAcum(): TasaAcum {
+  return { num: 0, den: 0 };
+}
+
+/** Suma una fila al acumulador. Peso ausente cuenta como 0. Devuelve `acc`. */
+export function sumarTasa(acc: TasaAcum, tasa: number | null | undefined, peso: number | null | undefined): TasaAcum {
+  if (tasa == null || isNaN(tasa)) return acc;
+  const w = peso == null || isNaN(peso) ? 0 : peso;
+  acc.num += tasa * w;
+  acc.den += w;
+  return acc;
+}
+
+/** Une dos acumuladores (p. ej. las ciudades de un partner). Devuelve `acc`. */
+export function unirTasa(acc: TasaAcum, otro: TasaAcum | null | undefined): TasaAcum {
+  if (!otro) return acc;
+  acc.num += otro.num;
+  acc.den += otro.den;
+  return acc;
+}
+
+/** Valor de la tasa, o `null` si ninguna fila con peso trajo el dato. */
+export function leerTasa(acc: TasaAcum | null | undefined): number | null {
+  return acc && acc.den > 0 ? acc.num / acc.den : null;
+}
+
+/** Atajo sobre pares [tasa, peso]: misma semántica que el acumulador. */
+export function tasaPonderada(pairs: Iterable<[tasa: number | null | undefined, peso: number | null | undefined]>): number | null {
+  const acc = tasaAcum();
+  for (const [v, w] of pairs) sumarTasa(acc, v, w);
+  return leerTasa(acc);
+}
+
 /** Ratio seguro: 0 si el denominador es 0. */
 export function ratio(num: number, den: number): number {
   return den > 0 ? num / den : 0;

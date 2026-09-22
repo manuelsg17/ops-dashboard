@@ -86,6 +86,9 @@ export function bdg(c, p, cls = "mcard-badge") {
                   : t("rend.cmp.semAnterior");
   if (p === null || p === undefined)
     return `<span class="${cls} b-neu" title="Sin dato previo (N/A)">N/A</span>`;
+  // Actual sin dato (una tasa que el período no trae): sin esto daba "-100%".
+  if (c === null || c === undefined)
+    return `<span class="${cls} b-neu" title="Sin dato (N/A)">N/A</span>`;
   if (p === 0)
     return c > 0 ? `<span class="${cls} b-pos" title="Primer periodo con dato (no hay ${compLabel})">NEW</span>`
                  : `<span class="${cls} b-neu" title="Sin movimiento">--</span>`;

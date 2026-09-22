@@ -31,7 +31,7 @@ window.Chart = Chart;
 // el problema no es cosmético, es de credibilidad delante del cliente.
 import { projectFlow, retentionSeries, seriesByDate, snapshotValue,
          horasPorConductorBase, TK_HORAS_BASE_MIN, TK_MIN_ACTIVOS,
-         pacingFlujo, median, fechasEnRango } from "./domain/metrics.js";
+         pacingFlujo, median, fechasEnRango, tasaAcum, sumarTasa, leerTasa } from "./domain/metrics.js";
 import { p2Lectura, p2Accion, META_CUMPLIDA_PCT } from "./domain/lectura.js";
 import { reportYM, diasMesReporte, MES_NOMBRES } from "./shared/mesReporte.js";
 import * as forecast from "./forecast.js";
@@ -692,13 +692,14 @@ export function p2CityRet(partner, scope, dates) {
 //     ciudades: se reconstruye desde el numerador (internalFleetSh) y el
 //     denominador (ownedFleetActiveCars), ambos disponibles en cada fila.
 //   accept = Σ(acceptanceRate × trips) / Σ trips   (no hay numerador propio;
-//     acceptance_rate ya es 0–1, se pondera por trips como mejor proxy)
+//     acceptance_rate ya es 0–1, se pondera por trips como mejor proxy). Solo
+//     entran los trips de filas que TRAEN la tasa (ver tasaAcum en domain/metrics).
 // AD/N+R se reusan de p2Metrics (misma función que el path taxi) para que la
 // matriz Fleet SIEMPRE coincida con la matriz Taxi; aquí solo lo fleet-específico.
 export function p2FleetSeries(partner, scope, dates) {
   const cities = scope ? [scope] : p2PartnerCities(partner);
   const cars = dates.map(() => 0), internalShW = dates.map(() => 0);
-  const tripsSum = dates.map(() => 0), acceptW = dates.map(() => 0);
+  const acc = dates.map(() => tasaAcum());
   dates.forEach((d, i) => {
     cities.forEach(c => {
       const rows = (p2CityDateIndex() && p2CityDateIndex().get(`${c}|||${d}`)) || [];
@@ -709,15 +710,14 @@ export function p2FleetSeries(partner, scope, dates) {
         if (typeof rowIsFleet === "function" && !rowIsFleet(r)) return;
         cars[i]       += r.ownedFleetActiveCars || 0;
         internalShW[i]+= r.internalFleetSh || 0;
-        tripsSum[i]   += r.trips || 0;
-        acceptW[i]    += (r.acceptanceRate || 0) * (r.trips || 0);
+        sumarTasa(acc[i], r.acceptanceRate, r.trips);
       });
     });
   });
   return {
     ownedFleetActiveCars: cars,
     shCarInt: dates.map((_, i) => cars[i] > 0 ? internalShW[i] / cars[i] : null),
-    accept:   dates.map((_, i) => tripsSum[i] > 0 ? acceptW[i] / tripsSum[i] : null)
+    accept:   acc.map(a => leerTasa(a))
   };
 }
 // Tendencia de ciudad ponderada (TODOS los partners de la ciudad) para ratios fleet.
@@ -725,7 +725,7 @@ export function p2CityFleetSeries(scope, dates) {
   const cities = scope ? [scope] : [];   // Perú-general: sin trend de ciudad única
   if (!cities.length) return { ownedFleetActiveCars: dates.map(() => null), shCarInt: dates.map(() => null), accept: dates.map(() => null) };
   const cars = dates.map(() => 0), internalShW = dates.map(() => 0);
-  const tripsSum = dates.map(() => 0), acceptW = dates.map(() => 0);
+  const acc = dates.map(() => tasaAcum());
   dates.forEach((d, i) => {
     cities.forEach(c => {
       const rows = (p2CityDateIndex() && p2CityDateIndex().get(`${c}|||${d}`)) || [];
@@ -733,15 +733,14 @@ export function p2CityFleetSeries(scope, dates) {
         if (typeof rowIsFleet === "function" && !rowIsFleet(r)) return;   // solo fleetrooms Fleet
         cars[i]       += r.ownedFleetActiveCars || 0;
         internalShW[i]+= r.internalFleetSh || 0;
-        tripsSum[i]   += r.trips || 0;
-        acceptW[i]    += (r.acceptanceRate || 0) * (r.trips || 0);
+        sumarTasa(acc[i], r.acceptanceRate, r.trips);
       });
     });
   });
   return {
     ownedFleetActiveCars: cars,
     shCarInt: dates.map((_, i) => cars[i] > 0 ? internalShW[i] / cars[i] : null),
-    accept:   dates.map((_, i) => tripsSum[i] > 0 ? acceptW[i] / tripsSum[i] : null)
+    accept:   acc.map(a => leerTasa(a))
   };
 }
 

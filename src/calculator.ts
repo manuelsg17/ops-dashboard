@@ -6,6 +6,7 @@ import { repartirPorLinea, pesoNaturalTk, splitPorFraccion } from "./domain/repa
 import { hayProgresoSinGuardar, draftAplica, debePreseleccionarKam } from "./domain/calcDraft.js";
 import { detectarCambiosTk, hayCambiosTk, mensajeCambiosTk, claveFila, TK_PARAGUAS } from "./domain/desgloseTk.js";
 import { SIN_KAM } from "./core/config.js";
+import { tasaAcum, sumarTasa, leerTasa } from "./domain/metrics.js";
 import { logAccess } from "./shared/accessLog.js";
 // calculator.js — Calculadora de Metas (flujo por PESTAÑAS de línea de negocio)
 // El KAM ingresa su meta TOTAL por línea y se reparte (disgrega) a cada partner+ciudad
@@ -171,7 +172,7 @@ export function _calcAggByPartnerCity(rows, monthsSet) {
             // unidad (partner, ciudad) no se puede clasificar de un solo lado.
             // Lo consume el carve-out de domain/repartoLinea.ts.
             adTk: 0, shTk: 0, nrTk: 0,
-            acceptW: 0, intSh: 0, ownedCars: 0, _adByDate: {}, _bcarsByDate: {}, _adTkByDate: {} };
+            _accept: tasaAcum(), intSh: 0, ownedCars: 0, _adByDate: {}, _bcarsByDate: {}, _adTkByDate: {} };
       out.set(k, e);
     }
     if (!e.clid && r.clid) e.clid = r.clid;
@@ -195,10 +196,10 @@ export function _calcAggByPartnerCity(rows, monthsSet) {
     // Referencias fleet (tasas). SH/Auto interno = Σ internal_fleet_sh / Σ owned_fleet_active_cars
     // (MISMA definición que usa el deck/Metas como ACTUAL; antes se usaba sh_per_active_car
     // que medía otra cosa → la meta que fijaba el KAM nunca cuadraba con el actual).
-    // Acceptance (0-1) ponderada por viajes.
+    // Acceptance (0-1) ponderada por viajes, solo de las filas que traen la tasa.
     e.intSh     += r.internalFleetSh || 0;
     e.ownedCars += r.ownedFleetActiveCars || 0;
-    e.acceptW   += (r.acceptanceRate || 0) * (r.trips || 0);
+    sumarTasa(e._accept, r.acceptanceRate, r.trips);
   });
   // Colapsar snapshots: máx sobre fechas de la suma por fecha (suma de fleetrooms).
   for (const e of out.values()) {
@@ -217,9 +218,10 @@ export function _calcAggByPartnerCity(rows, monthsSet) {
 
 // Referencia 3m (promedio ponderado) de los KPIs fleet de un partner-ciudad.
 export function _calcFleetRef(e) {
+  const acc = leerTasa(e._accept);
   return {
     shcar:  e.ownedCars > 0 ? e.intSh / e.ownedCars : null,      // SH interno / auto propio (= deck/Metas)
-    accept: e.trips > 0 ? (e.acceptW / e.trips) * 100 : null     // % (0-100)
+    accept: acc == null ? null : acc * 100                       // % (0-100)
   };
 }
 

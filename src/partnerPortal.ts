@@ -21,7 +21,7 @@ import { stampPDF } from "./shared/pdfmeta.js";
 import { ensurePdfLibs } from "./shared/lazyLibs.js";
 // Mismo núcleo de cálculo que Metas, Rendimiento y el deck: el partner tiene que
 // ver EXACTAMENTE los números que su KAM le presenta.
-import { seriesByDate, projectFlow, ratio, weightedAvg } from "./domain/metrics.js";
+import { seriesByDate, projectFlow, ratio, weightedAvg, tasaPonderada } from "./domain/metrics.js";
 import { reportYM, diasMesReporte, MES_NOMBRES } from "./shared/mesReporte.js";
 import { datasetLinea } from "./shared/escala.js";
 
@@ -106,6 +106,13 @@ function _wowCell(pct) {
 }
 
 function _sum(rows, fn) { return rows.reduce((s, r) => s + (fn(r) || 0), 0); }
+
+// Aceptación (%) ponderada por viajes, solo sobre las filas que traen la tasa.
+// null = ninguna fila la trae: se muestra "—", no 0%.
+function _portalAccept(rows) {
+  const v = tasaPonderada(rows.map(r => [r.acceptanceRate, r.trips]));
+  return v == null ? null : v * 100;
+}
 
 // KPI del último período (snapshot) + período anterior, para el badge.
 function _portalKpis(rows) {
@@ -217,9 +224,8 @@ function _portalMetas(line, rows) {
     const owned = _sum(rows, r => r.ownedFleetActiveCars || 0);
     const intSh = _sum(rows, r => r.internalFleetSh || 0);
     const trips = _sum(rows, r => r.trips || 0);
-    const accW  = rows.reduce((s, r) => s + (r.acceptanceRate || 0) * (r.trips || 0), 0);
     const shCar  = ratio(intSh, owned);
-    const accept = ratio(accW, trips) * 100;
+    const accept = _portalAccept(rows);
     // Las metas de tasa se re-ponderan por el mismo denominador que el actual;
     // promediarlas a secas entre ciudades daría un número sin significado.
     const wMeta = (key, w) => {
@@ -253,6 +259,12 @@ function _portalMetas(line, rows) {
 // Fila meta-vs-actual con barra de avance y (si aplica) marca de proyección.
 function _portalMetaRow(label, act, meta, proj, fmtFn) {
   if (meta == null || !meta) return "";
+  // Sin actual medible (tasa sin dato en el rango): la meta se muestra, pero
+  // sin barra ni % — un 0% se leería como incumplimiento total.
+  if (act == null) return `
+    <div class="agy-style-196"><div class="agy-style-259">
+      <span>${label}</span><span><strong>—</strong> <span class="agy-style-89">/ ${fmtFn(meta)} · sin dato en el rango</span></span>
+    </div></div>`;
   const p  = (act / meta) * 100;
   const pp = proj != null ? (proj / meta) * 100 : null;
   return `
@@ -340,12 +352,11 @@ export function renderPartnerPortal() {
     // contra sí mismo. Ahora el período anterior se calcula de verdad.
     const fl = rs => {
       const owned = _sum(rs, r => r.ownedFleetActiveCars || 0);
-      const trips = _sum(rs, r => r.trips || 0);
       return {
         owned,
         branded: _sum(rs, r => r.brandedActiveCars || 0),
         shCar:   ratio(_sum(rs, r => r.internalFleetSh || 0), owned),
-        accept:  ratio(rs.reduce((s, r) => s + (r.acceptanceRate || 0) * (r.trips || 0), 0), trips) * 100
+        accept:  _portalAccept(rs)
       };
     };
     const now = fl(rowsLast), prev = fl(rowsPrev);
@@ -353,7 +364,7 @@ export function renderPartnerPortal() {
       ${_kpiCard("🚗 Autos propios activos", escalaN, now.owned, now.owned, prev.owned, "#0284c7")}
       ${_kpiCard("🎨 Brandeados", escalaN, now.branded, now.branded, prev.branded, "#7e22ce")}
       ${_kpiCard("⏱️ SH / Auto (interno)", escalaN, now.shCar, now.shCar, prev.shCar, "#8b5cf6", v => fmt(v))}
-      ${_kpiCard("✅ Aceptación", `${escalaN} · ponderada por viajes`, now.accept, now.accept, prev.accept, "#10b981", v => fmt(v) + "%")}
+      ${_kpiCard("✅ Aceptación", `${escalaN} · ponderada por viajes`, now.accept, now.accept, prev.accept, "#10b981", v => v == null ? "—" : fmt(v) + "%")}
     </div></div>`;
   } else {
     html += `<div class="section"><div class="metric-row">

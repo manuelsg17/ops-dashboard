@@ -7,7 +7,7 @@ import { logAccess } from "./shared/accessLog.js";
 // número, y tiene tests — que se vea de dónde sale.
 import {
   snapshotValue, seriesByDate, projectSnapshot, projectFlow,
-  weightedAvg, ratio, sumKpis
+  weightedAvg, ratio, sumKpis, tasaAcum, sumarTasa, leerTasa
 } from "./domain/metrics.js";
 import { reportYM, diasMesReporte } from "./shared/mesReporte.js";
 import { SIN_KAM } from "./core/config.js";
@@ -183,7 +183,7 @@ export function _metasLineDataset(line) {
 // ponderados (Σ internalFleetSh / Σ ownedCars; Σ(rate×trips)/Σtrips) — igual que
 // presentacion2.p2FleetSeries / rendimiento._rendFleetAgg.
 //
-// Se conservan los NUMERADORES Y DENOMINADORES crudos (intSh, owned, accW, trips)
+// Se conservan los NUMERADORES Y DENOMINADORES crudos (intSh, owned, accTrips, trips)
 // además de las tasas ya calculadas: son imprescindibles para poder re-ponderar
 // al agregar por ciudad/KAM/país. Promediar las tasas ya calculadas de varios
 // partners daría un número sin significado (un partner con 3 autos pesaría igual
@@ -197,11 +197,11 @@ export function _metasFleetActuals(fechas, selSet, cityFilter) {
     if (selSet.size && !_lineSelHas(selSet, _sidebar, r.partner)) return;
     const k = `${r.partner}|||${r.city}`;
     let e = by.get(k);
-    if (!e) { e = { owned: 0, intSh: 0, trips: 0, accW: 0, branded: 0, _owned: {} }; by.set(k, e); }
+    if (!e) { e = { owned: 0, intSh: 0, trips: 0, _acc: tasaAcum(), branded: 0, _owned: {} }; by.set(k, e); }
     e.owned   += r.ownedFleetActiveCars || 0;
     e.intSh   += r.internalFleetSh || 0;
     e.trips   += r.trips || 0;
-    e.accW    += (r.acceptanceRate || 0) * (r.trips || 0);
+    sumarTasa(e._acc, r.acceptanceRate, r.trips);   // sin tasa → fuera de num y den
     e.branded += r.brandedActiveCars || 0;
     // Autos propios por fecha: `owned` de arriba acumula auto-períodos (es el
     // denominador correcto de SH/auto), pero para MOSTRAR "cuántos autos tiene"
@@ -210,9 +210,13 @@ export function _metasFleetActuals(fechas, selSet, cityFilter) {
   });
   by.forEach(e => {
     e.shCar     = ratio(e.intSh, e.owned);
-    e.accept    = ratio(e.accW, e.trips) * 100;
+    const acc   = leerTasa(e._acc);
+    e.accept    = acc == null ? null : acc * 100;
+    // Peso de la aceptación al re-ponderar por ciudad/KAM: los viajes de las
+    // filas que SÍ traían la tasa, no todos (`trips`).
+    e.accTrips  = e._acc.den;
     e.ownedNow  = snapshotValue(seriesByDate(e._owned));
-    delete e._owned;
+    delete e._owned; delete e._acc;
   });
   return by;
 }
@@ -351,6 +355,8 @@ export function _metaLineRow(label, actual, meta, fmtFn, metaOnlyNote) {
 //   weight(a) → SOLO para KPIs de TASA. Al agregar por ciudad/KAM/país la tasa
 //             se re-pondera por este denominador en vez de sumarse. Sin esto,
 //             un partner con 3 autos pesaría lo mismo que uno con 300.
+//   actWeight(a) → opcional: peso del ACTUAL si difiere del de la meta (la
+//             aceptación pesa solo los viajes de filas que traían la tasa).
 //   note    → nota al pie cuando el KPI es solo-meta
 
 // Agrega un KPI sobre un conjunto de unidades (partner-ciudad).
@@ -368,9 +374,10 @@ function _metasAggKpi(kpi, units) {
       // TypeError. Encontrado al sembrar metas Fleet en local para poder
       // verificar la traduccion.
       const w  = u.a ? (kpi.weight(u.a) || 0) : 0;
+      const wa = u.a && kpi.actWeight ? (kpi.actWeight(u.a) || 0) : w;
       const av = u.a ? kpi.act(u.a)  : null;
       const mv = u.m ? kpi.meta(u.m) : null;
-      if (av != null) aw.push([av, w]);
+      if (av != null) aw.push([av, wa]);
       if (mv != null) mw.push([mv, w]);
     });
     return {
@@ -711,7 +718,7 @@ export function _renderMetasFleet(mesName, fechas, selSet, cityFilter, kamFilter
         weight: a => a.owned, fmtFn: v => fmt(v) },
       { label: t("metas.kpi.aceptacion"), sub: t("metas.pondViajes"),
         meta: m => m.mAcc, act: a => a.accept, proj: null,
-        weight: a => a.trips, fmtFn: v => fmt(v) + "%" },
+        weight: a => a.trips, actWeight: a => a.accTrips, fmtFn: v => fmt(v) + "%" },
       { label: t("metas.kpi.utilizacion"), sub: t("metas.soloMeta"),
         meta: m => m.mUtil, act: () => null, proj: null,
         weight: a => a.owned, fmtFn: v => fmt(v) + "%", note: t("metas.sinActual") }
