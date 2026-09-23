@@ -1,10 +1,14 @@
 // shared/chartTheme.ts — Tema común de gráficos desde los tokens (Ola 4, sep-2026)
 //
-// ApexCharts (Rendimiento, Vista Partner) y Chart.js (Presentación) salen de
-// LOS MISMOS tokens CSS (src/styles/tokens.css), leídos en tiempo de ejecución
-// con getComputedStyle — así el modo oscuro de más adelante se hereda sin
-// tocar ningún gráfico. Todavía NO está conectado a ningún gráfico existente
-// (eso es Ola 6): hoy solo lo usa el kit (?ui=kit).
+// ApexCharts (Rendimiento, portal) y Chart.js (Presentación) salen de LOS
+// MISMOS tokens CSS (src/styles/tokens.css), leídos en tiempo de ejecución con
+// getComputedStyle.
+//
+// MODO OSCURO (Ola 7): los gráficos hornean el color al dibujar, así que al
+// cambiar el tema la vista los vuelve a dibujar (app.ts, evento "yango:tema").
+// `chartTokens(scope)` lee los tokens EN un elemento: dentro de un subárbol con
+// data-theme="light" (hojas del deck) salen los claros aunque la app esté
+// oscura. `lightChartTokens()` da siempre los claros (exportaciones).
 //
 // Uso previsto:
 //   new ApexCharts(el, deepMerge(apexBase(), { series, xaxis: { categories } }))
@@ -32,18 +36,46 @@ export const FALLBACK = {
   font: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
 } as const;
 
-/** Lee un custom property del :root; sin DOM (tests, worker) o vacío → fallback. */
-export function cssVar(name: string, fallback: string): string {
+/** Lee un custom property (del :root o del elemento `scope`); sin DOM (tests,
+ *  worker) o vacío → fallback. */
+export function cssVar(name: string, fallback: string, scope?: Element | null): string {
   try {
     if (typeof document === "undefined" || typeof getComputedStyle !== "function") return fallback;
-    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    const v = getComputedStyle(scope || document.documentElement).getPropertyValue(name).trim();
     return v || fallback;
   } catch {
     return fallback;
   }
 }
 
+/** Tema efectivo en `scope` (el data-theme más cercano). */
+export function temaEn(scope?: Element | null): "light" | "dark" {
+  try {
+    if (typeof document === "undefined") return "light";
+    const el = (scope || document.documentElement).closest?.("[data-theme]");
+    return el && el.getAttribute("data-theme") === "dark" ? "dark" : "light";
+  } catch {
+    return "light";
+  }
+}
+
+let _sondaClara: HTMLElement | null = null;
+/** Elemento oculto con data-theme="light": leer tokens en él da SIEMPRE los
+ *  del tema claro (hojas del deck, exportaciones), sin tocar <html>. */
+export function lightScope(): Element | null {
+  if (typeof document === "undefined" || !document.body) return null;
+  if (!_sondaClara || !_sondaClara.isConnected) {
+    _sondaClara = document.createElement("div");
+    _sondaClara.setAttribute("data-theme", "light");
+    _sondaClara.setAttribute("aria-hidden", "true");
+    _sondaClara.hidden = true;
+    document.body.appendChild(_sondaClara);
+  }
+  return _sondaClara;
+}
+
 export interface ChartTokens {
+  theme: "light" | "dark";
   palette: string[];
   other: string;
   grid: string;
@@ -56,19 +88,39 @@ export interface ChartTokens {
   font: string;
 }
 
-export function chartTokens(): ChartTokens {
+export function chartTokens(scope?: Element | null): ChartTokens {
+  const v = (n: string, fb: string) => cssVar(n, fb, scope);
   return {
-    palette: FALLBACK.palette.map((fb, i) => cssVar(`--cat-${i + 1}`, fb)),
-    other: cssVar("--cat-other", FALLBACK.other),
-    grid: cssVar("--chart-grid", FALLBACK.grid),
-    axis: cssVar("--chart-axis", FALLBACK.axis),
-    label: cssVar("--chart-label", FALLBACK.label),
-    text: cssVar("--color-text", FALLBACK.text),
-    textMuted: cssVar("--color-text-muted", FALLBACK.textMuted),
-    surface: cssVar("--color-surface", FALLBACK.surface),
-    border: cssVar("--color-border", FALLBACK.border),
-    font: cssVar("--font-sans", FALLBACK.font)
+    theme: temaEn(scope),
+    palette: FALLBACK.palette.map((fb, i) => v(`--cat-${i + 1}`, fb)),
+    other: v("--cat-other", FALLBACK.other),
+    grid: v("--chart-grid", FALLBACK.grid),
+    axis: v("--chart-axis", FALLBACK.axis),
+    label: v("--chart-label", FALLBACK.label),
+    text: v("--color-text", FALLBACK.text),
+    textMuted: v("--color-text-muted", FALLBACK.textMuted),
+    surface: v("--color-surface", FALLBACK.surface),
+    border: v("--color-border", FALLBACK.border),
+    font: v("--font-sans", FALLBACK.font)
   };
+}
+
+/** Tokens del tema CLARO, esté como esté la app (exportaciones, deck). */
+export function lightChartTokens(): ChartTokens {
+  const t = chartTokens(lightScope());
+  return { ...t, theme: "light" };
+}
+
+/** Traduce un color de la paleta de un tema a su par en el otro (mismo slot).
+ *  Lo que no es de la paleta (marca, estados, hex propios) queda igual. */
+export function remapColor(color: string, from: ChartTokens, to: ChartTokens): string {
+  if (typeof color !== "string") return color;
+  const c = color.trim().toLowerCase();
+  const i = from.palette.findIndex(p => p.trim().toLowerCase() === c);
+  if (i >= 0) return to.palette[i];
+  if (from.other.trim().toLowerCase() === c) return to.other;
+  if (from.surface.trim().toLowerCase() === c) return to.surface;
+  return color;
 }
 
 /** Color de la serie i (0-based). Fuera de la paleta → gris "Otros", nunca
@@ -120,11 +172,26 @@ export function apexBase(t: ChartTokens = chartTokens()) {
       itemMargin: { horizontal: 8, vertical: 2 }
     },
     tooltip: {
-      theme: "light",
+      theme: t.theme,
       style: { fontSize: `${FONT_SM}px`, fontFamily: t.font },
       x: { show: true }
     },
     states: { active: { filter: { type: "none" } } }
+  };
+}
+
+/** Solo las opciones de ApexCharts que dependen del TEMA (para re-tematizar un
+ *  gráfico ya configurado, p.ej. la copia clara que se exporta a PNG). */
+export function apexThemeOverrides(t: ChartTokens = chartTokens()) {
+  const b = apexBase(t);
+  return {
+    chart: { foreColor: t.label, background: t.surface },
+    grid: { borderColor: t.grid },
+    xaxis: { axisBorder: { color: t.axis }, labels: { style: { colors: t.label } } },
+    yaxisLabels: { style: { colors: t.label } },
+    legend: { labels: { colors: t.textMuted } },
+    markers: { strokeColors: t.surface },
+    tooltip: { theme: b.tooltip.theme }
   };
 }
 

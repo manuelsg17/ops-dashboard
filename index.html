@@ -45,7 +45,13 @@
     base-uri 'self';
   "/>
 
-  <!-- Único <script> del documento: Vite arma acá TODO el grafo de módulos ES
+  <!-- Tema claro/oscuro ANTES del primer pintado (Ola 7). Script clásico y
+       bloqueante a propósito: el grafo de módulos es diferido y llegaría tarde
+       (parpadeo en claro con el oscuro elegido). Archivo y no inline por la
+       CSP (script-src 'self'). Ver public/theme-init.js y src/shared/theme.ts. -->
+  <script src="/theme-init.js"></script>
+
+  <!-- Grafo de módulos: Vite arma acá TODO el grafo de módulos ES
        de la app (src/vendor.js importa las 7 libs de terceros — antes CDN,
        ahora npm — y los 17 módulos propios). Ver src/vendor.js. -->
   <script type="module" src="/src/vendor.ts"></script>
@@ -199,6 +205,8 @@
         <button type="button" id="userBadge" class="user-badge" data-act="toggleUserMenu"
                 aria-haspopup="true" aria-expanded="false" aria-controls="userMenu"></button>
         <div class="user-menu" id="userMenu">
+          <!-- Tema (Claro / Oscuro / Sistema): lo pinta app.ts (_pintarMenuTema). -->
+          <div id="themeMenu"></div>
           <button type="button" class="user-menu-item" data-act="handleLogout">
             <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></svg>
             <span data-i18n="top.logout">Salir</span>

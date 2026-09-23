@@ -10,10 +10,16 @@
         components.css, ui.ts y chartTheme.ts.
      3. COMPONENTES (components.css) — usan solo semánticos.
 
-   MODO OSCURO (planificado para después de la Ola 6): será UN bloque
-   `[data-theme="dark"] { … }` que re-apunta SOLO los semánticos (sección 2).
-   Si para el modo oscuro hace falta tocar un componente, es que ese
-   componente usó un primitivo o un hex: arreglarlo ahí, no en el tema.
+   MODO OSCURO (Ola 7, sep-2026): `[data-theme="dark"]` (al final) re-apunta
+   SOLO los semánticos (sección 2). Si para el modo oscuro hace falta tocar un
+   componente, es que ese componente usó un primitivo o un hex: arreglarlo
+   ahí, no en el tema.
+   `data-theme` lo pone public/theme-init.js en <html> ANTES del primer
+   pintado (Claro / Oscuro / Sistema, guardado en localStorage). Un subárbol
+   puede forzar el claro con `data-theme="light"`: por eso los semánticos se
+   declaran en `:root, [data-theme="light"]` y no solo en :root. Así las
+   superficies de EXPORTACIÓN (hojas del deck, tarjeta de la Calculadora y
+   cualquier captura html2canvas) salen claras aunque la app esté oscura.
 
    NADA de este archivo cambia pantallas existentes: son custom properties
    nuevas (sin colisión: el resto del CSS solo usa --sl-* y --au-role) y
@@ -72,7 +78,25 @@
   --sky-50:    #f0f9ff; --sky-200:    #bae6fd; --sky-600:    #0284c7; --sky-700:    #0369a1;
   --violet-50: #f5f3ff; --violet-200: #ddd6fe; --violet-600: #7c3aed; --violet-700: #6d28d9;
 
-  /* ── 2. SEMÁNTICOS (lo que el modo oscuro va a re-apuntar) ─────────────── */
+  /* Primitivos del modo OSCURO (Ola 7). Neutros "noche" (gris frío, misma
+     familia que --neutral-*) y los pasos de estado que leen bien sobre ellos.
+     Contrastes medidos en la cabecera del bloque [data-theme="dark"]. */
+  --night-950: #0e1116;  --night-900: #161a21;  --night-850: #1c212a;
+  --night-800: #242a35;  --night-750: #2b313c;  --night-700: #3a414e;
+  --night-500: #5f6775;  --night-450: #6b7382;  --night-400: #9199a6;
+  --night-300: #aab1bd;  --night-100: #e6e8ec;
+  --brand-400: #f0584f;  --brand-950: #351a1b;
+  --green-400:  #4ade80; --green-500:  #22c55e; --green-900:  #1f5a36; --green-950:  #0f2a1c;
+  --amber-400:  #fbbf24; --amber-500:  #f59e0b; --amber-900:  #5f4714; --amber-950:  #2d220c;
+  --red-300:    #fb8a8a; --red-500:    #ef4444; --red-900:    #6e2a2e; --red-950:    #341618;
+  --sky-350:    #56c3f5; --sky-400:    #38bdf8; --sky-500:    #0ea5e9; --sky-900:    #1d4b69; --sky-950: #0d2536;
+  --violet-300: #b4a0fb; --violet-500: #8b5cf6; --violet-900: #48367e; --violet-950: #23193f;
+}
+
+:root, [data-theme="light"] {
+  color-scheme: light;
+
+  /* ── 2. SEMÁNTICOS (lo que el modo oscuro re-apunta) ──────────────────── */
 
   /* Superficies */
   --color-bg:              var(--neutral-100);  /* fondo de la app            */
@@ -100,6 +124,9 @@
   --color-brand-hover:     var(--brand-600);
   --color-brand-soft:      var(--brand-50);
   --color-on-brand:        var(--neutral-0);
+  /* Marca como TEXTO/ícono chico (no como fondo): en claro es la misma marca
+     (4.69:1); en oscuro se aclara para llegar a AA sobre la superficie. */
+  --color-brand-text:      var(--brand-500);
 
   /* Roles de estado: fg (texto AA), bg-soft (fondo), border, solid (barras) */
   --color-ok-fg:      var(--green-700);  --color-ok-bg:      var(--green-50);
@@ -147,6 +174,13 @@
   --focus-ring-color: var(--sky-600);
   --focus-ring: 0 0 0 2px var(--color-surface), 0 0 0 4px var(--focus-ring-color);
 
+  /* Sombras: 3 (cambian con el tema: en oscuro la sombra es más densa) */
+  --shadow-sm: 0 1px 2px rgba(17, 24, 39, .06);
+  --shadow-md: 0 2px 8px rgba(17, 24, 39, .08), 0 1px 2px rgba(17, 24, 39, .04);
+  --shadow-lg: 0 12px 32px rgba(17, 24, 39, .18);
+}
+
+:root {
   /* ── 3. ESCALAS (no cambian con el tema) ──────────────────────────────── */
 
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -186,11 +220,6 @@
   --radius-lg: 12px;   /* diálogos, paneles grandes           */
   --radius-pill: 999px;
 
-  /* Sombras: 3 */
-  --shadow-sm: 0 1px 2px rgba(17, 24, 39, .06);
-  --shadow-md: 0 2px 8px rgba(17, 24, 39, .08), 0 1px 2px rgba(17, 24, 39, .04);
-  --shadow-lg: 0 12px 32px rgba(17, 24, 39, .18);
-
   /* Layout */
   --layout-sidebar-w:   240px;
   --layout-content-max: 1600px;
@@ -201,15 +230,90 @@
   --duration-fast: 120ms;
 }
 
-/* ── MODO OSCURO (placeholder, sin valores todavía) ──────────────────────────
-   Se completa al final del plan (después de la Ola 6). Solo re-apunta la
-   sección 2 (semánticos) — nunca primitivos ni componentes. La paleta
-   categórica oscura tiene que VALIDARSE contra la superficie oscura
-   (validate_palette.js --mode dark), no invertirse a ojo.
+/* ── MODO OSCURO (Ola 7, sep-2026) ─────────────────────────────────────────
+   Re-apunta SOLO semánticos. Superficies en 4 escalones (fondo < tarjeta <
+   encabezado/hover < pista/hundido): en oscuro lo "hundido" es MÁS claro que
+   la tarjeta, porque lo que separa es la luminancia, no la sombra.
 
+   CONTRASTES (WCAG 2.x, medidos con /tmp/ola7/contrast.mjs):
+     texto #e6e8ec    sobre surface 14.22 · muted 13.16 · sunken 11.74 · bg 15.42
+     muted #aab1bd    8.08 / 7.48 / 6.68 / 8.76
+     subtle #9199a6   6.07 / 5.62 / 5.02 / 6.58   (en oscuro SÍ vale sobre sunken)
+     borde de control #6b7382  3.65 sobre surface (≥3 WCAG 1.4.11)
+     blanco sobre marca #E1251B 4.69 (la marca NO cambia: se reconoce igual)
+     marca como texto  --color-brand-text #f0584f 5.16 (surface) · 4.73 (brand-soft)
+     ok fg #4ade80 10.01 (surface) / 8.81 (su bg) · warn #fbbf24 10.45 / 9.35
+     bad fg #fb8a8a 7.56 / 7.15 · info #56c3f5 8.74 / 7.88 · over #b4a0fb 7.78 / 7.30
+     -solid (objeto gráfico, 3:1) sobre surface / sobre la pista (sunken):
+       ok 7.66/6.32 · warn 8.12/6.71 · bad 4.64/3.83 · info 6.29/5.20 · over 4.12/3.40
+     foco #38bdf8 8.14 · rótulos de gráfico #9199a6 6.07
+
+   PALETA CATEGÓRICA oscura: los MISMOS 9 tonos en el MISMO orden, en su paso
+   para fondo oscuro (skill dataviz, references/palette.md; cian y ocre
+   re-escalonados acá). Validada con validate_palette.js --mode dark
+   --surface #161a21: L 0.48–0.67, croma ≥0.10, CVD ΔE adyacente peor 8.1,
+   visión normal peor 16.2, todos ≥3:1 sobre la tarjeta (y sobre #1c212a).
+   Los 3 primeros (ciudades) pasan "todos contra todos": CVD 9.4, normal 20.9.
+   ───────────────────────────────────────────────────────────────────────── */
 [data-theme="dark"] {
   color-scheme: dark;
-  --color-bg: …;  --color-surface: …;  --color-text: …;  …
-  --cat-1: …;  …
+
+  --color-bg:              var(--night-950);
+  --color-surface:         var(--night-900);
+  --color-surface-muted:   var(--night-850);
+  --color-surface-sunken:  var(--night-800);
+  --color-overlay:         rgba(0, 0, 0, .6);
+
+  --color-text:            var(--night-100);
+  --color-text-muted:      var(--night-300);
+  --color-text-subtle:     var(--night-400);
+  --color-text-disabled:   var(--night-500);
+  --color-text-inverse:    var(--neutral-900);
+
+  --color-border:          var(--night-750);
+  --color-border-strong:   var(--night-700);
+  --color-border-input:    var(--night-450);
+
+  --color-brand:           var(--brand-500);
+  --color-brand-hover:     var(--brand-600);
+  --color-brand-soft:      var(--brand-950);
+  --color-on-brand:        var(--neutral-0);
+  --color-brand-text:      var(--brand-400);
+
+  --color-ok-fg:      var(--green-400);  --color-ok-bg:      var(--green-950);
+  --color-ok-border:  var(--green-900);  --color-ok-solid:   var(--green-500);
+
+  --color-warn-fg:    var(--amber-400);  --color-warn-bg:    var(--amber-950);
+  --color-warn-border:var(--amber-900);  --color-warn-solid: var(--amber-500);
+
+  --color-bad-fg:     var(--red-300);    --color-bad-bg:     var(--red-950);
+  --color-bad-border: var(--red-900);    --color-bad-solid:  var(--red-500);
+
+  --color-info-fg:    var(--sky-350);    --color-info-bg:    var(--sky-950);
+  --color-info-border:var(--sky-900);    --color-info-solid: var(--sky-500);
+
+  --color-over-fg:    var(--violet-300); --color-over-bg:    var(--violet-950);
+  --color-over-border:var(--violet-900); --color-over-solid: var(--violet-500);
+
+  --cat-1: #3987e5;  /* azul     */
+  --cat-2: #d95926;  /* naranja  */
+  --cat-3: #199e70;  /* aqua     */
+  --cat-4: #c98500;  /* amarillo */
+  --cat-5: #d55181;  /* magenta  */
+  --cat-6: #008300;  /* verde    */
+  --cat-7: #9085e9;  /* violeta  */
+  --cat-8: #1aa3b5;  /* cian     */
+  --cat-9: #b8752a;  /* ocre     */
+  --cat-other: var(--night-500);
+
+  --chart-grid:  var(--night-750);
+  --chart-axis:  var(--night-700);
+  --chart-label: var(--night-400);
+
+  --focus-ring-color: var(--sky-400);
+  --focus-ring: 0 0 0 2px var(--color-surface), 0 0 0 4px var(--focus-ring-color);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, .45), 0 1px 2px rgba(0, 0, 0, .3);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, .6);
 }
-   ───────────────────────────────────────────────────────────────────────── */

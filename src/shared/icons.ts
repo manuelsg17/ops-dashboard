@@ -18,8 +18,8 @@ import {
   Car, CarTaxiFront, ChartColumn, ChartLine, Check, ChevronDown, ChevronLeft,
   ChevronRight, CircleAlert, CircleCheck, Clock, Copy, Database, Download, Eye,
   FileText, Flag, Funnel, Globe, Image, Info, Lightbulb, ListChecks, Lock, LogOut,
-  MapPin, Menu, Minus, Motorbike, Package, Pencil, Plus, Presentation, Printer,
-  RefreshCw, Rocket, Save, Search, Settings, Star, Table, Target, Trash,
+  MapPin, Menu, Minus, Monitor, Moon, Motorbike, Package, Pencil, Plus, Presentation, Printer,
+  RefreshCw, Rocket, Save, Search, Settings, Star, Sun, Table, Target, Trash,
   TrendingDown, TrendingUp, TriangleAlert, Truck, Upload, User, Users, X
 } from "lucide";
 
@@ -64,6 +64,8 @@ export const ICONS = {
   "map-pin": MapPin,
   "menu": Menu,
   "minus": Minus,
+  "monitor": Monitor,
+  "moon": Moon,
   "package": Package,
   "plus": Plus,
   "presentation": Presentation,
@@ -74,6 +76,7 @@ export const ICONS = {
   "search": Search,
   "settings": Settings,
   "star": Star,
+  "sun": Sun,
   "table": Table,
   "target": Target,
   "taxi": CarTaxiFront,

@@ -2376,6 +2376,12 @@ export const I18N: Record<string, Record<string, string>> = {
   "p2.err.pdf":        { es: "Error al generar el PDF", en: "Error generating the PDF", ru: "Ошибка при создании PDF" },
   "p2.vacio.sinDatos":    { es: "Carga datos de Rendimiento para usar Presentación.", en: "Load Performance data to use Presentation.", ru: "Загрузите данные «Показатели», чтобы использовать презентацию." },
   "p2.vacio.sinPartners": { es: "No hay partners cargados.", en: "No partners loaded.", ru: "Партнёры не загружены." },
+
+  // ── Tema claro / oscuro (Ola 7) — menú de sesión ─────────────────────────
+  "tema.titulo":  { es: "Tema",    en: "Theme",  ru: "Тема" },
+  "tema.claro":   { es: "Claro",   en: "Light",  ru: "Светлая" },
+  "tema.oscuro":  { es: "Oscuro",  en: "Dark",   ru: "Тёмная" },
+  "tema.sistema": { es: "Sistema", en: "System", ru: "Системная" },
 };
 
 let _lang = "es";

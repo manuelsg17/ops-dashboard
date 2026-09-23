@@ -27,6 +27,7 @@ import { t, mesLabel, getLang } from "./core/i18n";
 import { logAccess } from "./shared/accessLog.js";
 import { stampPDF } from "./shared/pdfmeta.js";
 import { ensurePdfLibs } from "./shared/lazyLibs.js";
+import { opcionesCapturaClara, tokenClaro } from "./shared/exportClaro";
 // Mismo núcleo de cálculo que Metas, Rendimiento y el deck: el partner tiene que
 // ver EXACTAMENTE los números que su KAM le presenta.
 import { seriesByDate, projectFlow, ratio, tasaPonderada } from "./domain/metrics.js";
@@ -666,9 +667,11 @@ export async function portalDownloadPDF() {
   if (btn) { if (lbl) lbl.textContent = t("metas.generandoPDF"); btn.disabled = true; }
   try {
     await ensurePdfLibs();
-    let bg = getComputedStyle(document.body).backgroundColor;
-    if (!bg || bg === "transparent" || bg === "rgba(0, 0, 0, 0)") bg = "white";
-    const canvas = await html2canvas(content, { scale: 2, useCORS: true, logging: false, backgroundColor: bg });
+    // Siempre claro (Ola 7): fondo = el de la app EN CLARO (antes se leía del
+    // body, que con el tema oscuro daba un PDF negro) y la copia que captura
+    // html2canvas va en claro, gráficos incluidos (exportClaro.ts).
+    const bg = tokenClaro("--color-bg", "#f3f4f6");
+    const canvas = await html2canvas(content, opcionesCapturaClara({ scale: 2, useCORS: true, logging: false, backgroundColor: bg }));
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ orientation: "portrait", unit: "px", format: [canvas.width, canvas.height] });
     pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, canvas.width, canvas.height);

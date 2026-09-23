@@ -3,7 +3,8 @@
 import { escapeHTML } from "./core/security";
 import { fechaLocalISO } from "./shared/fechaLocal";
 import { MAX_SERIES_CON_MARCADORES } from "./shared/topSeries";
-import { apexBase, chartTokens, seriesColor } from "./shared/chartTheme";
+import { apexBase, chartTokens, seriesColor, lightChartTokens, remapColor, apexThemeOverrides } from "./shared/chartTheme";
+import { temaActual } from "./shared/theme";
 import { t } from "./core/i18n";
 
 // ── TOOLTIP FLOTANTE ──────────────────────────────────────────────────────────
@@ -314,15 +315,72 @@ export function buildDonutChart(elId, labels, series, colors) {
 }
 
 // ── DOWNLOAD CHART AS PNG ─────────────────────────────────────────────────────
-export function dlChart(chartId, name) {
+// El PNG sale SIEMPRE claro (Ola 7): con la app en oscuro, se dibuja una COPIA
+// del gráfico fuera de pantalla con los tokens claros y se exporta esa. El
+// gráfico visible no se toca (no parpadea).
+export async function dlChart(chartId, name) {
   const ch = STATE.charts[chartId];
   if (!ch) return;
-  ch.dataURI().then(({ imgURI }) => {
-    const a = document.createElement("a");
-    a.href     = imgURI;
-    a.download = `yango_${name}_${fechaLocalISO()}.png`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  });
+  const { imgURI } = temaActual() === "dark" ? await _dataURIClaro(ch) : await ch.dataURI();
+  const a = document.createElement("a");
+  a.href     = imgURI;
+  a.download = `yango_${name}_${fechaLocalISO()}.png`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+// Copia profunda que conserva las funciones (formatters) por referencia.
+function _clonar(v) {
+  if (Array.isArray(v)) return v.map(_clonar);
+  if (v && typeof v === "object" && !(typeof Element !== "undefined" && v instanceof Element)) {
+    const o = {};
+    for (const k of Object.keys(v)) o[k] = _clonar(v[k]);
+    return o;
+  }
+  return v;
+}
+
+/** Tematiza en claro la config de un gráfico ya dibujado en oscuro. Pura
+ *  (exportada para test): no toca el DOM. */
+export function configClara(config, oscuro, claro) {
+  const cfg = _clonar(config);
+  const map = c => remapColor(c, oscuro, claro);
+  const th = apexThemeOverrides(claro);
+  if (Array.isArray(cfg.colors)) cfg.colors = cfg.colors.map(map);
+  if (cfg.fill && Array.isArray(cfg.fill.colors)) cfg.fill.colors = cfg.fill.colors.map(map);
+  if (cfg.stroke && Array.isArray(cfg.stroke.colors)) cfg.stroke.colors = cfg.stroke.colors.map(map);
+  cfg.chart = { ...cfg.chart, foreColor: th.chart.foreColor, background: th.chart.background,
+    animations: { enabled: false }, events: {}, id: undefined, group: undefined };
+  cfg.grid = { ...cfg.grid, borderColor: th.grid.borderColor };
+  const ejeX = cfg.xaxis || {};
+  cfg.xaxis = { ...ejeX, axisBorder: { ...ejeX.axisBorder, color: th.xaxis.axisBorder.color },
+    labels: { ...ejeX.labels, style: { ...ejeX.labels?.style, colors: th.xaxis.labels.style.colors } } };
+  const tematizarY = y => ({ ...y, labels: { ...y.labels, style: { ...y.labels?.style, colors: th.yaxisLabels.style.colors } } });
+  if (Array.isArray(cfg.yaxis)) cfg.yaxis = cfg.yaxis.map(tematizarY);
+  else if (cfg.yaxis) cfg.yaxis = tematizarY(cfg.yaxis);
+  cfg.legend = { ...cfg.legend, labels: { ...cfg.legend?.labels, colors: th.legend.labels.colors } };
+  cfg.markers = { ...cfg.markers, strokeColors: th.markers.strokeColors };
+  cfg.tooltip = { ...cfg.tooltip, theme: th.tooltip.theme };
+  return cfg;
+}
+
+async function _dataURIClaro(ch) {
+  const oscuro = chartTokens(), claro = lightChartTokens();
+  const w = ch.w.globals;
+  const cfg = configClara(ch.w.config, oscuro, claro);
+  cfg.chart.width = w.svgWidth;
+  cfg.chart.height = w.svgHeight;
+  const host = document.createElement("div");
+  host.setAttribute("data-theme", "light");
+  host.style.cssText = `position:fixed;left:-10000px;top:0;width:${w.svgWidth}px`;
+  document.body.appendChild(host);
+  const copia = new ApexCharts(host, cfg);
+  try {
+    await copia.render();
+    return await copia.dataURI();
+  } finally {
+    try { copia.destroy(); } catch (e) { /* ya destruido */ }
+    host.remove();
+  }
 }
