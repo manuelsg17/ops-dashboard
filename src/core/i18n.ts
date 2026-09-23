@@ -149,6 +149,16 @@ export const I18N: Record<string, Record<string, string>> = {
   "rend.ciudad.sub":    { es: "Rendimiento y comparativo WoW", en: "Performance and WoW comparison", ru: "Показатели и сравнение с прошлой неделей" },
   "rend.kam.titulo":    { es: "Por KAM", en: "By KAM", ru: "По KAM" },
   "rend.kam.sub":       { es: "Rendimiento por responsable", en: "Performance by owner", ru: "Показатели по ответственному" },
+  // Alcance de los filtros activos (I13, sep-2026): el título ya no dice "Perú"
+  // mientras muestra un subconjunto (filtro de ciudad/KAM restaurado de otra sesión).
+  "alcance.kam":        { es: "KAM: {k}", en: "KAM: {k}", ru: "KAM: {k}" },
+  "alcance.partners":   { es: "{n} de {total} partners", en: "{n} of {total} partners", ru: "{n} из {total} партнёров" },
+  "rend.peru.tituloFiltrado": { es: "Vista filtrada — {a}", en: "Filtered view — {a}", ru: "Отфильтрованный обзор — {a}" },
+  "metas.alcance":      { es: "Filtro activo: {a}", en: "Active filter: {a}", ru: "Активный фильтр: {a}" },
+  "rend.pcard.sinDato": { es: "sin dato en este período", en: "no data this period", ru: "нет данных за период" },
+  // Guard de escala (B12): mientras llega el dataset de la escala elegida no se
+  // pintan los números de la otra escala con este rótulo.
+  "carga.escala":       { es: "Cargando datos ({e})…", en: "Loading data ({e})…", ru: "Загрузка данных ({e})…" },
 
   "rend.tend.titulo":   { es: "Tendencias", en: "Trends", ru: "Тренды" },
   "rend.tend.sub":      { es: "Perú por partner · y comparativa directa entre ciudades",
