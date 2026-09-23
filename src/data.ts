@@ -21,6 +21,11 @@ import { sliceEscala, normEscala } from "./shared/escala.js";
 import { evaluarFrescura } from "./shared/frescura.js";
 import { LOAD_WINDOW, computeWindowStart, inicioVentanaSemanalCalendario, planVentanaSemanal } from "./shared/ventanaCarga.js";
 import { SIN_KAM } from "./core/config.js";
+import { mesCanonico, anioParaFilaMeta, limaYM } from "./domain/mesesMeta";
+import { ErrorSubida, describirErrorSubida } from "./domain/erroresSubida";
+import { filasComoObjetos } from "./workers/excelParse";
+import { alCerrarSesion } from "./shared/sesion";
+import { MSG_SIN_FILAS } from "./domain/permisosUI";
 
 
 // ── PARSER DE TAXIPARKS ─────────────────────────────────────────────────────
@@ -1829,74 +1834,88 @@ export async function uploadChannels(rows) {
 }
 
 // ── FILE UPLOAD HANDLERS ──────────────────────────────────────────────────────
+// I2: se llama desde initApp, que vuelve a correr en cada login SIN recarga.
+// Sin este guard, salir y entrar duplicaba los listeners y cada Excel se subía
+// DOS veces (dos Workers, dos upserts, dos loadFromSupabase).
+let _fileHandlersListos = false;
 export function initFileHandlers() {
+  if (_fileHandlersListos) return;
+  _fileHandlersListos = true;
   document.getElementById("fileRend")
-    .addEventListener("change", e => handleFile(e.target.files[0], "rendimiento"));
+    .addEventListener("change", e => handleFile(e.target.files[0], "rendimiento", e.target));
   document.getElementById("fileMetas")
-    .addEventListener("change", e => handleFile(e.target.files[0], "metas"));
+    .addEventListener("change", e => handleFile(e.target.files[0], "metas", e.target));
   document.getElementById("fileData")
-    .addEventListener("change", e => handleFile(e.target.files[0], "data"));
+    .addEventListener("change", e => handleFile(e.target.files[0], "data", e.target));
   document.getElementById("fileRendMensual")
-    .addEventListener("change", e => handleFile(e.target.files[0], "rendimientoMensual"));
+    .addEventListener("change", e => handleFile(e.target.files[0], "rendimientoMensual", e.target));
   document.getElementById("fileRendDiario")
-    .addEventListener("change", e => handleFile(e.target.files[0], "rendimientoDiario"));
+    .addEventListener("change", e => handleFile(e.target.files[0], "rendimientoDiario", e.target));
   const fF = document.getElementById("fileFlotas");
-  if (fF) fF.addEventListener("change", e => handleFile(e.target.files[0], "flotas"));
+  if (fF) fF.addEventListener("change", e => handleFile(e.target.files[0], "flotas", e.target));
   const fC = document.getElementById("fileConversion");
-  if (fC) fC.addEventListener("change", e => handleFile(e.target.files[0], "conversion"));
+  if (fC) fC.addEventListener("change", e => handleFile(e.target.files[0], "conversion", e.target));
 }
 
-// Classifies upload errors into user-friendly messages
+// Mensaje de error de una carga. La clasificación vive en
+// domain/erroresSubida.ts y va por CÓDIGO (SQLSTATE/PostgREST o ErrorSubida),
+// no buscando texto en el mensaje. Quedó sin llamar desde la migración al Web
+// Worker (jul-2026): todo error salía como "Error: <mensaje crudo>".
 export function describeUploadError(type, err) {
-  const base = err.message || "Error desconocido";
-  const typeLabel = { rendimiento: "Rendimiento Semanal", rendimientoMensual: "Rendimiento Mensual",
-                      rendimientoDiario: "Rendimiento Diario", conversion: "Conversión",
-                      metas: "Metas", data: "Partners", flotas: "Flotas" }[type] || type;
-  if (base.includes("duplicate") || base.includes("unico") || base.includes("unique"))
-    return `Ya existen filas con las mismas claves en ${typeLabel}. Los datos existentes fueron actualizados (upsert).`;
-  if (base.includes("JWT") || base.includes("auth") || base.includes("401"))
-    return "Error de autenticación. Cierra sesión e inicia de nuevo.";
-  if (base.includes("No se encontraron") || base.includes("Archivo vacío"))
-    return base;
-  if (base.includes("violates") || base.includes("null value"))
-    return `Error de formato en ${typeLabel}: hay campos vacíos o columnas incorrectas. Verifica el archivo.`;
-  return `Error al procesar ${typeLabel}: ${base}`;
+  return describirErrorSubida(type, err);
 }
 
-export async function handleFile(file, type) {
-  if (!file) return;
+export async function handleFile(file, type, inputEl) {
+  // I7: vaciar el input SIEMPRE. Sin esto, volver a elegir el MISMO archivo
+  // (el caso típico: corregir el Excel y re-subirlo con el mismo nombre) no
+  // disparaba `change` y no pasaba nada.
+  const _limpiarInput = () => { try { if (inputEl) inputEl.value = ""; } catch (_) {} };
+  if (!file) { _limpiarInput(); return; }
 
   // Validación de tamaño máximo (10 MB)
   const MAX_MB = 10;
   if (file.size > MAX_MB * 1024 * 1024) {
     showBanner(false, `El archivo excede ${MAX_MB} MB (${(file.size / 1024 / 1024).toFixed(1)} MB). Reduce el tamaño e intenta de nuevo.`);
+    _limpiarInput();
     return;
   }
 
   showLoad(true, `Procesando ${type}... (Web Worker)`);
   const reader = new FileReader();
+  reader.onerror = () => {
+    showBanner(false, "No se pudo leer el archivo.");
+    showLoad(false);
+    _limpiarInput();
+  };
   reader.onload = async ev => {
+    let worker = null;
     try {
       // Offload XLSX parsing to a Web Worker so UI thread doesn't freeze
-      const worker = new Worker(new URL("./workers/excelWorker.ts", import.meta.url), { type: "module" });
-      
+      worker = new Worker(new URL("./workers/excelWorker.ts", import.meta.url), { type: "module" });
+
+      // I7: sin onerror, un fallo al cargar/evaluar el Worker (chunk 404 tras un
+      // deploy, excepción al importar XLSX) dejaba el spinner colgado para
+      // siempre: onmessage nunca llega.
+      worker.onerror = (ev2) => {
+        try { if (ev2 && ev2.preventDefault) ev2.preventDefault(); } catch (_) {}
+        try { worker.terminate(); } catch (_) {}
+        showBanner(false, "No se pudo procesar el Excel (falló el lector del archivo). Recarga la página e intenta de nuevo.");
+        showLoad(false);
+        _limpiarInput();
+      };
+
       worker.onmessage = async (e) => {
-        const { success, rawRows, error } = e.data;
+        const { success, rawRows, error, canales } = e.data;
         worker.terminate();
         if (!success) {
           showBanner(false, error || "Error procesando el archivo.");
           showLoad(false);
+          _limpiarInput();
           return;
         }
 
         try {
-          // Convert array-of-arrays to array-of-objects with header
-          const headers = rawRows[0] || [];
-          const json = rawRows.slice(1).map(row => {
-            const obj = {};
-            headers.forEach((h, i) => { if (h) obj[h] = row[i] !== undefined ? row[i] : ""; });
-            return obj;
-          });
+          const json = filasComoObjetos(rawRows);
 
           if      (type === "data")               await uploadPartners(json);
           else if (type === "rendimiento")       await uploadRendimiento(json);
@@ -1904,25 +1923,87 @@ export async function handleFile(file, type) {
           else if (type === "rendimientoDiario") await uploadRendimientoDiario(json);
           else if (type === "metas")              await uploadMetas(json);
           else if (type === "flotas")             await uploadFlotas(json);
-          else if (type === "conversion")         await uploadConversion(json);
-          await loadFromSupabase();
-          if ((STATE.curMode === "mensual" || STATE.curMode === "diario") && typeof switchMode === "function") {
-            await switchMode(STATE.curMode);
+          else if (type === "conversion") {
+            await uploadConversion(json);
+            // B2: 2da pestaña del MISMO Excel ("Adquisition by channel"). Se
+            // descartaba en silencio desde la migración al Worker.
+            if (canales && canales.rawRows) await uploadChannels(filasComoObjetos(canales.rawRows));
           }
+          // Refresca semanal y, además, invalida mensual/diario/conversión
+          // (invalidarDerivados): un upload de partners/flotas cambia el KAM o el
+          // tagging con el que se armaron esos datasets.
+          await refrescarTrasEscritura();
         } catch(err) {
-          showBanner(false, "Error: " + (err.message || err));
+          showBanner(false, describeUploadError(type, err));
+          // Cancelar o un archivo que no pasa la validación no son fallas del
+          // sistema: el banner ya lo explica, no ensuciar la consola.
+          if (!(err && (err.codigo === "cancelado" || err.codigo === "validacion"))) console.error("handleFile:", err);
         } finally {
           showLoad(false);
+          _limpiarInput();
         }
       };
 
       worker.postMessage({ fileData: ev.target.result, type });
     } catch(e) {
+      try { if (worker) worker.terminate(); } catch (_) {}
       showBanner(false, "Error al leer el archivo: " + e.message);
       showLoad(false);
+      _limpiarInput();
     }
   };
   reader.readAsBinaryString(file);
+}
+
+// ── REFRESCO TRAS UNA ESCRITURA DE DATOS MAESTROS (B8) ──────────────────────
+// loadFromSupabase rehace SOLO la escala semanal. Mensual, diario y conversión
+// son lazy y quedaban cacheados con el KAM / tagging / flota activa de ANTES:
+// cambiar el KAM de un partner, taggear un fleetroom como TukTuk o desactivar
+// una flota no llegaba a esas vistas hasta recargar la página.
+//
+// invalidarDerivados() los marca como no cargados (y sus columnas diferidas) y,
+// si la escala activa no es la semanal, la vuelve a armar en el acto.
+export async function invalidarDerivados() {
+  // Si hay una carga de escala en vuelo, esperarla: terminaría DESPUÉS del reset
+  // y dejaría _mensualLoaded=true con los datos viejos.
+  const enVuelo = [_scaleInflight.mensual, _scaleInflight.diario].filter(Boolean);
+  if (enVuelo.length) await Promise.allSettled(enVuelo);
+  STATE._mensualLoaded = false;
+  STATE._diarioLoaded = false;
+  STATE._conversionLoaded = false;
+  _colsFull.mensual = null;
+  _colsFull.diario = null;
+  if (STATE.curMode && STATE.curMode !== "semanal" && typeof switchMode === "function") {
+    await switchMode(STATE.curMode);
+  }
+}
+
+// I2: estado POR USUARIO de este módulo que no vive en STATE (o que auth.ts no
+// limpiaba). Sin esto, entrar con otro usuario sin recargar reusaba la
+// conversión ya cargada, las columnas diferidas y la ventana del anterior.
+alCerrarSesion(() => {
+  STATE.conversionData = [];
+  STATE._conversionLoaded = false;
+  _colsFull.semanal = _colsFull.mensual = _colsFull.diario = null;
+  _scaleInflight.mensual = _scaleInflight.diario = null;
+  STATE._allPeriods = null;
+  STATE._loadedFrom = null;
+  STATE._semanalData = null;
+  STATE.metasMesSel = null;
+  STATE.metasMesSelYear = null;
+  // El token cacheado (5 s) es del usuario ANTERIOR: un login inmediato lo
+  // habría usado para las primeras requests.
+  _authTokenCache = null; _authTokenAt = 0;
+});
+
+// Refresco estándar después de ESCRIBIR datos maestros o de subir un archivo:
+// semanal (loadFromSupabase) + derivados. Devuelve si el refresco de la BASE
+// quedó completo (el valor de loadFromSupabase): quien llama NO debe pintar un
+// banner verde si es false — el patrón de calcSaveMetas (I4).
+export async function refrescarTrasEscritura() {
+  const ok = await loadFromSupabase();
+  try { await invalidarDerivados(); } catch (e) { console.error("invalidarDerivados:", e); }
+  return ok !== false;
 }
 
 // ── UPLOAD PARTNERS ───────────────────────────────────────────────────────────
@@ -2034,8 +2115,21 @@ export async function updateFlotaField(clid, patch) {
   if (upd.ciudad !== undefined) upd.ciudad = normCity(upd.ciudad);
   if (upd.kam    !== undefined) upd.kam    = String(upd.kam || "").trim();
   if (upd.nombre_asignado !== undefined) upd.nombre_asignado = String(upd.nombre_asignado || "").trim();
-  const { error } = await sb.from("flotas").update(upd).eq("clid", clid);
+  // I3: .select() para distinguir "actualizado" de "RLS no tocó nada" (un
+  // viewer: flotas_admin_update lo excluye y el UPDATE da 0 filas SIN error).
+  const { data, error } = await sb.from("flotas").update(upd).eq("clid", clid).select("clid");
   if (error) throw error;
+  _exigirFilas(data);
+}
+
+// I3: con RLS, un UPDATE/DELETE sin permiso NO da error — afecta 0 filas. Quien
+// escribe con .select() pasa acá lo que volvió; vacío = no se guardó nada.
+export function _exigirFilas(data) {
+  if (!data || !data.length) {
+    const e = new Error(MSG_SIN_FILAS);
+    e.code = "42501";
+    throw e;
+  }
 }
 
 // ── CREAR UNA FLOTA NUEVA (cuando no existe registro en la tabla) ─────────────
@@ -2049,8 +2143,9 @@ export async function createFlota(clid, partial) {
     kam:             String(partial.kam || "").trim(),
     activo:          partial.activo !== false
   };
-  const { error } = await sb.from("flotas").insert(row);
+  const { data, error } = await sb.from("flotas").insert(row).select("clid");
   if (error) throw error;
+  _exigirFilas(data);
 }
 
 // ── MARCAR is_fleet / is_tuktuk POR CLID (desde Vista Flotas) ─────────────────
@@ -2063,9 +2158,11 @@ export async function setPartnerFlag(clid, key, value, partnerFallback, kamFallb
   const kam      = STATE.KAM_MAP[clid]  || kamFallback || "";
   const isFleet  = key === "is_fleet"  ? value : !!(STATE.CLID_IS_FLEET  || {})[clid];
   const isTuktuk = key === "is_tuktuk" ? value : !!(STATE.CLID_IS_TUKTUK || {})[clid];
-  const { error } = await sb.from("partners")
-    .upsert([{ clid, partner, kam, activo: true, is_fleet: isFleet, is_tuktuk: isTuktuk }], { onConflict: "clid" });
+  const { data, error } = await sb.from("partners")
+    .upsert([{ clid, partner, kam, activo: true, is_fleet: isFleet, is_tuktuk: isTuktuk }], { onConflict: "clid" })
+    .select("clid");
   if (error) throw error;
+  _exigirFilas(data);
 }
 
 // ── MARCAR is_fleet / is_tuktuk / exclude_from_taxi / is_delivery / is_cargo
@@ -2102,8 +2199,9 @@ export async function setFleetroomFlags(dbId, patch, ctx = {}) {
     is_cargo:          get("is_cargo",          STATE.FLEETROOM_IS_CARGO),
     activo:            true
   };
-  const { error } = await sb.from("fleetrooms").upsert([row], { onConflict: "db_id" });
+  const { data, error } = await sb.from("fleetrooms").upsert([row], { onConflict: "db_id" }).select("db_id");
   if (error) throw error;
+  _exigirFilas(data);
 }
 
 // TRUE si el fleetroom (db_id) está marcado Delivery / Cargo. Sin fallback por
@@ -2162,6 +2260,9 @@ export function _metaBlankNull(v) {
 export async function uploadMetas(rows) {
   const skippedNoCity = [];
   const skippedBadClid = [];
+  const skippedNoYear = [];
+  const _hoyLima = limaYM(new Date());
+  const _derivados = new Map();   // mes → año derivado (para la confirmación)
   // Detección a nivel de ARCHIVO de las columnas opcionales (fleet/tuktuk/año).
   const colYear   = _metaOptHeader(rows, ["AÑO", "ANIO", "ANO", "YEAR", "MES_YEAR", "MESYEAR"]);
   const colShcar  = _metaOptHeader(rows, ["META SH/AUTO", "SH/AUTO", "META_SH_CAR", "SH_CAR", "META SH AUTO", "SH POR AUTO"]);
@@ -2183,15 +2284,23 @@ export async function uploadMetas(rows) {
     const kam        = (clid && STATE.KAM_MAP[clid]) || kamXls || "";
     const o = {
       clid, partner, kam,
-      // Mes en UPPERCASE para evitar duplicados "mayo"/"Mayo"/"MAYO" en BD
-      mes:  String(row["MES"]    || row["Mes"]    || "").trim().toUpperCase(),
+      // Mes CANÓNICO (ENERO…DICIEMBRE, "SETIEMBRE"/"September" → SEPTIEMBRE):
+      // un mismo mes escrito de dos formas quedaba en dos filas y la app los
+      // trataba como meses distintos. En mayúsculas como siempre.
+      mes:  mesCanonico(row["MES"] || row["Mes"] || ""),
       city: normCity(row["CIUDAD"] || row["Ciudad"]),
       meta_active_drivers: toN(row["ACTIVE DRIVERS"] || row["Active Drivers"] || 0),
       meta_nr:             toN(row["N+R"] || row["n+r"] || 0),
       meta_supply_hours:   toN(row["SUPPLY HOURS"] || row["Supply Hours"] || 0)
     };
     // Columnas opcionales (solo si su header está en el archivo). Blank → null.
-    if (colYear)   o.mes_year         = _metaBlankNull(row[colYear]);
+    // AÑO (B1): mes_year es NOT NULL y parte de la UNIQUE desde 2026-09-23.
+    // Sin columna AÑO (o con la celda vacía) se usa el año de la ocurrencia de
+    // ese mes más cercana a hoy — en diciembre, ENERO es del año siguiente — y
+    // se le pide confirmación al usuario más abajo, ANTES de escribir.
+    const _an = anioParaFilaMeta(o.mes, colYear ? row[colYear] : null, _hoyLima);
+    o.mes_year = _an.anio;
+    if (_an.derivado) _derivados.set(o.mes, _an.anio);
     if (colShcar)  o.meta_sh_car      = _metaBlankNull(row[colShcar]);
     if (colAcc)    o.meta_acceptance  = _metaBlankNull(row[colAcc]);
     if (colUtil)   o.meta_utilization = _metaBlankNull(row[colUtil]);
@@ -2208,6 +2317,10 @@ export async function uploadMetas(rows) {
     }
     if (!r.partner || !r.mes) return false;
     if (!r.clid) return false;
+    if (r.mes_year == null) {
+      skippedNoYear.push(r.mes);
+      return false;
+    }
     if (!r.city) {
       skippedNoCity.push({ partner: r.partner, clid: r.clid, mes: r.mes });
       return false;
@@ -2231,15 +2344,31 @@ export async function uploadMetas(rows) {
     if (DEBUG) console.warn("uploadMetas: filas sin city descartadas:", skippedNoCity);
   }
 
-  // Dedupe por (clid, city, mes): mantener la ULTIMA ocurrencia. Postgres falla
+  if (skippedNoYear.length) {
+    // Un mes que no se reconoce y sin AÑO: no se inventa un año, se rechaza.
+    throw new ErrorSubida("validacion",
+      `${skippedNoYear.length} fila(s) con un MES que no se reconoce (${[...new Set(skippedNoYear)].slice(0, 3).join(", ")}) ` +
+      `y sin columna AÑO. Usa el nombre del mes (ENERO…DICIEMBRE) o agrega una columna AÑO. No se guardó nada.`);
+  }
+  if (_derivados.size) {
+    const lista = [..._derivados.entries()].map(([m, y]) => `• ${m} ${y}`).join("\n");
+    const ok = confirm(
+      `El archivo no dice el AÑO de estas metas (falta la columna AÑO o está vacía).\n\n` +
+      `Se van a guardar como:\n${lista}\n\n` +
+      `(Regla: el mes más cercano a hoy — en diciembre, ENERO es del año siguiente.)\n\n` +
+      `¿Es correcto? Si no, cancela y agrega una columna AÑO al Excel.`);
+    if (!ok) throw new ErrorSubida("cancelado", "Carga de metas cancelada.");
+  }
+
+  // Dedupe por (clid, city, mes, mes_year): mantener la ULTIMA ocurrencia. Postgres falla
   // con "ON CONFLICT DO UPDATE command cannot affect row a second time" si el
   // batch envia 2+ rows que mapean al mismo registro destino (sea por duplicado
   // exacto en el Excel o por constraint UNIQUE en la BD que no incluye `city`).
   const seen     = new Map();   // key -> { row, originalIdx }
   const dupKeys  = [];
   data.forEach((r, idx) => {
-    const key = `${r.clid}|||${r.city}|||${r.mes}`;
-    if (seen.has(key)) dupKeys.push({ key, partner: r.partner, city: r.city, mes: r.mes });
+    const key = `${r.clid}|||${r.city}|||${r.mes}|||${r.mes_year}`;
+    if (seen.has(key)) dupKeys.push({ key, partner: r.partner, city: r.city, mes: `${r.mes} ${r.mes_year}` });
     seen.set(key, r);   // ultima gana
   });
   const deduped = [...seen.values()];
@@ -2254,21 +2383,12 @@ export async function uploadMetas(rows) {
     if (DEBUG) console.warn("uploadMetas: duplicados consolidados:", dupKeys);
   }
 
+  // UNIQUE (clid, city, mes, mes_year) desde la migración 2026-09-23: ENERO
+  // 2026 y ENERO 2027 son filas distintas. Un 42P10 acá = la migración no está
+  // aplicada en esta base (describirErrorSubida lo dice así).
   const { error } = await sb.from("metas")
-    .upsert(deduped, { onConflict: "clid,city,mes" });
-  if (error) {
-    // Si el constraint en BD es solo (clid,mes) sin city, el error de Postgres
-    // sera "cannot affect row a second time". Damos un mensaje accionable.
-    if ((error.message || "").includes("affect row a second time")) {
-      throw new Error(
-        "El UNIQUE constraint de la tabla `metas` no incluye `city`. " +
-        "Ejecuta en Supabase SQL:\n" +
-        "  ALTER TABLE metas DROP CONSTRAINT IF EXISTS metas_clid_mes_key;\n" +
-        "  ALTER TABLE metas ADD CONSTRAINT metas_clid_city_mes_key UNIQUE (clid, city, mes);"
-      );
-    }
-    throw error;
-  }
+    .upsert(deduped, { onConflict: "clid,city,mes,mes_year" });
+  if (error) throw error;
 }
 
 // ── UPDATE STATE INDEXES ──────────────────────────────────────────────────────

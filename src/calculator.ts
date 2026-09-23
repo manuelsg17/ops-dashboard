@@ -8,6 +8,7 @@ import { detectarCambiosTk, hayCambiosTk, mensajeCambiosTk, claveFila, TK_PARAGU
 import { SIN_KAM } from "./core/config.js";
 import { tasaAcum, sumarTasa, leerTasa } from "./domain/metrics.js";
 import { logAccess } from "./shared/accessLog.js";
+import { alCerrarSesion } from "./shared/sesion";
 // calculator.js — Calculadora de Metas (flujo por PESTAÑAS de línea de negocio)
 // El KAM ingresa su meta TOTAL por línea y se reparte (disgrega) a cada partner+ciudad
 // segun su % de representacion en el ULTIMO MES. En vez de un scroll con 6+ tablas,
@@ -72,6 +73,16 @@ export const CALC_STATE = {
   // el usuario esté escribiendo en ese momento.
   _draftIntentado: false
 };
+
+// I2: al cerrar sesión, CALC_STATE vuelve a su estado inicial. Sin esto, salir y
+// entrar con OTRO usuario sin recargar dejaba las metas a medio cargar, las
+// ediciones y el KAM del anterior en memoria (el draft de localStorage ya se
+// borraba en el logout; el objeto en memoria no).
+const _CALC_STATE_INICIAL = JSON.stringify(CALC_STATE);
+alCerrarSesion(() => {
+  for (const k of Object.keys(CALC_STATE)) delete CALC_STATE[k];
+  Object.assign(CALC_STATE, JSON.parse(_CALC_STATE_INICIAL));
+});
 
 // Única llave de localStorage para "lo que el KAM cargó y todavía no guardó":
 // meta global (kamGoals) + % TukTuk (tkPct). UN solo borrador, no uno por KAM —
