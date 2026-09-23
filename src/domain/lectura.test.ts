@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { p2Lectura, p2Accion } from "./lectura.js";
+import { p2Lectura, p2Accion, p2SenalesEjecutivas, SENALES_UMBRALES } from "./lectura.js";
 
 // La portada la lee la GERENCIA DEL PARTNER. Estos tests fijan que el texto
 // diga algo accionable: cada frase con su número y su consecuencia. Si alguien
@@ -198,5 +198,97 @@ describe("acción ejecutiva: UNA sola palanca", () => {
 
   it("sin nada atrasado no inventa una acción", () => {
     expect(p2Accion({ ...base, kpis: base.kpis.map(k => ({ ...k, pct: 120, real: k.meta * 1.2 })) })).toBeNull();
+  });
+});
+
+// ── Señales ejecutivas (mudadas desde Vista Partner, Ola 6) ──────────────────
+// Mismos umbrales que tenía _pvExecutiveSummary. Cada test aísla UNA regla con
+// un contexto "neutro" que no dispara ninguna otra.
+describe("señales ejecutivas del deck (ex Vista Partner)", () => {
+  const fmtN = (n: number) => String(Math.round(n));
+  const fmtDec = (n: number, d: number) => n.toFixed(d);
+  const neutro = {
+    lang: "es", unidades: "semanas", fmt: fmtN, fmtDec,
+    serieAD: [100, 102, 101, 99, 100, 101],   // estable, 6 períodos
+    picoAD: 120,                              // 101/120 = 84%: ni pico ni bajo
+    recibeLeads: true, nuevos: { total: 20, yango: 4 },
+    comision: { comPrev: 1000, viajesPrev: 1000, comAct: 1000, viajesAct: 1000 },
+    ciudades: [{ label: "Lima", ad: 80 }, { label: "Arequipa", ad: 40 }]
+  };
+  const kinds = (ctx: any) => p2SenalesEjecutivas(ctx).map(s => s.kind);
+
+  it("un contexto neutro no dispara nada", () => {
+    expect(p2SenalesEjecutivas(neutro)).toEqual([]);
+  });
+
+  it("volatilidad: CV ≥ 25% con 6+ períodos", () => {
+    const s = p2SenalesEjecutivas({ ...neutro, serieAD: [50, 150, 60, 140, 55, 101], picoAD: 150 });
+    const v = s.find(x => x.kind === "volatilidad")!;
+    expect(v.sev).toBe("mid");
+    expect(v.detail).toMatch(/\d+% .*6 semanas/);
+  });
+
+  it("volatilidad: con menos de 6 períodos no se juzga", () => {
+    expect(kinds({ ...neutro, serieAD: [50, 150, 60, 140, 101], picoAD: 150 })).not.toContain("volatilidad");
+  });
+
+  it("volatilidad: los períodos en 0 no cuentan (y con <4 con dato no se juzga)", () => {
+    expect(kinds({ ...neutro, serieAD: [0, 0, 0, 50, 150, 101], picoAD: 150 })).not.toContain("volatilidad");
+  });
+
+  it("pico: ≥95% del pico es señal POSITIVA (sev ok) con los tres números", () => {
+    const s = p2SenalesEjecutivas({ ...neutro, picoAD: 104 }).find(x => x.kind === "pico_mejor")!;
+    expect(s.sev).toBe("ok");
+    expect(s.detail).toContain("101");
+    expect(s.detail).toContain("97%");
+    expect(s.detail).toContain("104");
+  });
+
+  it("pico: <60% del pico avisa potencial desaprovechado; entre 60 y 95 no dice nada", () => {
+    expect(kinds({ ...neutro, picoAD: 200 })).toContain("pico_bajo");
+    expect(kinds({ ...neutro, picoAD: 150 })).not.toContain("pico_bajo");
+    expect(kinds({ ...neutro, picoAD: 150 })).not.toContain("pico_mejor");
+  });
+
+  it("comisión por viaje: cae ≥10% → señal con antes, después y caída", () => {
+    const s = p2SenalesEjecutivas({ ...neutro, comision: { comPrev: 1200, viajesPrev: 1000, comAct: 1000, viajesAct: 1000 } })
+      .find(x => x.kind === "comision_viaje")!;
+    expect(s.detail).toBe("$1.20 → $1.00 (−16.7%)");
+    expect(kinds({ ...neutro, comision: { comPrev: 1050, viajesPrev: 1000, comAct: 1000, viajesAct: 1000 } })).not.toContain("comision_viaje");
+  });
+
+  it("comisión por viaje: sin base (0 viajes o 0 comisión) no se juzga", () => {
+    expect(kinds({ ...neutro, comision: { comPrev: 0, viajesPrev: 1000, comAct: 10, viajesAct: 1000 } })).toEqual([]);
+    expect(kinds({ ...neutro, comision: null })).toEqual([]);
+  });
+
+  it("dependencia de leads: ≥50% Yango con ≥5 nuevos, solo si recibe leads", () => {
+    const d = p2SenalesEjecutivas({ ...neutro, nuevos: { total: 10, yango: 6 } }).find(x => x.kind === "dependencia_leads")!;
+    expect(d.detail).toContain("60%");
+    expect(d.detail).toContain("6 de 10");
+    expect(kinds({ ...neutro, nuevos: { total: 4, yango: 4 } })).not.toContain("dependencia_leads");    // muy pocos
+    expect(kinds({ ...neutro, recibeLeads: false, nuevos: { total: 10, yango: 6 } })).not.toContain("dependencia_leads");
+  });
+
+  it("brecha entre ciudades: ≥2,5× entre la mejor y la peor con AD", () => {
+    const b = p2SenalesEjecutivas({ ...neutro, ciudades: [{ label: "Lima", ad: 300 }, { label: "Trujillo", ad: 100 }, { label: "Arequipa", ad: 0 }] })
+      .find(x => x.kind === "brecha_ciudades")!;
+    expect(b.detail).toBe("Lima 300 vs Trujillo 100 (3.0×)");   // Arequipa (0) no cuenta
+    expect(kinds({ ...neutro, ciudades: [{ label: "Lima", ad: 240 }, { label: "Trujillo", ad: 100 }] })).not.toContain("brecha_ciudades");
+    expect(kinds({ ...neutro, ciudades: [{ label: "Lima", ad: 900 }] })).not.toContain("brecha_ciudades");
+  });
+
+  it("los umbrales son los de Vista Partner (no se recalibraron al mudar)", () => {
+    expect(SENALES_UMBRALES).toMatchObject({ cvMin: 0.25, picoMejor: 95, picoBajo: 60, comisionCaidaPct: 10,
+      dependenciaShare: 0.5, dependenciaMinNuevos: 5, brechaRatio: 2.5 });
+  });
+
+  it("ruso e inglés: sin español colado", () => {
+    const ctx = { ...neutro, serieAD: [50, 150, 60, 140, 55, 101], picoAD: 400, nuevos: { total: 10, yango: 8 } };
+    const ru = p2SenalesEjecutivas({ ...ctx, lang: "ru", unidades: "нед." }).map(s => s.title + " " + s.detail).join(" ");
+    expect(ru).toMatch(/[а-яА-Я]/);
+    expect(ru).not.toMatch(/conductores|de los nuevos|variables/);
+    const en = p2SenalesEjecutivas({ ...ctx, lang: "en", unidades: "weeks" }).map(s => s.title + " " + s.detail).join(" ");
+    expect(en).not.toMatch(/conductores|de los nuevos/);
   });
 });

@@ -1,7 +1,9 @@
 //@ts-nocheck
 // presentacion2.js — "Presentación 2.0" (Fase 1a)
-// Presentación semanal estandarizada para enviar al partner. Sección NUEVA e
-// independiente: no toca "Vista Partner" (partnerView.js). Reusa helpers
+// Presentación semanal estandarizada para enviar al partner. Desde la Ola 6
+// (sep 2026) también absorbe lo que solo tenía Vista Partner, que se retiró:
+// embudo de conversión, adquisición por canal, N+R por origen y cinco señales
+// ejecutivas en la hoja de Alertas (ver "HOJAS MUDADAS DESDE VISTA PARTNER"). Reusa helpers
 // globales (fmt, fmtSmart, d2s, CITY_COLORS, cityLabel, escapeHTML,
 // ensureIndexes) y define abajo los helpers de presentación (getPartnerVals,
 // getCityVals, getSelectedDates, _presOrderCities, getWoW, wowColor) que
@@ -34,9 +36,21 @@ import { esMesEnCurso } from "./domain/mesEnCurso";
 import { projectFlow, retentionSeries, seriesByDate, snapshotValue,
          horasPorConductorBase, TK_HORAS_BASE_MIN, TK_MIN_ACTIVOS,
          pacingFlujo, median, fechasEnRango, tasaAcum, sumarTasa, leerTasa } from "./domain/metrics.js";
-import { p2Lectura, p2Accion, META_CUMPLIDA_PCT } from "./domain/lectura.js";
+import { p2Lectura, p2Accion, META_CUMPLIDA_PCT, p2SenalesEjecutivas } from "./domain/lectura.js";
 import { reportYM, diasMesReporte, MES_NOMBRES } from "./shared/mesReporte.js";
 import { makeT, pick, fmtL, fmtSmartL, fmtDecL, mesL, xl, ciudadL, EXPORT_STR } from "./core/i18nExport";
+// Idioma de la HERRAMIENTA (t) para los controles: la barra, el selector de
+// hojas, el chequeo previo y los avisos los lee el KAM, no el partner. El deck
+// sigue en su propio idioma (P2T / xl). Antes la barra seguía el idioma del
+// deck: con el deck en ruso, un KAM que navega en español veía "ЯЗЫК" y
+// "СРАВНИТЬ С" (anotado en el plan, Ola 6).
+import { t, getLang } from "./core/i18n";
+import { btn, segmented, alertBox, emptyState } from "./shared/ui";
+import { iconSvg } from "./shared/icons";
+import { alertDialog, confirmDialog } from "./shared/confirmDialog";
+import { chartTokens, cssVar } from "./shared/chartTheme";
+import { embudoCohorte, canalCohorte, FILTRO_DEFECTO, COHORTE_MIN, EMBUDO_COLS, CANALES } from "./domain/conversionCohorte";
+import { mesNombre } from "./core/meses";
 import * as forecast from "./forecast.js";
 Object.assign(window, forecast);
 
@@ -274,8 +288,13 @@ export function p2Deck(partner) {
   if (showTk)  verticales.push({ ds: "tuktuk",   et: "TukTuk" });
   if (hasDl)   verticales.push({ ds: "delivery", et: "Delivery" });
   if (hasCg)   verticales.push({ ds: "cargo",    et: "Cargo" });
-  verticales.forEach(v => P2_POR_VERTICAL.forEach(def =>
-    deck.push({ def: { ...def, es: `${def.es} · ${v.et}`, en: `${def.en} · ${v.et}`, ru: `${def.ru || def.en} · ${v.et}` }, ds: v.ds })));
+  const conSufijo = (def, et) => ({ ...def, es: `${def.es} · ${et}`, en: `${def.en} · ${et}`, ru: `${def.ru || def.en} · ${et}` });
+  verticales.forEach(v => {
+    P2_POR_VERTICAL.forEach(def => deck.push({ def: conSufijo(def, v.et), ds: v.ds }));
+    // N+R por origen (mudada de Vista Partner): solo Taxi — es donde existen
+    // los leads Yango (new_from_service) — y solo si hubo N+R en el rango.
+    if (v.ds === "taxi" && p2NrOrigenTieneDatos(partner)) deck.push({ def: conSufijo(P2_NR_ORIGEN_SLIDE, v.et), ds: "taxi" });
+  });
 
   // 5. Alertas: UNA hoja con todas las categorías adentro (una por vertical
   //    volvía a inflar el deck). El embudo de captación NO es una hoja propia:
@@ -284,40 +303,63 @@ export function p2Deck(partner) {
   //    acortarlo, y ahí abajo compite mejor con la lectura y la acción.
   deck.push({ def: P2_ALERTAS_SLIDE, ds: base });
 
+  // 5b. Embudo de conversión y adquisición por canal (tabla conversion_pais,
+  //     mudadas de Vista Partner). Ojo: NO es el embudo del Ejecutivo, que sale
+  //     de new_profiles_* del reporte de rendimiento — son dos fuentes
+  //     distintas. Solo aparecen si el partner tiene datos en el último mes.
+  if (p2EmbudoTieneDatos(partner)) deck.push({ def: P2_EMBUDO_SLIDE, ds: base });
+  if (p2CanalTieneDatos(partner))  deck.push({ def: P2_CANAL_SLIDE, ds: base });
+
   // 6. Proyección: solo pantalla, al final del cuerpo.
   deck.push({ def: P2_SLIDES[3], ds: base });
 
   // 7. Anexo Data Raw, una hoja por vertical (conserva el corte por ciudad).
-  verticales.forEach(v => P2_ANEXO_VERTICAL.forEach(def =>
-    deck.push({ def: { ...def, es: `${def.es} · ${v.et}`, en: `${def.en} · ${v.et}`, ru: `${def.ru || def.en} · ${v.et}` }, ds: v.ds })));
+  verticales.forEach(v => P2_ANEXO_VERTICAL.forEach(def => deck.push({ def: conSufijo(def, v.et), ds: v.ds })));
 
   // Seguimiento: solo si el partner tiene tareas cargadas.
   if (typeof p2PartnerHasSeguimiento === "function" && p2PartnerHasSeguimiento(partner))
     deck.push({ def: P2_SEG_SLIDE, ds: base });
   return deck;
 }
-// HTML del nav (prev/next + un botón por slide del deck; sección TukTuk tintada ámbar).
+// Selector de hojas (Ola 6): lista segmentada con scroll horizontal, en UNA
+// fila, con anterior/siguiente a los lados. Antes eran 18 botones que se
+// partían en 2-3 filas y empujaban la hoja hacia abajo.
+//   · Activa: fondo oscuro (se distingue sin depender del rojo, que es marca).
+//   · TukTuk: icono de tuktuk (antes emoji 🛺, que cambia según el sistema).
+//   · Fuera del PDF: tachada y atenuada — la exclusión tiene que notarse SIN
+//     abrir el panel, o el KAM manda un PDF incompleto sin darse cuenta de que
+//     lo había recortado en otra sesión.
+// Las etiquetas siguen el idioma de la APP (t): el selector lo usa el KAM.
 export function p2NavHTML() {
   const deck = p2Deck(PRESENT2_STATE.partner);
-  const btns = deck.map((entry, i) => {
-    const label = p2SlideLabel(entry.def);
-    const on = PRESENT2_STATE.slide === i, tk = entry.ds === "tuktuk";
+  const chips = deck.map((entry, i) => {
+    const on = PRESENT2_STATE.slide === i;
     const fuera = !p2SlideEnPdf(entry);
-    const activeBg = tk ? "#f59e0b" : "#FF0000";
-    const bd = on ? activeBg : (tk ? "#fde68a" : "#e5e5e5");
-    const bg = on ? activeBg : (tk ? "#fffbeb" : "#fff");
-    const co = on ? "#fff" : (tk ? "#b45309" : "#555");
-    // Las hojas excluidas del PDF se ven atenuadas y con ⃠: la exclusión tiene
-    // que notarse SIN abrir el panel, o el KAM manda un PDF incompleto sin darse
-    // cuenta de que lo había recortado en otra sesión.
-    const off = fuera ? "opacity:.45;text-decoration:line-through" : "";
-    return `<button data-slide2="${i}" data-act="goSlide2" data-i="${i}" title="${fuera ? escapeHTML(P2T("Fuera del PDF", "Excluded from PDF", "Не входит в PDF")) : ""}" style="padding:6px 14px;border-radius:6px;font-size:.78rem;font-weight:600;border:2px solid ${bd};background:${bg};color:${co};cursor:pointer;${off}">${tk ? "🛺 " : ""}${escapeHTML(label)}</button>`;
+    const cls = "p2-slide-chip" + (on ? " is-active" : "") + (fuera ? " is-off" : "") + (entry.ds === "tuktuk" ? " is-tk" : "");
+    const ico = entry.ds === "tuktuk" ? iconSvg("tuktuk", { size: 14 }) : "";
+    return `<button type="button" class="${cls}" role="tab" aria-selected="${on}" data-slide2="${i}" data-act="goSlide2" data-i="${i}"${fuera ? ` title="${escapeHTML(t("p2.ctl.fueraPdf"))}"` : ""}>${ico}<span>${escapeHTML(p2SlideLabelUI(entry.def))}</span></button>`;
   }).join("");
-  return `<button class="png-btn" data-act="prevSlide2" class="agy-style-329">◀</button>${btns}<button class="png-btn" data-act="nextSlide2" class="agy-style-329">▶</button>`;
+  return btn({ label: t("p2.ctl.anterior"), icon: "chevron-left", iconOnly: true, variant: "ghost", size: "sm", act: "prevSlide2", disabled: PRESENT2_STATE.slide <= 0 }) +
+    `<div class="p2-slides__track" role="tablist" aria-label="${escapeHTML(t("p2.ctl.hojasAria"))}">${chips}</div>` +
+    btn({ label: t("p2.ctl.siguiente"), icon: "chevron-right", iconOnly: true, variant: "ghost", size: "sm", act: "nextSlide2", disabled: PRESENT2_STATE.slide >= deck.length - 1 });
+}
+// Tras repintar el selector, la hoja activa queda a la vista dentro de la
+// franja con scroll (sin mover la página: solo el scroll horizontal).
+export function p2ScrollChipActivo() {
+  const track = document.querySelector("#present2Nav .p2-slides__track");
+  const on = track && track.querySelector(".p2-slide-chip.is-active");
+  if (!track || !on) return;
+  const l = on.offsetLeft, r = l + on.offsetWidth;
+  if (l < track.scrollLeft) track.scrollLeft = l - 8;
+  else if (r > track.scrollLeft + track.clientWidth) track.scrollLeft = r - track.clientWidth + 8;
 }
 // Etiqueta de una hoja en el idioma del deck.
 export function p2SlideLabel(def) {
   return P2T(def.es, def.en, def.ru);
+}
+// Etiqueta de una hoja en el idioma de la APP (selector y panel de hojas).
+export function p2SlideLabelUI(def) {
+  return pick({ es: def.es, en: def.en, ru: def.ru }, getLang());
 }
 // ¿Esta hoja entra al PDF? `noPdf` es del código (Proyección: solo pantalla);
 // `pdfOff` es del KAM.
@@ -337,25 +379,26 @@ export function p2PdfPanelHTML() {
   const deck = p2Deck(PRESENT2_STATE.partner);
   const filas = deck.map(entry => {
     const k = p2SlideKey(entry);
+    const ico = entry.ds === "tuktuk" ? iconSvg("tuktuk", { size: 14 }) : "";
     if (entry.def.noPdf) {
-      return `<label class="p2pdf-row p2pdf-na" title="${escapeHTML(P2T("Esta hoja es solo de pantalla", "Screen-only sheet", "Только для экрана"))}">
-        <input type="checkbox" disabled><span>${escapeHTML(p2SlideLabel(entry.def))}</span>
-        <em>${escapeHTML(P2T("solo pantalla", "screen only", "только экран"))}</em></label>`;
+      return `<label class="p2-pdf-row is-na" title="${escapeHTML(t("p2.pdf.soloPantallaHint"))}">
+        <input type="checkbox" disabled><span class="p2-pdf-row__lbl">${ico}${escapeHTML(p2SlideLabelUI(entry.def))}</span>
+        <em>${escapeHTML(t("p2.pdf.soloPantalla"))}</em></label>`;
     }
     const on = !PRESENT2_STATE.pdfOff.has(k);
-    return `<label class="p2pdf-row">
+    return `<label class="p2-pdf-row">
       <input type="checkbox" ${on ? "checked" : ""} data-act-change="present2TogglePdfSlide" data-key="${escapeHTML(k)}">
-      <span>${entry.ds === "tuktuk" ? "🛺 " : ""}${escapeHTML(p2SlideLabel(entry.def))}</span></label>`;
+      <span class="p2-pdf-row__lbl">${ico}${escapeHTML(p2SlideLabelUI(entry.def))}</span></label>`;
   }).join("");
   const n = deck.filter(p2SlideEnPdf).length;
-  return `<div class="p2pdf-panel">
-    <div class="p2pdf-h">
-      <strong>${escapeHTML(P2T("Hojas que entran al PDF", "Sheets included in the PDF", "Страницы, входящие в PDF"))}</strong>
-      <span>${n} / ${deck.filter(e => !e.def.noPdf).length}</span>
-      <button class="png-btn" data-act="present2PdfAll" data-on="1">${escapeHTML(P2T("Todas", "All", "Все"))}</button>
-      <button class="png-btn" data-act="present2PdfAll" data-on="0">${escapeHTML(P2T("Ninguna", "None", "Ни одной"))}</button>
+  return `<div class="p2-pdf-panel ui-card" id="p2PdfPanel">
+    <div class="p2-pdf-panel__head">
+      <strong>${escapeHTML(t("p2.pdf.titulo"))}</strong>
+      <span class="p2-pdf-panel__n ui-num">${n} / ${deck.filter(e => !e.def.noPdf).length}</span>
+      ${btn({ label: t("p2.pdf.todas"), variant: "secondary", size: "sm", act: "present2PdfAll", data: { on: "1" } })}
+      ${btn({ label: t("p2.pdf.ninguna"), variant: "secondary", size: "sm", act: "present2PdfAll", data: { on: "0" } })}
     </div>
-    <div class="p2pdf-list">${filas}</div>
+    <div class="p2-pdf-panel__list">${filas}</div>
   </div>`;
 }
 
@@ -391,14 +434,11 @@ export function p2FreshnessWarn() {
   const tkBehind = tkMax < taxiMax;
   const ahead    = tkBehind ? "Taxi" : "TukTuk",   aheadMax  = tkBehind ? taxiMax : tkMax;
   const behind   = tkBehind ? "TukTuk" : "Taxi",   behindMax = tkBehind ? tkMax : taxiMax;
-  const mi = p2ModeInfo();
-  const A = escapeHTML(ahead), B = escapeHTML(behind), aM = d2s(aheadMax), bM = d2s(behindMax);
-  const msg = P2T(
-    `Posible dato faltante (${mi.label}): <b>${A}</b> llega a <b>${aM}</b> pero <b>${B}</b> solo a <b>${bM}</b>. Si actualizas todo junto, revisa si falta subir el <b>${B}</b> de <b>${aM}</b>.`,
-    `Possible missing data (${mi.label}): <b>${A}</b> reaches <b>${aM}</b> but <b>${B}</b> only <b>${bM}</b>. If you upload everything together, check whether <b>${B}</b> for <b>${aM}</b> is missing.`,
-    `Возможно, не хватает данных (${mi.label}): <b>${A}</b> доходит до <b>${aM}</b>, а <b>${B}</b> только до <b>${bM}</b>. Если вы загружаете всё вместе, проверьте, не пропущена ли загрузка <b>${B}</b> за <b>${aM}</b>.`);
-  return `<div class="agy-style-333">
-    <span class="agy-style-334">⚠️</span><span class="agy-style-335">${msg}</span></div>`;
+  // Aviso para el KAM (nunca entra al PDF): va en el idioma de la APP.
+  const escala = t(`mode.${STATE.curMode === "mensual" ? "mensual" : STATE.curMode === "diario" ? "diario" : "semanal"}`);
+  return `<div class="p2-freshness">${alertBox({ tone: "warn",
+    title: t("p2.frescura.titulo", { escala }),
+    text: t("p2.frescura.texto", { a: ahead, am: d2s(aheadMax), b: behind, bm: d2s(behindMax) }) })}</div>`;
 }
 
 // Header de marca compartido: partner + contexto (izq) · logo + título de slide (der)
@@ -961,18 +1001,48 @@ export function p2FmtVal(kind, v) {
 }
 
 // ── SLIDE 0: MATRIZ (niveles × KPIs) ──────────────────────────────────────────
+export const P2_FLEET_KEYS = { shCarInt: 1, accept: 1, ownedFleetActiveCars: 1 };
+// ¿Hay alguna fila de sub-flota Fleet del partner en ese nivel y rango? Sin
+// ninguna, los KPIs de flota no son "0": no hay dato (Ola 6).
+export function p2FleetPresente(partner, city, dates) {
+  const idx = p2CityDateIndex();
+  const cities = city ? [city] : p2PartnerCities(partner);
+  return dates.some(d => cities.some(c => ((idx && idx.get(`${c}|||${d}`)) || [])
+    .some(r => r.partner === partner && (typeof rowIsFleet !== "function" || rowIsFleet(r)))));
+}
 export function buildSlide2Matrix(partner, dates, idx) {
   const fleetMode = p2IsFleetMode(partner);
   const kpis = fleetMode ? p2KpiDefsFleet() : p2KpiDefs();
   const levels = p2Levels(partner);
   const from = dates[0], to = dates[dates.length - 1];
   const rows = levels.map(lv => {
+    // Ciudad donde el partner NO tiene ninguna fila en el rango (operó ahí en
+    // otro período): antes salían 4 gráficas planas en 0 que se leían como
+    // "hizo cero". Ahora la fila dice "sin dato" (Ola 6).
+    if (!p2Present(partner, lv.city, dates).some(Boolean)) {
+      return `
+      <div class="p2-nivel-vacio" style="border-left-color:${lv.color}">
+        <span style="color:${lv.color}">${escapeHTML(lv.label)}</span>
+        <span class="p2-sin-dato">${escapeHTML(P2T("Sin dato en el período", "No data in the period", "Нет данных за период"))}</span>
+      </div>`;
+    }
     // Fusiona ad/nr/... (p2Metrics, igual que en taxi) con shCar/accept/activeCars
     // (p2FleetSeries, ponderados) — sin colisión de keys, se pueden mezclar.
     const m = fleetMode
       ? Object.assign({}, p2Metrics(partner, lv.city, dates), p2FleetSeries(partner, lv.city, dates))
       : p2Metrics(partner, lv.city, dates);
+    // KPIs de flota en un nivel SIN sub-flotas Fleet en el rango (p.ej. una ciudad
+    // donde el partner solo hace taxi): antes una línea plana en 0 / eje vacío.
+    const sinFlota = fleetMode && !p2FleetPresente(partner, lv.city, dates);
     const cards = kpis.map(k => {
+      if (sinFlota && P2_FLEET_KEYS[k.key]) return `
+        <div class="agy-style-356">
+          <div class="agy-style-357">
+            <span class="agy-style-358"><span style="width:6px;height:6px;border-radius:50%;background:${k.color};flex-shrink:0"></span><span class="agy-style-359">${escapeHTML(k.label)}</span></span>
+          </div>
+          <div class="agy-style-360">—</div>
+          <div class="agy-style-361 p2-kpi-vacio"><span class="p2-sin-dato">${escapeHTML(P2T("Sin dato en el período", "No data in the period", "Нет данных за период"))}</span></div>
+        </div>`;
       const arr = m[k.key];
       const last = arr[arr.length - 1];
       const prev = arr.length > 1 ? arr[arr.length - 2] : null;
@@ -1012,9 +1082,10 @@ export function buildSlide2Matrix(partner, dates, idx) {
 export function buildSlide2MatrixCharts(partner, dates, root) {
   const fleetMode = p2IsFleetMode(partner);
   const kpis = fleetMode ? p2KpiDefsFleet() : p2KpiDefs();
-  const FLEET_KEYS = { shCarInt: 1, accept: 1, ownedFleetActiveCars: 1 };   // sin cohorte v1; trend ponderado
+  const FLEET_KEYS = P2_FLEET_KEYS;   // sin cohorte v1; trend ponderado
   const levels = p2Levels(partner);
   levels.forEach(lv => {
+    if (!p2Present(partner, lv.city, dates).some(Boolean)) return;   // "sin dato": no hay canvas
     const m = fleetMode
       ? Object.assign({}, p2Metrics(partner, lv.city, dates), p2FleetSeries(partner, lv.city, dates))
       : p2Metrics(partner, lv.city, dates);
@@ -1052,12 +1123,13 @@ export function p2RawCols() {
     { key: "ad",    label: xl("kpi.ad", PRESENT2_STATE.lang), kind: "num", grp: "vol" },
     { key: "newd",  label: P2T("Nuevos", "New Drivers", "Новые водители"),           kind: "num", grp: "vol" },
     { key: "react", label: P2T("Reactivados", "Reactivated", "Реактивированные"),      kind: "num", grp: "vol" },
-    { key: "nr",    label: "N+R",              kind: "num", grp: "vol" },
+    { key: "nr",    label: xl("kpi.nrCorto", PRESENT2_STATE.lang), kind: "num", grp: "vol" },
     { key: "comm",  label: P2T("Comisión Partner", "Partner Commission", "Комиссия партнёра"), kind: "money", grp: "vol" },
     { key: "ret",   label: P2T("Retención", "Retention", "Удержание"), kind: "pct", grp: "efi" },
-    { key: "tripsPerSh", label: "Trips/SH",    kind: "ratio", grp: "efi" },
-    { key: "tripsPerAd", label: "Trips/AD",    kind: "ratio", grp: "efi" },
-    { key: "shPerAd",    label: "SH/AD",       kind: "ratio", grp: "efi" }
+    // Abreviaturas internas (no nombres del reporte del partner): se traducen.
+    { key: "tripsPerSh", label: P2T("Viajes/hora", "Trips/SH", "Поездки/час"),      kind: "ratio", grp: "efi" },
+    { key: "tripsPerAd", label: P2T("Viajes/cond.", "Trips/AD", "Поездки/вод."),   kind: "ratio", grp: "efi" },
+    { key: "shPerAd",    label: P2T("Horas/cond.", "SH/AD", "Часы/вод."),          kind: "ratio", grp: "efi" }
   ];
 }
 // Fleet: TODAS las columnas de agregador (p2RawCols, sin quitar nada — incluye
@@ -1066,7 +1138,9 @@ export function p2RawCols() {
 export function p2RawColsFleet() {
   return [
     ...p2RawCols(),
-    { key: "ownedFleetActiveCars", label: "Owned Fleet Active Cars", kind: "num", grp: "fleet" },
+    // Mismas etiquetas que la matriz Fleet (p2KpiDefsFleet): nombres OFICIALES
+    // del reporte Fleet del partner, en inglés también en español a propósito.
+    { key: "ownedFleetActiveCars", label: P2T("Owned Fleet Active Cars", "Owned Fleet Active Cars", "Активные авто собственного автопарка"), kind: "num", grp: "fleet" },
     { key: "shCarInt",             label: P2T("Internal Fleet SH/Auto", "Internal Fleet SH/Car", "Часы внутреннего автопарка / авто"),     kind: "ratio1", grp: "fleet" },
     { key: "accept",               label: "Acceptance Rate", kind: "pct", grp: "fleet" }
   ];
@@ -1089,9 +1163,22 @@ export function buildSlide2Raw(partner, dates, pct, idx) {
   const levels = p2Levels(partner);
   const from = dates[0], to = dates[dates.length - 1];
   const tables = levels.map(lv => {
+    if (!p2Present(partner, lv.city, dates).some(Boolean)) {
+      return `
+      <div class="agy-style-371">
+        <div class="agy-style-372">
+          <span style="width:10px;height:10px;border-radius:2px;background:${lv.color};display:inline-block"></span>
+          <span style="font-weight:800;font-size:.82rem;color:${lv.color}">${escapeHTML(lv.label)}</span>
+          <span class="p2-sin-dato">${escapeHTML(P2T("Sin dato en el período", "No data in the period", "Нет данных за период"))}</span>
+        </div>
+      </div>`;
+    }
     const m = fleetMode
       ? Object.assign({}, p2Metrics(partner, lv.city, dates), p2FleetSeries(partner, lv.city, dates))
       : p2Metrics(partner, lv.city, dates);
+    // Nivel sin sub-flotas Fleet en el rango: los autos de flota no son 0, no
+    // hay dato → "—" (mismo criterio que la matriz; las tasas ya venían en null).
+    if (fleetMode && !p2FleetPresente(partner, lv.city, dates)) m.ownedFleetActiveCars = dates.map(() => null);
     // Filas = semanas. En % arrancan desde la 2da semana (WoW).
     const idxs = pct ? dates.map((_, i) => i).slice(1) : dates.map((_, i) => i);
     // Fila de GRUPOS encima de las columnas (Volumen / Eficiencia / Flota):
@@ -2295,8 +2382,14 @@ export function buildSlide2Alertas(partner, dates, idx) {
     if (!opera) return null;
     PRESENT2_STATE.dataset = v.ds;
     let als = [];
-    try { als = p2ComputeAlerts(partner, p2AllDates().filter(d => (dates || []).includes(d))) || []; }
+    const fechasV = p2AllDates().filter(d => (dates || []).includes(d));
+    try { als = p2ComputeAlerts(partner, fechasV) || []; }
     catch (e) { als = []; }
+    // + señales ejecutivas mudadas de Vista Partner (nivel partner, no ciudad).
+    // Orden: alta → media → positivas (sev "ok", p.ej. récord histórico).
+    try { als = als.concat(p2SenalesPartner(partner, fechasV)); } catch (e) { /* una regla nueva nunca tumba la hoja */ }
+    const ORD = { high: 0, mid: 1, ok: 2 };
+    als.sort((a, b) => (ORD[a.sev] ?? 1) - (ORD[b.sev] ?? 1));
     PRESENT2_STATE.dataset = savedDs;
     return { ...v, als };
   }).filter(Boolean);
@@ -2304,15 +2397,19 @@ export function buildSlide2Alertas(partner, dates, idx) {
   PRESENT2_STATE.dataset = savedDs;
 
   const SEV = { high: { c: "#FF0000", t: P2T("Alta", "High", "Высокий") },
-                mid:  { c: "#f59e0b", t: P2T("Media", "Mid", "Средний") } };
+                mid:  { c: "#f59e0b", t: P2T("Media", "Mid", "Средний") },
+                ok:   { c: "var(--color-ok-solid)", t: P2T("Positiva", "Positive", "Позитивный") } };
 
   const html = bloques.map(b => {
     const n = b.als.length;
+    // Color del contador: el de la señal más grave; solo positivas → verde.
+    const nCol = b.als.some(a => a.sev === "high") ? "#FF0000"
+               : b.als.some(a => a.sev !== "ok") ? "#f59e0b" : "#10b981";
     return `<div class="al-bloque">
       <div class="al-cab">
         <span class="al-dot" style="background:${b.col}"></span>
         <span class="al-nom">${b.lbl}</span>
-        <span class="al-n" style="color:${n ? (b.als.some(a => a.sev === "high") ? "#FF0000" : "#f59e0b") : "#10b981"}">${
+        <span class="al-n" style="color:${n ? nCol : "#10b981"}">${
           n ? `${n} ${n === 1 ? P2T("señal", "signal", "сигнал") : P2T("señales", "signals", "сигналов")}` : (P2T("✓ sin señales", "✓ clear", "✓ без сигналов"))}</span>
       </div>
       ${n ? `<ul class="al-lista">${b.als.map(a => {
@@ -2332,6 +2429,330 @@ export function buildSlide2Alertas(partner, dates, idx) {
     <div class="al-wrap">${html || `<div class="agy-style-396">${P2T("Sin categorías con datos.", "No categories with data.", "Нет категорий с данными.")}</div>`}</div>
     ${p2BrandFooter(idx)}
   </div>`;
+}
+
+// ── HOJAS MUDADAS DESDE VISTA PARTNER (Ola 6, sep 2026) ──────────────────────
+// Al retirar Vista Partner (decisión 2 del plan sep-2026) se mudó al deck lo que
+// SOLO ella tenía: el embudo de conversión y la adquisición por canal (tabla
+// conversion_pais, partner vs promedio de su cohorte) y el N+R por origen por
+// ciudad. Las tres aparecen SOLO si hay datos (p2Deck) y entran al PDF como
+// cualquier otra hoja; el KAM las puede sacar desde "Hojas".
+//
+// MODO COMPARTIR: Vista Partner tenía un botón "Solo tendencias" que escondía
+// las cifras de los cohortes antes de mostrarle la pantalla al partner. En el
+// deck no hace falta: (1) las líneas de cohorte de "KPIs por Nivel" se dibujan
+// NORMALIZADAS a la escala del partner y sin etiquetas — en el PDF solo queda
+// la forma; el valor crudo aparece únicamente en el tooltip de la pantalla del
+// KAM; (2) embudo y canales muestran solo promedios de cohorte, con un mínimo
+// de COHORTE_MIN miembros (domain/conversionCohorte.ts). Ver el informe de la
+// Ola 6 por el caso "Top 1" (una banda de un solo partner).
+export const P2_EMBUDO_SLIDE = { es: "Embudo de conversión", en: "Conversion funnel", ru: "Воронка конверсии", charts: true,
+  build: (p, d, i) => buildSlide2Embudo(p, i), chartFn: (p, d, root) => buildSlide2EmbudoChart(p, root) };
+export const P2_CANAL_SLIDE = { es: "Adquisición por canal", en: "Acquisition by channel", ru: "Привлечение по каналам", charts: true,
+  build: (p, d, i) => buildSlide2Canal(p, i), chartFn: (p, d, root) => buildSlide2CanalChart(p, root) };
+export const P2_NR_ORIGEN_SLIDE = { es: "N+R por origen", en: "N+R by source", ru: "Новые+реактив. по источнику", charts: true,
+  build: (p, d, i) => buildSlide2NrOrigen(p, d, i), chartFn: (p, d, root) => buildSlide2NrOrigenCharts(p, d, root) };
+
+// Pares del embudo (cohorte Top 5 / Top 10 + filtros AD/ND). Mismos defaults
+// que Vista Partner. Es estado del KAM, no del partner: se mantiene al cambiar.
+export function p2ConvFiltro() {
+  return PRESENT2_STATE.conv || (PRESENT2_STATE.conv = { cohorte: "top10", ...FILTRO_DEFECTO });
+}
+export function p2EmbudoTieneDatos(partner) {
+  const rows = STATE.conversionData || [];
+  return rows.length > 0 && embudoCohorte(rows, partner, p2ConvFiltro()).hayDatoPartner;
+}
+export function p2CanalTieneDatos(partner) {
+  const rows = STATE.conversionData || [];
+  if (!rows.length) return false;
+  const c = canalCohorte(rows, partner, p2ConvFiltro());
+  return c.hayDatoMes && c.hayDatoPartner;
+}
+// Fechas de la sección Taxi con el rango del filtro (mismo cálculo que el render).
+function _p2FechasTaxi() {
+  const from = document.getElementById("dateFrom")?.value || (STATE.allDates || [])[0];
+  const to   = document.getElementById("dateTo")?.value   || (STATE.allDates || [])[(STATE.allDates || []).length - 1];
+  const saved = PRESENT2_STATE.dataset;
+  PRESENT2_STATE.dataset = "taxi";
+  try { return p2SelectedDates(from, to, STATE.curMode); } finally { PRESENT2_STATE.dataset = saved; }
+}
+export function p2NrOrigenTieneDatos(partner) {
+  if (!p2HasTaxi(partner)) return false;
+  const dates = _p2FechasTaxi();
+  if (!dates.length) return false;
+  const saved = PRESENT2_STATE.dataset;
+  PRESENT2_STATE.dataset = "taxi";
+  try { return p2Vals(partner, null, dates, r => r.newPartner + r.newService + r.reactivated).some(v => v > 0); }
+  finally { PRESENT2_STATE.dataset = saved; }
+}
+
+// Mes ISO de conversion_pais ("2026-08") → "Agosto 2026" en el idioma del deck.
+function _p2MesISO(mes) {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(mes || ""));
+  return m ? `${mesNombre(+m[2] - 1, PRESENT2_STATE.lang)} ${m[1]}` : String(mes || "—");
+}
+// Colores de las series nuevas: del sistema de diseño (tokens), nunca hex. El
+// partner va con el rojo de marca, igual que su línea en el resto del deck.
+function _p2ColoresCohorte() {
+  const tk = chartTokens();
+  return { partner: cssVar("--color-brand", tk.palette[0]), top5: tk.palette[0], top10: tk.palette[6], texto: tk.textMuted, grid: tk.grid };
+}
+function _p2Canvas(id, root) { return root ? root.querySelector(`#${id}`) : document.getElementById(id); }
+// Barras agrupadas: partner vs promedio del cohorte elegido.
+function _p2BarrasCohorte(canvasId, root, etiquetas, partnerVals, cohorteVals, cohorteLbl, fmtV, fmtEje = fmtV) {
+  const canvas = _p2Canvas(canvasId, root);
+  if (!canvas || typeof Chart === "undefined") return;
+  const C = _p2ColoresCohorte();
+  const cc = p2ConvFiltro().cohorte === "top5" ? C.top5 : C.top10;
+  const chart = new Chart(canvas, {
+    type: "bar",
+    data: { labels: etiquetas, datasets: [
+      { label: cohorteLbl, data: cohorteVals, backgroundColor: cc, borderRadius: 3, maxBarThickness: 38 },
+      { label: PRESENT2_STATE.partner, data: partnerVals, backgroundColor: C.partner, borderRadius: 3, maxBarThickness: 38 }
+    ] },
+    options: {
+      devicePixelRatio: P2_EXPORT_SCALE, responsive: true, maintainAspectRatio: false, animation: false,
+      layout: { padding: { top: 18, right: 6, left: 2, bottom: 0 } },
+      plugins: {
+        legend: { position: "top", align: "end", labels: { boxWidth: 10, boxHeight: 10, font: { size: 10, weight: "bold" }, color: C.texto } },
+        tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.raw == null ? "—" : fmtV(ctx.raw)}` } },
+        datalabels: {
+          display: ctx => ctx.dataset.data[ctx.dataIndex] != null,   // el contexto de datalabels no trae .raw
+          anchor: "end", align: "top", offset: 1, clamp: true,
+          formatter: v => v == null ? "" : fmtV(v),
+          color: ctx => ctx.dataset.backgroundColor, font: { size: 9, weight: "bold" }
+        }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 9 }, color: C.texto, maxRotation: 0, autoSkip: false } },
+        y: { beginAtZero: true, grace: "18%", grid: { color: C.grid, lineWidth: 0.5 }, border: { display: false },
+             ticks: { font: { size: 8 }, color: C.texto, maxTicksLimit: 5, callback: v => fmtEje(v) } }
+      }
+    }
+  });
+  PRESENT2_STATE.charts.push(chart);
+}
+// Tabla partner / Prom. Top 5 / Prom. Top 10 (sin filas de competidores).
+function _p2TablaCohorte(cols, d, fmtV) {
+  const X = p2X(), C = _p2ColoresCohorte();
+  const fila = (lbl, vals, color, yo) => `<tr class="${yo ? "p2c-yo" : ""}">
+      <td class="p2c-l"><span class="p2c-dot" style="background:${color}"></span>${escapeHTML(lbl)}</td>
+      ${cols.map(c => `<td class="p2c-v">${vals && vals[c.key] != null ? fmtV(vals[c.key]) : "—"}</td>`).join("")}</tr>`;
+  return `<table class="p2c-tabla">
+    <thead><tr><th></th>${cols.map(c => `<th>${escapeHTML(c.label)}</th>`).join("")}</tr></thead>
+    <tbody>
+      ${fila(PRESENT2_STATE.partner, d.partner, C.partner, true)}
+      ${fila(X("Prom. Top 5", "Avg Top 5", "Средн. Топ 5"), d.top5, C.top5, false)}
+      ${fila(X("Prom. Top 10", "Avg Top 10", "Средн. Топ 10"), d.top10, C.top10, false)}
+    </tbody></table>`;
+}
+function _p2NotaCohorte(d) {
+  const X = p2X(), F = p2ConvFiltro();
+  const pocos = !d.top5 || !d.top10;
+  return `<div class="p2c-nota">${escapeHTML(X(
+    `Solo promedios de cohorte (Top 5 / Top 10 por conductores activos): no se muestra el dato de ningún otro partner. ${d.nPares} pares elegibles con ${F.ndMin}+ nuevos conductores en el mes.`,
+    `Cohort averages only (Top 5 / Top 10 by active drivers): no other partner's data is shown. ${d.nPares} eligible peers with ${F.ndMin}+ new drivers in the month.`,
+    `Только средние по когорте (Топ 5 / Топ 10 по активным водителям): данные других партнёров не показываются. ${d.nPares} сопоставимых партнёров с ${F.ndMin}+ новыми водителями за месяц.`))}${pocos ? ` ${escapeHTML(X(
+    `Con menos de ${COHORTE_MIN} pares el promedio no se muestra (sería el dato de un partner).`,
+    `With fewer than ${COHORTE_MIN} peers the average is hidden (it would reveal a single partner).`,
+    `При менее чем ${COHORTE_MIN} партнёрах среднее не показывается (оно раскрыло бы данные одного партнёра).`))}` : ""}</div>`;
+}
+function _p2CohorteLbl() {
+  const X = p2X();
+  return p2ConvFiltro().cohorte === "top5" ? X("Prom. Top 5", "Avg Top 5", "Средн. Топ 5") : X("Prom. Top 10", "Avg Top 10", "Средн. Топ 10");
+}
+
+// ── Hoja: EMBUDO DE CONVERSIÓN ──
+function _p2EmbudoCols() {
+  const X = p2X();
+  return EMBUDO_COLS.map(k => ({ key: k, label: k === "firstOrder" ? X("1er viaje", "1st trip", "1-я поездка")
+    : X(`${k.slice(1)} viajes`, `${k.slice(1)} trips`, `${k.slice(1)} поездок`) }));
+}
+export function buildSlide2Embudo(partner, idx) {
+  const X = p2X();
+  const d = embudoCohorte(STATE.conversionData || [], partner, p2ConvFiltro());
+  const pct = v => `${X.dec(v, 1)}%`;
+  return `<div class="agy-style-365 p2c-hoja">
+    ${p2BrandHeader(partner, `${X("Embudo de conversión", "Conversion funnel", "Воронка конверсии")} · ${_p2MesISO(d.mes)}`,
+      X("De cada 100 conductores nuevos, cuántos llegan a cada número de viajes — tú contra el promedio de tu cohorte",
+        "Out of every 100 new drivers, how many reach each trip count — you vs your cohort average",
+        "Из каждых 100 новых водителей — сколько доходят до каждого числа поездок: вы против среднего по когорте"))}
+    <div class="p2c-cuerpo">
+      <div class="p2c-graf"><canvas id="p2conv_chart"></canvas></div>
+      ${_p2TablaCohorte(_p2EmbudoCols(), d, pct)}
+      ${_p2NotaCohorte(d)}
+    </div>
+    ${p2BrandFooter(idx)}
+  </div>`;
+}
+export function buildSlide2EmbudoChart(partner, root) {
+  const X = p2X();
+  const d = embudoCohorte(STATE.conversionData || [], partner, p2ConvFiltro());
+  // Sin "1er viaje" en la gráfica (≈100% para todos, aplasta la escala), como en Vista Partner.
+  const cols = _p2EmbudoCols().filter(c => c.key !== "firstOrder");
+  const coh = p2ConvFiltro().cohorte === "top5" ? d.top5 : d.top10;
+  const r1 = v => v == null || isNaN(v) ? null : Math.round(v * 10) / 10;
+  _p2BarrasCohorte("p2conv_chart", root, cols.map(c => c.label), cols.map(c => r1(d.partner[c.key])),
+    cols.map(c => coh ? r1(coh[c.key]) : null), _p2CohorteLbl(), v => `${X.dec(v, 1)}%`, v => `${X.dec(v, 0)}%`);
+}
+
+// ── Hoja: ADQUISICIÓN POR CANAL ──
+// Los nombres de canal son los del reporte de origen (pestaña "Adquisition by
+// channel") y se dejan tal cual en los tres idiomas: el partner los reconoce
+// así en sus propios reportes de Yango.
+export function buildSlide2Canal(partner, idx) {
+  const X = p2X();
+  const d = canalCohorte(STATE.conversionData || [], partner, p2ConvFiltro());
+  const n = v => X.num(Math.round(v || 0));
+  return `<div class="agy-style-365 p2c-hoja">
+    ${p2BrandHeader(partner, `${X("Adquisición por canal", "Acquisition by channel", "Привлечение по каналам")} · ${_p2MesISO(d.mes)}`,
+      X("Conductores nuevos del mes según el canal por el que llegaron — tú contra el promedio de tu cohorte",
+        "New drivers in the month by acquisition channel — you vs your cohort average",
+        "Новые водители за месяц по каналу привлечения: вы против среднего по когорте"))}
+    <div class="p2c-cuerpo">
+      <div class="p2c-graf"><canvas id="p2canal_chart"></canvas></div>
+      ${_p2TablaCohorte(CANALES.map(c => ({ key: c.key, label: c.label })), d, n)}
+      ${_p2NotaCohorte(d)}
+    </div>
+    ${p2BrandFooter(idx)}
+  </div>`;
+}
+export function buildSlide2CanalChart(partner, root) {
+  const X = p2X();
+  const d = canalCohorte(STATE.conversionData || [], partner, p2ConvFiltro());
+  const coh = p2ConvFiltro().cohorte === "top5" ? d.top5 : d.top10;
+  const r1 = v => v == null || isNaN(v) ? null : Math.round(v * 10) / 10;
+  _p2BarrasCohorte("p2canal_chart", root, CANALES.map(c => c.label), CANALES.map(c => r1(d.partner[c.key])),
+    CANALES.map(c => coh ? r1(coh[c.key]) : null), _p2CohorteLbl(), v => X.num(Math.round(v)));
+}
+
+// ── Hoja: N+R POR ORIGEN (por nivel: Perú + cada ciudad) ──
+// Nuevos que trajo el partner, nuevos que llegaron por Yango (leads) y
+// reactivados, apilados por período. "Nuevos (Yango)" aparece solo si el
+// partner recibe leads (mismo criterio que Vista Partner).
+function _p2RecibeLeads(partner) {
+  return p2RawDataset().some(r => r.partner === partner && (r.newService || 0) > 0);
+}
+function _p2NrSeries(partner) {
+  const X = p2X(), tk = chartTokens();
+  const s = [
+    { key: "np", label: X("Nuevos (partner)", "New (partner)", "Новые (партнёр)"), fn: r => r.newPartner || 0, color: tk.palette[0] },
+    { key: "ns", label: X("Nuevos (Yango)", "New (Yango)", "Новые (Yango)"), fn: r => r.newService || 0, color: tk.palette[3] },
+    { key: "re", label: X("Reactivados", "Reactivated", "Реактивированные"), fn: r => r.reactivated || 0, color: tk.palette[2] }
+  ];
+  return _p2RecibeLeads(partner) ? s : s.filter(x => x.key !== "ns");
+}
+export function buildSlide2NrOrigen(partner, dates, idx) {
+  const X = p2X();
+  const series = _p2NrSeries(partner);
+  const levels = p2Levels(partner);
+  const from = dates[0], to = dates[dates.length - 1];
+  const bloques = levels.map(lv => {
+    const hay = p2Present(partner, lv.city, dates).some(Boolean);
+    const vals = series.map(se => p2Vals(partner, lv.city, dates, se.fn));
+    const tot = dates.map((_, i) => vals.reduce((sum, v) => sum + (v[i] || 0), 0));
+    const cab = `<div class="p2nr-cab"><span class="p2nr-dot" style="background:${lv.color}"></span><span style="color:${lv.color}">${escapeHTML(lv.label)}</span></div>`;
+    if (!hay) return `<div class="p2nr-bloque">${cab}<div class="p2-sin-dato">${escapeHTML(X("Sin dato en el período", "No data in the period", "Нет данных за период"))}</div></div>`;
+    const filas = series.map((se, si) => `<tr><td class="p2nr-l"><span class="p2c-dot" style="background:${se.color}"></span>${escapeHTML(se.label)}</td>${vals[si].map(v => `<td>${X.num(v)}</td>`).join("")}</tr>`).join("")
+      + `<tr class="p2nr-tot"><td class="p2nr-l">${escapeHTML(X("Total", "Total", "Итого"))}</td>${tot.map(v => `<td>${X.num(v)}</td>`).join("")}</tr>`;
+    return `<div class="p2nr-bloque">${cab}
+      <div class="p2nr-graf"><canvas id="p2nr_${lv.id}"></canvas></div>
+      <table class="p2nr-tabla"><thead><tr><th></th>${dates.map(d => `<th>${d2s(d)}</th>`).join("")}</tr></thead><tbody>${filas}</tbody></table>
+    </div>`;
+  }).join("");
+  return `<div class="agy-style-365 p2-hoja-cards">
+    ${p2BrandHeader(partner, `${X("Nuevos + Reactivados por origen", "New + Reactivated by source", "Новые + реактивированные по источнику")} · ${d2s(from)} → ${d2s(to)}`,
+      X("De dónde vienen los conductores que se suman cada período", "Where the drivers joining each period come from", "Откуда приходят водители, пополняющие парк в каждом периоде"))}
+    <div class="p2nr-grid p2nr-grid--${Math.min(levels.length, 4)}">${bloques}</div>
+    ${p2BrandFooter(idx)}
+  </div>`;
+}
+export function buildSlide2NrOrigenCharts(partner, dates, root) {
+  const X = p2X(), tk = chartTokens();
+  const series = _p2NrSeries(partner);
+  p2Levels(partner).forEach(lv => {
+    const canvas = _p2Canvas(`p2nr_${lv.id}`, root);
+    if (!canvas || typeof Chart === "undefined") return;
+    const chart = new Chart(canvas, {
+      type: "bar",
+      data: { labels: dates.map(d2s), datasets: series.map(se => ({
+        label: se.label, data: p2Vals(partner, lv.city, dates, se.fn), backgroundColor: se.color, stack: "nr", maxBarThickness: 34 })) },
+      options: {
+        devicePixelRatio: P2_EXPORT_SCALE, responsive: true, maintainAspectRatio: false, animation: false,
+        layout: { padding: { top: 4, right: 4, left: 2, bottom: 0 } },
+        plugins: {
+          legend: { position: "top", align: "end", labels: { boxWidth: 8, boxHeight: 8, font: { size: 8 }, color: tk.textMuted } },
+          tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${X.num(ctx.raw)}` } },
+          datalabels: { display: false }
+        },
+        scales: {
+          x: { stacked: true, grid: { display: false }, ticks: { font: { size: 7 }, color: tk.label, maxRotation: 0 } },
+          y: { stacked: true, beginAtZero: true, grid: { color: tk.grid, lineWidth: 0.5 }, border: { display: false },
+               ticks: { font: { size: 7 }, color: tk.label, maxTicksLimit: 4, callback: v => X.num(v) } }
+        }
+      }
+    });
+    PRESENT2_STATE.charts.push(chart);
+  });
+}
+
+// Controles de los pares del embudo: solo con la hoja de embudo o canal a la
+// vista (en el resto no significan nada y harían más ancha la barra).
+export function p2ConvBarHTML(entry) {
+  const k = entry && entry.def && entry.def.es;
+  if (k !== P2_EMBUDO_SLIDE.es && k !== P2_CANAL_SLIDE.es) return "";
+  const F = p2ConvFiltro();
+  const num = (id, v, lbl) => `<input id="${id}" type="number" min="0" inputmode="numeric" class="ui-input ui-input--sm p2-num" value="${escapeHTML(String(v))}" aria-label="${escapeHTML(lbl)}" data-act-change="present2ConvFiltro"/>`;
+  return `<span class="p2-field__lbl">${escapeHTML(t("p2.conv.pares"))}</span>
+    ${segmented({ ariaLabel: t("p2.conv.pares"), act: "present2ConvCohorte", value: F.cohorte,
+      options: [{ value: "top5", label: "Top 5" }, { value: "top10", label: "Top 10" }] })}
+    <span class="p2-conv-f" title="${escapeHTML(t("p2.conv.adHint"))}">${escapeHTML(t("p2.conv.ad"))}
+      ${num("p2ConvAdMin", F.adMin, t("p2.conv.adMin"))}–${num("p2ConvAdMax", F.adMax, t("p2.conv.adMax"))}</span>
+    <span class="p2-conv-f">${escapeHTML(t("p2.conv.ndMin"))} ${num("p2ConvNdMin", F.ndMin, t("p2.conv.ndMin"))}</span>`;
+}
+export function present2ConvCohorte(v) {
+  p2ConvFiltro().cohorte = v === "top5" ? "top5" : "top10";
+  const bar = document.getElementById("present2ConvBar");
+  if (bar) bar.innerHTML = p2ConvBarHTML(p2Deck(PRESENT2_STATE.partner)[PRESENT2_STATE.slide]);
+  renderSlide2();
+}
+// Campo vacío = sin ese límite (mismo arreglo I12 que Vista Partner: `+""` es 0,
+// no NaN, y borrar "AD máx" dejaba el cohorte vacío sin explicación).
+function _p2NumOr(id, def) {
+  const raw = document.getElementById(id)?.value;
+  if (raw == null || String(raw).trim() === "") return def;
+  const n = +raw;
+  return isNaN(n) ? def : n;
+}
+export function present2ConvFiltro() {
+  const F = p2ConvFiltro();
+  F.adMin = _p2NumOr("p2ConvAdMin", 0);
+  F.adMax = _p2NumOr("p2ConvAdMax", 999999);
+  F.ndMin = _p2NumOr("p2ConvNdMin", 0);
+  renderSlide2();
+}
+
+// Señales ejecutivas del partner en la vertical activa (reglas mudadas de Vista
+// Partner, domain/lectura.ts#p2SenalesEjecutivas) con la forma de p2ComputeAlerts.
+export function p2SenalesPartner(partner, dates) {
+  if (!dates || !dates.length) return [];
+  const last = dates.length - 1;
+  const serieAD = p2Vals(partner, null, dates, P2_GET.ad);
+  const historia = p2Vals(partner, null, p2AllDates(), P2_GET.ad);
+  const u = d => [d];
+  const nr = p2Vals(partner, null, u(dates[last]), r => r.newPartner + r.newService + r.reactivated)[0];
+  const ys = p2Vals(partner, null, u(dates[last]), r => r.newService || 0)[0];
+  const trips = p2Vals(partner, null, dates, P2_GET.trips), comm = p2Vals(partner, null, dates, P2_GET.comm);
+  const ciudades = p2PartnerCities(partner).map(c => ({ label: ciudadL(c, PRESENT2_STATE.lang), ad: p2Vals(partner, c, u(dates[last]), P2_GET.ad)[0] }));
+  const senales = p2SenalesEjecutivas({
+    lang: PRESENT2_STATE.lang, serieAD, unidades: p2ModeInfo().units,
+    picoAD: historia.length ? Math.max(0, ...historia) : 0,
+    recibeLeads: _p2RecibeLeads(partner), nuevos: { total: nr, yango: ys },
+    comision: last > 0 ? { comPrev: comm[last - 1], viajesPrev: trips[last - 1], comAct: comm[last], viajesAct: trips[last] } : null,
+    ciudades, fmt: p2Num, fmtDec: p2Dec
+  });
+  const nivel = xl("peru", PRESENT2_STATE.lang);
+  return senales.map(x => ({ ...x, level: nivel }));
 }
 
 // ── SLIDE: ALERTAS (NEXT STEPS) ───────────────────────────────────────────────
@@ -2757,14 +3178,16 @@ export function renderPresent2() {
   // rawDataFull (no rawData) — así el guard no falla si TODO lo cargado resulta
   // ser tuktuk (rawData quedaría vacío tras la exclusión, pero sí hay data).
   if (!STATE.rawDataFull || !STATE.rawDataFull.length) {
-    el.innerHTML = `<div class="empty"><p>Carga datos de <strong>Rendimiento</strong> para usar Presentación.</p></div>`;
+    el.innerHTML = `<div class="p2-shell">${emptyState({ icon: "presentation", title: t("p2.vacio.sinDatos"),
+      action: btn({ label: t("p2.ctl.volver"), icon: "chevron-left", variant: "secondary", act: "switchTab", data: { tab: "rend" } }) })}</div>`;
     return;
   }
   // Selector = unión taxi + tuktuk (deck combinado): un partner puede tener
   // sección Taxi y/o TukTuk; ambos deben poder elegirse.
   const partners = p2PartnerList();
   if (!partners.length) {
-    el.innerHTML = `<div class="empty"><p>No hay partners cargados.</p></div>`;
+    el.innerHTML = `<div class="p2-shell">${emptyState({ icon: "users", title: t("p2.vacio.sinPartners"),
+      action: btn({ label: t("p2.ctl.volver"), icon: "chevron-left", variant: "secondary", act: "switchTab", data: { tab: "rend" } }) })}</div>`;
     return;
   }
   if (!PRESENT2_STATE.partner || !partners.includes(PRESENT2_STATE.partner)) PRESENT2_STATE.partner = partners[0];
@@ -2774,6 +3197,21 @@ export function renderPresent2() {
   const canForceFleet = typeof isFleetPartner === "function" && isFleetPartner(PRESENT2_STATE.partner);
   if (PRESENT2_STATE.fleetMode === "fleet" && !canForceFleet) PRESENT2_STATE.fleetMode = "auto";
 
+  // Embudo y canales (conversion_pais) se cargan bajo demanda, como hacía Vista
+  // Partner. Al llegar, se repinta conservando la HOJA en la que estaba el KAM
+  // (por clave, no por índice: las hojas nuevas se insertan en el medio).
+  if (!STATE._conversionLoaded && typeof loadConversionIfNeeded === "function" && !PRESENT2_STATE._convCargando) {
+    PRESENT2_STATE._convCargando = true;
+    loadConversionIfNeeded().then(() => {
+      PRESENT2_STATE._convCargando = false;
+      if (STATE.curTab !== "present2") return;
+      const k = PRESENT2_STATE._slideKey;   // clave de la hoja pintada ANTES de llegar los datos
+      const i = k ? p2Deck(PRESENT2_STATE.partner).findIndex(e => p2SlideKey(e) === k) : -1;
+      if (i >= 0) PRESENT2_STATE.slide = i;
+      renderPresent2();
+    }).catch(() => { PRESENT2_STATE._convCargando = false; });
+  }
+
   // Deck del partner: define nav, badge y sección activa del toggle.
   const deck = p2Deck(PRESENT2_STATE.partner);
   PRESENT2_STATE._deckLen = deck.length;
@@ -2781,53 +3219,63 @@ export function renderPresent2() {
   if (PRESENT2_STATE.slide >= deck.length) PRESENT2_STATE.slide = 0;
   const curDs = (deck[PRESENT2_STATE.slide] || deck[0]).ds;
 
-  el.innerHTML = `
-    <div class="agy-style-431">
-      <div class="agy-style-432">
-        <div class="agy-style-168">
-          <label class="agy-style-433">Partner</label>
-          <input id="present2Search" type="text" class="sb-inp agy-style-434" autocomplete="off" placeholder="${P2T("Buscar partner...", "Search partner...", "Поиск партнёра...")}" value="${escapeHTML(PRESENT2_STATE.partner)}" data-act-input="p2FilterPartners" data-act-focus="p2ShowPartnerList" data-act-blur="p2HidePartnerListDelayed" data-act-keydown="p2SearchKeydown"/>
-          <div id="present2PartnerList" class="agy-style-435"></div>
-        </div>
-        <div>
-          <label class="agy-style-433">${P2T("Idioma", "Language", "Язык")}</label>
-          <div class="mode-toggle">
-            ${P2_LANGS.map(L => `<button class="mode-btn ${PRESENT2_STATE.lang === L.k ? "active" : ""}" data-act="setPresent2Lang" data-lang="${L.k}">${L.lbl}</button>`).join("")}
-          </div>
-        </div>
-        <div>
-          <label class="agy-style-433">${P2T("Comparar con", "Compare", "Сравнить с")}</label>
-          <div id="present2CmpBar" class="agy-style-436">${p2CmpBar()}</div>
-        </div>
-        <div>
-          <label class="agy-style-433">${P2T("Vista", "View", "Вид")}</label>
-          <div class="mode-toggle" title="${P2T("Auto respeta el flag Fleet de Configuración", "Auto follows the Fleet flag in Config", "Авто следует флагу Fleet из настроек")}">
-            <button class="mode-btn ${PRESENT2_STATE.fleetMode === "auto"  ? "active" : ""}" data-act="present2SetFleetMode" data-mode="auto">Auto</button>
-            <button class="mode-btn ${PRESENT2_STATE.fleetMode === "taxi"  ? "active" : ""}" data-act="present2SetFleetMode" data-mode="taxi">${P2T("Taxi", "Taxi", "Такси")}</button>
-            <button class="mode-btn ${PRESENT2_STATE.fleetMode === "fleet" ? "active" : ""}" ${canForceFleet ? `data-act="present2SetFleetMode" data-mode="fleet"` : `disabled class="agy-style-437"`} title="${canForceFleet ? "" : (P2T("Este partner no está marcado como Fleet", "This partner isn't flagged as Fleet", "Этот партнёр не отмечен как Fleet"))}">Fleet</button>
-          </div>
-        </div>
-        ${p2TuktukSectionVisible(PRESENT2_STATE.partner) ? `
-        <div>
-          <label class="agy-style-433">${P2T("Sección", "Section", "Раздел")}</label>
-          <div class="mode-toggle" id="present2SectionBar" title="${P2T("Salta a la sección Taxi o TukTuk del deck", "Jump to the Taxi or TukTuk section", "Перейти к разделу Такси или ТукТук")}">${_p2SectionBarHTML(curDs)}</div>
-        </div>` : ""}
-        ${p2MetaMeses().length ? `
-        <div title="${P2T("Mes de la meta en 'Avance vs Meta'. Auto = el mes del 'Hasta'.", "Goal month for 'Goal vs Target'. Auto = the 'To' month.", "Месяц цели в «Прогресс к цели». Авто = месяц из поля «По».")}">
-          <label class="agy-style-433">${P2T("Mes meta", "Goal month", "Месяц цели")}</label>
-          <select data-act-change="present2SetAvanceMes" class="agy-style-438">
-            <option value="">${P2T("Auto (según filtro)", "Auto (by filter)", "Авто (по фильтру)")}</option>
-            ${p2MetaMeses().map(m => `<option value="${escapeHTML(m)}" ${PRESENT2_STATE.avanceMesSel === m ? "selected" : ""}>${escapeHTML(p2MesLabel(m))}</option>`).join("")}
+  // BARRA DE CONTROL (Ola 6): una sola barra agrupada con los componentes del
+  // sistema de diseño. Rótulos en el idioma de la APP (t); el deck conserva
+  // el suyo. Fila 1 = qué deck (partner, idioma del deck, vista, sección, mes
+  // de la meta) + acciones; fila 2 = con qué se compara. La única acción
+  // primaria (rojo de marca) es "Descargar PDF".
+  const lbl = (txt, forId) => forId
+    ? `<label class="p2-field__lbl" for="${forId}">${escapeHTML(txt)}</label>`
+    : `<span class="p2-field__lbl">${escapeHTML(txt)}</span>`;
+  const idiomaDeck = segmented({ ariaLabel: t("p2.ctl.idioma"), act: "setPresent2Lang", value: PRESENT2_STATE.lang,
+    options: P2_LANGS.map(L => ({ value: L.k, label: L.lbl })) });
+  const vista = segmented({ ariaLabel: t("p2.ctl.vista"), act: "present2SetFleetMode", value: PRESENT2_STATE.fleetMode,
+    options: [
+      { value: "auto",  label: t("p2.ctl.auto") },
+      { value: "taxi",  label: "Taxi", icon: "taxi" },
+      { value: "fleet", label: "Fleet", icon: "car", disabled: !canForceFleet }
+    ] });
+  const seccion = p2TuktukSectionVisible(PRESENT2_STATE.partner)
+    ? `<div class="p2-field" title="${escapeHTML(t("p2.ctl.seccionHint"))}">${lbl(t("p2.ctl.seccion"))}<div id="present2SectionBar">${_p2SectionBarHTML(curDs)}</div></div>`
+    : "";
+  const meses = p2MetaMeses();
+  const mesMeta = meses.length ? `
+        <div class="p2-field" title="${escapeHTML(t("p2.ctl.mesMetaHint"))}">
+          ${lbl(t("p2.ctl.mesMeta"), "present2MesMeta")}
+          <select id="present2MesMeta" class="ui-select ui-select--sm" data-act-change="present2SetAvanceMes">
+            <option value="">${escapeHTML(t("p2.ctl.mesAuto"))}</option>
+            ${meses.map(m => `<option value="${escapeHTML(m)}" ${PRESENT2_STATE.avanceMesSel === m ? "selected" : ""}>${escapeHTML(mesL(m, getLang()))}</option>`).join("")}
           </select>
-        </div>` : ""}
-        <div class="agy-style-439">
-          <button data-act="switchTab" data-tab="rend" class="agy-style-440">← ${P2T("Volver", "Back", "Назад")}</button>
-          <button class="png-btn" data-act="present2TogglePdfPanel" title="${escapeHTML(P2T("Elige qué hojas entran al PDF", "Choose which sheets go into the PDF", "Выберите страницы для PDF"))}">🗂 ${escapeHTML(P2T("Hojas", "Sheets", "Страницы"))} ${_p2PdfCount()}</button>
-          <button class="apply-btn agy-style-441" data-act="p2AbrirChequeoExport">⬇ ${escapeHTML(P2T("Descargar PDF", "Download PDF", "Скачать PDF"))}</button>
+        </div>` : "";
+  el.innerHTML = `
+    <div class="p2-shell">
+      <div class="p2-toolbar" role="toolbar" aria-label="${escapeHTML(t("p2.ctl.aria"))}">
+        <div class="p2-toolbar__row">
+          <div class="p2-field p2-field--partner">
+            ${lbl(t("p2.ctl.partner"), "present2Search")}
+            <div class="p2-search">
+              ${iconSvg("search", { size: 16 })}
+              <input id="present2Search" type="text" class="ui-input ui-input--sm" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="present2PartnerList" placeholder="${escapeHTML(t("p2.ctl.buscar"))}" value="${escapeHTML(PRESENT2_STATE.partner)}" data-act-input="p2FilterPartners" data-act-focus="p2ShowPartnerList" data-act-blur="p2HidePartnerListDelayed" data-act-keydown="p2SearchKeydown"/>
+              <div id="present2PartnerList" class="p2-search__list" role="listbox"></div>
+            </div>
+          </div>
+          <div class="p2-field" title="${escapeHTML(t("p2.ctl.idiomaHint"))}">${lbl(t("p2.ctl.idioma"))}${idiomaDeck}</div>
+          <div class="p2-field" title="${escapeHTML(canForceFleet ? t("p2.ctl.vistaHint") : t("p2.ctl.fleetNo"))}">${lbl(t("p2.ctl.vista"))}${vista}</div>
+          ${seccion}
+          ${mesMeta}
+          <div class="p2-toolbar__actions">
+            ${btn({ label: t("p2.ctl.volver"), icon: "chevron-left", variant: "ghost", size: "sm", act: "switchTab", data: { tab: "rend" } })}
+            ${btn({ label: t("p2.ctl.hojas", { n: _p2PdfCount() }), icon: "file-text", variant: "secondary", size: "sm", act: "present2TogglePdfPanel", title: t("p2.ctl.hojasHint"), id: "present2PdfBtn" })}
+            ${btn({ label: t("p2.ctl.descargar"), icon: "download", variant: "primary", size: "sm", act: "p2AbrirChequeoExport" })}
+          </div>
+        </div>
+        <div class="p2-toolbar__row p2-toolbar__row--sub">
+          <div class="p2-field p2-field--inline">${lbl(t("p2.ctl.comparar"))}<div id="present2CmpBar" class="p2-cmp" role="group" aria-label="${escapeHTML(t("p2.ctl.comparar"))}">${p2CmpBar()}</div></div>
+          <div id="present2ConvBar" class="p2-field p2-field--inline">${p2ConvBarHTML(deck[PRESENT2_STATE.slide])}</div>
         </div>
       </div>
       ${p2PdfPanelHTML()}
-      <div id="present2Nav" class="agy-style-442">
+      <div id="present2Nav" class="p2-slides">
         ${p2NavHTML()}
       </div>
       ${p2FreshnessWarn()}
@@ -2835,17 +3283,25 @@ export function renderPresent2() {
         <div id="slide2Inner" class="agy-style-362"></div>
       </div>
     </div>`;
+  const pdfBtn = document.getElementById("present2PdfBtn");
+  if (pdfBtn) { pdfBtn.setAttribute("aria-expanded", String(!!PRESENT2_STATE.pdfPanel)); pdfBtn.setAttribute("aria-controls", "p2PdfPanel"); }
+  p2ScrollChipActivo();
 
   renderSlide2();
 }
 
+// Toggles de comparación: botones "presionables" (aria-pressed). El punto de
+// color es el MISMO de la línea punteada que dibujan en las gráficas (dato, no
+// decoración: permite leer la leyenda sin abrirla). Etiquetas en el idioma de
+// la app; en la hoja, la cohorte sigue rotulándose en el idioma del deck.
 export function p2CmpBar() {
   const tog = PRESENT2_STATE.cohort || {};
-  const cityBtn = `<button data-act="present2ToggleCity" class="preset-btn${PRESENT2_STATE.cmpCity ? " active" : ""}" style="flex:0 0 auto;padding:4px 10px;${PRESENT2_STATE.cmpCity ? "background:#64748b;color:#fff;border-color:#64748b" : ""}">${P2T("Ciudad", "City", "Город")}</button>`;
-  const bands = P2_BANDS.map(b => {
-    const on = tog[b.key];
-    return `<button data-act="present2ToggleCohort" data-key="${escapeHTML(b.key)}" class="preset-btn${on ? " active" : ""}" style="flex:0 0 auto;padding:4px 10px;${on ? `background:${b.color};color:#fff;border-color:${b.color}` : ""}">${escapeHTML(P2T(b.es, b.en, b.ru || b.en))}</button>`;
-  }).join("");
+  const bt = (act, data, on, label, color) =>
+    `<button type="button" class="p2-toggle${on ? " is-on" : ""}" aria-pressed="${!!on}" data-act="${act}"${data}>` +
+    `<span class="p2-toggle__dot${color ? "" : " p2-toggle__dot--city"}"${color ? ` style="background:${color}"` : ""}></span>${escapeHTML(label)}</button>`;
+  const cityBtn = bt("present2ToggleCity", "", PRESENT2_STATE.cmpCity, t("p2.ctl.ciudad"), null);
+  const bands = P2_BANDS.map(b => bt("present2ToggleCohort", ` data-key="${escapeHTML(b.key)}"`, tog[b.key],
+    pick({ es: b.es, en: b.en, ru: b.ru }, getLang()), b.color)).join("");
   return cityBtn + bands;
 }
 
@@ -2879,6 +3335,7 @@ export function renderSlide2() {
   if (PRESENT2_STATE.slide >= deck.length) PRESENT2_STATE.slide = 0;
   const entry = deck[PRESENT2_STATE.slide] || deck[0];
   PRESENT2_STATE.dataset = entry.ds;   // scope: los accesores (p2RawDataset/…) leen este global
+  PRESENT2_STATE._slideKey = p2SlideKey(entry);
   const from = document.getElementById("dateFrom") ? document.getElementById("dateFrom").value : STATE.allDates[0];
   const to   = document.getElementById("dateTo")   ? document.getElementById("dateTo").value   : STATE.allDates[STATE.allDates.length - 1];
   const dates = p2SelectedDates(from, to, STATE.curMode);   // dataset-aware: TukTuk usa sus fechas
@@ -2941,7 +3398,16 @@ export function renderSlide2() {
 export function goSlide2(i) {
   PRESENT2_STATE.slide = i;
   const nav = document.getElementById("present2Nav");
-  if (nav) nav.innerHTML = p2NavHTML();   // repinta el nav (tinte por sección Taxi/TukTuk)
+  if (nav) nav.innerHTML = p2NavHTML();   // repinta el selector (activa, anterior/siguiente)
+  p2ScrollChipActivo();
+  // Controles que dependen de la hoja: la Sección (Taxi/TukTuk) y los pares del
+  // embudo (solo en las hojas de conversión/canal).
+  const deck = p2Deck(PRESENT2_STATE.partner);
+  const entry = deck[PRESENT2_STATE.slide] || deck[0];
+  const sec = document.getElementById("present2SectionBar");
+  if (sec && entry) sec.innerHTML = _p2SectionBarHTML(entry.ds);
+  const conv = document.getElementById("present2ConvBar");
+  if (conv) conv.innerHTML = p2ConvBarHTML(entry);
   renderSlide2();
 }
 export function prevSlide2() { goSlide2(Math.max(0, PRESENT2_STATE.slide - 1)); }
@@ -2967,12 +3433,11 @@ export function present2PdfAll(on) {
   else p2Deck(PRESENT2_STATE.partner).forEach(e => { if (!e.def.noPdf) PRESENT2_STATE.pdfOff.add(p2SlideKey(e)); });
   renderPresent2();
 }
-// Markup de los botones Taxi/TukTuk de la Sección (bar con id present2SectionBar).
-// "just-active" dispara la animación CSS de pop al repintarse (ver styles.css).
+// Botones Taxi/TukTuk de la Sección (#present2SectionBar). Con la hoja en
+// Delivery/Cargo (u otra vertical) ninguno queda presionado.
 export function _p2SectionBarHTML(curDs) {
-  return `
-    <button class="mode-btn ${curDs === "taxi"   ? "active just-active" : ""}" data-act="present2JumpSection" data-section="taxi">🚕 Taxi</button>
-    <button class="mode-btn ${curDs === "tuktuk" ? "active just-active" : ""}" data-act="present2JumpSection" data-section="tuktuk">🛺 TukTuk</button>`;
+  return segmented({ ariaLabel: t("p2.ctl.seccion"), act: "present2JumpSection", value: curDs,
+    options: [{ value: "taxi", label: "Taxi", icon: "taxi" }, { value: "tuktuk", label: "TukTuk", icon: "tuktuk" }] });
 }
 // Salta a la primera diapositiva de la sección (Taxi/TukTuk) del deck del partner.
 // NO resetea el partner (arregla el bug de perder el partner al alternar). goSlide2
@@ -2981,10 +3446,7 @@ export function _p2SectionBarHTML(curDs) {
 export function present2JumpSection(ds) {
   const deck = p2Deck(PRESENT2_STATE.partner);
   const i = deck.findIndex(e => e.ds === ds);
-  goSlide2(i < 0 ? 0 : i);
-  const actualDs = (deck[PRESENT2_STATE.slide] || deck[0]).ds;
-  const bar = document.getElementById("present2SectionBar");
-  if (bar) bar.innerHTML = _p2SectionBarHTML(actualDs);
+  goSlide2(i < 0 ? 0 : i);   // goSlide2 ya repinta la Sección con la hoja real
 }
 export function present2ToggleCohort(k) {
   PRESENT2_STATE.cohort = PRESENT2_STATE.cohort || {};
@@ -2999,26 +3461,29 @@ export function p2FilterPartners(q) { p2ShowPartnerList(); _p2PaintPartnerList(q
 export function p2ShowPartnerList() {
   const list = document.getElementById("present2PartnerList");
   if (!list) return;
-  list.style.display = "block";
+  list.classList.add("is-open");
+  document.getElementById("present2Search")?.setAttribute("aria-expanded", "true");
   if (!list.innerHTML) { const inp = document.getElementById("present2Search"); _p2PaintPartnerList(inp ? inp.value : ""); }
 }
-export function p2HidePartnerList() { const l = document.getElementById("present2PartnerList"); if (l) l.style.display = "none"; }
+export function p2HidePartnerList() {
+  const l = document.getElementById("present2PartnerList");
+  if (l) l.classList.remove("is-open");
+  document.getElementById("present2Search")?.setAttribute("aria-expanded", "false");
+}
 export function _p2PaintPartnerList(q) {
   const list = document.getElementById("present2PartnerList");
   if (!list) return;
   const lower = (q || "").toLowerCase().trim();
   const all = p2PartnerList();   // unión taxi + tuktuk (mismo criterio que el selector)
   const filtered = lower ? all.filter(p => p.toLowerCase().includes(lower)) : all;
-  if (!filtered.length) { list.innerHTML = `<div class="agy-style-180">Sin coincidencias</div>`; return; }
+  if (!filtered.length) { list.innerHTML = `<div class="p2-search__empty">${escapeHTML(t("p2.ctl.sinCoincidencias"))}</div>`; return; }
   list.innerHTML = filtered.slice(0, 100).map(p => {
     const sel = p === PRESENT2_STATE.partner;
     // data-partner (leído via this.dataset.partner) en vez de inyectar el nombre crudo en el
     // string JS del onmousedown: un partner con comilla doble/backslash rompía el click o
     // podía inyectar un atributo HTML (el .replace solo escapaba comilla simple). dataset.*
     // decodifica el atributo HTML sin pasar por un parser de string JS → sin ese riesgo.
-    return `<div class="pv-opt" data-partner="${escapeHTML(p)}" data-act-mousedown="p2SelectPartner" style="padding:7px 12px;font-size:.78rem;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid #f3f3f3;${sel ? "background:#fff0f0;font-weight:700" : ""}">
-      <span class="agy-style-444"></span>
-      <span class="agy-style-181">${escapeHTML(p)}</span></div>`;
+    return `<div class="p2-search__opt${sel ? " is-sel" : ""}" role="option" aria-selected="${sel}" data-partner="${escapeHTML(p)}" data-act-mousedown="p2SelectPartner"><span>${escapeHTML(p)}</span></div>`;
   }).join("");
 }
 export function p2SelectPartner(p) {
@@ -3029,7 +3494,7 @@ export function p2SelectPartner(p) {
 export function p2SearchKeydown(e) {
   if (e.key === "Enter") {
     const l = document.getElementById("present2PartnerList");
-    const f = l && l.querySelector(".pv-opt");
+    const f = l && l.querySelector(".p2-search__opt");
     if (f) f.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
     e.preventDefault();
   } else if (e.key === "Escape") { p2HidePartnerList(); }
@@ -3049,20 +3514,21 @@ export function p2SearchKeydown(e) {
 // Devuelve { resumen[], avisos[] }. Un aviso NO impide exportar: puede ser
 // deliberado (mandar una sola semana, por ejemplo). Solo obliga a mirarlo.
 export function p2ChequeoExport(partner) {
-  const mi = p2ModeInfo();
+  // Lo lee el KAM antes de enviar: idioma de la APP (t), no del deck.
   const from = document.getElementById("dateFrom")?.value || "";
   const to   = document.getElementById("dateTo")?.value   || "";
   const mesName = p2AvanceMes();
+  const mesTxt = mesName ? mesL(mesName, getLang()) : "—";
+  const escala = t(`mode.${STATE.curMode === "mensual" ? "mensual" : STATE.curMode === "diario" ? "diario" : "semanal"}`);
   const deck = p2Deck(partner);
   const dentro = deck.filter(p2SlideEnPdf);
   const resumen = [
-    [P2T("Partner", "Partner", "Партнёр"), partner],
-    [P2T("Idioma del PDF", "PDF language", "Язык PDF"),
-      (P2_LANGS.find(l => l.k === PRESENT2_STATE.lang) || {}).lbl],
-    [P2T("Escala", "Scale", "Масштаб"), mi.label],
-    [P2T("Rango", "Range", "Период"), `${d2s(from)} → ${d2s(to)}`],
-    [P2T("Mes de la meta", "Goal month", "Месяц цели"), p2MesLabel(mesName)],
-    [P2T("Hojas", "Sheets", "Страницы"), `${dentro.length} / ${deck.filter(e => !e.def.noPdf).length}`]
+    [t("p2.chk.partner"), partner],
+    [t("p2.chk.idioma"), (P2_LANGS.find(l => l.k === PRESENT2_STATE.lang) || {}).lbl],
+    [t("p2.chk.escala"), escala],
+    [t("p2.chk.rango"), `${d2s(from)} → ${d2s(to)}`],
+    [t("p2.chk.mes"), mesTxt],
+    [t("p2.chk.hojas"), `${dentro.length} / ${deck.filter(e => !e.def.noPdf).length}`]
   ];
   const avisos = [];
   // 1. Rango que no cubre el mes de la meta: los FLUJOS quedan cortos y el % se
@@ -3073,68 +3539,41 @@ export function p2ChequeoExport(partner) {
   const delMes = p2MonthDates(mesName);
   const enRango = p2DatesMetaEnRango(mesName, p2SelectedDates(from, to, STATE.curMode));
   PRESENT2_STATE.dataset = savedDs;
-  if (delMes.length && enRango.length < delMes.length) avisos.push(P2T(
-    `El rango cubre ${enRango.length} de ${delMes.length} períodos de ${p2MesLabel(mesName)}: Nuevos+Reactivados y Horas van a quedar cortos contra una meta mensual.`,
-    `The range covers ${enRango.length} of ${delMes.length} periods of ${p2MesLabel(mesName)}: New+Reactivated and Hours will fall short against a monthly goal.`,
-    `Диапазон покрывает ${enRango.length} из ${delMes.length} периодов месяца ${p2MesLabel(mesName)}: новые+реактивированные и часы будут занижены относительно месячной цели.`));
+  if (delMes.length && enRango.length < delMes.length)
+    avisos.push(t("p2.chk.aviso.rango", { n: enRango.length, total: delMes.length, mes: mesTxt }));
   // 2. Sin metas del mes: el deck sale sin cumplimiento y se lee como si el
   //    partner no hubiera llegado a nada.
   const m = p2MetaFor(partner, null, mesName);
-  if (!(m.mA || m.mNR || m.mH)) avisos.push(P2T(
-    `No hay metas cargadas para ${p2MesLabel(mesName)}: el deck sale sin cumplimiento.`,
-    `No goals loaded for ${p2MesLabel(mesName)}: the deck goes out without attainment.`,
-    `Цели на ${p2MesLabel(mesName)} не загружены: колода уйдёт без выполнения.`));
+  if (!(m.mA || m.mNR || m.mH)) avisos.push(t("p2.chk.aviso.sinMetas", { mes: mesTxt }));
   // 3. Taxi y TukTuk con distinta frescura: el combinado suma un periodo que en
   //    una linea existe y en la otra no. En pantalla esto se avisa arriba del
   //    deck, fuera de las hojas — al exportar no se ve.
-  if (p2FreshnessWarn()) avisos.push(P2T(
-    "Taxi y TukTuk no llegan al mismo período: puede faltar subir uno de los dos.",
-    "Taxi and TukTuk do not reach the same period: one of the two may be missing.",
-    "Такси и ТукТук доходят до разных периодов: возможно, один из них не загружен."));
+  if (p2FreshnessWarn()) avisos.push(t("p2.chk.aviso.frescura"));
   // 4. Escala no mensual contra una meta mensual (mismo motivo que el aviso de
   //    la pestaña Metas): el % de Conductores Activos no es comparable.
-  if (STATE.curMode !== "mensual") avisos.push(P2T(
-    `Escala ${mi.label.toLowerCase()}: el % de Conductores Activos contra una meta MENSUAL no es comparable (es un nivel, no se acumula).`,
-    `${mi.label} scale: the Active Drivers % against a MONTHLY goal is not comparable (it is a level, it does not accumulate).`,
-    `Масштаб «${mi.label}»: процент активных водителей против МЕСЯЧНОЙ цели несопоставим (это уровень, он не накапливается).`));
+  if (STATE.curMode !== "mensual") avisos.push(t("p2.chk.aviso.escala", { escala }));
   return { resumen, avisos, hojas: dentro.length };
 }
-export function p2CerrarChequeo() {
-  document.getElementById("p2ExportChk")?.remove();
-  document.body.classList.remove("p2-modal-abierto");
-}
-// Modal, no confirm(): el confirm del navegador no puede mostrar la tabla ni los
-// avisos, y se acepta por reflejo. Mismo criterio que el borrado de usuarios.
-export function p2AbrirChequeoExport() {
+// Chequeo previo: diálogo del sistema de diseño (no confirm() del navegador,
+// que no puede mostrar el resumen y se acepta por reflejo). Cancelar = no se
+// exporta nada; confirmar = mismo camino de siempre (downloadPresent2PDF).
+export async function p2AbrirChequeoExport() {
   const partner = PRESENT2_STATE.partner;
-  if (!partner) { alert(P2T("Selecciona un partner primero.", "Pick a partner first.", "Сначала выберите партнёра.")); return; }
-  p2CerrarChequeo();
+  if (!partner) { await alertDialog({ title: t("p2.err.sinPartner") }); return; }
   const C = p2ChequeoExport(partner);
-  if (!C.hojas) { alert(P2T("No queda ninguna hoja seleccionada para el PDF.",
-    "No sheets are selected for the PDF.", "Не выбрано ни одной страницы для PDF.")); return; }
-  const div = document.createElement("div");
-  div.id = "p2ExportChk";
-  div.className = "p2chk-fondo";
-  div.innerHTML = `<div class="p2chk">
-    <div class="p2chk-h">${escapeHTML(P2T("Esto es lo que se va a exportar", "This is what will be exported", "Вот что будет экспортировано"))}</div>
-    <dl class="p2chk-dl">${C.resumen.map(([k, v]) =>
-      `<div><dt>${escapeHTML(k)}</dt><dd>${escapeHTML(String(v))}</dd></div>`).join("")}</dl>
-    ${C.avisos.length ? `<ul class="p2chk-avisos">${C.avisos.map(a => `<li>${escapeHTML(a)}</li>`).join("")}</ul>` : ""}
-    <div class="p2chk-btns">
-      <button class="png-btn" data-act="p2CerrarChequeo">${escapeHTML(P2T("Cancelar", "Cancel", "Отмена"))}</button>
-      <button class="apply-btn" data-act="downloadPresent2PDF">⬇ ${escapeHTML(P2T("Descargar PDF", "Download PDF", "Скачать PDF"))}</button>
-    </div>
-  </div>`;
-  document.body.appendChild(div);
-  document.body.classList.add("p2-modal-abierto");
+  if (!C.hojas) { await alertDialog({ title: t("p2.err.sinHojas"), tone: "bad" }); return; }
+  const body = C.resumen.map(([k, v]) => `${k}: ${v}`).join("\n") +
+    (C.avisos.length ? `\n\n${t("p2.chk.revisar")}\n` + C.avisos.map(a => `• ${a}`).join("\n") : "");
+  const ok = await confirmDialog({ title: t("p2.chk.titulo"), body,
+    confirmLabel: t("p2.ctl.descargar"), cancelLabel: t("dialogo.cancelar") });
+  if (ok) await downloadPresent2PDF();
 }
 
 export async function downloadPresent2PDF() {
-  p2CerrarChequeo();
   logAccess("download_pdf", "presentacion2:" + (PRESENT2_STATE.partner || "?"));
   const partner = PRESENT2_STATE.partner;
-  if (!partner) { alert("Selecciona un partner primero."); return; }
-  try { await ensurePdfLibs(); } catch (e) { alert("No se pudieron cargar las librerías de PDF. Reintenta."); return; }
+  if (!partner) { await alertDialog({ title: t("p2.err.sinPartner") }); return; }
+  try { await ensurePdfLibs(); } catch (e) { await alertDialog({ title: t("p2.err.libs"), tone: "bad" }); return; }
   destroyPresent2Charts();
   await new Promise(r => setTimeout(r, 100));
 
@@ -3144,18 +3583,16 @@ export async function downloadPresent2PDF() {
   // cada uno sus propias fechas. No calcular acá (sería siempre las de Taxi).
 
   const prog = document.createElement("div");
-  prog.style.cssText = "position:fixed;inset:0;background:rgba(255,255,255,.95);z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px";
-  prog.innerHTML = `<div class="agy-style-445"></div><div id="p2Msg" class="agy-style-446">${P2T("Generando PDF...", "Generating PDF...", "Создаём PDF...")}</div>`;
+  prog.className = "p2-progress";
+  prog.setAttribute("role", "status");
+  prog.innerHTML = `<div class="p2-progress__spin"></div><div id="p2Msg" class="p2-progress__msg">${escapeHTML(t("p2.pdf.generando"))}</div>`;
   document.body.appendChild(prog);
 
   // Deck combinado: incluye sección Taxi + (si aplica) sección TukTuk. Se excluyen
   // las slides marcadas noPdf (Proyección: solo pantalla) y las que el KAM haya
   // desmarcado en el panel de hojas.
   const deck = p2Deck(partner).filter(p2SlideEnPdf);
-  if (!deck.length) { document.body.removeChild(prog); alert(P2T(
-    "No queda ninguna hoja seleccionada para el PDF.",
-    "No sheets are selected for the PDF.",
-    "Не выбрано ни одной страницы для PDF.")); return; }
+  if (!deck.length) { document.body.removeChild(prog); await alertDialog({ title: t("p2.err.sinHojas"), tone: "bad" }); return; }
   PRESENT2_STATE._deckLen = deck.length;
   PRESENT2_STATE._showDsBadge = p2TuktukSectionVisible(partner) && p2HasTaxi(partner);
   const savedDs = PRESENT2_STATE.dataset;
@@ -3219,7 +3656,9 @@ export async function downloadPresent2PDF() {
     pdf.save(`${partner}_Presentacion2_${to}.pdf`);
   } catch (err) {
     console.error(err);
-    alert((P2T("Error al generar PDF: ", "Error generating PDF: ", "Ошибка при создании PDF: ")) + err.message);
+    // Se avisa DESPUÉS de restaurar la vista (más abajo): el diálogo no debe
+    // quedar detrás del velo de progreso.
+    PRESENT2_STATE._pdfError = err && err.message ? err.message : String(err);
     document.querySelectorAll('div[data-p2slide="1"]').forEach(d => { try { d.remove(); } catch (e) {} });
   }
   PRESENT2_STATE.dataset = savedDs;   // restaurar el dataset de la vista en vivo
@@ -3227,6 +3666,10 @@ export async function downloadPresent2PDF() {
   document.body.removeChild(prog);
   // Restaurar la vista en vivo (los charts se destruyeron al inicio)
   try { renderSlide2(); } catch (e) {}
+  if (PRESENT2_STATE._pdfError) {
+    const msg = PRESENT2_STATE._pdfError; PRESENT2_STATE._pdfError = null;
+    await alertDialog({ title: t("p2.err.pdf"), body: msg, tone: "bad" });
+  }
 }
 
 // ── ACCIONES DELEGADAS (Fase A2) ─────────────────────────────────────────────
@@ -3240,15 +3683,17 @@ registerActions({
   p2FilterPartners:     (d, el) => p2FilterPartners(el.value),
   p2SearchKeydown:      (d, el, e) => p2SearchKeydown(e),
   p2SelectPartner:      (d, el) => p2SelectPartner(el.dataset.partner),
-  setPresent2Lang:      d => setPresent2Lang(d.lang),
-  present2SetFleetMode: d => present2SetFleetMode(d.mode),
+  setPresent2Lang:      d => setPresent2Lang(d.value || d.lang),
+  present2SetFleetMode: d => { if (d.value || d.mode) present2SetFleetMode(d.value || d.mode); },
   present2SetAvanceMes: (d, el) => present2SetAvanceMes(el.value),
   present2TogglePdfPanel,
-  p2AbrirChequeoExport, p2CerrarChequeo,
+  p2AbrirChequeoExport,
   present2TogglePdfSlide: d => present2TogglePdfSlide(d.key),
   present2PdfAll:         d => present2PdfAll(d.on === "1"),
   present2ToggleCohort: d => present2ToggleCohort(d.key),
-  present2JumpSection:  d => present2JumpSection(d.section),
+  present2JumpSection:  d => present2JumpSection(d.value || d.section),
+  present2ConvCohorte:  d => present2ConvCohorte(d.value),
+  present2ConvFiltro,
   p2ShowPartnerList,
   p2HidePartnerListDelayed: () => setTimeout(p2HidePartnerList, 200)
 });

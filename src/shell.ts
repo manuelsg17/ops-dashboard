@@ -27,8 +27,7 @@ import { registerActions } from "./shared/actions.js";
 export const NAV_GROUPS = [
   { label: "nav.analisis", items: [
     { id: "rend",        label: "nav.rendimiento",  icon: "chart-line" },
-    { id: "metas",       label: "nav.metas",        icon: "target" },
-    { id: "partnerview", label: "nav.vistaPartner", icon: "user" }
+    { id: "metas",       label: "nav.metas",        icon: "target" }
   ] },
   { label: "nav.grupo.planificacion", items: [
     { id: "calculator",  label: "nav.calculadora",  icon: "calculator" },
@@ -151,8 +150,6 @@ const _CHIPS_FILTRO = ["escala", "rango", "ciudad", "kam", "linea", "partners"];
 const TAB_META = {
   rend:        { title: "nav.rendimiento",  sub: "shell.sub.rend",        chips: _CHIPS_FILTRO, line: () => STATE.rendLine || LINEA_DEF },
   metas:       { title: "nav.metas",        sub: "shell.sub.metas",       chips: _CHIPS_FILTRO, line: () => STATE.metasLine || LINEA_DEF },
-  // Vista partner tiene su propio selector de partner: del panel solo usa la escala.
-  partnerview: { title: "nav.vistaPartner", sub: "shell.sub.partnerview", chips: ["escala"] },
   calculator:  { title: "nav.calculadora",  sub: "shell.sub.calculator" },
   seguimiento: { title: "nav.seguimiento",  sub: "shell.sub.seguimiento" },
   rawdata:     { title: "nav.dataRaw",      sub: "shell.sub.rawdata" },
@@ -161,9 +158,9 @@ const TAB_META = {
 };
 // Pestañas que muestran el panel de filtros (las demás están en NO_SIDEBAR_TABS
 // de app.ts; Presentación va a pantalla completa y no lleva encabezado).
-const _TABS_CON_PANEL = new Set(["rend", "metas", "partnerview", "portal"]);
+const _TABS_CON_PANEL = new Set(["rend", "metas", "portal"]);
 
-const _TABS_CON_FRESCURA = new Set(["rend", "metas", "partnerview", "calculator", "rawdata"]);
+const _TABS_CON_FRESCURA = new Set(["rend", "metas", "calculator", "rawdata"]);
 
 const _LINEA_LBL = { comb: () => t("rend.linea.comb"), agg: () => t("rend.linea.agg"), fleet: () => "Fleet", tk: () => "TukTuk" };
 
