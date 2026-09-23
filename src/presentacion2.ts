@@ -118,7 +118,7 @@ export let PRESENT2_STATE = {
   partner:  null,
   lang:     "es",       // es | en | ru
   slide:    0,          // 0=Matriz, 1=Data Raw #, 2=Data Raw %
-  cohort:   {},         // { t1, t23, t45, t610, t5 } activados
+  cohort:   {},         // { t23, t45, t610, t5 } activados (sin "Top 1": ver P2_BANDS)
   cmpCity:  true,       // mostrar tendencia de ciudad
   fleetMode: "auto",    // "auto" | "fleet" | "taxi" — auto = según is_fleet del partner
   dataset:  "taxi",     // "taxi" | "tuktuk" — qué slice de partners/datos se muestra
@@ -564,8 +564,10 @@ export function destroyPresent2Charts() {
 // tuktuk salía en BLANCO en mensual (claves "YYYY-MM" en un índice de semanas).
 // (Taxi ya es mode-aware porque _byCityDate/rawData/allDates se reconstruyen en switchMode.)
 // Bandas de cohorte para comparar al partner contra su grupo de tamaño.
+// Sin banda "Top 1" (decisión de Manuel, 24-sep-2026): era UN solo partner, así
+// que su "promedio" era el dato crudo de un competidor identificable. No volver
+// a agregar una banda de un solo miembro.
 export const P2_BANDS = [
-  { key: "t1",   range: [0, 1],  color: "#dc2626", es: "Top 1",       en: "Top 1",     ru: "Топ 1" },
   { key: "t23",  range: [1, 3],  color: "#f59e0b", es: "Top 2-3",     en: "Top 2-3",   ru: "Топ 2-3" },
   { key: "t45",  range: [3, 5],  color: "#0284c7", es: "Top 4-5",     en: "Top 4-5",   ru: "Топ 4-5" },
   { key: "t610", range: [5, 10], color: "#a855f7", es: "Top 6-10",    en: "Top 6-10",  ru: "Топ 6-10" },
@@ -2445,7 +2447,7 @@ export function buildSlide2Alertas(partner, dates, idx) {
 // la forma; el valor crudo aparece únicamente en el tooltip de la pantalla del
 // KAM; (2) embudo y canales muestran solo promedios de cohorte, con un mínimo
 // de COHORTE_MIN miembros (domain/conversionCohorte.ts). Ver el informe de la
-// Ola 6 por el caso "Top 1" (una banda de un solo partner).
+// Ola 6 por el caso "Top 1" (una banda de un solo partner; retirada el 24-sep-2026).
 export const P2_EMBUDO_SLIDE = { es: "Embudo de conversión", en: "Conversion funnel", ru: "Воронка конверсии", charts: true,
   build: (p, d, i) => buildSlide2Embudo(p, i), chartFn: (p, d, root) => buildSlide2EmbudoChart(p, root) };
 export const P2_CANAL_SLIDE = { es: "Adquisición por canal", en: "Acquisition by channel", ru: "Привлечение по каналам", charts: true,
@@ -3449,6 +3451,9 @@ export function present2JumpSection(ds) {
   goSlide2(i < 0 ? 0 : i);   // goSlide2 ya repinta la Sección con la hoja real
 }
 export function present2ToggleCohort(k) {
+  // Una clave que ya no es banda (p.ej. el "t1" retirado) no se guarda: sin
+  // esto quedaría un toggle fantasma sin botón para apagarlo.
+  if (!P2_BANDS.some(b => b.key === k)) return;
   PRESENT2_STATE.cohort = PRESENT2_STATE.cohort || {};
   PRESENT2_STATE.cohort[k] = !PRESENT2_STATE.cohort[k];
   refreshPresent2Bar(); renderSlide2();
