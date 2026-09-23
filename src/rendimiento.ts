@@ -6,6 +6,7 @@ import { ratio, tasaAcum, sumarTasa, leerTasa } from "./domain/metrics.js";
 import { sliceEscala, datasetLinea } from "./shared/escala.js";
 import { SIN_KAM } from "./core/config.js";
 import { t } from "./core/i18n";
+import { dn } from "./shared/huella";
 
 // ── LÍNEA DE NEGOCIO (Agregador / Fleet / TukTuk / Combinado) ─────────────────
 // Localizado a Rendimiento: NO muta STATE.rawData (el agregador queda intacto para
@@ -334,19 +335,19 @@ export function _renderRendImpl() {
         </div>
         <div class="city-kpi">
           <span class="city-kpi-label">${escapeHTML(t("metric.ad.label"))}</span>
-          <div class="city-kpi-right"><span class="city-kpi-val">${fmt(cAD)}</span>${bdgMode(cAD,cpAD,"mb-badge")}</div>
+          <div class="city-kpi-right"><span class="city-kpi-val"${dn("rend", "ciudad", "ad", city)}>${fmt(cAD)}</span>${bdgMode(cAD,cpAD,"mb-badge")}</div>
         </div>
         <div class="city-kpi">
           <span class="city-kpi-label">${escapeHTML(t("metric.nr.label"))}</span>
-          <div class="city-kpi-right"><span class="city-kpi-val">${fmt(cNR)}</span>${bdgMode(cNR,cpNR,"mb-badge")}</div>
+          <div class="city-kpi-right"><span class="city-kpi-val"${dn("rend", "ciudad", "nr", city)}>${fmt(cNR)}</span>${bdgMode(cNR,cpNR,"mb-badge")}</div>
         </div>
         <div class="city-kpi">
           <span class="city-kpi-label">${escapeHTML(t("metric.sh.label"))}</span>
-          <div class="city-kpi-right"><span class="city-kpi-val">${fmt(cSH)}</span>${bdgMode(cSH,cpSH,"mb-badge")}</div>
+          <div class="city-kpi-right"><span class="city-kpi-val"${dn("rend", "ciudad", "sh", city)}>${fmt(cSH)}</span>${bdgMode(cSH,cpSH,"mb-badge")}</div>
         </div>
         <div class="city-kpi">
           <span class="city-kpi-label">${t("metric.tr.label")}</span>
-          <div class="city-kpi-right"><span class="city-kpi-val">${fmtSmart(cTR)}</span>${bdgMode(cTR,cpTR,"mb-badge")}</div>
+          <div class="city-kpi-right"><span class="city-kpi-val"${dn("rend", "ciudad", "tr", city)}>${fmtSmart(cTR)}</span>${bdgMode(cTR,cpTR,"mb-badge")}</div>
         </div>
       </div>`;
   });
@@ -376,12 +377,12 @@ export function _renderRendImpl() {
     html += `
       <div class="mcard" style="border-left:3px solid ${col}">
         <div class="mcard-label"><span style="width:8px;height:8px;border-radius:50%;background:${col};display:inline-block"></span> ${escapeHTML(kam)}</div>
-        <div class="mcard-val">${fmt(kAD)}</div>
+        <div class="mcard-val"${dn("rend", "kam", "ad", kam)}>${fmt(kAD)}</div>
         <div>${bdgMode(kAD,kpAD)} <span class="agy-style-525">${escapeHTML(t("rend.lbl.activos"))}</span></div>
         <div class="mcard-breakdown">
-          <div class="mb-row"><span class="mb-name">N+R</span><span class="mb-val">${fmt(kNR)}</span>${bdgMode(kNR,kpNR,"mb-badge")}</div>
-          <div class="mb-row"><span class="mb-name">${escapeHTML(t("metric.sh.short"))}</span><span class="mb-val">${fmt(kSH)}</span></div>
-          <div class="mb-row"><span class="mb-name">${t("metric.tr.short")}</span><span class="mb-val">${fmtSmart(kTR)}</span>${bdgMode(kTR,kpTR,"mb-badge")}</div>
+          <div class="mb-row"><span class="mb-name">N+R</span><span class="mb-val"${dn("rend", "kam", "nr", kam)}>${fmt(kNR)}</span>${bdgMode(kNR,kpNR,"mb-badge")}</div>
+          <div class="mb-row"><span class="mb-name">${escapeHTML(t("metric.sh.short"))}</span><span class="mb-val"${dn("rend", "kam", "sh", kam)}>${fmt(kSH)}</span></div>
+          <div class="mb-row"><span class="mb-name">${t("metric.tr.short")}</span><span class="mb-val"${dn("rend", "kam", "tr", kam)}>${fmtSmart(kTR)}</span>${bdgMode(kTR,kpTR,"mb-badge")}</div>
         </div>
       </div>`;
   });
@@ -429,9 +430,9 @@ export function _renderRendImpl() {
   html += secH("⚡", "#eab308", t("rend.prod.titulo"),
     t("rend.prod.sub", { d: d2s(lastDate) }), "");
   html += `<div class="section"><div class="metric-row">
-    ${_rendKpiCard(t("rend.kpi.horasCond"), "⏱️", pNow.shAd, pPrev.shAd, "#8b5cf6", v => fmt(v))}
-    ${_rendKpiCard(t("rend.kpi.viajesCond"), "🚕", pNow.trAd, pPrev.trAd, "#0284c7", v => fmt(v))}
-    ${_rendKpiCard(t("rend.kpi.viajesHora"), "📐", pNow.trSh, pPrev.trSh, "#10b981", v => v.toFixed(2))}
+    ${_rendKpiCard(t("rend.kpi.horasCond"), "⏱️", pNow.shAd, pPrev.shAd, "#8b5cf6", v => fmt(v), undefined, undefined, "rend.prod.shAd")}
+    ${_rendKpiCard(t("rend.kpi.viajesCond"), "🚕", pNow.trAd, pPrev.trAd, "#0284c7", v => fmt(v), undefined, undefined, "rend.prod.trAd")}
+    ${_rendKpiCard(t("rend.kpi.viajesHora"), "📐", pNow.trSh, pPrev.trSh, "#10b981", v => v.toFixed(2), undefined, undefined, "rend.prod.trSh")}
   </div></div>`;
 
   // ── 4c. Quién se movió ────────────────────────────────────────────────────
@@ -544,7 +545,7 @@ export function mkMetricCard(label, icon, val, prevWk, apd, lastRows, prevRows, 
     <div class="mcard" style="border-top:3px solid ${color}">
       <div class="mcard-label">${icon} ${label}</div>
       <div class="mcard-sub-label">${escapeHTML(isCum ? t("rend.lbl.acumRango") : _rendPeriodLabel())}</div>
-      <div class="mcard-val">${fmt(val)}</div>
+      <div class="mcard-val"${dn("rend", "pais", metric)}>${fmt(val)}</div>
       <div class="agy-style-257">${bdgMode(lwVal, pwVal)}
         <span class="agy-style-258">${escapeHTML(t("rend.cmp.vs", { p: STATE.curMode === "mensual" ? t("rend.cmp.mesAnterior") : STATE.curMode === "diario" ? t("rend.cmp.diaAnterior") : t("rend.cmp.semAnterior") }))}</span>
       </div>
@@ -569,7 +570,7 @@ export function mkMetricCard(label, icon, val, prevWk, apd, lastRows, prevRows, 
     const dot = KAM_COLORS[kam] || "#888";
     html += `<div class="mb-row">
       <span class="mb-name"><span class="mb-dot" style="background:${dot}"></span>${escapeHTML(kam)}</span>
-      <span class="mb-val">${fmt(kv)}</span>${bdgMode(klv, kpv, "mb-badge")}
+      <span class="mb-val"${dn("rend", "pais-kam", metric, kam)}>${fmt(kv)}</span>${bdgMode(klv, kpv, "mb-badge")}
     </div>`;
   });
 
@@ -684,10 +685,10 @@ export function renderTable() {
       : `<span class="agy-style-90">${fmt(r.ns)}</span>`;
     h += `<tr data-partner="${escapeHTML(r.partner)}"${r.ns > 0 ? ' class="leads-row"' : ""}>
       <td>${pd}${alertBd}${escapeHTML(r.partner)}</td><td>${kd}${escapeHTML(r.kam)}</td>
-      <td class="tn">${fmt(r.ad)}</td><td class="tn">${fmt(r.nr)}</td>
-      <td class="tn">${fmt(r.sh)}</td><td class="tn">${fmtSmart(r.tr)}</td>
-      <td class="tn">${fmtK(r.co)}</td>
-      <td class="tn">${nsCell}</td>
+      <td class="tn"${dn("rend", "tabla", "ad", r.partner)}>${fmt(r.ad)}</td><td class="tn"${dn("rend", "tabla", "nr", r.partner)}>${fmt(r.nr)}</td>
+      <td class="tn"${dn("rend", "tabla", "sh", r.partner)}>${fmt(r.sh)}</td><td class="tn"${dn("rend", "tabla", "tr", r.partner)}>${fmtSmart(r.tr)}</td>
+      <td class="tn"${dn("rend", "tabla", "co", r.partner)}>${fmtK(r.co)}</td>
+      <td class="tn"${dn("rend", "tabla", "ns", r.partner)}>${nsCell}</td>
       <td class="tn">${bdgMode(r.ad, r.pad, "tbadge")}</td>
       <td class="agy-style-528"><span style="${r.tAD.c}">${r.tAD.i}</span></td>
     </tr>`;
@@ -840,13 +841,14 @@ export function buildPartnerCards(apd, lastDate, prevDate, partners, sel) {
 // comparar último período vs previo — comparar el acumulado contra un solo
 // período da porcentajes disparatados. Sin `badgeVal` se compara `val`, que es
 // el comportamiento correcto para snapshots (el caso por defecto).
-export function _rendKpiCard(label, icon, val, prev, color, fmtFn, subLabel, badgeVal) {
+// numKey (opcional): clave de la huella de números (shared/huella.ts).
+export function _rendKpiCard(label, icon, val, prev, color, fmtFn, subLabel, badgeVal, numKey) {
   const _bv = badgeVal === undefined ? val : badgeVal;
   return `
     <div class="mcard" style="border-top:3px solid ${color}">
       <div class="mcard-label">${icon} ${label}</div>
       <div class="mcard-sub-label">${subLabel || "snapshot último período"}</div>
-      <div class="mcard-val">${fmtFn(val)}</div>
+      <div class="mcard-val"${numKey ? dn(numKey) : ""}>${fmtFn(val)}</div>
       <div class="agy-style-257">${bdgMode(_bv, prev)}
         <span class="agy-style-258">${escapeHTML(t("rend.cmp.vs", { p: STATE.curMode === "mensual" ? t("rend.cmp.mesAnterior") : STATE.curMode === "diario" ? t("rend.cmp.diaAnterior") : t("rend.cmp.semAnterior") }))}</span>
       </div>
@@ -1024,12 +1026,12 @@ export function _renderFleetView(lastRows, prevRows, lastDate, prevDate) {
     const c = _rendFleetAgg(lastRows), p = _rendFleetAgg(prevRows);
     const pct = v => fmt(v) + "%";
     html += `<div class="section">${_rendFleetScorecard([
-      { label: "% SH Externo (no propio)",        val: c.externalShShare, prev: p.externalShShare, fmtFn: pct },
-      { label: "% Viajes con Fraude",              val: c.fraudShare,      prev: p.fraudShare,      fmtFn: pct },
-      { label: "% Viajes Mal Calificados",         val: c.badRatedShare,   prev: p.badRatedShare,   fmtFn: pct },
-      { label: "% Completion Rate",                val: c.completionRate,  prev: p.completionRate,  fmtFn: pct },
-      { label: "Subsidio Yango / GMV",             val: c.subsidyByGmv,    prev: p.subsidyByGmv,    fmtFn: pct },
-      { label: "% Solicitudes de Soporte",         val: c.supportReqShare, prev: p.supportReqShare, fmtFn: pct }
+      { label: "% SH Externo (no propio)",        key: "externalShShare", val: c.externalShShare, prev: p.externalShShare, fmtFn: pct },
+      { label: "% Viajes con Fraude",              key: "fraudShare", val: c.fraudShare,      prev: p.fraudShare,      fmtFn: pct },
+      { label: "% Viajes Mal Calificados",         key: "badRatedShare", val: c.badRatedShare,   prev: p.badRatedShare,   fmtFn: pct },
+      { label: "% Completion Rate",                key: "completionRate", val: c.completionRate,  prev: p.completionRate,  fmtFn: pct },
+      { label: "Subsidio Yango / GMV",             key: "subsidyByGmv", val: c.subsidyByGmv,    prev: p.subsidyByGmv,    fmtFn: pct },
+      { label: "% Solicitudes de Soporte",         key: "supportReqShare", val: c.supportReqShare, prev: p.supportReqShare, fmtFn: pct }
     ])}</div>`;
   }
 
@@ -1048,11 +1050,11 @@ export function _renderFleetView(lastRows, prevRows, lastDate, prevDate) {
           <span style="width:10px;height:10px;border-radius:50%;background:${col};display:inline-block"></span>
           ${cityLabel(city)}
         </div>
-        ${_rendFleetCityKpi("Owned Fleet Cars", c.owned,      p.owned,      fmt)}
-        ${_rendFleetCityKpi("SH / Auto",        c.shCar,      p.shCar,      fmt)}
-        ${_rendFleetCityKpi("Aceptación",       c.accept,     p.accept,     v => fmt(v) + "%")}
-        ${_rendFleetCityKpi("Branded Cars",     c.branded,    p.branded,    fmt)}
-        ${_rendFleetCityKpi("% Brandeado",      c.pctBranded, p.pctBranded, v => fmt(v) + "%")}
+        ${_rendFleetCityKpi("Owned Fleet Cars", c.owned,      p.owned,      fmt, `rend.fleet-ciudad.owned.${city}`)}
+        ${_rendFleetCityKpi("SH / Auto",        c.shCar,      p.shCar,      fmt, `rend.fleet-ciudad.shCar.${city}`)}
+        ${_rendFleetCityKpi("Aceptación",       c.accept,     p.accept,     v => fmt(v) + "%", `rend.fleet-ciudad.accept.${city}`)}
+        ${_rendFleetCityKpi("Branded Cars",     c.branded,    p.branded,    fmt, `rend.fleet-ciudad.branded.${city}`)}
+        ${_rendFleetCityKpi("% Brandeado",      c.pctBranded, p.pctBranded, v => fmt(v) + "%", `rend.fleet-ciudad.pctBranded.${city}`)}
       </div>`;
   });
   html += `</div></div>`;
@@ -1070,16 +1072,16 @@ export function _rendFleetCardsBody(c, p) {
   // auto-fit (no tocar la clase global — la usa también el Agregador con 3 cards).
   // auto-fit/minmax evita que se aplasten en pantallas angostas (envuelve a 2 filas).
   return `<div class="section"><div class="metric-row agy-style-226">
-      ${_rendKpiCard(t("rend.kpi.ownedCars"),   "🚗", c.owned,      p.owned,      "#0284c7", fmt)}
-      ${_rendKpiCard(t("rend.kpi.shAuto"), "⏱️", c.shCar,      p.shCar,      "#8b5cf6", num)}
-      ${_rendKpiCard(t("rend.kpi.aceptacion"),          "✅", c.accept,     p.accept,     "#10b981", pct)}
-      ${_rendKpiCard(t("rend.kpi.brandedCars"), "🏷️", c.branded,    p.branded,    "#f59e0b", fmt)}
-      ${_rendKpiCard(t("rend.kpi.pctBrand"),         "🎯", c.pctBranded, p.pctBranded, "#7e22ce", pct)}
-      ${_rendKpiCard(t("rend.kpi.gmvAuto"),          "💰", c.gmvPerCar,        p.gmvPerCar,        "#059669", num)}
-      ${_rendKpiCard(t("rend.kpi.comAuto"),     "💵", c.commissionPerCar, p.commissionPerCar, "#059669", num)}
-      ${_rendKpiCard(t("rend.kpi.viajesAuto"),       "🧭", c.tripsPerCar,      p.tripsPerCar,      "#0284c7", num)}
-      ${_rendKpiCard("Viajes / Hora",       "⚡", c.tripsPerHour,     p.tripsPerHour,     "#0284c7", num)}
-      ${_rendKpiCard(t("rend.kpi.gmvHora"),          "📈", c.moneyPerHour,     p.moneyPerHour,     "#059669", num)}
+      ${_rendKpiCard(t("rend.kpi.ownedCars"),   "🚗", c.owned,      p.owned,      "#0284c7", fmt, undefined, undefined, "rend.fleet.owned")}
+      ${_rendKpiCard(t("rend.kpi.shAuto"), "⏱️", c.shCar,      p.shCar,      "#8b5cf6", num, undefined, undefined, "rend.fleet.shCar")}
+      ${_rendKpiCard(t("rend.kpi.aceptacion"),          "✅", c.accept,     p.accept,     "#10b981", pct, undefined, undefined, "rend.fleet.accept")}
+      ${_rendKpiCard(t("rend.kpi.brandedCars"), "🏷️", c.branded,    p.branded,    "#f59e0b", fmt, undefined, undefined, "rend.fleet.branded")}
+      ${_rendKpiCard(t("rend.kpi.pctBrand"),         "🎯", c.pctBranded, p.pctBranded, "#7e22ce", pct, undefined, undefined, "rend.fleet.pctBranded")}
+      ${_rendKpiCard(t("rend.kpi.gmvAuto"),          "💰", c.gmvPerCar,        p.gmvPerCar,        "#059669", num, undefined, undefined, "rend.fleet.gmvPerCar")}
+      ${_rendKpiCard(t("rend.kpi.comAuto"),     "💵", c.commissionPerCar, p.commissionPerCar, "#059669", num, undefined, undefined, "rend.fleet.commissionPerCar")}
+      ${_rendKpiCard(t("rend.kpi.viajesAuto"),       "🧭", c.tripsPerCar,      p.tripsPerCar,      "#0284c7", num, undefined, undefined, "rend.fleet.tripsPerCar")}
+      ${_rendKpiCard("Viajes / Hora",       "⚡", c.tripsPerHour,     p.tripsPerHour,     "#0284c7", num, undefined, undefined, "rend.fleet.tripsPerHour")}
+      ${_rendKpiCard(t("rend.kpi.gmvHora"),          "📈", c.moneyPerHour,     p.moneyPerHour,     "#059669", num, undefined, undefined, "rend.fleet.moneyPerHour")}
     </div></div>`;
 }
 // Scorecard compacto: filas label+valor+badge WoW/MoM apiladas en 1 tarjeta (a
@@ -1091,15 +1093,15 @@ export function _rendFleetScorecard(items) {
     ${items.map(it => `
       <div class="city-kpi">
         <span class="city-kpi-label">${it.label}</span>
-        <div class="city-kpi-right"><span class="city-kpi-val">${it.val == null ? "—" : it.fmtFn(it.val)}</span>${bdgMode(it.val, it.prev, "mb-badge")}</div>
+        <div class="city-kpi-right"><span class="city-kpi-val"${it.key ? dn("rend", "fleet-calidad", it.key) : ""}>${it.val == null ? "—" : it.fmtFn(it.val)}</span>${bdgMode(it.val, it.prev, "mb-badge")}</div>
       </div>`).join("")}
   </div>`;
 }
-export function _rendFleetCityKpi(label, val, prev, fmtFn) {
+export function _rendFleetCityKpi(label, val, prev, fmtFn, numKey) {
   // val null = tasa/ratio sin base: "—", no el "0" que daría fmt(null).
   return `<div class="city-kpi">
     <span class="city-kpi-label">${label}</span>
-    <div class="city-kpi-right"><span class="city-kpi-val">${val == null ? "—" : fmtFn(val)}</span>${bdgMode(val, prev, "mb-badge")}</div>
+    <div class="city-kpi-right"><span class="city-kpi-val"${numKey ? dn(numKey) : ""}>${val == null ? "—" : fmtFn(val)}</span>${bdgMode(val, prev, "mb-badge")}</div>
   </div>`;
 }
 export function _rendFleetPartnerTable(lastRows, prevRows) {
@@ -1126,13 +1128,13 @@ export function _rendFleetPartnerTable(lastRows, prevRows) {
     h += `<tr>
       <td>${escapeHTML(r.partner)}</td>
       <td><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${kc};margin-right:4px"></span>${escapeHTML(r.kam)}</td>
-      <td class="tn">${fmt(r.owned)} ${bdgMode(r.owned, r.prev.owned, "tbadge")}</td>
-      <td class="tn">${num(r.shCar)} ${bdgMode(r.shCar, r.prev.shCar, "tbadge")}</td>
-      <td class="tn">${pct(r.accept)} ${bdgMode(r.accept, r.prev.accept, "tbadge")}</td>
-      <td class="tn">${fmt(r.branded)}</td>
-      <td class="tn">${pct(r.pctBranded)} ${bdgMode(r.pctBranded, r.prev.pctBranded, "tbadge")}</td>
-      <td class="tn">${num(r.gmvPerCar)} ${bdgMode(r.gmvPerCar, r.prev.gmvPerCar, "tbadge")}</td>
-      <td class="tn">${num(r.commissionPerCar)} ${bdgMode(r.commissionPerCar, r.prev.commissionPerCar, "tbadge")}</td>
+      <td class="tn"${dn("rend", "fleet-tabla", "owned", r.partner)}>${fmt(r.owned)} ${bdgMode(r.owned, r.prev.owned, "tbadge")}</td>
+      <td class="tn"${dn("rend", "fleet-tabla", "shCar", r.partner)}>${num(r.shCar)} ${bdgMode(r.shCar, r.prev.shCar, "tbadge")}</td>
+      <td class="tn"${dn("rend", "fleet-tabla", "accept", r.partner)}>${pct(r.accept)} ${bdgMode(r.accept, r.prev.accept, "tbadge")}</td>
+      <td class="tn"${dn("rend", "fleet-tabla", "branded", r.partner)}>${fmt(r.branded)}</td>
+      <td class="tn"${dn("rend", "fleet-tabla", "pctBranded", r.partner)}>${pct(r.pctBranded)} ${bdgMode(r.pctBranded, r.prev.pctBranded, "tbadge")}</td>
+      <td class="tn"${dn("rend", "fleet-tabla", "gmvPerCar", r.partner)}>${num(r.gmvPerCar)} ${bdgMode(r.gmvPerCar, r.prev.gmvPerCar, "tbadge")}</td>
+      <td class="tn"${dn("rend", "fleet-tabla", "commissionPerCar", r.partner)}>${num(r.commissionPerCar)} ${bdgMode(r.commissionPerCar, r.prev.commissionPerCar, "tbadge")}</td>
     </tr>`;
   });
   h += `</tbody></table>`;
@@ -1148,8 +1150,8 @@ export function _rendTkKPIs(lastRows, prevRows) {
   return secH("🛺", "#7e22ce", "TukTuk · Autos",
       "Autos brandeados y activos del último período · solo sub-flotas TukTuk", "") +
     `<div class="section"><div class="metric-row">
-      ${_rendKpiCard(t("rend.kpi.brandeados"),  "🏷️", c.branded, p.branded, "#7e22ce", fmt)}
-      ${_rendKpiCard(t("rend.kpi.activeCars"), "🚗", c.actCars, p.actCars, "#0284c7", fmt)}
+      ${_rendKpiCard(t("rend.kpi.brandeados"),  "🏷️", c.branded, p.branded, "#7e22ce", fmt, undefined, undefined, "rend.tk.branded")}
+      ${_rendKpiCard(t("rend.kpi.activeCars"), "🚗", c.actCars, p.actCars, "#0284c7", fmt, undefined, undefined, "rend.tk.activeCars")}
     </div></div>` +
     _rendTkAdquisicion(lastRows, prevRows);
 }

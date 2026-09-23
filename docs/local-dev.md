@@ -77,7 +77,10 @@ Password de los cuatro: **`local-dev-1234`**
 
 Al partner hay que mapearle CLIDs en `partner_users` para que vea algo: **sin
 filas no ve nada, y eso es lo correcto** (kill-switch, ver
-`migrations/2026-07-24_partner_portal_rls.sql`).
+`migrations/2026-07-24_partner_portal_rls.sql`). `seed_synthetic.sql` lo mapea a
+ANDINA MOVILIDAD (`900000000001`); no puede ir en `seed.sql` porque la FK exige
+que el CLID ya exista en `partners`. `kam@local.test` lleva `app_metadata.kam =
+'Ana'` (lo pone `seed.sql`).
 
 ---
 
@@ -141,37 +144,79 @@ entero solo si el drift se vuelve inmanejable.
 
 ### Los datos sinteticos
 
-`supabase/seed_synthetic.sql` — 12 partners inventados (CLID `9000000000xx`, un
-rango que no existe en produccion) repartidos en 24 sub-flotas, 3 ciudades,
-4 verticales y 16 semanas (con mensual y diario DERIVADOS de la semanal).
+`supabase/seed_synthetic.sql` — el UNICO generador (determinista: `setseed`,
+fechas fijas, nunca `now()`). **"Vivo" desde el 23-sep-2026 (Ola 0)**: se
+parece a produccion a esa fecha, no a julio.
 
-**Copian la FORMA de los tres partners grandes de produccion, no sus datos**
-(sep 2026). La forma se midio con consultas agregadas — escala, volatilidad,
-ratios, reparto entre ciudades y verticales — y los valores se generan aca. No se
-baja ni una fila real a la maquina: es la regla del proyecto y ademas es lo unico
-que sirve, porque lo que hace realista una prueba es el comportamiento, no los
-digitos.
+| tabla | rango | filas |
+|---|---|---|
+| `rendimiento` (semanal, la fuente) | 2026-02-02 → 2026-09-14 (33 semanas; la ultima cerrada) | 2.563 |
+| `rendimiento_mensual` (derivada) | 2026-02 → 2026-09 (septiembre PARCIAL, 3 semanas) | 622 |
+| `rendimiento_diario` (derivada) | 2026-06-22 → 2026-09-21 (92 dias; va adelante de la semanal, como en prod) | 7.218 |
+| `metas` | JUNIO..SEPTIEMBRE 2026 + DICIEMBRE 2025 / ENERO 2026 | 257 |
+| `conversion_pais` (embudo + 8 canales) | 2026-03 → 2026-08 | 342 |
+| `seguimiento` | 25 tareas en 6 partners (4 bloqueadas, 10 vencidas al 23-sep) | 25 |
+| `proyectos` | 4 tipos (scouts / contact_center / offline / online) | 6 |
+| `partners` / `fleetrooms` / `flotas` | 60 CLIDs, 79 sub-flotas | 58 / 79 / 3 |
+| `partner_users` | `partner@local.test` → ANDINA MOVILIDAD (`900000000001`) | 1 |
+
+**60 CLIDs** inventados (`9000000000xx`, rango que no existe en produccion),
+**6 KAMs** (Ana, Beto, Carla, Dario, Elena, Fabio) + el bucket "No KAM", 3
+ciudades. ~28.700 AD en Combinado la ultima semana (prod: ~27.300), con una cola
+larga de partners chicos. `seed.sql` le pone ademas `app_metadata.kam = 'Ana'`
+a `kam@local.test` (preseleccion de la Calculadora).
+
+**Copian la FORMA de produccion, no sus datos** (sep 2026). La forma se midio con
+consultas agregadas — escala, volatilidad, ratios, reparto entre ciudades y
+verticales — y los valores se generan aca. No se baja ni una fila real a la
+maquina: es la regla del proyecto y ademas es lo unico que sirve, porque lo que
+hace realista una prueba es el comportamiento, no los digitos.
 
 | perfil | imita | forma |
 |---|---|---|
-| ANDINA MOVILIDAD | Yego | ~2.450 AD en Lima, muy estable (CV 6%), 3 ciudades, las 4 verticales, 17 hojas de deck |
+| ANDINA MOVILIDAD | Yego | ~2.450 AD en Lima, muy estable (CV 6%), 3 ciudades, las 4 verticales |
 | RUTA SUR | Lizzo | ~1.280 en Lima + TukTuk grande, CV 12% |
-| EXPRESO CAPITAL | TRANSPOTAXI | ~1.430 en Lima pero **CV 41%** y en caida: es el que dispara alertas, lecturas y trayectorias con forma |
+| EXPRESO CAPITAL | TRANSPOTAXI | Lima con **CV 41%** y en caida: dispara alertas, lecturas y trayectorias |
 
-Los otros 9 existen para que las COHORTES tengan contra que compararse: el
-benchmark del Ejecutivo exige **>=3 pares con 50+ activos en las mismas ciudades**
-del partner, y sin relleno por ciudad esa tira simplemente no se dibuja. Con este
-seed hay 6 pares en Lima, 6 en Trujillo y 5 en Arequipa.
+Los 12 partners originales (`...01`-`...12`) se conservan con el mismo nombre y
+forma, porque CLAUDE.md y varias verificaciones los nombran. Casos que el seed
+siembra **a proposito** (cada uno reproduce algo que ya fue un bug o una trampa):
 
-Que cubre que la version anterior no cubria: el **embudo de captacion** (las
-columnas `new_profiles_partner_reg*`, que son proporciones y no conteos), las
-**metas** de las tres lineas, la volatilidad por flota, y ratios en el rango real
-(aceptacion 0,57-0,68, horas/conductor 14-24 por semana, viajes/hora 1,5 taxi /
-3,9 tuktuk). Con los ratios de la version vieja (aceptacion 0,74-0,95) el
-benchmark comparaba contra medianas que no existen en ningun mercado.
+- **Taxi y TukTuk en el mismo partner-ciudad**: ANDINA, RUTA SUR, EXPRESO, SOL DE
+  LIMA, VILLA EL SALVADOR (Lima), AUTOS DEL MISTI (Arequipa), TRUJILLO CENTRO.
+- **Solo-TukTuk** (caso PIAGGIO): MOTOS DEL SUR, TUKTUK EXPRESS, MOTOTAXI ANDES.
+- **Fleet**: ANDINA, EXPRESO, FLOTA CENTRAL, LIMA TAXI EJECUTIVO, FLOTA
+  MIRAFLORES, SANTA ANITA, INDEPENDENCIA (con metas Fleet de tasa).
+- **Delivery/Cargo** (`exclude_from_taxi`): ANDINA, EXPRESO, SAN ISIDRO, ATE.
+- **"No KAM" caso A** (fila en `partners` con `kam` vacio): VIA RAPIDA y RUTA DEL
+  SILLAR (sus FILAS conservan el KAM viejo: escenario del bug de precedencia) y
+  ALTO SELVA ALEGRE. **Caso B** (datos sin fila en `partners`, nombre por
+  `flotas`): NORTE SEGURO y GRUPO MANCORA.
+- **Flota inactiva** (`flotas.activo=false`): TAXI BELLAVISTA — tiene datos y
+  metas, y no debe sumar en ninguna vista.
+- **Entradas y salidas**: LINCE CONDUCE (desde jun) y CERCADO EXPRESS (desde
+  jul) no tienen base previa; PUENTE PIEDRA se fue el 10-ago → su meta de
+  septiembre no tiene actividad (el caso "Flota Pe").
+- **Metas**: el plan sale del mes anterior normalizado por semanas × un factor
+  por CLID, asi el cumplimiento varia (p10-p90 de N+R ≈ 0,8-1,15 en meses
+  cerrados; ~0,7 en septiembre, en curso). 6 cuentas con actividad y SIN meta;
+  filas en cero (SURCO DRIVERS y EL PORVENIR en septiembre) y en NULL (MIRAMAR
+  TAXI en agosto), que `hasLineMeta` cuenta como "sin meta"; desglose
+  `meta_tk_*` solo donde el KAM lo "declaro" (Ana en agosto — 3 filas —, Dario
+  en septiembre); **DICIEMBRE 2025 y ENERO 2026** para 4 partners (bug B1 de
+  metas entre años; la UNIQUE `(clid, city, mes)` impide sembrar ENERO de dos
+  años para la misma cuenta, que es justamente el bug).
+
+**Los triggers de auditoria se apagan durante la carga** (dentro de la
+transaccion): si no, cada corrida dejaba ~15.000 filas "INSERT por nadie" en
+`audit_log`, que es lo que lee Monitoreo.
 
 Los **invariantes** que hay que sostener estan listados al final del archivo — son
 lo que se verifica, no numeros fijos: los numeros cambian si se toca el `setseed`.
+Verificado el 23-sep-2026: dos corridas seguidas dan checksums identicos; el
+mensual cierra contra la semanal (flujos = suma, AD ≥ maximo semanal); tasas ≤ 1
+en las tres escalas; desglose TukTuk ≤ paraguas; embudo decreciente y canales =
+`new_drivers`; con el JWT del partner simulado, RLS devuelve solo su CLID.
 
 ### Trampa que sigue viva
 
@@ -179,6 +224,56 @@ lo que se verifica, no numeros fijos: los numeros cambian si se toca el `setseed
 `dist/` local apunta a Supabase local. No afecta al deploy (Vercel y Pages buildean
 sin ese archivo, y `dist/` esta en `.gitignore`), pero un `npm run preview` despues
 de un build local va contra local, no contra produccion.
+
+## Huella de numeros
+
+Sirve para **probar que un cambio de UI no movio ninguna cifra** (plan de mejora,
+seccion 5, compuerta 3). Se saca una huella antes y otra despues, y se comparan.
+
+**Como funciona.** Los elementos que muestran una cifra clave llevan
+`data-num="<vista>.<seccion>.<metrica>[.<entidad>][.<campo>]"` (helper `dn()` en
+`src/shared/huella.ts`). La entidad es el nombre del partner/ciudad/KAM (o
+`partner@CIUDAD`), nunca una posicion: reordenar una tabla no cambia la huella.
+Cubre Rendimiento (pais + desglose por KAM, ciudades, KAMs, productividad, tabla
+de partners, vista Fleet y KPIs TukTuk), Metas (tarjetas pais / ciudad / KAM /
+partner de las 4 lineas, con `.real` `.meta` `.pct` `.proj`), el portal del
+partner (KPIs, bloque de metas, detalle por periodo) y la tabla de reparto de la
+Calculadora (inputs de meta — se lee su `value` —, % y totales/cuadre). Donde la
+cifra estaba suelta dentro de un texto se envolvio en un `<span>` sin clase; la
+meta de las tarjetas pais de Metas va dentro de una frase traducida, asi que se
+repite en un `<span hidden>`. Nada de eso cambia lo que se ve.
+
+**Sacar una huella** (app abierta con sesion, cualquier rol):
+
+1. Abrir la consola del navegador y pegar el contenido entero de
+   `scripts/huella/huella.js`. Recorre semanal/mensual/diario × comb/agg/fleet/tk
+   × Rendimiento + Metas (mes de meta mas reciente con periodos, completo) + la
+   Calculadora una vez; con rol `partner`, el portal en cada linea disponible.
+   Tarda del orden de un minuto; al final restaura escala, pestaña y filtros.
+2. Esperar `✓ huella lista`. El JSON queda en `window.__huellaJSON`; en Chrome
+   `copy(window.__huellaJSON)` y pegarlo en un archivo (p.ej. `/tmp/huella-antes.json`).
+3. Para acotar: antes de pegar, `window.__huellaOpts = { escalas: ["semanal"],
+   vistas: ["rend"], lineas: ["comb"] }`.
+
+**Comparar:**
+
+```bash
+node scripts/huella/compare.mjs /tmp/huella-antes.json /tmp/huella-despues.json
+# exit 0 = identicas · 1 = difieren (lista agregadas/quitadas/cambiadas) · 2 = argumentos invalidos
+```
+
+**Reglas para que sea comparable**: misma base (mismo `seed_synthetic.sql`, sin
+ediciones de prueba en el medio — re-sembrar si hizo falta), mismo rol, mismo
+idioma (los numeros se formatean segun el idioma) y el mismo KAM elegido en la
+Calculadora. El rango de fechas NO depende del sidebar: el script lo fija por
+escala (Rendimiento: ultimos 6 / 3 / 14 periodos cargados; Metas: el mes
+completo) y lo deja en `meta.escenarios`; `compare.mjs` avisa si cambio.
+
+**Trampas**: con la pestaña del navegador OCULTA `requestAnimationFrame` no
+dispara y `switchMode`/`switchTab` se cuelgan (ver CLAUDE.md, sep-2026); el script
+lo detecta (`document.hidden`) y lo reemplaza por un `setTimeout` solo mientras
+corre. Una clave repetida en la misma pantalla no se pierde: queda como `clave#2`
+y se lista en `meta.escenarios[...].clavesDuplicadas`.
 
 ## Reset
 
