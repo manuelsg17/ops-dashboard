@@ -14,6 +14,7 @@ import { reportYM, diasMesReporte } from "./shared/mesReporte.js";
 import { SIN_KAM } from "./core/config.js";
 import { parseLocalDate } from "./core/dates";
 import { esMesEnCurso } from "./domain/mesEnCurso";
+import { estadoMetaFila } from "./domain/estadoMeta";
 import { ordenarKams } from "./domain/desgloseKam";
 import { escalaLista, reintentarCuandoEscalaLista } from "./shared/escalaLista";
 import { partesAlcance } from "./shared/alcance";
@@ -484,15 +485,10 @@ function _mtGroupTable(entLabel, groups) {
 //     cells: [{ id, label, mode: "both"|"real"|"meta"|"none",
 //               real, meta, pct, proj, F, numKey, note }] }
 // Estado de la fila (filtros): sin meta · na (nada medible contra meta) ·
-// bajo (algún % < 95) · sobre (todos ≥95 y alguno > 150) · en (el resto).
+// bajo (algún % < 95) · sobre (todos ≥100) · en (el resto). La regla vive en
+// domain/estadoMeta.ts (decisión de Manuel, 24-sep-2026); los colores no cambian.
 function _mtRowStatus(r) {
-  if (r.sinMeta) return "sin";
-  const ps = r.cells.filter(c => c.mode === "both" && c.meta > 0).map(c => c.pct);
-  if (!ps.length) return "na";
-  const min = Math.min(...ps), max = Math.max(...ps);
-  if (min < 95) return "bajo";
-  if (max > 150) return "sobre";
-  return "en";
+  return estadoMetaFila(r.cells.filter(c => c.mode === "both" && c.meta > 0).map(c => c.pct), !!r.sinMeta);
 }
 function _mtWorst(r) {
   if (r._st === "sin") return 1e12 + 1;
