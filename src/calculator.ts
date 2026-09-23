@@ -2309,7 +2309,7 @@ export function calcExportKeydown(e) {
   if (e.key === "Enter") {
     const list = document.getElementById("calcExportList");
     const first = list && list.querySelector(".pv-opt");
-    if (first) first.dispatchEvent(new MouseEvent("mousedown"));
+    if (first) first.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
     e.preventDefault();
   } else if (e.key === "Escape") {
     calcHideExportList();

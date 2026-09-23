@@ -362,7 +362,6 @@ function _renderUso() {
   const porTab = {};
   evs.filter(e => e.event === "tab").forEach(e => { porTab[e.detail || "?"] = (porTab[e.detail || "?"] || 0) + 1; });
   const tabs = Object.entries(porTab).sort((a, b) => b[1] - a[1]);
-  const maxTab = tabs.length ? tabs[0][1] : 1;
 
   const porDesc = {};
   evs.filter(e => e.event.startsWith("download")).forEach(e => {
@@ -377,17 +376,20 @@ function _renderUso() {
       <div class="mcard-val" style="color:${color}">${fmt(val)}</div>
     </div>`;
 
-  const barras = (list, color) => list.length
+  // Cada lista escala contra SU propio máximo (I12). Antes las descargas usaban
+  // el máximo de las PESTAÑAS: con 5 descargas contra 1 visita la barra medía
+  // 500% y se salía del contenedor.
+  const barras = (list, color) => { const max = list.length ? Math.max(1, list[0][1]) : 1; return list.length
     ? list.map(([k, n]) => `
         <div style="margin-bottom:7px">
           <div style="display:flex;justify-content:space-between;font-size:.74rem;margin-bottom:2px">
             <span>${escapeHTML(k)}</span><strong>${fmt(n)}</strong>
           </div>
           <div style="height:6px;background:#f0f0f0;border-radius:3px;overflow:hidden">
-            <div style="height:100%;width:${(n / maxTab * 100).toFixed(1)}%;background:${color}"></div>
+            <div style="height:100%;width:${Math.min(n / max * 100, 100).toFixed(1)}%;background:${color}"></div>
           </div>
         </div>`).join("")
-    : `<div class="agy-style-90" style="font-size:.76rem">${escapeHTML(t("mon.sinDatos"))}</div>`;
+    : `<div class="agy-style-90" style="font-size:.76rem">${escapeHTML(t("mon.sinDatos"))}</div>`; };
 
   return secH("📈", "#f59e0b", t("mon.usoTitulo"),
       t("mon.ultimos30dSub"), "") +

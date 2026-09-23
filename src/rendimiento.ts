@@ -7,6 +7,9 @@ import { sliceEscala, datasetLinea } from "./shared/escala.js";
 import { SIN_KAM } from "./core/config.js";
 import { t } from "./core/i18n";
 import { dn } from "./shared/huella";
+import { particionarPorKam, ordenarKams } from "./domain/desgloseKam";
+import { escalaLista, reintentarCuandoEscalaLista } from "./shared/escalaLista";
+import { partesAlcance } from "./shared/alcance";
 
 // ── LÍNEA DE NEGOCIO (Agregador / Fleet / TukTuk / Combinado) ─────────────────
 // Localizado a Rendimiento: NO muta STATE.rawData (el agregador queda intacto para
@@ -165,6 +168,15 @@ export let _renderRendToken = 0;
 export function renderRend() {
   if (_renderRendBusy) return;
   if (!STATE.rawData.length) return;
+  // B12: con la escala recién cambiada (o la mensual restaurada al arrancar)
+  // curMode ya dice "mensual" pero rawData sigue siendo el semanal hasta que
+  // switchMode termina la carga. Pintar en ese hueco mostraba números semanales
+  // bajo rótulos mensuales. Se muestra "cargando" y se reintenta solo.
+  if (!escalaLista(STATE)) {
+    _rendPintarCargandoEscala();
+    reintentarCuandoEscalaLista("rend", STATE, renderRend, () => STATE.curTab === "rend");
+    return;
+  }
   _renderRendBusy  = true;
   _renderRendToken++;
   try {
@@ -172,6 +184,27 @@ export function renderRend() {
   } finally {
     _renderRendBusy = false;
   }
+}
+
+function _rendPintarCargandoEscala() {
+  const empty   = document.getElementById("rendEmpty");
+  const content = document.getElementById("rendContent");
+  if (!content) return;
+  if (empty) empty.style.display = "none";
+  content.style.display = "";
+  destroyAllCharts();
+  content.innerHTML = rendLineToggleHTML() +
+    `<div class="section"><div class="agy-style-266">${escapeHTML(t("carga.escala", { e: t("mode." + (STATE.curMode || "semanal")) }))}</div></div>`;
+}
+
+// Alcance de los filtros activos para el título (I13). Vacío = sin recorte.
+export function _rendAlcance() {
+  const f = getCurrentFilters();
+  return partesAlcance({
+    city: f.city, kam: f.kam,
+    nSel: (f.selected || []).length,
+    nTotal: document.querySelectorAll("#pList input").length
+  }, t, cityLabel);
 }
 
 export function _renderRendImpl() {
@@ -290,8 +323,9 @@ export function _renderRendImpl() {
   // ── 1. Peru General ────────────────────────────────────────────────────────
   // Subtitulo segun modo: en diario/semanal/mensual contextualiza el dato
   const periodLabel = _rendPeriodLabel();
+  const _alc = _rendAlcance();
   html += secH("🇵🇪", "#FF0000",
-    t("rend.peru.titulo"),
+    _alc.length ? t("rend.peru.tituloFiltrado", { a: escapeHTML(_alc.join(" · ")) }) : t("rend.peru.titulo"),
     t("rend.peru.sub", { p: periodLabel }),
     d2s(lastDate));
   html += `<div class="section"><div class="metric-row">
@@ -357,14 +391,18 @@ export function _renderRendImpl() {
   html += secH("👤", "#f59e0b", t("rend.kam.titulo"), t("rend.kam.sub"), "");
   html += `<div class="section"><div class="agy-style-524">`;
   // Respetar kamFilter: si el usuario filtra por un KAM, solo mostrar ese
+  // B4 (sep-2026): antes se iteraba Object.values(KAM_MAP), que nunca trae
+  // "No KAM" → las filas huérfanas no caían en ningún grupo (el desglose no
+  // sumaba el total) y con el filtro "No KAM" la sección quedaba vacía. Ahora
+  // es una PARTICIÓN por KAM efectivo (_lineKamOf): suma el total por construcción.
   const kamFilterVal = document.getElementById("kamFilter")?.value || "all";
-  const kamsToShow = [...new Set(Object.values(STATE.KAM_MAP))]
-    .filter(k => kamFilterVal === "all" || k === kamFilterVal)
-    .sort();
+  const kLastBy = particionarPorKam(lastRows, _lineKamOf);
+  const kPrevBy = particionarPorKam(prevRows, _lineKamOf);
+  const kamsToShow = ordenarKams([...kLastBy.keys(), ...kPrevBy.keys()], SIN_KAM)
+    .filter(k => kamFilterVal === "all" || k === kamFilterVal);
   kamsToShow.forEach(kam => {
-    const kpSet = new Set(STATE.KAM_PARTNERS[kam] || []);
-    const kL  = lastRows.filter(r => kpSet.has(r.partner));
-    const kP  = prevRows.filter(r => kpSet.has(r.partner));
+    const kL  = kLastBy.get(kam) || [];
+    const kP  = kPrevBy.get(kam) || [];
     if (!kL.length) return;
     const kAD  = sumR(kL, r => r.activeDrivers);
     const kNR  = sumR(kL, r => r.newPartner + r.newService + r.reactivated);
@@ -551,11 +589,15 @@ export function mkMetricCard(label, icon, val, prevWk, apd, lastRows, prevRows, 
       </div>
       <div class="mcard-breakdown">`;
 
-  [...new Set(Object.values(STATE.KAM_MAP))].sort().forEach(kam => {
-    const kpSet = new Set(STATE.KAM_PARTNERS[kam] || []);
-    const kl   = lastRows.filter(r => kpSet.has(r.partner));
-    const kAll = apd.filter(r => kpSet.has(r.partner));
-    const kpr  = prevRows.filter(r => kpSet.has(r.partner));
+  // Misma partición que "Por KAM" (B4): con KAM_MAP faltaba "No KAM" y las
+  // filas del desglose no sumaban el valor grande de la tarjeta.
+  const _kL = particionarPorKam(lastRows, _lineKamOf);
+  const _kA = particionarPorKam(apd, _lineKamOf);
+  const _kP = particionarPorKam(prevRows, _lineKamOf);
+  ordenarKams([..._kL.keys(), ..._kA.keys(), ..._kP.keys()], SIN_KAM).forEach(kam => {
+    const kl   = _kL.get(kam) || [];
+    const kAll = _kA.get(kam) || [];
+    const kpr  = _kP.get(kam) || [];
     if (!kl.length && !kAll.length && !kpr.length) return;
     // Métrica acumulada (N+R/Horas/Viajes): la fila muestra el ACUMULADO del
     // rango (kAll) para que el breakdown sume el valor grande de la tarjeta —
@@ -764,12 +806,21 @@ export function buildPartnerCards(apd, lastDate, prevDate, partners, sel) {
     const rows = (apdByPartner.get(partner) || [])
       .slice().sort((a, b) => a.date.localeCompare(b.date));
     if (!rows.length) return;
-    const last    = rows[rows.length - 1];
+    // B5 (sep-2026): antes era rows[rows.length - 1] — la ÚLTIMA fila del
+    // partner, aunque fuera de un período anterior a lastDate. Un partner que
+    // dejó de reportar mostraba un dato viejo rotulado como el del período
+    // actual. Ahora es la fila de lastDate; sin ella, "—" (sin dato), no el viejo.
+    const last    = rows.find(r => r.date === lastDate) || null;
     const prevRow = prevByPartner.get(partner) || null;
     const col     = STATE.partnerColors[partner] || "#FF0000";
-    const kc      = KAM_COLORS[last.kam] || "#888";
+    // KAM efectivo (misma precedencia que el resto de la vista), no el que
+    // traía la fila del Excel.
+    const kam     = _lineKamOf(rows[rows.length - 1]);
+    const kc      = KAM_COLORS[kam] || "#888";
+    const v       = k => last ? fmt(last[k]) : "—";
+    const cur     = k => last ? last[k] : null;
 
-    const lastNR = last.newPartner + last.newService + last.reactivated;
+    const lastNR = last ? last.newPartner + last.newService + last.reactivated : null;
     const prevNR = prevRow ? prevRow.newPartner + prevRow.newService + prevRow.reactivated : null;
     const tA = trendI(rows.map(r => r.activeDrivers));
     const tN = trendI(rows.map(r => r.newPartner + r.newService + r.reactivated));
@@ -785,19 +836,19 @@ export function buildPartnerCards(apd, lastDate, prevDate, partners, sel) {
       </div>
       <div class="pcard-sub">
         <span style="width:7px;height:7px;border-radius:50%;background:${kc};display:inline-block;margin-right:3px"></span>
-        ${escapeHTML(last.kam)} &nbsp;·&nbsp; ${prevRow ? d2s(prevDate) + " → " : ""}${d2s(lastDate)}
+        ${escapeHTML(kam)} &nbsp;·&nbsp; ${prevRow ? d2s(prevDate) + " → " : ""}${d2s(lastDate)}${last ? "" : ` · <em>${escapeHTML(t("rend.pcard.sinDato"))}</em>`}
       </div>
       <div class="pcard-kpis">
         <div class="pk">
           <div class="pk-label">${escapeHTML(t("metric.ad.short"))}</div>
-          <div class="pk-val">${fmt(last.activeDrivers)}</div>
-          ${bdgMode(last.activeDrivers, prevRow?.activeDrivers ?? null, "mb-badge")}
+          <div class="pk-val">${v("activeDrivers")}</div>
+          ${bdgMode(cur("activeDrivers"), prevRow?.activeDrivers ?? null, "mb-badge")}
           <span style="${tA.c}">${tA.i}</span>
         </div>
         <div class="pk">
           <div class="pk-label">${escapeHTML(t("metric.sh.short"))}</div>
-          <div class="pk-val">${fmt(last.supplyHours)}</div>
-          ${bdgMode(last.supplyHours, prevRow?.supplyHours ?? null, "mb-badge")}
+          <div class="pk-val">${v("supplyHours")}</div>
+          ${bdgMode(cur("supplyHours"), prevRow?.supplyHours ?? null, "mb-badge")}
           <span style="${tH.c}">${tH.i}</span>
         </div>
         <div class="pk-wide">
@@ -809,18 +860,18 @@ export function buildPartnerCards(apd, lastDate, prevDate, partners, sel) {
           <div class="pk-sub-grid">
             <div>
               <div class="pk-sub-label">Partner</div>
-              <div class="pk-sub-val">${fmt(last.newPartner)}</div>
-              ${bdgMode(last.newPartner, prevRow?.newPartner ?? null, "mb-badge")}
+              <div class="pk-sub-val">${v("newPartner")}</div>
+              ${bdgMode(cur("newPartner"), prevRow?.newPartner ?? null, "mb-badge")}
             </div>
             <div>
               <div class="pk-sub-label">Servicio</div>
-              <div class="pk-sub-val">${fmt(last.newService)}</div>
-              ${bdgMode(last.newService, prevRow?.newService ?? null, "mb-badge")}
+              <div class="pk-sub-val">${v("newService")}</div>
+              ${bdgMode(cur("newService"), prevRow?.newService ?? null, "mb-badge")}
             </div>
             <div>
               <div class="pk-sub-label">Reactivados</div>
-              <div class="pk-sub-val">${fmt(last.reactivated)}</div>
-              ${bdgMode(last.reactivated, prevRow?.reactivated ?? null, "mb-badge")}
+              <div class="pk-sub-val">${v("reactivated")}</div>
+              ${bdgMode(cur("reactivated"), prevRow?.reactivated ?? null, "mb-badge")}
             </div>
           </div>
         </div>
@@ -990,7 +1041,9 @@ export function _renderFleetView(lastRows, prevRows, lastDate, prevDate) {
   let html = rendLineToggleHTML();
 
   // Perú general (10 KPIs de flota: presencia/calidad + revenue/productividad)
-  html += secH("🚗", "#0284c7", t("rend.fleet.peru"),
+  const _alc = _rendAlcance();   // I13: no rotular "Perú" un subconjunto
+  html += secH("🚗", "#0284c7",
+    _alc.length ? "Fleet · " + t("rend.peru.tituloFiltrado", { a: escapeHTML(_alc.join(" · ")) }) : t("rend.fleet.peru"),
     t("rend.fleet.peruSub", { p: periodLabel }),
     d2s(lastDate));
   html += _rendFleetCardsBody(_rendFleetAgg(lastRows), _rendFleetAgg(prevRows));

@@ -21,10 +21,14 @@ import { stampPDF } from "./shared/pdfmeta.js";
 import { ensurePdfLibs } from "./shared/lazyLibs.js";
 // Mismo núcleo de cálculo que Metas, Rendimiento y el deck: el partner tiene que
 // ver EXACTAMENTE los números que su KAM le presenta.
-import { seriesByDate, projectFlow, ratio, weightedAvg, tasaPonderada } from "./domain/metrics.js";
+import { seriesByDate, projectFlow, ratio, tasaPonderada } from "./domain/metrics.js";
 import { reportYM, diasMesReporte, MES_NOMBRES } from "./shared/mesReporte.js";
 import { datasetLinea } from "./shared/escala.js";
 import { dn } from "./shared/huella";
+import { metaTasaPonderada } from "./domain/metaTasa";
+import { esMesEnCurso } from "./domain/mesEnCurso";
+import { escalaLista, reintentarCuandoEscalaLista } from "./shared/escalaLista";
+import { fechaLocalISO } from "./shared/fechaLocal";
 
 export const PORTAL_STATE = { city: "all", line: "comb" };
 
@@ -202,6 +206,12 @@ function _portalMetas(line, rows) {
   // REPORTE: con calcProjectionDays (mes calendario) la semana del 29-jun daba
   // los 30 días de junio bajo la meta de julio. Ver diasMesReporte.
   const { daysElapsed, daysRemaining } = diasMesReporte(last, STATE.curMode, parseLocalDate);
+  // Decisión 4 (Manuel, 23-sep-2026): la proyección al cierre SOLO para el mes
+  // en curso — un mes cerrado "no logrará más avances". Regla única en
+  // domain/mesEnCurso.ts (la misma de Metas y del deck).
+  const anioMes = mesYearSel != null ? mesYearSel
+    : (last ? reportYM(last, STATE.curMode, parseLocalDate).y : null);
+  const proyOn = esMesEnCurso(MES_NOMBRES.indexOf(mes) + 1, anioMes);
 
   // Qué meta aplica según la línea. `null` = ese KPI no tiene meta cargada para
   // esta línea (distinto de meta 0).
@@ -225,16 +235,25 @@ function _portalMetas(line, rows) {
   if (line === "fleet") {
     const owned = _sum(rows, r => r.ownedFleetActiveCars || 0);
     const intSh = _sum(rows, r => r.internalFleetSh || 0);
-    const trips = _sum(rows, r => r.trips || 0);
     const shCar  = ratio(intSh, owned);
     const accept = _portalAccept(rows);
-    // Las metas de tasa se re-ponderan por el mismo denominador que el actual;
-    // promediarlas a secas entre ciudades daría un número sin significado.
-    const wMeta = (key, w) => {
-      const pairs = delMes.filter(m => m[key] != null).map(m => [m[key], w]);
-      return pairs.length ? weightedAvg(pairs) : null;
-    };
-    const mShCar = wMeta("mSHcar", owned), mAcc = wMeta("mAcc", trips), mUtil = wMeta("mUtil", owned);
+    // Las metas de tasa se re-ponderan por el peso de CADA unidad (partner,
+    // ciudad), igual que la pestaña Metas (_metasAggKpi): autos para SH/auto y
+    // utilización, viajes para aceptación.
+    // B6 (sep-2026): antes cada fila de meta llevaba el MISMO peso (el total del
+    // partner) — un promedio simple disfrazado. 90%·100 autos + 50%·2 autos daba
+    // 70% acá y ~89% en Metas: el partner veía otra meta que su KAM.
+    const pesoU = new Map();
+    rows.forEach(r => {
+      const k = `${r.partner}|||${r.city}`;
+      let e = pesoU.get(k);
+      if (!e) { e = { owned: 0, trips: 0 }; pesoU.set(k, e); }
+      e.owned += r.ownedFleetActiveCars || 0;
+      e.trips += r.trips || 0;
+    });
+    const wMeta = (key, peso) => metaTasaPonderada(delMes, m => m[key],
+      m => (pesoU.get(`${m.partner}|||${m.city}`) || {})[peso]);
+    const mShCar = wMeta("mSHcar", "owned"), mAcc = wMeta("mAcc", "trips"), mUtil = wMeta("mUtil", "owned");
     if (mShCar == null && mAcc == null && mUtil == null) return "";
     return secH("🎯", "#0284c7", `Tus metas de flota — ${escapeHTML(mes)}`,
         "Acumulado del RANGO seleccionado vs el objetivo mensual acordado con tu KAM · para un % representativo, elegí el mes completo", "") +
@@ -250,11 +269,12 @@ function _portalMetas(line, rows) {
   if (mA == null && mNR == null && mH == null) return "";
   const lbl = line === "tk" ? "TukTuk" : line === "comb" ? "(Taxi + TukTuk)" : "";
   return secH("🎯", "#8b5cf6", `Tus metas ${lbl} — ${escapeHTML(mes)}`.replace("  ", " "),
-      "Avance del mes contra el objetivo acordado con tu KAM · la barra clara es la proyección al cierre", "") +
+      proyOn ? "Avance del mes contra el objetivo acordado con tu KAM · la barra clara es la proyección al cierre"
+             : "Resultado del mes cerrado contra el objetivo acordado con tu KAM", "") +
     `<div class="section">
-      ${_portalMetaRow("Conductores Activos", adAct, mA, projAD(adSerie, last), fmt, `portal.metas.${line}.ad`)}
-      ${_portalMetaRow("Nuevos + Reactivados", nrAct, mNR, projectFlow(nrAct, daysElapsed, daysRemaining), fmt, `portal.metas.${line}.nr`)}
-      ${_portalMetaRow("Horas de Conexión", shAct, mH, projectFlow(shAct, daysElapsed, daysRemaining), fmtSmart, `portal.metas.${line}.sh`)}
+      ${_portalMetaRow("Conductores Activos", adAct, mA, proyOn ? projAD(adSerie, last) : null, fmt, `portal.metas.${line}.ad`)}
+      ${_portalMetaRow("Nuevos + Reactivados", nrAct, mNR, proyOn ? projectFlow(nrAct, daysElapsed, daysRemaining) : null, fmt, `portal.metas.${line}.nr`)}
+      ${_portalMetaRow("Horas de Conexión", shAct, mH, proyOn ? projectFlow(shAct, daysElapsed, daysRemaining) : null, fmtSmart, `portal.metas.${line}.sh`)}
     </div>`;
 }
 
@@ -289,6 +309,16 @@ function _portalMetaRow(label, act, meta, proj, fmtFn, numKey = "") {
 export function renderPartnerPortal() {
   const box = document.getElementById("portalContent");
   if (!box) return;
+  // B12: con la escala mensual guardada, curMode dice "mensual" desde el
+  // arranque pero rawData sigue siendo el semanal hasta que termina la carga.
+  // Antes se pintaban números SEMANALES con rótulos "mensual" y segundos
+  // después cambiaban — delante del partner. Se espera al dataset correcto.
+  if (!escalaLista(STATE)) {
+    const esc = STATE.curMode === "mensual" ? "mensuales" : STATE.curMode === "diario" ? "diarios" : "semanales";
+    box.innerHTML = `<div class="empty"><p>Cargando datos ${esc}…</p></div>`;
+    reintentarCuandoEscalaLista("portal", STATE, renderPartnerPortal, () => STATE.curTab === "portal");
+    return;
+  }
 
   const line = _portalLine();
   const rows = _portalRows(line);
@@ -475,7 +505,7 @@ export async function portalDownloadPDF() {
     const pdf = new jsPDF({ orientation: "portrait", unit: "px", format: [canvas.width, canvas.height] });
     pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, canvas.width, canvas.height);
     stampPDF(pdf, "Mi desempeño — Yango Perú");
-    pdf.save(`MiDesempeno_${(new Date()).toISOString().slice(0, 10)}.pdf`);
+    pdf.save(`MiDesempeno_${fechaLocalISO()}.pdf`);
   } catch (err) {
     // Mensaje genérico a propósito: el portal es de cara externa, no le eco
     // detalles internos (payloads de Supabase, stacks) a un partner.
