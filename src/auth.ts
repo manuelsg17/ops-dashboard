@@ -16,6 +16,7 @@ import { registerActions } from "./shared/actions.js";
 import { snapshotClear } from "./data/cache.js";
 import { logAccess, resetAccessLogSession } from "./shared/accessLog.js";
 import { resetearEstadoDeSesion } from "./shared/sesion";
+import { perfMark } from "./shared/perf";
 
 // ── LOCK DE AUTH CON ESCAPE ──────────────────────────────────────────────────
 // supabase-js serializa las operaciones de auth con un Web Lock COMPARTIDO entre
@@ -205,6 +206,7 @@ export async function initAuth() {
       if (intento === 0) await new Promise(r => setTimeout(r, 600));
     }
   }
+  perfMark("auth:session-confirmed");
   if (session) {
     showApp(session.user);
   } else {

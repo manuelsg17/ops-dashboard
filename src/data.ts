@@ -14,6 +14,7 @@
 // que muchas cosas estén listas, y no vale la pena que dependa del espejado a
 // window de vendor.js.
 import { snapshotLoad, snapshotSave, snapshotClear } from "./data/cache.js";
+import { perfMark, perfMeasure } from "./shared/perf";
 import { t } from "./core/i18n";
 // Formulas de proyeccion: una sola definicion para todo el dashboard.
 import { projectFlow, projectSnapshot, dropDuplicatePeriods } from "./domain/metrics.js";
@@ -805,6 +806,7 @@ async function _hydrateFromCache() {
     _applyCoreData(snap.partners, snap.rend, snap.frooms, snap.flotas, { resetLine: true });
     _indexCoreData();
     _renderActiveTabAfterLoad();
+    perfMark("paint:cache");
     _applyMetasProyectosSeguimiento(snap.metas, snap.proyectos, snap.seguimiento);
     _snapAt = snap.at || 0;
     return true;
@@ -992,13 +994,16 @@ export async function loadFromSupabase(opts = {}) {
     const [partners, rendSem, frooms, flotas] = await critical;
     const { rows: rend, periodos: periodosSem, loadedFrom: winStart } = rendSem;
     STATE._loadedFrom = winStart;   // desde dónde hay datos en memoria DE VERDAD
-    _applyCoreData(partners, rend, frooms, flotas, { resetLine: !_paintedFromCache });
-    _indexCoreData();
-
-    const warnSuffix = STATE.parseWarnings.size
-      ? ` · ⚠ ${STATE.parseWarnings.size} campo(s) inválido(s)` : "";
-    showBanner(true, t("estado.datosCargados") + " · " + new Date().toLocaleTimeString("es-PE") + warnSuffix);
-    _renderActiveTabAfterLoad();
+    perfMark("net:critical");
+    perfMeasure("render2", () => {
+      _applyCoreData(partners, rend, frooms, flotas, { resetLine: !_paintedFromCache });
+      _indexCoreData();
+      const warnSuffix = STATE.parseWarnings.size
+        ? ` · ⚠ ${STATE.parseWarnings.size} campo(s) inválido(s)` : "";
+      showBanner(true, t("estado.datosCargados") + " · " + new Date().toLocaleTimeString("es-PE") + warnSuffix);
+      _renderActiveTabAfterLoad();
+    });
+    perfMark("net:applied");
 
     // metas/proyectos/seguimiento: se pidieron en paralelo desde el arranque de
     // la función (`deferred`, ver comentario junto a `critical`) sin bloquear el
@@ -1481,6 +1486,7 @@ async function _loadMensual(silent) {
     // Slice Fleet mensual (Fase 2): espejo del semanal (Fleet ⊂ Agregador).
     STATE.rawDataMensualFleet = STATE.rawDataMensual.filter(r => rowIsFleet(r));
     STATE._mensualLoaded = true;
+    perfMark("net:mensual");
   } catch(err) {
     showBanner(false, "Error al cargar mensual: " + err.message);
   }

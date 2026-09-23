@@ -1,4 +1,8 @@
 //@ts-nocheck
+// PRIMER import, a propósito: instrumentación del arranque (?perf=1) y latencia
+// simulada en DEV (?lat=300). Tiene que envolver fetch ANTES de que auth.ts cree
+// el cliente de supabase-js (que captura fetch al crearse). Ver shared/perf.ts.
+import "./shared/perf";
 // vendor.js — Bootstrap de librerías de terceros (Fase A1, migración a Vite).
 //
 // Reemplaza los <script src="cdn..."> con SRI del index.html: las 7 librerías
