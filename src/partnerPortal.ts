@@ -24,6 +24,7 @@ import { ensurePdfLibs } from "./shared/lazyLibs.js";
 import { seriesByDate, projectFlow, ratio, weightedAvg, tasaPonderada } from "./domain/metrics.js";
 import { reportYM, diasMesReporte, MES_NOMBRES } from "./shared/mesReporte.js";
 import { datasetLinea } from "./shared/escala.js";
+import { dn } from "./shared/huella";
 
 export const PORTAL_STATE = { city: "all", line: "comb" };
 
@@ -139,12 +140,13 @@ function _portalKpis(rows) {
   };
 }
 
-function _kpiCard(label, sub, valor, actual, previo, color, fmtFn = fmt) {
+// numKey (opcional): clave de la huella de números (shared/huella.ts).
+function _kpiCard(label, sub, valor, actual, previo, color, fmtFn = fmt, numKey = "") {
   return `
     <div class="mcard" style="border-top:3px solid ${color}">
       <div class="mcard-label">${label}</div>
       <div class="mcard-sub-label">${sub}</div>
-      <div class="mcard-val">${fmtFn(valor)}</div>
+      <div class="mcard-val"${numKey ? dn(numKey) : ""}>${fmtFn(valor)}</div>
       <div class="agy-style-257">${bdgMode(actual, previo)}
         <span class="agy-style-258">vs período anterior</span>
       </div>
@@ -237,10 +239,10 @@ function _portalMetas(line, rows) {
     return secH("🎯", "#0284c7", `Tus metas de flota — ${escapeHTML(mes)}`,
         "Acumulado del RANGO seleccionado vs el objetivo mensual acordado con tu KAM · para un % representativo, elegí el mes completo", "") +
       `<div class="section">
-        ${_portalMetaRow("SH / Auto (interno)", shCar, mShCar, null, v => fmt(v))}
-        ${_portalMetaRow("Aceptación", accept, mAcc, null, v => fmt(v) + "%")}
+        ${_portalMetaRow("SH / Auto (interno)", shCar, mShCar, null, v => fmt(v), "portal.metas.fleet.shCar")}
+        ${_portalMetaRow("Aceptación", accept, mAcc, null, v => fmt(v) + "%", "portal.metas.fleet.accept")}
         ${mUtil != null ? `<div class="agy-style-196"><div class="agy-style-259">
-            <span>Utilización</span><span><strong>${fmt(mUtil)}%</strong> <span class="agy-style-89">meta · sin actual medible</span></span>
+            <span>Utilización</span><span><strong${dn("portal.metas.fleet.util.meta")}>${fmt(mUtil)}%</strong> <span class="agy-style-89">meta · sin actual medible</span></span>
           </div></div>` : ""}
       </div>`;
   }
@@ -250,20 +252,21 @@ function _portalMetas(line, rows) {
   return secH("🎯", "#8b5cf6", `Tus metas ${lbl} — ${escapeHTML(mes)}`.replace("  ", " "),
       "Avance del mes contra el objetivo acordado con tu KAM · la barra clara es la proyección al cierre", "") +
     `<div class="section">
-      ${_portalMetaRow("Conductores Activos", adAct, mA, projAD(adSerie, last), fmt)}
-      ${_portalMetaRow("Nuevos + Reactivados", nrAct, mNR, projectFlow(nrAct, daysElapsed, daysRemaining), fmt)}
-      ${_portalMetaRow("Horas de Conexión", shAct, mH, projectFlow(shAct, daysElapsed, daysRemaining), fmtSmart)}
+      ${_portalMetaRow("Conductores Activos", adAct, mA, projAD(adSerie, last), fmt, `portal.metas.${line}.ad`)}
+      ${_portalMetaRow("Nuevos + Reactivados", nrAct, mNR, projectFlow(nrAct, daysElapsed, daysRemaining), fmt, `portal.metas.${line}.nr`)}
+      ${_portalMetaRow("Horas de Conexión", shAct, mH, projectFlow(shAct, daysElapsed, daysRemaining), fmtSmart, `portal.metas.${line}.sh`)}
     </div>`;
 }
 
 // Fila meta-vs-actual con barra de avance y (si aplica) marca de proyección.
-function _portalMetaRow(label, act, meta, proj, fmtFn) {
+function _portalMetaRow(label, act, meta, proj, fmtFn, numKey = "") {
+  const _k = sfx => numKey ? dn(numKey, sfx) : "";   // huella de números
   if (meta == null || !meta) return "";
   // Sin actual medible (tasa sin dato en el rango): la meta se muestra, pero
   // sin barra ni % — un 0% se leería como incumplimiento total.
   if (act == null) return `
     <div class="agy-style-196"><div class="agy-style-259">
-      <span>${label}</span><span><strong>—</strong> <span class="agy-style-89">/ ${fmtFn(meta)} · sin dato en el rango</span></span>
+      <span>${label}</span><span><strong${_k("real")}>—</strong> <span class="agy-style-89">/ <span${_k("meta")}>${fmtFn(meta)}</span> · sin dato en el rango</span></span>
     </div></div>`;
   const p  = (act / meta) * 100;
   const pp = proj != null ? (proj / meta) * 100 : null;
@@ -271,14 +274,14 @@ function _portalMetaRow(label, act, meta, proj, fmtFn) {
     <div class="agy-style-196">
       <div class="agy-style-259">
         <span>${label}</span>
-        <span><strong>${fmtFn(act)}</strong> <span class="agy-style-89">/ ${fmtFn(meta)}</span>
-          <strong style="color:${pColor(p)};margin-left:6px">${p.toFixed(1)}%</strong></span>
+        <span><strong${_k("real")}>${fmtFn(act)}</strong> <span class="agy-style-89">/ <span${_k("meta")}>${fmtFn(meta)}</span></span>
+          <strong style="color:${pColor(p)};margin-left:6px"${_k("pct")}>${p.toFixed(1)}%</strong></span>
       </div>
       <div class="agy-style-260" style="position:relative">
         ${pp != null && pp > p ? `<div style="position:absolute;top:0;left:0;height:100%;width:${Math.min(pp,100).toFixed(1)}%;background:${pColor(pp)};opacity:.32;border-radius:5px"></div>` : ""}
         <div style="position:relative;height:100%;width:${Math.min(p, 100).toFixed(1)}%;background:${pColor(p)};border-radius:5px"></div>
       </div>
-      ${pp != null ? `<div style="font-size:.68rem;color:${pColor(pp)};margin-top:3px">Proyección al cierre: <strong>${fmtFn(proj)}</strong> (${pp.toFixed(1)}%)</div>` : ""}
+      ${pp != null ? `<div style="font-size:.68rem;color:${pColor(pp)};margin-top:3px">Proyección al cierre: <strong${_k("proj")}>${fmtFn(proj)}</strong> (${pp.toFixed(1)}%)</div>` : ""}
     </div>`;
 }
 
@@ -361,17 +364,17 @@ export function renderPartnerPortal() {
     };
     const now = fl(rowsLast), prev = fl(rowsPrev);
     html += `<div class="section"><div class="metric-row">
-      ${_kpiCard("🚗 Autos propios activos", escalaN, now.owned, now.owned, prev.owned, "#0284c7")}
-      ${_kpiCard("🎨 Brandeados", escalaN, now.branded, now.branded, prev.branded, "#7e22ce")}
-      ${_kpiCard("⏱️ SH / Auto (interno)", escalaN, now.shCar, now.shCar, prev.shCar, "#8b5cf6", v => fmt(v))}
-      ${_kpiCard("✅ Aceptación", `${escalaN} · ponderada por viajes`, now.accept, now.accept, prev.accept, "#10b981", v => v == null ? "—" : fmt(v) + "%")}
+      ${_kpiCard("🚗 Autos propios activos", escalaN, now.owned, now.owned, prev.owned, "#0284c7", fmt, "portal.kpi.fleet.owned")}
+      ${_kpiCard("🎨 Brandeados", escalaN, now.branded, now.branded, prev.branded, "#7e22ce", fmt, "portal.kpi.fleet.branded")}
+      ${_kpiCard("⏱️ SH / Auto (interno)", escalaN, now.shCar, now.shCar, prev.shCar, "#8b5cf6", v => fmt(v), "portal.kpi.fleet.shCar")}
+      ${_kpiCard("✅ Aceptación", `${escalaN} · ponderada por viajes`, now.accept, now.accept, prev.accept, "#10b981", v => v == null ? "—" : fmt(v) + "%", "portal.kpi.fleet.accept")}
     </div></div>`;
   } else {
     html += `<div class="section"><div class="metric-row">
-      ${_kpiCard("📊 Conductores Activos", escalaN, k.ad,  k.ad,  k.adP, "#FF0000")}
-      ${_kpiCard("🆕 Nuevos + Reactivados", "acumulado del rango", k.nr, k.nrL, k.nrP, "#f97316")}
-      ${_kpiCard("⏱️ Horas de Conexión", "acumulado del rango", k.sh, k.shL, k.shP, "#8b5cf6", fmtSmart)}
-      ${_kpiCard("🚕 Viajes", "acumulado del rango", k.tr, k.trL, k.trP, "#0284c7", fmtSmart)}
+      ${_kpiCard("📊 Conductores Activos", escalaN, k.ad,  k.ad,  k.adP, "#FF0000", fmt, `portal.kpi.${line}.ad`)}
+      ${_kpiCard("🆕 Nuevos + Reactivados", "acumulado del rango", k.nr, k.nrL, k.nrP, "#f97316", fmt, `portal.kpi.${line}.nr`)}
+      ${_kpiCard("⏱️ Horas de Conexión", "acumulado del rango", k.sh, k.shL, k.shP, "#8b5cf6", fmtSmart, `portal.kpi.${line}.sh`)}
+      ${_kpiCard("🚕 Viajes", "acumulado del rango", k.tr, k.trL, k.trP, "#0284c7", fmtSmart, `portal.kpi.${line}.tr`)}
     </div></div>`;
   }
 
@@ -424,10 +427,10 @@ export function renderPartnerPortal() {
     const prev = i > 0 ? porFecha.get(fechasAsc[i - 1]) : null;
     html += `<tr>
       <td>${d2s(d)}</td>
-      <td class="tn">${fmt(v.ad)}</td>${_wowCell(_portalWow(v.ad, prev && prev.ad))}
-      <td class="tn">${fmt(v.nr)}</td>${_wowCell(_portalWow(v.nr, prev && prev.nr))}
-      <td class="tn">${fmtSmart(v.sh)}</td>${_wowCell(_portalWow(v.sh, prev && prev.sh))}
-      <td class="tn">${fmtSmart(v.tr)}</td>${_wowCell(_portalWow(v.tr, prev && prev.tr))}
+      <td class="tn"${dn("portal.detalle.ad", d)}>${fmt(v.ad)}</td>${_wowCell(_portalWow(v.ad, prev && prev.ad))}
+      <td class="tn"${dn("portal.detalle.nr", d)}>${fmt(v.nr)}</td>${_wowCell(_portalWow(v.nr, prev && prev.nr))}
+      <td class="tn"${dn("portal.detalle.sh", d)}>${fmtSmart(v.sh)}</td>${_wowCell(_portalWow(v.sh, prev && prev.sh))}
+      <td class="tn"${dn("portal.detalle.tr", d)}>${fmtSmart(v.tr)}</td>${_wowCell(_portalWow(v.tr, prev && prev.tr))}
     </tr>`;
   });
   html += `</tbody></table></div></div>`;

@@ -8,6 +8,7 @@ import { detectarCambiosTk, hayCambiosTk, mensajeCambiosTk, claveFila, TK_PARAGU
 import { SIN_KAM } from "./core/config.js";
 import { tasaAcum, sumarTasa, leerTasa } from "./domain/metrics.js";
 import { logAccess } from "./shared/accessLog.js";
+import { dn } from "./shared/huella";
 // calculator.js — Calculadora de Metas (flujo por PESTAÑAS de línea de negocio)
 // El KAM ingresa su meta TOTAL por línea y se reparte (disgrega) a cada partner+ciudad
 // segun su % de representacion en el ULTIMO MES. En vez de un scroll con 6+ tablas,
@@ -1046,12 +1047,13 @@ export function _calcSec4_distribucion(agg, distTotals, monthLabel) {
       : "";
     return `<input type="number" step="1" min="0" value="${val}"${ttl}
       data-pk="${escapeHTML(partner)}" data-city="${escapeHTML(city)}" data-metric="${metric}"
-      data-act-change="calcOnGoalEdit"
+      data-act-change="calcOnGoalEdit"${dn("calc.dist", metric, `${partner}@${city}`)}
       class="calc-inp agy-style-127${cls}"/>`;
   };
-  const _pctCell = (val, tot, noAct) => noAct
-    ? `<td class="tn agy-style-128">—</td>`
-    : `<td class="tn agy-style-129">${tot > 0 ? ((val / tot) * 100).toFixed(1) + "%" : "—"}</td>`;
+  // numKey: clave de la huella de números (shared/huella.ts).
+  const _pctCell = (val, tot, noAct, numKey) => noAct
+    ? `<td class="tn agy-style-128"${numKey ? dn(numKey) : ""}>—</td>`
+    : `<td class="tn agy-style-129"${numKey ? dn(numKey) : ""}>${tot > 0 ? ((val / tot) * 100).toFixed(1) + "%" : "—"}</td>`;
 
   let sumAD = 0, sumSH = 0, sumNR = 0, nManual = 0;
   // El reparto se calcula sobre `agg` (la cartera COMPLETA), no sobre `items`
@@ -1079,16 +1081,16 @@ export function _calcSec4_distribucion(agg, distTotals, monthLabel) {
     // saber que 1.199 de esos son TukTuk. Solo aparece con % declarado y en las
     // unidades que tienen porción TukTuk — en las demás sería ruido.
     const tkSub = k => (reparto && b[k + "Tk"] > 0)
-      ? `<div class="calc-tk-sub" title="${escapeHTML(t("calc.tkDeEsta"))}">🛺 ${escapeHTML(fmt(Math.round(b[k + "Tk"])))}</div>` : "";
+      ? `<div class="calc-tk-sub" title="${escapeHTML(t("calc.tkDeEsta"))}"${dn("calc.dist", k + "Tk", `${e.partner}@${e.city}`)}>🛺 ${escapeHTML(fmt(Math.round(b[k + "Tk"])))}</div>` : "";
     return `
       <tr${rowStyle}>
         <td class="agy-style-116">${escapeHTML(e.partner)}${badge}${manual}${guardada}</td>
         <td class="agy-style-117">${escapeHTML(e.city)}</td>
-        ${_pctCell(e.ad, distTotals.ad, b.noAct)}
+        ${_pctCell(e.ad, distTotals.ad, b.noAct, `calc.dist.pctAd.${e.partner}@${e.city}`)}
         <td>${_input(e.partner, e.city, "ad", b.ad)}${tkSub("ad")}</td>
-        ${_pctCell(e.sh, distTotals.sh, b.noAct)}
+        ${_pctCell(e.sh, distTotals.sh, b.noAct, `calc.dist.pctSh.${e.partner}@${e.city}`)}
         <td>${_input(e.partner, e.city, "sh", b.sh)}${tkSub("sh")}</td>
-        ${_pctCell(nr, distTotals.nr, b.noAct)}
+        ${_pctCell(nr, distTotals.nr, b.noAct, `calc.dist.pctNr.${e.partner}@${e.city}`)}
         <td>${_input(e.partner, e.city, "nr", b.nr)}${tkSub("nr")}</td>
       </tr>`;
   }).join("");
@@ -1116,15 +1118,15 @@ export function _calcSec4_distribucion(agg, distTotals, monthLabel) {
           <tfoot class="agy-style-121">
             <tr>
               <td colspan="2">${escapeHTML(t("calc.sumaDist"))}</td>
-              <td></td><td class="tn" id="calcAggSumAD">${fmt(sumAD)}</td>
-              <td></td><td class="tn" id="calcAggSumSH">${fmt(sumSH)}</td>
-              <td></td><td class="tn" id="calcAggSumNR">${fmt(sumNR)}</td>
+              <td></td><td class="tn" id="calcAggSumAD"${dn("calc.dist.total.ad")}>${fmt(sumAD)}</td>
+              <td></td><td class="tn" id="calcAggSumSH"${dn("calc.dist.total.sh")}>${fmt(sumSH)}</td>
+              <td></td><td class="tn" id="calcAggSumNR"${dn("calc.dist.total.nr")}>${fmt(sumNR)}</td>
             </tr>
             <tr>
               <td colspan="2" class="agy-style-137">${escapeHTML(t("calc.metaKamCuadre"))}</td>
-              <td></td><td class="tn" id="calcAggCuadreAD">${_calcCuadre(sumAD, +g.ad || 0)}</td>
-              <td></td><td class="tn" id="calcAggCuadreSH">${_calcCuadre(sumSH, +g.sh || 0)}</td>
-              <td></td><td class="tn" id="calcAggCuadreNR">${_calcCuadre(sumNR, +g.nr || 0)}</td>
+              <td></td><td class="tn" id="calcAggCuadreAD"${dn("calc.dist.cuadre.ad")}>${_calcCuadre(sumAD, +g.ad || 0)}</td>
+              <td></td><td class="tn" id="calcAggCuadreSH"${dn("calc.dist.cuadre.sh")}>${_calcCuadre(sumSH, +g.sh || 0)}</td>
+              <td></td><td class="tn" id="calcAggCuadreNR"${dn("calc.dist.cuadre.nr")}>${_calcCuadre(sumNR, +g.nr || 0)}</td>
             </tr>
           </tfoot>
         </table>
