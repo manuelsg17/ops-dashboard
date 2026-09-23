@@ -895,19 +895,6 @@ function _rendKamSeccion(apd, lastRows, prevRows) {
   return h + `</tbody></table></div>`;
 }
 
-// ── METRIC CARD (legado) ──────────────────────────────────────────────────────
-// Ya no se usa en la vista (Ola 6: _rdKpi + tabla "Por KAM"); se conserva por
-// compatibilidad con quien la llame como global.
-export function mkMetricCard(label, icon, val, prevWk, apd, lastRows, prevRows, metric, color, isCum) {
-  const gv = rows =>
-    metric === "nr" ? sumR(rows, r => r.newPartner + r.newService + r.reactivated)
-    : metric === "sh" ? sumR(rows, r => r.supplyHours)
-    : metric === "tr" ? sumR(rows, r => r.trips || 0)
-    : sumR(rows, r => r.activeDrivers);
-  return _rdKpi({ label, value: fmt(val), cur: gv(lastRows), prev: gv(prevRows),
-    sub: isCum ? t("rend.lbl.acumRango") : _rendPeriodLabel() });
-}
-
 // ── TABLE ─────────────────────────────────────────────────────────────────────
 export function buildTable(apd, lastDate, prevDate, sel) {
   const selSet = new Set(sel);
@@ -1133,25 +1120,6 @@ export function buildPartnerCards(apd, lastDate, prevDate, partners, sel) {
   grid.innerHTML = html; // un solo reflow al final
 }
 
-// ── KPIs DE LÍNEA (Fleet / TukTuk) — Fase 2 ───────────────────────────────────
-// LEGADO: tarjeta KPI simple con badge WoW/MoM (reusa .mcard). La usa Vista
-// Partner (partnerView.ts); Rendimiento ya pinta con _rdKpi. No cambiar su
-// salida sin revisar esa vista.
-// subLabel es opcional y por defecto dice "snapshot último período".
-// `badgeVal` separa lo que se MUESTRA de lo que se COMPARA (flujo vs snapshot).
-// numKey (opcional): clave de la huella de números (shared/huella.ts).
-export function _rendKpiCard(label, icon, val, prev, color, fmtFn, subLabel, badgeVal, numKey) {
-  const _bv = badgeVal === undefined ? val : badgeVal;
-  return `
-    <div class="mcard" style="border-top:3px solid ${color}">
-      <div class="mcard-label">${icon} ${label}</div>
-      <div class="mcard-sub-label">${subLabel || t("rend.snapshotUlt")}</div>
-      <div class="mcard-val"${numKey ? dn(numKey) : ""}>${fmtFn(val)}</div>
-      <div class="agy-style-257">${bdgMode(_bv, prev)}
-        <span class="agy-style-258">${escapeHTML(t("rend.cmp.vs", { p: STATE.curMode === "mensual" ? t("rend.cmp.mesAnterior") : STATE.curMode === "diario" ? t("rend.cmp.diaAnterior") : t("rend.cmp.semAnterior") }))}</span>
-      </div>
-    </div>`;
-}
 // Suma/pondera KPIs Fleet sobre filas crudas (una por fleetroom-ciudad de una fecha).
 // SH/Auto interno = Σ internalFleetSh / Σ ownedFleetActiveCars; Aceptación = Σ(rate×trips)/Σtrips
 // (mismas fórmulas que presentacion2.p2FleetSeries). Cars/Branded = snapshots sumados.
@@ -1356,23 +1324,6 @@ function _rdFleetKpis(c, p, metaInfo) {
     ${k(t("rend.kpi.gmvHora"),     c.moneyPerHour,     p.moneyPerHour,     num, "rend.fleet.moneyPerHour")}
   </div>`;
 }
-// LEGADO (Vista Partner): 10 tarjetas .mcard. Rendimiento usa _rdFleetKpis.
-export function _rendFleetCardsBody(c, p) {
-  const num = v => v == null ? "—" : fmt(v);
-  const pct = v => v == null ? "—" : fmt(v) + "%";
-  return `<div class="section"><div class="metric-row agy-style-226">
-      ${_rendKpiCard(t("rend.kpi.ownedCars"),   "🚗", c.owned,      p.owned,      "#0284c7", fmt, undefined, undefined, "rend.fleet.owned")}
-      ${_rendKpiCard(t("rend.kpi.shAuto"), "⏱️", c.shCar,      p.shCar,      "#8b5cf6", num, undefined, undefined, "rend.fleet.shCar")}
-      ${_rendKpiCard(t("rend.kpi.aceptacion"),          "✅", c.accept,     p.accept,     "#10b981", pct, undefined, undefined, "rend.fleet.accept")}
-      ${_rendKpiCard(t("rend.kpi.brandedCars"), "🏷️", c.branded,    p.branded,    "#f59e0b", fmt, undefined, undefined, "rend.fleet.branded")}
-      ${_rendKpiCard(t("rend.kpi.pctBrand"),         "🎯", c.pctBranded, p.pctBranded, "#7e22ce", pct, undefined, undefined, "rend.fleet.pctBranded")}
-      ${_rendKpiCard(t("rend.kpi.gmvAuto"),          "💰", c.gmvPerCar,        p.gmvPerCar,        "#059669", num, undefined, undefined, "rend.fleet.gmvPerCar")}
-      ${_rendKpiCard(t("rend.kpi.comAuto"),     "💵", c.commissionPerCar, p.commissionPerCar, "#059669", num, undefined, undefined, "rend.fleet.commissionPerCar")}
-      ${_rendKpiCard(t("rend.kpi.viajesAuto"),       "🧭", c.tripsPerCar,      p.tripsPerCar,      "#0284c7", num, undefined, undefined, "rend.fleet.tripsPerCar")}
-      ${_rendKpiCard("Viajes / Hora",       "⚡", c.tripsPerHour,     p.tripsPerHour,     "#0284c7", num, undefined, undefined, "rend.fleet.tripsPerHour")}
-      ${_rendKpiCard(t("rend.kpi.gmvHora"),          "📈", c.moneyPerHour,     p.moneyPerHour,     "#059669", num, undefined, undefined, "rend.fleet.moneyPerHour")}
-    </div></div>`;
-}
 // Scorecard compacto de calidad/riesgo: una tabla label · valor · delta (se
 // leen mejor como checklist que como 6 tarjetas grandes).
 export function _rendFleetScorecard(items) {
@@ -1385,14 +1336,6 @@ export function _rendFleetScorecard(items) {
       ${STATE.curMode !== "diario" ? `<td class="rd-dcol">${_rdDelta(it.val, it.prev, { invert: it.invert })}</td>` : ""}
     </tr>`).join("")}
   </tbody></table></div>`;
-}
-// LEGADO (Vista Partner).
-export function _rendFleetCityKpi(label, val, prev, fmtFn, numKey) {
-  // val null = tasa/ratio sin base: "—", no el "0" que daría fmt(null).
-  return `<div class="city-kpi">
-    <span class="city-kpi-label">${label}</span>
-    <div class="city-kpi-right"><span class="city-kpi-val"${numKey ? dn(numKey) : ""}>${val == null ? "—" : fmtFn(val)}</span>${bdgMode(val, prev, "mb-badge")}</div>
-  </div>`;
 }
 function _rdFleetCiudadTabla(ciudades) {
   const conDelta = STATE.curMode !== "diario";
@@ -1537,18 +1480,6 @@ export function _rendTkAdquisicion(lastRows, prevRows) {
       </tr></thead>
       <tbody>${filasHTML}</tbody>
     </table></div>`;
-}
-
-// ── SECTION HEADER (legado, lo usan otras vistas como global) ──────────────────
-export function secH(icon, bg, title, sub, tag) {
-  return `<div class="sh">
-    <div class="sh-icon" style="background:${bg}20">${icon}</div>
-    <div>
-      <div class="sh-title">${title}</div>
-      <div class="sh-sub">${sub}</div>
-    </div>
-    ${tag ? `<span class="sh-tag">${tag}</span>` : ""}
-  </div>`;
 }
 
 // Variante compacta de section header (sin fondo de ícono ni tag) — vivía en

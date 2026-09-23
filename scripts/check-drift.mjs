@@ -188,7 +188,7 @@ function chequearDiccionariosExport() {
 // ─────────────────────────────────────────────────────────────────────────────
 function chequearFrasesExport() {
   const casos = [
-    ...listarSrc().filter(f => !f.endsWith("partnerView.ts")).map(f => [f, /(?<![\w.$])P2T\(/g]),
+    ...listarSrc().map(f => [f, /(?<![\w.$])P2T\(/g]),
     ["src/domain/lectura.ts", /(?<![\w.$])T\(/g]
   ];
   for (const [f, re] of casos) {
@@ -212,9 +212,7 @@ function chequearFrasesExport() {
 // forma que el de las escalas: apareció en el deck (4 avisos), en el Gantt que
 // entra al PDF y en los nombres de los métodos de pronóstico. Lo correcto es
 // pick()/makeT() de core/i18nExport o t() de core/i18n.
-//
-// Vista Partner (partnerView.ts) queda afuera: se retira (decisión 2 del plan
-// sep-2026) y no se invierte en migrarla. Escape puntual: `// i18n-binario-ok`.
+// Escape puntual: `// i18n-binario-ok`.
 // ─────────────────────────────────────────────────────────────────────────────
 function chequearTernariosIdioma() {
   const R_IGUAL = /\b\w*(?:[lL]ang|idioma|LANG)\w*\s*[!=]==?\s*"(?:es|en|ru)"\s*\?/;
@@ -223,7 +221,6 @@ function chequearTernariosIdioma() {
   const R_FLAG  = /(?<![\w.$"'`])(?<![=!]=\s*)(?<![=!]==\s*)(?:es|en|isEN|isEn|isEs|esES)\s*\?(?![?.:])/;
   const R_DEF   = /\b(?:const|let|var)\s+(?:es|en|isEN|isEn|isEs)\s*=\s*[^;\n]*[lL]ang\w*\s*[!=]==?\s*"(?:es|en)"/;
   for (const f of listarSrc()) {
-    if (f.endsWith("partnerView.ts")) continue;
     const lineas = sinComentarios(leer(f)).split("\n");
     lineas.forEach((ln, i) => {
       if (/i18n-binario-ok/.test(leer(f).split("\n")[i] || "")) return;

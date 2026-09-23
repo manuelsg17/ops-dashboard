@@ -1445,7 +1445,7 @@ function _indexCoreData() {
 // fresca llegaba con el KAM parado en Presentacion, el deck se pintaba con las
 // columnas diferidas en null (embudo y benchmark en "—") o directamente no se
 // re-pintaba y seguia mostrando el snapshot del cache.
-const _NEED_FULL_COLS_LOAD = new Set(["partnerview", "rawdata", "calculator", "present2"]);
+const _NEED_FULL_COLS_LOAD = new Set(["rawdata", "calculator", "present2"]);
 
 export async function _renderActiveTabAfterLoad() {
     // Render solo el tab activo (mismo patron que applyFilters/switchMode).
@@ -1457,7 +1457,7 @@ export async function _renderActiveTabAfterLoad() {
     // en _applyMetasProyectosSeguimiento() apenas lleguen.
     if (STATE.rawData.length) {
       // BUG REAL (auditoría ago 2026): esta función re-renderizaba
-      // partnerview/calculator/rawdata directo, sin pasar por switchTab (que
+      // calculator/rawdata (y antes la Vista Partner) directo, sin pasar por switchTab (que
       // es quien awaitea ensureFullRendColumns). Si el caché pintaba con las
       // columnas diferidas ya mergeadas y LUEGO llegaba la data fresca de red
       // (resetFullRendColumns las vuelve a poner en null porque son objetos
@@ -1472,7 +1472,6 @@ export async function _renderActiveTabAfterLoad() {
         renderPartnerPortal();
       } else {
       if (STATE.curTab === "rend")                                        renderRend();
-      if (STATE.curTab === "partnerview" && typeof renderPartnerView === "function") renderPartnerView();
       if (STATE.curTab === "calculator"  && typeof renderCalculator === "function")  renderCalculator();
       if (STATE.curTab === "rawdata"     && typeof renderRawData === "function")     renderRawData();
       // present2 NO estaba: con el caché pintando primero y la red revalidando
