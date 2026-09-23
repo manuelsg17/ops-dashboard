@@ -233,6 +233,7 @@
 .au6-field { display: flex; flex-direction: column; gap: var(--space-1); }
 .au6-field__label { font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--color-text-muted); }
 .au6-field .ui-segmented { flex-wrap: wrap; align-self: flex-start; }
+.au6-field .ui-select { width: auto; min-width: 180px; max-width: 100%; align-self: flex-start; }
 .au6-perms { display: flex; flex-wrap: wrap; gap: var(--space-1); }
 .au6-perm {
   display: inline-flex; align-items: center; gap: var(--space-1); cursor: pointer;

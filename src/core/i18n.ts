@@ -1053,7 +1053,7 @@ export const I18N: Record<string, Record<string, string>> = {
   "au6.cerrarSesionesTitulo": { es: "¿Cerrar sus sesiones?", en: "Sign out their sessions?", ru: "Завершить его сеансы?" },
   "au6.cerrarSesionesOk": { es: "Cerrar sesiones", en: "Sign out sessions", ru: "Завершить сеансы" },
   "au6.comoVincularKam": { es: "Cómo vincular un KAM a una cuenta", en: "How to link a KAM to an account", ru: "Как связать KAM с учётной записью" },
-  "au6.comoVincularKamTxt": { es: "La Calculadora preselecciona la cartera del KAM vinculado (app_metadata.kam). Hoy se asigna por SQL en Supabase; el valor tiene que ser idéntico al de Partners (distingue mayúsculas) y la persona debe volver a iniciar sesión.", en: "The Calculator preselects the linked KAM's portfolio (app_metadata.kam). Today it is set via SQL in Supabase; the value must match Partners exactly (case-sensitive) and the person must sign in again.", ru: "Калькулятор предвыбирает портфель связанного KAM (app_metadata.kam). Сейчас он задаётся через SQL в Supabase; значение должно точно совпадать с «Партнёрами» (с учётом регистра), и человеку нужно войти заново." },
+  "au6.comoVincularKamTxt": { es: "La Calculadora preselecciona la cartera del KAM vinculado (app_metadata.kam). Elígelo en la tarjeta de la cuenta (selector «KAM vinculado»). Si ese selector no aparece, la función admin-users desplegada es la anterior: usa este SQL; el valor tiene que ser idéntico al de Partners (distingue mayúsculas). En los dos casos la persona debe volver a iniciar sesión.", en: "The Calculator preselects the linked KAM's portfolio (app_metadata.kam). Pick it on the account card (the “Linked KAM” selector). If that selector does not appear, the deployed admin-users function is the previous one: use this SQL; the value must match Partners exactly (case-sensitive). Either way the person must sign in again.", ru: "Калькулятор предвыбирает портфель связанного KAM (app_metadata.kam). Выбери его в карточке учётной записи (список «Связанный KAM»). Если списка нет, развёрнута прежняя версия функции admin-users: используй этот SQL; значение должно точно совпадать с «Партнёрами» (с учётом регистра). В обоих случаях человеку нужно войти заново." },
 
   "mon6.vacioTitulo": { es: "Monitoreo de uso", en: "Usage monitoring", ru: "Мониторинг использования" },
   "mon6.cargar": { es: "Cargar monitoreo", en: "Load monitoring", ru: "Загрузить мониторинг" },
@@ -1805,9 +1805,9 @@ export const I18N: Record<string, Record<string, string>> = {
   "calc.okSinRefresco": { es: "Metas GUARDADAS en la base de datos ({n} filas · {mes}), pero no se pudo refrescar la pantalla. Recarga la página para verlas — no vuelvas a guardar.",
                          en: "Goals SAVED to the database ({n} rows · {mes}), but the screen could not be refreshed. Reload the page to see them — do not save again.",
                          ru: "Цели СОХРАНЕНЫ в базе (строк: {n} · {mes}), но экран не удалось обновить. Перезагрузите страницу, чтобы их увидеть, — не сохраняйте повторно." },
-  "calc.conf.borrarKam": { es: "Eliminar las metas de {kam} para {mes}\n\n• {n} fila(s) (partner-ciudad)\n• Solo de este KAM: las de los demás KAMs no se tocan\n\nEsta acción NO se puede deshacer. Después tendrás que volver a cargar\nlas metas de {kam} para {m}.\n\n¿Confirmar?",
-                          en: "Delete {kam}'s goals for {mes}\n\n• {n} row(s) (partner-city)\n• Only this KAM: the other KAMs' goals are not touched\n\nThis action CANNOT be undone. Afterwards you will have to load\n{kam}'s goals for {m} again.\n\nConfirm?",
-                          ru: "Удалить цели {kam} на {mes}\n\n• строк (партнёр-город): {n}\n• Только этого KAM: цели других KAM не затрагиваются\n\nЭто действие НЕЛЬЗЯ отменить. Потом придётся заново загрузить\nцели {kam} на {m}.\n\nПодтвердить?" },
+  "calc.conf.borrarKam": { es: "Eliminar las metas de {kam} para {mes}\n\n• {n} fila(s) (partner-ciudad)\n• Solo de este KAM: las de los demás KAMs no se tocan\n\nEsta acción NO se puede deshacer. Después tendrás que volver a cargar\nlas metas de {kam} para {m}.\n\nPara confirmar se pide el nombre del KAM (da igual mayúsculas o minúsculas).",
+                          en: "Delete {kam}'s goals for {mes}\n\n• {n} row(s) (partner-city)\n• Only this KAM: the other KAMs' goals are not touched\n\nThis action CANNOT be undone. Afterwards you will have to load\n{kam}'s goals for {m} again.\n\nTo confirm, the KAM's name is required (upper or lower case both work).",
+                          ru: "Удалить цели {kam} на {mes}\n\n• строк (партнёр-город): {n}\n• Только этого KAM: цели других KAM не затрагиваются\n\nЭто действие НЕЛЬЗЯ отменить. Потом придётся заново загрузить\nцели {kam} на {m}.\n\nДля подтверждения нужно ввести имя KAM (регистр букв не важен)." },
   "calc.errFilasYaNoEstan": { es: "las filas a eliminar ya no están en la base (¿otra sesión las borró?). Recarga la página.",
                              en: "the rows to delete are no longer in the database (did another session delete them?). Reload the page.",
                              ru: "удаляемых строк уже нет в базе (их удалила другая сессия?). Перезагрузите страницу." },
@@ -1904,8 +1904,8 @@ export const I18N: Record<string, Record<string, string>> = {
   "mt.filtro.sobre": { es: "Sobre meta", en: "Above goal", ru: "Выше цели" },
   "mt.filtro.sin":   { es: "Sin meta", en: "No goal", ru: "Без цели" },
   "mt.filtro.bajoTip":  { es: "Algún indicador está por debajo del 95% de su meta", en: "At least one metric is below 95% of its goal", ru: "Хотя бы один показатель ниже 95% цели" },
-  "mt.filtro.enTip":    { es: "Todos los indicadores entre 95% y 150% de su meta", en: "All metrics between 95% and 150% of their goal", ru: "Все показатели от 95% до 150% цели" },
-  "mt.filtro.sobreTip": { es: "Todos llegan al 95% y alguno pasa del 150%: revisa si la meta está bien calibrada", en: "All reach 95% and at least one exceeds 150%: check whether the goal is well calibrated", ru: "Все от 95%, и хотя бы один выше 150%: проверь, верно ли задана цель" },
+  "mt.filtro.enTip":    { es: "Todos los indicadores llegan al 95% de su meta y alguno no llega al 100%", en: "All metrics reach 95% of their goal and at least one is below 100%", ru: "Все показатели от 95% цели, и хотя бы один ниже 100%" },
+  "mt.filtro.sobreTip": { es: "Todos los indicadores llegan al 100% de su meta o más", en: "All metrics reach 100% of their goal or more", ru: "Все показатели достигают 100% цели или больше" },
   "mt.filtro.sinTip":   { es: "Cuentas con actividad y sin meta cargada: suman al actual, no a la meta", en: "Active accounts with no goal loaded: they add to the actual, not to the goal", ru: "Активные аккаунты без цели: входят в факт, но не в цель" },
   "mt.vista.aria":   { es: "Vista de partners", en: "Partner view", ru: "Вид партнёров" },
   "mt.vista.tabla":  { es: "Tabla", en: "Table", ru: "Таблица" },
@@ -2376,6 +2376,15 @@ export const I18N: Record<string, Record<string, string>> = {
   "p2.err.pdf":        { es: "Error al generar el PDF", en: "Error generating the PDF", ru: "Ошибка при создании PDF" },
   "p2.vacio.sinDatos":    { es: "Carga datos de Rendimiento para usar Presentación.", en: "Load Performance data to use Presentation.", ru: "Загрузите данные «Показатели», чтобы использовать презентацию." },
   "p2.vacio.sinPartners": { es: "No hay partners cargados.", en: "No partners loaded.", ru: "Партнёры не загружены." },
+
+  // ── Configuración → Usuarios: KAM vinculado editable (Ola 7, decisiones) ──
+  "au7.kamNinguno":      { es: "(ninguno)", en: "(none)", ru: "(нет)" },
+  "au7.kamFueraLista":   { es: "{k} (no está en Partners)", en: "{k} (not in Partners)", ru: "{k} (нет в «Партнёрах»)" },
+  "au7.kamReloginHint":  { es: "La persona debe volver a iniciar sesión para que se aplique.", en: "The person must sign in again for it to apply.", ru: "Чтобы изменение вступило в силу, человеку нужно войти заново." },
+  "au7.kamGuardando":    { es: "Guardando KAM vinculado…", en: "Saving linked KAM…", ru: "Сохранение связанного KAM…" },
+  "au7.kamOk":           { es: "{e} quedó vinculado a {k}. La persona debe volver a iniciar sesión para que se aplique.", en: "{e} is now linked to {k}. The person must sign in again for it to apply.", ru: "{e} теперь связан с {k}. Чтобы изменение вступило в силу, человеку нужно войти заново." },
+  "au7.kamQuitadoOk":    { es: "{e} ya no tiene KAM vinculado. La persona debe volver a iniciar sesión para que se aplique.", en: "{e} no longer has a linked KAM. The person must sign in again for it to apply.", ru: "У {e} больше нет связанного KAM. Чтобы изменение вступило в силу, человеку нужно войти заново." },
+  "au7.kamError":        { es: "No se pudo guardar el KAM vinculado: ", en: "Could not save the linked KAM: ", ru: "Не удалось сохранить связанного KAM: " },
 };
 
 let _lang = "es";
