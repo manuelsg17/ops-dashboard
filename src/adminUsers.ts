@@ -23,6 +23,10 @@
 
 import { registerActions } from "./shared/actions.js";
 import { t } from "./core/i18n";
+import { STATE } from "./core/config.js";
+import { escapeHTML } from "./core/security";
+import { btn, badge, alertBox, emptyState, icon, segmented } from "./shared/ui";
+import { confirmDialog } from "./shared/confirmDialog";
 
 export const ADMIN_USERS_STATE = {
   users: [],        // [{id,email,role,lastSignInAt}]
@@ -110,8 +114,13 @@ async function _fn(action, body) {
 
 export async function auSetRole(userId, role) {
   const u = ADMIN_USERS_STATE.users.find(x => x.id === userId);
-  if (!confirm(t("au.confirmCambiarRol", { e: u?.email || userId, r: role }))) {
-    renderAdminUsers();   // revertir el <select> a su valor real
+  const ok = await confirmDialog({
+    title: t("au6.cambiarRolTitulo"),
+    body: t("au.confirmCambiarRol", { e: u?.email || userId, r: role }),
+    confirmLabel: t("au6.cambiarRolOk", { r: _roleMeta(role).label })
+  });
+  if (!ok) {
+    renderAdminUsers();   // revertir el control a su valor real
     return;
   }
   showLoad(true, t("au.cambiandoRol"));
@@ -165,7 +174,12 @@ export async function auDeleteUser(userId) {
 
 export async function auForceSignOut(userId) {
   const u = ADMIN_USERS_STATE.users.find(x => x.id === userId);
-  if (!confirm(t("au.confirmCerrarSesiones", { e: u?.email || userId }))) return;
+  const ok = await confirmDialog({
+    title: t("au6.cerrarSesionesTitulo"),
+    body: t("au.confirmCerrarSesiones", { e: u?.email || userId }),
+    confirmLabel: t("au6.cerrarSesionesOk")
+  });
+  if (!ok) return;
   showLoad(true, t("au.cerrandoSesiones"));
   try {
     await _fn("signOut", { userId });
@@ -234,20 +248,21 @@ export async function auRemoveClid(mappingId) {
 // re-render: el panel se repinta entero tras cada acción.
 export const AU_UI = { q: "", rol: "todos", confirmDelete: null };
 
+// Ola 6: sin emojis ni colores propios por rol — icono + etiqueta neutros. El
+// rol no es un estado bueno/malo, así que no lleva color semántico.
 function _roleMeta(r) {
   const M = {
-    admin:   { emoji: "🛡️", label: t("au.rol.adminLabel"),   color: "#dc2626", bg: "#fef2f2", desc: t("au.rol.adminDesc") },
-    kam:     { emoji: "👤", label: t("au.rol.kamLabel"),     color: "#0284c7", bg: "#ecfeff", desc: t("au.rol.kamDesc") },
-    viewer:  { emoji: "👁️", label: t("au.rol.viewerLabel"),  color: "#6b7280", bg: "#f9fafb", desc: t("au.rol.viewerDesc") },
-    partner: { emoji: "🤝", label: t("au.rol.partnerLabel"), color: "#7e22ce", bg: "#faf5ff", desc: t("au.rol.partnerDesc") }
+    admin:   { icon: "lock",     label: t("au.rol.adminLabel"),   desc: t("au.rol.adminDesc") },
+    kam:     { icon: "user",     label: t("au.rol.kamLabel"),     desc: t("au.rol.kamDesc") },
+    viewer:  { icon: "eye",      label: t("au.rol.viewerLabel"),  desc: t("au.rol.viewerDesc") },
+    partner: { icon: "building", label: t("au.rol.partnerLabel"), desc: t("au.rol.partnerDesc") }
   };
   return M[r] || M.viewer;
 }
 
 // "es-PE" fijo A PROPOSITO, igual que el timestamp de "Datos cargados" en
 // data.ts: son fechas de negocio (Peru), no texto de interfaz — no siguen el
-// idioma de la UI. Con la interfaz en ruso esto muestra "11 ago. 2026", no
-// "11 авг. 2026". Detectado probando esta pantalla en ruso; se documenta en vez
+// idioma de la UI. Detectado probando esta pantalla en ruso; se documenta en vez
 // de traducirlo para no introducir ambiguedad de formato de fecha (DD/MM vs
 // MM/DD) en una fecha que el equipo lee como referencia local de Peru.
 function _fechaCorta(iso) {
@@ -257,18 +272,20 @@ function _fechaCorta(iso) {
   return d.toLocaleDateString("es-PE", { day: "2-digit", month: "short", year: "numeric" });
 }
 // Antigüedad del último acceso: el dato accionable de un panel de usuarios es
-// "hace cuánto", no la fecha exacta.
+// "hace cuánto", no la fecha exacta. tono: ok ≤7 d · warn <30 d · bad ≥30 d.
 function _hace(iso) {
-  if (!iso) return { txt: t("au.nuncaIngreso"), color: "#9ca3af", frio: true };
+  if (!iso) return { txt: t("au.nuncaIngreso"), tono: "none" };
   const dias = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
-  if (isNaN(dias)) return { txt: "—", color: "#9ca3af", frio: true };
-  if (dias <= 0)  return { txt: t("au.hoy"),  color: "#10b981" };
-  if (dias === 1) return { txt: t("au.ayer"), color: "#10b981" };
-  if (dias < 7)   return { txt: t("au.haceDias", { n: dias }), color: "#10b981" };
-  if (dias < 30)  return { txt: t("au.haceDias", { n: dias }), color: "#f59e0b" };
+  if (isNaN(dias)) return { txt: "—", tono: "none" };
+  if (dias <= 0)  return { txt: t("au.hoy"),  tono: "ok" };
+  if (dias === 1) return { txt: t("au.ayer"), tono: "ok" };
+  if (dias < 7)   return { txt: t("au.haceDias", { n: dias }), tono: "ok" };
+  if (dias < 30)  return { txt: t("au.haceDias", { n: dias }), tono: "warn" };
   const m = Math.floor(dias / 30);
-  return { txt: m === 1 ? t("au.haceMes", { n: m }) : t("au.haceMeses", { n: m }), color: "#dc2626" };
+  return { txt: m === 1 ? t("au.haceMes", { n: m }) : t("au.haceMeses", { n: m }), tono: "bad" };
 }
+
+const _e = s => escapeHTML(s == null ? "" : String(s));
 
 export function renderAdminUsers() {
   const box = document.getElementById("adminUsersBox");
@@ -278,59 +295,49 @@ export function renderAdminUsers() {
   const S = ADMIN_USERS_STATE;
 
   if (!S.loaded && !S.loading && !S.error) {
-    box.innerHTML = `
-      <div class="au-empty">
-        <div class="au-empty-ico">👥</div>
-        <div class="au-empty-txt">${escapeHTML(t("au.consultanServidor"))}</div>
-        <button class="au-btn au-btn-primary" data-act="auLoad">${escapeHTML(t("au.cargarUsuarios"))}</button>
-      </div>`;
+    box.innerHTML = emptyState({
+      icon: "users", title: t("au6.vacioTitulo"), text: t("au.consultanServidor"),
+      action: btn({ label: t("au.cargarUsuarios"), variant: "primary", icon: "download", act: "auLoad" })
+    });
     return;
   }
   if (S.loading) {
-    box.innerHTML = `<div class="au-empty"><div class="au-spinner"></div><div class="au-empty-txt">${escapeHTML(t("au.cargandoUsuarios"))}</div></div>`;
+    box.innerHTML = `<div class="au6-loading" role="status">${icon("refresh", { size: 16 })}<span>${_e(t("au.cargandoUsuarios"))}</span></div>`;
     return;
   }
   if (S.error) {
-    box.innerHTML = `
-      <div class="au-alert">
-        <strong>${escapeHTML(t("au.noSePudoCargar"))}</strong>
-        <div>${escapeHTML(S.error)}</div>
-        <button class="au-btn" data-act="auLoad">${escapeHTML(t("au.reintentar"))}</button>
-      </div>`;
+    box.innerHTML = alertBox({ tone: "bad", title: t("au.noSePudoCargar"), text: S.error,
+      actions: btn({ label: t("au.reintentar"), size: "sm", icon: "refresh", act: "auLoad" }) });
     return;
   }
 
   const { permsByUser, clidsByUser } = _auIndices();
-
   const conteo = r => S.users.filter(u => u.role === r).length;
+  const filtro = segmented({
+    ariaLabel: t("au6.filtroRolAria"), act: "auFilterRol", value: AU_UI.rol,
+    options: [{ value: "todos", label: `${t("au.todos")} ${S.users.length}` },
+      ...AU_ROLES.map(r => ({ value: r, label: `${_roleMeta(r).label} ${conteo(r)}`, icon: _roleMeta(r).icon }))]
+  });
 
   let html = `
-    <div class="au-toolbar">
-      <input class="au-search" type="search" placeholder="${escapeHTML(t("au.buscarPorEmail"))}" value="${escapeHTML(AU_UI.q)}"
-             data-act-input="auSearch" autocomplete="off"/>
-      <div class="au-chips">
-        <button class="au-chip${AU_UI.rol === "todos" ? " on" : ""}" data-act="auFilterRol" data-rol="todos">
-          ${escapeHTML(t("au.todos"))} <b>${S.users.length}</b>
-        </button>
-        ${AU_ROLES.map(r => {
-          const m = _roleMeta(r), n = conteo(r);
-          return `<button class="au-chip${AU_UI.rol === r ? " on" : ""}" data-act="auFilterRol" data-rol="${r}"
-                    style="${AU_UI.rol === r ? `border-color:${m.color};color:${m.color}` : ""}">
-                    ${m.emoji} ${m.label} <b>${n}</b></button>`;
-        }).join("")}
-      </div>
-      <button class="au-btn au-icon-btn" data-act="auLoad" title="${escapeHTML(t("au.refrescar"))}">↻</button>
+    <div class="au6-toolbar">
+      <input class="ui-input au6-search" type="search" placeholder="${_e(t("au.buscarPorEmail"))}" value="${_e(AU_UI.q)}"
+             data-act-input="auSearch" autocomplete="off" aria-label="${_e(t("au.buscarPorEmail"))}"/>
+      ${filtro}
+      <span class="au6-toolbar__end">${btn({ label: t("au.refrescar"), iconOnly: true, icon: "refresh", size: "sm", variant: "ghost", act: "auLoad" })}</span>
     </div>
 
-    <details class="au-invite">
-      <summary><span class="au-invite-plus">＋</span> ${escapeHTML(t("au.invitarUsuario").replace("＋ ",""))}</summary>
-      <div class="au-invite-body">
-        <input class="au-input" id="auInviteEmail" type="email" placeholder="${escapeHTML(t("au.emailDominio"))}"/>
-        <select class="au-input au-input-sm" id="auInviteRole">
-          ${AU_ROLES.map(r => `<option value="${r}"${r === "viewer" ? " selected" : ""}>${_roleMeta(r).emoji} ${_roleMeta(r).label}</option>`).join("")}
-        </select>
-        <button class="au-btn au-btn-primary" data-act="auInvite">${escapeHTML(t("au.enviarInvitacion"))}</button>
-        <p class="au-hint">${t("au.invitarHint")}</p>
+    <details class="au6-invite">
+      <summary>${icon("plus", { size: 14 })}<span>${_e(t("au.invitarUsuario").replace("＋ ", ""))}</span></summary>
+      <div class="au6-invite__body">
+        <label class="ui-field au6-invite__email"><span class="ui-field__label">${_e(t("au6.email"))}</span>
+          <input class="ui-input" id="auInviteEmail" type="email" placeholder="${_e(t("au.emailDominio"))}"/></label>
+        <label class="ui-field"><span class="ui-field__label">${_e(t("au.rolLabel"))}</span>
+          <select class="ui-select" id="auInviteRole">
+            ${AU_ROLES.map(r => `<option value="${r}"${r === "viewer" ? " selected" : ""}>${_e(_roleMeta(r).label)}</option>`).join("")}
+          </select></label>
+        <div class="au6-invite__btn">${btn({ label: t("au.enviarInvitacion"), variant: "primary", act: "auInvite" })}</div>
+        <p class="ui-field__hint au6-invite__hint">${t("au.invitarHint")}</p>
       </div>
     </details>`;
 
@@ -363,123 +370,136 @@ function _auRepintarLista() {
   l.innerHTML = _auListHTML(permsByUser, clidsByUser);
 }
 
+// KAM vinculado (app_metadata.kam): la Calculadora lo usa para preseleccionar
+// la cartera. La Edge Function `admin-users` todavía NO lo devuelve en "list"
+// ni tiene una acción para fijarlo, así que acá es de SOLO LECTURA: se muestra
+// si viene (u.kam, para cuando la función lo exponga) o, para la propia cuenta,
+// el que trae la sesión (STATE.myKam). Asignarlo sigue siendo por SQL.
+function _kamVinculado(u) {
+  if (u.kam) return u.kam;
+  if (u.id === STATE.userId && STATE.myKam) return STATE.myKam;
+  return null;
+}
+
 function _auListHTML(permsByUser, clidsByUser) {
   const S = ADMIN_USERS_STATE;
-  // ── Filtros ─────────────────────────────────────────────────────────────
   const q = (AU_UI.q || "").toLowerCase().trim();
   const visibles = S.users.filter(u =>
     (AU_UI.rol === "todos" || u.role === AU_UI.rol) &&
     (!q || String(u.email || "").toLowerCase().includes(q))
   );
-  if (!visibles.length) {
-    return `<div class="au-empty"><div class="au-empty-txt">${escapeHTML(t("au.ningunoCoincide"))}</div></div>`;
-  }
+  if (!visibles.length) return emptyState({ icon: "search", title: t("au.ningunoCoincide") });
 
-  // ── Tarjeta por usuario ─────────────────────────────────────────────────
-  let html = `<div class="au-grid">`;
+  let html = `<div class="au6-grid">`;
   visibles.forEach(u => {
-    const uid  = escapeHTML(u.id);
+    const uid  = _e(u.id);
     const misP = permsByUser.get(u.id) || new Set();
     const misC = clidsByUser.get(u.id) || [];
-    const rm   = _roleMeta(u.role);
     const esPartner = u.role === "partner";
     const esAdmin   = u.role === "admin";
     const soyYo     = u.id === STATE.userId;
     const acceso    = _hace(u.lastSignInAt);
     const pidiendoBorrar = AU_UI.confirmDelete === u.id;
+    const inicial = String(u.email || "?").trim().charAt(0).toUpperCase();
 
     const permChips = esAdmin
-      ? `<span class="au-perm-implicit">${escapeHTML(t("au.adminTienePermisos"))}</span>`
+      ? `<span class="au6-muted">${_e(t("au.adminTienePermisos"))}</span>`
       : AU_PERMISOS_LIST().map(([key, label]) => {
           const on = misP.has(key);
-          return `<label class="au-perm${on ? " on" : ""}">
-            <input type="checkbox" data-act-change="auTogglePerm" data-uid="${uid}" data-perm="${escapeHTML(key)}" ${on ? "checked" : ""}/>
-            <span>${escapeHTML(label)}</span></label>`;
+          return `<label class="au6-perm${on ? " au6-perm--on" : ""}">
+            <input type="checkbox" data-act-change="auTogglePerm" data-uid="${uid}" data-perm="${_e(key)}" ${on ? "checked" : ""}/>
+            <span>${_e(label)}</span></label>`;
         }).join("");
 
     const clidBlock = esPartner ? `
-      <div class="au-field">
-        <div class="au-field-label">${escapeHTML(t("au.clidsAsignados"))}</div>
+      <div class="au6-field">
+        <div class="au6-field__label">${_e(t("au.clidsAsignados"))}</div>
         ${misC.length
-          ? `<div class="au-clids">${misC.map(m => `
-              <span class="au-clid">
-                <b>${escapeHTML(m.clid)}</b>
-                ${STATE.CLID_MAP[m.clid] ? `<i>${escapeHTML(STATE.CLID_MAP[m.clid])}</i>` : ""}
-                <button data-act="auRemoveClid" data-mid="${escapeHTML(m.id)}" title="${escapeHTML(t("au.quitar"))}">×</button>
-              </span>`).join("")}</div>`
-          : `<div class="au-warn">${escapeHTML(t("au.sinClidsWarn"))}</div>`}
-        <div class="au-clid-add">
-          <input class="au-input au-input-sm" id="auClid_${uid}" placeholder="CLID"/>
-          <button class="au-btn" data-act="auAddClid" data-uid="${uid}">${escapeHTML(t("au.asignar"))}</button>
+          ? `<div class="ui-chips">${misC.map(m => `
+              <span class="ui-chip"><span class="ui-chip__val">${_e(m.clid)}${STATE.CLID_MAP[m.clid] ? ` · ${_e(STATE.CLID_MAP[m.clid])}` : ""}</span>
+                <button type="button" class="ui-chip__remove" data-act="auRemoveClid" data-mid="${_e(m.id)}"
+                  aria-label="${_e(t("au.quitar"))} ${_e(m.clid)}" title="${_e(t("au.quitar"))}">${icon("x", { size: 12 })}</button></span>`).join("")}</div>`
+          : alertBox({ tone: "warn", text: t("au6.sinClids") })}
+        <div class="au6-clid-add">
+          <input class="ui-input ui-input--sm" id="auClid_${uid}" placeholder="CLID" aria-label="${_e(t("au6.clidNuevo"))}"/>
+          ${btn({ label: t("au.asignar"), size: "sm", act: "auAddClid", data: { uid: u.id } })}
         </div>
       </div>` : "";
 
-    // Confirmación EN LÍNEA en vez de confirm(): un borrado irreversible merece
-    // ver a quién se está borrando mientras se confirma, no un diálogo del
-    // navegador que tapa la pantalla y se acepta por reflejo.
+    const kamV = _kamVinculado(u);
+    const kamBlock = (u.role === "kam" || esAdmin) ? `
+      <div class="au6-field">
+        <div class="au6-field__label">${_e(t("au6.kamVinculado"))} <span class="au6-muted">${_e(t("au6.soloLectura"))}</span></div>
+        <div>${kamV ? badge(kamV, "neutral", { icon: "user" }) : `<span class="au6-muted" title="${_e(t("au6.kamNoDisponibleTip"))}">${_e(t("au6.kamNoDisponible"))}</span>`}</div>
+      </div>` : "";
+
+    // Confirmación EN LÍNEA: un borrado irreversible merece ver a quién se está
+    // borrando mientras se confirma.
     const zonaPeligro = pidiendoBorrar ? `
-      <div class="au-danger">
-        <div class="au-danger-txt">${t("au.eliminarPermanente", { e: escapeHTML(u.email || "") })}</div>
-        <div class="au-danger-actions">
-          <button class="au-btn" data-act="auCancelDelete">${escapeHTML(t("cfg.cancelar"))}</button>
-          <button class="au-btn au-btn-danger" data-act="auDelete" data-uid="${uid}">${escapeHTML(t("au.siEliminar"))}</button>
+      <div class="au6-danger" role="alert">
+        <div>${t("au.eliminarPermanente", { e: _e(u.email || "") })}</div>
+        <div class="au6-danger__actions">
+          ${btn({ label: t("cfg.cancelar"), size: "sm", variant: "ghost", act: "auCancelDelete" })}
+          ${btn({ label: t("au.siEliminar"), size: "sm", variant: "danger", icon: "trash", act: "auDelete", data: { uid: u.id } })}
         </div>
       </div>` : "";
 
     html += `
-      <div class="au-card${pidiendoBorrar ? " au-card-danger" : ""}" style="--au-role:${rm.color}">
-        <div class="au-card-head">
-          <div class="au-avatar" style="background:${rm.bg};color:${rm.color}">${rm.emoji}</div>
-          <div class="au-ident">
-            <div class="au-email">${escapeHTML(u.email || "—")}${soyYo ? `<span class="au-you">${escapeHTML(t("au.vos"))}</span>` : ""}</div>
-            <div class="au-meta">
-              <span style="color:${acceso.color}">● ${escapeHTML(acceso.txt)}</span>
-              ${_fechaCorta(u.createdAt) ? `<span>· ${escapeHTML(t("au.alta", { f: _fechaCorta(u.createdAt) }))}</span>` : ""}
+      <article class="ui-card au6-card${pidiendoBorrar ? " au6-card--danger" : ""}">
+        <div class="au6-card__head">
+          <div class="au6-avatar" aria-hidden="true">${_e(inicial)}</div>
+          <div class="au6-ident">
+            <div class="au6-email">${_e(u.email || "—")}${soyYo ? ` ${badge(t("au.vos"), "info")}` : ""}</div>
+            <div class="au6-meta">
+              <span class="au6-dot au6-dot--${acceso.tono}" aria-hidden="true"></span><span>${_e(acceso.txt)}</span>
+              ${_fechaCorta(u.createdAt) ? `<span>· ${_e(t("au.alta", { f: _fechaCorta(u.createdAt) }))}</span>` : ""}
             </div>
           </div>
-          <div class="au-actions">
-            <button class="au-btn au-icon-btn" data-act="auForceSignOut" data-uid="${uid}"
-                    title="${escapeHTML(t("au.cerrarSesionesTip"))}">⎋</button>
-            <button class="au-btn au-icon-btn au-icon-danger" data-act="auAskDelete" data-uid="${uid}"
-                    title="${soyYo ? escapeHTML(t("au.noPodesEliminarte")) : escapeHTML(t("au.eliminarUsuario"))}"
-                    ${soyYo ? "disabled" : ""}>🗑</button>
+          <div class="au6-actions">
+            ${btn({ label: t("au.cerrarSesionesTip"), iconOnly: true, icon: "log-out", size: "sm", variant: "ghost", act: "auForceSignOut", data: { uid: u.id } })}
+            ${btn({ label: soyYo ? t("au.noPodesEliminarte") : t("au.eliminarUsuario"), iconOnly: true, icon: "trash", size: "sm", variant: "ghost",
+                    act: "auAskDelete", data: { uid: u.id }, disabled: soyYo })}
           </div>
         </div>
 
-        <div class="au-field">
-          <div class="au-field-label">${escapeHTML(t("au.rolLabel"))} <span class="au-field-hint">${escapeHTML(rm.desc)}</span></div>
-          <div class="au-roles">
-            ${AU_ROLES.map(r => {
-              const m = _roleMeta(r), on = r === u.role;
-              return `<button class="au-role${on ? " on" : ""}" data-act="auSetRoleBtn" data-uid="${uid}" data-rol="${r}"
-                        style="${on ? `background:${m.bg};border-color:${m.color};color:${m.color}` : ""}">
-                        ${m.emoji} ${m.label}</button>`;
-            }).join("")}
-          </div>
+        <div class="au6-field">
+          <div class="au6-field__label">${_e(t("au.rolLabel"))} <span class="au6-muted">${_e(_roleMeta(u.role).desc)}</span></div>
+          ${segmented({ ariaLabel: t("au6.rolDe", { e: u.email || "" }), act: "auSetRoleBtn", value: u.role, data: { uid: u.id },
+            options: AU_ROLES.map(r => ({ value: r, label: _roleMeta(r).label })) })}
         </div>
 
-        <div class="au-field">
-          <div class="au-field-label">${escapeHTML(t("au.permisosExtra"))}</div>
-          <div class="au-perms">${permChips}</div>
+        ${kamBlock}
+
+        <div class="au6-field">
+          <div class="au6-field__label">${_e(t("au.permisosExtra"))}</div>
+          <div class="au6-perms">${permChips}</div>
         </div>
 
         ${clidBlock}
         ${zonaPeligro}
-      </div>`;
+      </article>`;
   });
   html += `</div>`;
   return html;
 }
 
 function _auFooterHTML() {
-  return `<p class="au-hint au-footnote">${t("au.footerHint")}</p>`;
+  return `<p class="au6-muted au6-footnote">${t("au.footerHint")}</p>
+    <details class="au6-howto">
+      <summary>${_e(t("au6.comoVincularKam"))}</summary>
+      <p>${_e(t("au6.comoVincularKamTxt"))}</p>
+      <pre class="au6-sql"><code>UPDATE auth.users
+   SET raw_app_meta_data = coalesce(raw_app_meta_data,'{}'::jsonb)
+                         || jsonb_build_object('kam','Ana')
+ WHERE email = '...@...';</code></pre>
+    </details>`;
 }
 
 registerActions({
   auLoad:   () => auLoadUsers(),
   auSearch:    (d, el) => { AU_UI.q = el.value; _auRepintarLista(); },
-  auFilterRol: d => { AU_UI.rol = d.rol; renderAdminUsers(); },
-  auSetRoleBtn:  d => auSetRole(d.uid, d.rol),
+  auFilterRol: d => { AU_UI.rol = d.value || d.rol; renderAdminUsers(); },
+  auSetRoleBtn:  d => { const u = ADMIN_USERS_STATE.users.find(x => x.id === d.uid); const r = d.value || d.rol; if (u && u.role !== r) auSetRole(d.uid, r); },
   auAskDelete:   d => { AU_UI.confirmDelete = d.uid; renderAdminUsers(); },
   auCancelDelete:() => { AU_UI.confirmDelete = null; renderAdminUsers(); },
   auDelete:      d => auDeleteUser(d.uid),

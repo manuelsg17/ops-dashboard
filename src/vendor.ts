@@ -20,6 +20,7 @@ import "./shared/perf";
 // que ninguna pantalla existente cambia hasta que se migre a propósito.
 import "./styles/tokens.css";
 import "./styles/components.css";
+import "./styles/views/config.css"; import "./styles/views/rawdata.css";   // Ola 6: Configuración + Data Raw
 import "./styles.css";
 import "./styles/views/calculator.css";
 import "./styles/views/metas.css";
