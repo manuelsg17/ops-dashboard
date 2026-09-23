@@ -2,11 +2,19 @@
 import { t, getLang, kamLabel } from "./core/i18n";
 import { xl, pick } from "./core/i18nExport";
 import { mesNombre } from "./core/meses";
+import { iconSvg } from "./shared/icons";
+import { emptyState, btn, badge, alertBox, rawHtml } from "./shared/ui";
+import { confirmDialog, alertDialog } from "./shared/confirmDialog";
 // seguimiento.js — Tracker de seguimiento de reuniones (Fase 3).
 // Jerarquía: PROYECTO → tareas. Cada tarea: Owner · Task · inicio · fin · resultado
 // esperado · status. Tab "Seguimiento" (editor CRUD admin-gated) + Gantt visual
 // (timeline por día/semana/mes, marca de hoy, agrupado por proyecto) + slide render-only
 // del deck de Presentación 2.0 (entra al PDF). Escrituras admin-gated (RLS 42501).
+//
+// Diseño (Ola 6, sep-2026): componentes del sistema (ui-kpi, ui-table,
+// ui-segmented, ui-btn, diálogos en página) y estilos propios en
+// src/styles/views/seguimiento.css (prefijo sg-). Colores SOLO de tokens: el
+// estado usa los semánticos (info/ok/bad) y el proyecto la paleta categórica.
 
 // view: qué se está mirando. "resumen" es el default a propósito — antes la
 // pestaña abría directo en el editor de UN partner (el primero alfabético), así
@@ -22,26 +30,46 @@ export const SEG_STATE = {
 
 // Etiqueta y tooltip de cada vista: t("seg.view.<k>") / t("seg.view.<k>Tip").
 export const SEG_VIEWS = [
-  { k: "resumen", emoji: "📊" },
-  { k: "kanban",  emoji: "🗂️" },
-  { k: "gantt",   emoji: "📅" },
-  { k: "editor",  emoji: "✏️" }
+  { k: "resumen", icon: "chart-bar" },
+  { k: "kanban",  icon: "list-check" },
+  { k: "gantt",   icon: "calendar" },
+  { k: "editor",  icon: "edit" }
 ];
 
 // `key` es el valor de la BD (seguimiento.status) y no se traduce. El texto de
 // cada estado vive en core/i18nExport (EXPORT_STR "seg.st.<key>") porque el
 // Gantt lo dibuja tanto la pestaña como la hoja del deck.
+// `color`: token CSS (se usa en style="" de barras y puntos; html2canvas lo
+// resuelve por getComputedStyle, así que el PDF del deck lo respeta).
 export const SEG_STATUS = [
-  { key: "pendiente", color: "#9ca3af" },
-  { key: "en_curso",  color: "#3b82f6" },
-  { key: "hecho",     color: "#10b981" },
-  { key: "bloqueado", color: "#dc2626" }
+  { key: "pendiente", color: "var(--cat-other)" },
+  { key: "en_curso",  color: "var(--color-info-solid)" },
+  { key: "hecho",     color: "var(--color-ok-solid)" },
+  { key: "bloqueado", color: "var(--color-bad-solid)" }
 ];
 export function _segStatus(k) { return SEG_STATUS.find(s => s.key === k) || SEG_STATUS[0]; }
 export function _segStatusColor(k) { return _segStatus(k).color; }
 // `lang`: "es" | "en" | "ru" — el de la interfaz en la pestaña, el del deck en el PDF.
 export function _segStatusLabel(k, lang) { return xl(`seg.st.${_segStatus(k).key}`, lang); }
-export function _segProjColor(name) { return (typeof hashColor === "function") ? hashColor("proj:" + (name || "")) : "#64748b"; }
+// Color de un proyecto: paleta categórica de los tokens (9 colores). Dentro de
+// un partner se asigna por el ORDEN ALFABÉTICO de sus proyectos guardados —
+// así dos proyectos del mismo partner nunca comparten color (con un hash de 9
+// colores chocaban seguido) y el mismo proyecto conserva el suyo en el resumen,
+// el kanban, el Gantt y la hoja del deck. Sin partner, o un proyecto recién
+// creado que todavía no está en la base: hash del nombre.
+export function _segProjColor(name, partner) {
+  const n = name || "";
+  if (partner != null) {
+    const lista = [...new Set((STATE.seguimientoData || [])
+      .filter(r => r.partner === partner).map(r => r.project || ""))].sort();
+    const i = lista.indexOf(n);
+    if (i >= 0) return `var(--cat-${(i % 9) + 1})`;
+  }
+  const s = "proj:" + n;
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = s.charCodeAt(i) + ((h << 5) - h);
+  return `var(--cat-${(Math.abs(h) % 9) + 1})`;
+}
 
 // sidebarPartners = Taxi ∪ solo-TukTuk: con allPartners (solo Taxi) un partner
 // solo-TukTuk (caso PIAGGIO) no se podía elegir para cargarle seguimiento.
@@ -138,11 +166,6 @@ export function _segDraftSucio() {
   return (SEG_STATE.deleted || []).length > 0 ||
     JSON.stringify(SEG_STATE.draft || []) !== (SEG_STATE._draftBase ?? "[]");
 }
-// true = se puede cambiar de partner (no hay cambios, o el usuario acepta perderlos).
-function _segPuedeSalir(nuevo) {
-  if (nuevo === SEG_STATE.partner || !_segDraftSucio()) return true;
-  return confirm(t("seg.confirmSalir", { p: SEG_STATE.partner }));
-}
 
 // Orden de proyectos (primera aparición en el draft/rows). "" → grupo "Sin proyecto".
 export function _segProjectOrder(rows) {
@@ -199,23 +222,25 @@ export function _segBar(r, tl) {
 
 // ── GANTT reutilizable (tab + PDF). rows = filas del partner; opts.lang idioma ────
 // ("es" | "en" | "ru"): el de la interfaz en la pestaña, el del deck en el PDF.
+// Estilos: clases sg-gantt* (seguimiento.css, cargado siempre desde vendor.ts,
+// así que también aplican dentro del deck). Solo quedan en style="" los colores
+// y radios que dependen del dato (estado/proyecto de cada barra).
 export function _segBuildGantt(rows, opts) {
   opts = opts || {};
   const lang = opts.lang || "es";
   const X = k => xl(k, lang);
   const tasks = (rows || []).filter(r => (r.task || "").trim());
   if (!tasks.length) {
-    return `<div class="agy-style-537">${X("seg.sinTareas")}</div>`;
+    return `<div class="sg-gantt-empty">${escapeHTML(X("seg.sinTareas"))}</div>`;
   }
   const tl = _segTimeline(tasks, lang);
-  const nCol = tl ? tl.cols.length : 0;
   const today = _segToday();
   const todayIdx = tl ? tl.cols.findIndex(c => today >= c.s && today <= c.e) : -1;
   const order = _segProjectOrder(tasks);
 
-  const brdToday = i => (i === todayIdx ? "border-left:2px solid rgba(255,0,0,.5);" : "");
-  const th = (s, i) => `<th style="text-align:center;padding:4px 5px;border-bottom:2px solid #e5e5e5;background:#fafafa;font-size:.56rem;font-weight:700;color:${i === todayIdx ? "#FF0000" : "#555"};white-space:nowrap;${i != null ? brdToday(i) : ""}">${escapeHTML(s)}</th>`;
-  const headTimeline = tl ? tl.cols.map((c, i) => th(c.label, i)).join("") : "";
+  const hoy = i => (i === todayIdx ? " sg-gantt__today" : "");
+  const th = (s, cls) => `<th class="sg-gantt__th${cls || ""}">${escapeHTML(s)}</th>`;
+  const headTimeline = tl ? tl.cols.map((c, i) => th(c.label, " sg-gantt__th--col" + hoy(i))).join("") : "";
 
   // Cuerpo agrupado por proyecto: fila de encabezado (barra-span del proyecto) + tareas.
   const body = order.map(proj => {
@@ -223,54 +248,58 @@ export function _segBuildGantt(rows, opts) {
     const bars = gTasks.map(r => _segBar(r, tl)).filter(Boolean);
     const pBs = bars.length ? Math.min(...bars.map(b => b.bs)) : -1;
     const pBe = bars.length ? Math.max(...bars.map(b => b.be)) : -1;
-    const pCol = _segProjColor(proj);
+    const pCol = _segProjColor(proj, opts.partner);
     const nDone = gTasks.filter(r => r.status === "hecho").length;
     const projTimeline = tl ? tl.cols.map((c, i) => {
       const on = pBs >= 0 && i >= pBs && i <= pBe;
-      return `<td style="padding:1px 2px;${brdToday(i)}"><div style="height:8px;border-radius:4px;background:${on ? pCol + "55" : "transparent"}"></div></td>`;
+      return `<td class="sg-gantt__cell${hoy(i)}">${on ? `<div class="sg-gantt__span" style="background:${pCol}"></div>` : ""}</td>`;
     }).join("") : "";
-    const projHead = `<tr>
-      <td colspan="2" class="agy-style-538">
-        <span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${pCol};vertical-align:middle;margin-right:6px"></span>
-        <span class="agy-style-539">${escapeHTML(_segProjLabel(proj, lang))}</span>
-        <span class="agy-style-540">${nDone}/${gTasks.length} ${X("seg.hechas")}</span>
+    const projHead = `<tr class="sg-gantt__proj">
+      <td colspan="2" class="sg-gantt__proj-cell">
+        <span class="sg-dot sg-dot--sq" style="background:${pCol}"></span>
+        <span class="sg-gantt__proj-name">${escapeHTML(_segProjLabel(proj, lang))}</span>
+        <span class="sg-gantt__proj-count">${nDone}/${gTasks.length} ${escapeHTML(X("seg.hechas"))}</span>
       </td>${projTimeline}</tr>`;
 
     const taskRows = gTasks.map(r => {
       const stC = _segStatusColor(r.status), stL = _segStatusLabel(r.status, lang);
       const a = _segParseDate(r.start_date), b = _segParseDate(r.end_date);
       const bar = _segBar(r, tl);
-      const dateTxt = (a || b) ? `📅 ${_segFmtD(a)}${(b && +b !== +(a || b)) ? " → " + _segFmtD(b) : ""}` : "";
+      const dateTxt = (a || b) ? `${_segFmtD(a)}${(b && +b !== +(a || b)) ? " → " + _segFmtD(b) : ""}` : "";
+      const meta = [
+        r.owner ? `<span class="sg-meta">${iconSvg("user", { size: 11 })}${escapeHTML(r.owner)}</span>` : "",
+        dateTxt ? `<span class="sg-meta">${iconSvg("calendar", { size: 11 })}${dateTxt}</span>` : ""
+      ].filter(Boolean).join("");
       const cells = tl ? tl.cols.map((c, i) => {
         const on = bar && i >= bar.bs && i <= bar.be;
-        const first = bar && i === bar.bs, last = bar && i === bar.be;
-        const radius = on ? `${first ? "5px" : "0"} ${last ? "5px" : "0"} ${last ? "5px" : "0"} ${first ? "5px" : "0"}` : "0";
-        return `<td style="padding:2px 2px;vertical-align:middle;${brdToday(i)}"><div style="height:13px;border-radius:${radius};background:${on ? stC : "transparent"}"></div></td>`;
+        if (!on) return `<td class="sg-gantt__cell${hoy(i)}"></td>`;
+        const first = i === bar.bs, last = i === bar.be;
+        const radius = `${first ? "5px" : "0"} ${last ? "5px" : "0"} ${last ? "5px" : "0"} ${first ? "5px" : "0"}`;
+        return `<td class="sg-gantt__cell${hoy(i)}"><div class="sg-gantt__bar" style="background:${stC};border-radius:${radius}"></div></td>`;
       }).join("") : "";
-      return `<tr>
-        <td class="agy-style-541">
-          <div class="agy-style-542">${escapeHTML(r.task)}</div>
-          <div class="agy-style-543">${r.owner ? "👤 " + escapeHTML(r.owner) : ""}${r.owner && dateTxt ? " · " : ""}${dateTxt}</div>
-          ${r.expected_result ? `<div class="agy-style-544">🎯 ${escapeHTML(r.expected_result)}</div>` : ""}
+      return `<tr class="sg-gantt__task">
+        <td class="sg-gantt__name">
+          <div class="sg-gantt__task-t">${escapeHTML(r.task)}</div>
+          ${meta ? `<div class="sg-gantt__meta">${meta}</div>` : ""}
+          ${r.expected_result ? `<div class="sg-gantt__goal">${iconSvg("target", { size: 11 })}<span>${escapeHTML(r.expected_result)}</span></div>` : ""}
         </td>
-        <td class="agy-style-545">
-          <span style="display:inline-block;font-size:.58rem;font-weight:700;color:#fff;background:${stC};padding:2px 8px;border-radius:10px;white-space:nowrap">${escapeHTML(stL)}</span></td>
+        <td class="sg-gantt__st"><span class="sg-pill" style="background:${stC}">${escapeHTML(stL)}</span></td>
         ${cells}</tr>`;
     }).join("");
     return projHead + taskRows;
   }).join("");
 
   // Leyenda (inline-block → segura en el PDF).
-  const chip = (color, label) => `<span class="agy-style-546"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${color};vertical-align:middle;margin-right:4px"></span>${escapeHTML(label)}</span>`;
-  const legend = `<div class="agy-style-122">
-    ${SEG_STATUS.map(s => chip(s.color, _segStatusLabel(s.key, lang))).join("")}
-    ${todayIdx >= 0 ? `<span class="agy-style-547"><span class="agy-style-548"></span>${X("seg.hoy")}</span>` : ""}
+  const item = (color, label) => `<span class="sg-legend__item"><span class="sg-dot sg-dot--sq" style="background:${color}"></span>${escapeHTML(label)}</span>`;
+  const legend = `<div class="sg-legend">
+    ${SEG_STATUS.map(s => item(s.color, _segStatusLabel(s.key, lang))).join("")}
+    ${todayIdx >= 0 ? `<span class="sg-legend__item sg-legend__today"><span class="sg-legend__today-mark"></span>${escapeHTML(X("seg.hoy"))}</span>` : ""}
   </div>`;
 
-  return `${legend}<div class="agy-style-321">
-    <table class="agy-style-373">
-      <colgroup><col style="width:${tl ? "minmax(200px,1fr)" : "60%"}"/><col class="agy-style-549"/></colgroup>
-      <thead><tr>${th(X("seg.tarea"))}${th(X("seg.estado"))}${headTimeline}</tr></thead>
+  return `${legend}<div class="sg-gantt">
+    <table class="sg-gantt__table">
+      <colgroup><col class="sg-gantt__col-name"/><col class="sg-gantt__col-st"/></colgroup>
+      <thead><tr>${th(X("seg.tarea"), " sg-gantt__th--name")}${th(X("seg.estado"))}${headTimeline}</tr></thead>
       <tbody>${body}</tbody>
     </table></div>`;
 }
@@ -278,7 +307,13 @@ export function _segBuildGantt(rows, opts) {
 // Solo el Gantt (repinta #segGantt desde el draft, sin re-render del editor → no pierde foco).
 export function _segRenderGantt() {
   const g = document.getElementById("segGantt");
-  if (g) g.innerHTML = _segBuildGantt(SEG_STATE.draft, { lang: getLang() });
+  if (g) g.innerHTML = _segBuildGantt(SEG_STATE.draft, { lang: getLang(), partner: SEG_STATE.partner });
+}
+
+// Encabezado de sección de la pestaña (sin emojis ni iconos de color).
+function _sgH(title, sub, right = "") {
+  return `<div class="sg-sec__head"><div><h2 class="sg-sec__title">${escapeHTML(title)}</h2>` +
+    (sub ? `<p class="sg-sec__sub">${escapeHTML(sub)}</p>` : "") + `</div>${right}</div>`;
 }
 
 // ── BARRA DE CONTROL (buscador de partner + KAM + selector de vista) ─────────
@@ -294,35 +329,46 @@ function _segControlsHTML() {
     // mostrar, así que se deshabilitan en vez de renderizar un vacío confuso.
     const needsPartner = v.k === "gantt" || v.k === "editor";
     const dis = needsPartner && !SEG_STATE.partner;
-    return `<button class="mode-btn${on ? " active" : ""}" ${dis ? "disabled" : ""}
+    return `<button type="button" class="ui-segmented__btn" aria-pressed="${on}"${dis ? " disabled" : ""}
       title="${escapeHTML(dis ? t("seg.eligePartner") : t(`seg.view.${v.k}Tip`))}"
-      ${dis ? "" : `data-act="segSetView" data-view="${v.k}"`}
-      style="${dis ? "opacity:.4;cursor:not-allowed" : ""}">${v.emoji} ${t(`seg.view.${v.k}`)}</button>`;
+      ${dis ? "" : `data-act="segSetView" data-view="${v.k}"`}>${iconSvg(v.icon, { size: 14 })}<span>${escapeHTML(t(`seg.view.${v.k}`))}</span></button>`;
   }).join("");
 
+  const partner = SEG_STATE.partner;
+  const kam = partner ? _segKamOf(partner) : "";
+  const contexto = partner ? `<div class="sg-context">
+      <span class="ui-chip"><span class="ui-chip__key">Partner:</span><span class="ui-chip__val" title="${escapeHTML(partner)}">${escapeHTML(partner)}</span>
+        <button type="button" class="ui-chip__remove" data-act="segClearPartner" aria-label="${escapeHTML(t("seg.volverTodos"))}" title="${escapeHTML(t("seg.volverTodos"))}">${iconSvg("x", { size: 12 })}</button></span>
+      ${kam ? badge(t("seg.kamDe", { k: kamLabel(kam) }), "neutral", { icon: "user" }) : ""}
+    </div>` : "";
+
   return `
-    <div class="seg-controls">
-      <div class="seg-ctl-field seg-ctl-search">
-        <label class="agy-style-95">Partner</label>
-        <input id="segSearch" type="text" class="sb-inp" autocomplete="off"
-          placeholder="${escapeHTML(t("seg.phBuscar"))}"
-          value="${escapeHTML(SEG_STATE.partner || SEG_STATE.search || "")}"
-          data-act-input="segFilterPartners" data-act-focus="segShowPartnerList"
-          data-act-blur="segHidePartnerListDelayed" data-act-keydown="segSearchKeydown"/>
-        <div id="segPartnerList" class="seg-partner-list"></div>
+    <div class="sg-toolbar ui-card">
+      <div class="ui-field sg-field sg-field--search">
+        <label class="ui-field__label" for="segSearch">Partner</label>
+        <div class="sg-search">
+          <span class="sg-search__icon">${iconSvg("search", { size: 14 })}</span>
+          <input id="segSearch" type="text" class="ui-input ui-input--sm sg-search__input" autocomplete="off"
+            role="combobox" aria-controls="segPartnerList" aria-autocomplete="list"
+            placeholder="${escapeHTML(t("seg.phBuscar"))}"
+            value="${escapeHTML(SEG_STATE.partner || SEG_STATE.search || "")}"
+            data-act-input="segFilterPartners" data-act-focus="segShowPartnerList"
+            data-act-blur="segHidePartnerListDelayed" data-act-keydown="segSearchKeydown"/>
+          <div id="segPartnerList" class="sg-partner-list" role="listbox"></div>
+        </div>
       </div>
-      <div class="seg-ctl-field">
-        <label class="agy-style-95">KAM</label>
-        <select class="sb-sel" data-act-change="segSetKam">
-          <option value="all"${SEG_STATE.kam === "all" ? " selected" : ""}>${t("seg.todos")}</option>
+      <div class="ui-field sg-field">
+        <label class="ui-field__label" for="segKam">KAM</label>
+        <select id="segKam" class="ui-select ui-select--sm" data-act-change="segSetKam">
+          <option value="all"${SEG_STATE.kam === "all" ? " selected" : ""}>${escapeHTML(t("seg.todos"))}</option>
           ${kams.map(k => `<option value="${escapeHTML(k)}"${SEG_STATE.kam === k ? " selected" : ""}>${escapeHTML(kamLabel(k))}</option>`).join("")}
         </select>
       </div>
-      <div class="seg-ctl-field seg-ctl-views">
-        <label class="agy-style-95">${t("seg.lblVista")}</label>
-        <div class="mode-toggle-row">${viewBtns}</div>
+      <div class="ui-field sg-field">
+        <span class="ui-field__label">${escapeHTML(t("seg.lblVista"))}</span>
+        <div class="ui-segmented" role="group" aria-label="${escapeHTML(t("seg.lblVista"))}">${viewBtns}</div>
       </div>
-      ${SEG_STATE.partner ? `<button class="mode-btn seg-clear" data-act="segClearPartner" title="${escapeHTML(t("seg.volverTodos"))}">✕ ${escapeHTML(SEG_STATE.partner)}</button>` : ""}
+      ${contexto}
     </div>`;
 }
 
@@ -338,62 +384,70 @@ function _segRenderResumen(tasks) {
   const sinTareas    = _segPartners().filter(p => !rows.some(r => r.partner === p)).length;
 
   if (!rows.length) {
-    return `<div class="section"><div class="agy-style-224">
-      ${SEG_STATE.kam !== "all" ? t("seg.vacioKam", { kam: escapeHTML(SEG_STATE.kam) }) : t("seg.vacio")}<br>
-      ${t("seg.vacioAccion")}
-    </div></div>`;
+    return emptyState({
+      icon: "list-check",
+      title: SEG_STATE.kam !== "all" ? t("seg.vacioKam", { kam: kamLabel(SEG_STATE.kam) }) : t("seg.vacio"),
+      text: t("seg.vacioAccion"),
+      action: btn({ label: t("seg.vacioBtn"), variant: "primary", icon: "search", act: "segFocusSearch" })
+    });
   }
 
-  const kpi = (label, val, color, tip) => `
-    <div class="mcard" style="border-top:3px solid ${color}" title="${escapeHTML(tip)}">
-      <div class="mcard-label">${label}</div>
-      <div class="mcard-val" style="color:${color}">${fmt(val)}</div>
+  // Tono semántico solo cuando hay algo que señalar: 0 vencidas no es rojo.
+  const kpi = (label, val, tone, tip) => `
+    <div class="ui-kpi sg-kpi sg-kpi--${val ? tone : "none"}" title="${escapeHTML(tip)}">
+      <div class="ui-kpi__label">${escapeHTML(label)}</div>
+      <div class="ui-kpi__row"><span class="ui-kpi__value">${fmt(val)}</span></div>
+      <div class="ui-kpi__sub">${escapeHTML(tip)}</div>
     </div>`;
 
-  let html = `<div class="section"><div class="metric-row">
-    ${kpi(t("seg.kpi.vencidas"), totalOverdue, totalOverdue ? "#dc2626" : "#9ca3af", t("seg.kpi.vencidasTip"))}
-    ${kpi(t("seg.kpi.bloqueadas"), totalBlocked, totalBlocked ? "#f59e0b" : "#9ca3af", t("seg.kpi.bloqueadasTip"))}
-    ${kpi(t("seg.kpi.abiertas"), totalOpen, "#3b82f6", t("seg.kpi.abiertasTip"))}
-    ${kpi(t("seg.kpi.hechas"), totalDone, "#10b981", t("seg.kpi.hechasTip"))}
-  </div></div>`;
+  let html = `<div class="ui-kpi-grid sg-kpis">
+    ${kpi(t("seg.kpi.vencidas"), totalOverdue, "bad", t("seg.kpi.vencidasTip"))}
+    ${kpi(t("seg.kpi.bloqueadas"), totalBlocked, "warn", t("seg.kpi.bloqueadasTip"))}
+    ${kpi(t("seg.kpi.abiertas"), totalOpen, "info", t("seg.kpi.abiertasTip"))}
+    ${kpi(t("seg.kpi.hechas"), totalDone, "ok", t("seg.kpi.hechasTip"))}
+  </div>`;
 
-  html += _secH("👥", "#0284c7", t("seg.conSeg", { n: rows.length }),
+  html += `<section class="sg-sec">` + _sgH(t("seg.conSeg", { n: rows.length }),
     sinTareas ? t(sinTareas === 1 ? "seg.sinTareas1" : "seg.sinTareasN", { n: sinTareas })
               : t("seg.todosConSeg"));
 
-  html += `<div class="section"><div class="tbl-wrap"><table class="dtbl seg-summary">
+  const lang = getLang();
+  html += `<div class="ui-table-wrap"><table class="ui-table ui-table--sticky-first sg-summary">
     <thead><tr>
-      <th>Partner</th><th>KAM</th><th>${t("seg.th.proyectos")}</th>
-      <th title="${escapeHTML(t("seg.th.vencidasTip"))}">${t("seg.kpi.vencidas")}</th>
-      ${SEG_STATUS.map(st => `<th>${_segStatusLabel(st.key, getLang())}</th>`).join("")}
-      <th>${t("seg.th.proxima")}</th><th></th>
+      <th>Partner</th><th>KAM</th><th class="ui-num">${escapeHTML(t("seg.th.proyectos"))}</th>
+      <th class="ui-num" title="${escapeHTML(t("seg.th.vencidasTip"))}">${escapeHTML(t("seg.kpi.vencidas"))}</th>
+      ${SEG_STATUS.map(st => `<th class="ui-num">${escapeHTML(_segStatusLabel(st.key, lang))}</th>`).join("")}
+      <th class="ui-num">${escapeHTML(t("seg.th.proxima"))}</th><th><span class="ui-sr-only">${escapeHTML(t("seg.abrir"))}</span></th>
     </tr></thead><tbody>`;
 
   rows.forEach(r => {
-    const pcol = STATE.partnerColors[r.partner] || "#ccc";
-    const kcol = KAM_COLORS[r.kam] || "#ccc";
     const done = r.byStatus.hecho, pct = r.total ? (done / r.total) * 100 : 0;
-    const cell = (n, color) => n
-      ? `<td class="tn"><span style="color:${color};font-weight:700">${fmt(n)}</span></td>`
-      : `<td class="tn agy-style-90">0</td>`;
-    html += `<tr class="${r.overdue ? "seg-row-alert" : ""}">
-      <td><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${pcol};margin-right:5px"></span>${escapeHTML(r.partner)}
-        <div class="seg-progress" title="${escapeHTML(t("seg.progresoTip", { d: fmt(done), t: fmt(r.total), p: pct.toFixed(0) }))}">
-          <div class="seg-progress-fill" style="width:${pct.toFixed(1)}%"></div>
+    const cell = (n, tone) => n
+      ? `<td class="ui-num"><span class="sg-count sg-count--${tone}">${fmt(n)}</span></td>`
+      : `<td class="ui-num"><span class="sg-count sg-count--zero">0</span></td>`;
+    const tip = t("seg.progresoTip", { d: fmt(done), t: fmt(r.total), p: pct.toFixed(0) });
+    html += `<tr class="${r.overdue ? "sg-row--alert" : ""}">
+      <td class="sg-summary__partner">
+        <div class="sg-summary__name">${escapeHTML(r.partner)}</div>
+        <div class="sg-summary__progress" title="${escapeHTML(tip)}">
+          <div class="ui-progress ui-progress--ok" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(pct)}" aria-label="${escapeHTML(tip)}">
+            <div class="ui-progress__bar" style="width:${pct.toFixed(1)}%"></div></div>
+          <span class="sg-summary__frac">${fmt(done)}/${fmt(r.total)}</span>
         </div>
       </td>
-      <td><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${kcol};margin-right:4px"></span>${escapeHTML(r.kam ? kamLabel(r.kam) : "—")}</td>
-      <td class="tn">${fmt(r.projects.size)}</td>
-      ${cell(r.overdue, "#dc2626")}
-      ${cell(r.byStatus.pendiente, "#6b7280")}
-      ${cell(r.byStatus.en_curso, "#3b82f6")}
-      ${cell(r.byStatus.bloqueado, "#dc2626")}
-      ${cell(done, "#10b981")}
-      <td class="tn">${r.nextDue ? _segFmtD(r.nextDue) : "—"}</td>
-      <td><button class="mode-btn seg-open" data-act="segOpenPartner" data-partner="${escapeHTML(r.partner)}" title="${escapeHTML(t("seg.abrirTip", { p: r.partner }))}">${t("seg.abrir")}</button></td>
+      <td>${escapeHTML(r.kam ? kamLabel(r.kam) : "—")}</td>
+      <td class="ui-num">${fmt(r.projects.size)}</td>
+      ${r.overdue ? `<td class="ui-num">${badge(fmt(r.overdue), "bad", { icon: "alert-triangle" })}</td>` : cell(0)}
+      ${cell(r.byStatus.pendiente, "neutral")}
+      ${cell(r.byStatus.en_curso, "info")}
+      ${cell(done, "ok")}
+      ${cell(r.byStatus.bloqueado, "bad")}
+      <td class="ui-num">${r.nextDue ? _segFmtD(r.nextDue) : "—"}</td>
+      <td class="sg-summary__act">${btn({ label: t("seg.abrir"), size: "sm", variant: "secondary", icon: "arrow-right",
+        act: "segOpenPartner", data: { partner: r.partner }, title: t("seg.abrirTip", { p: r.partner }) })}</td>
     </tr>`;
   });
-  html += `</tbody></table></div></div>`;
+  html += `</tbody></table></div></section>`;
   return html;
 }
 
@@ -402,42 +456,116 @@ function _segRenderResumen(tasks) {
 // acotado a uno — el caso global es el que sirve para la reunión semanal de
 // KAMs: "qué está bloqueado en toda mi cartera".
 function _segRenderKanban(tasks) {
-  const scoped = SEG_STATE.partner ? tasks.filter(t => t.partner === SEG_STATE.partner) : tasks;
+  const scoped = SEG_STATE.partner ? tasks.filter(r => r.partner === SEG_STATE.partner) : tasks;
   if (!scoped.length) {
-    return `<div class="section"><div class="agy-style-224">${t("seg.kanbanVacio")}</div></div>`;
+    return emptyState({
+      icon: "list-check", title: t("seg.kanbanVacio"),
+      text: SEG_STATE.partner ? t("seg.vacioAccion") : ""
+    });
   }
+  const lang = getLang();
   const cols = SEG_STATUS.map(st => {
-    const items = scoped.filter(t => (t.status || "pendiente") === st.key)
+    const items = scoped.filter(r => (r.status || "pendiente") === st.key)
       .sort((a, b) => {
         // Vencidas arriba, después por fecha de entrega más próxima.
         const ao = _segIsOverdue(a) ? 0 : 1, bo = _segIsOverdue(b) ? 0 : 1;
         if (ao !== bo) return ao - bo;
         return String(a.end_date || "9999").localeCompare(String(b.end_date || "9999"));
       });
-    const cards = items.map(t => {
-      const pcol = STATE.partnerColors[t.partner] || "#ccc";
-      const over = _segIsOverdue(t);
-      const end  = _segParseDate(t.end_date);
-      return `<div class="seg-card${over ? " seg-card-overdue" : ""}" style="border-left-color:${pcol}">
-        ${SEG_STATE.partner ? "" : `<div class="seg-card-partner">${escapeHTML(t.partner || "—")}</div>`}
-        <div class="seg-card-task">${escapeHTML(t.task)}</div>
-        <div class="seg-card-meta">
-          ${t.project ? `<span class="seg-chip" style="background:${_segProjColor(t.project)}22;color:${_segProjColor(t.project)}">${escapeHTML(t.project)}</span>` : ""}
-          ${t.owner ? `<span>👤 ${escapeHTML(t.owner)}</span>` : ""}
-          ${end ? `<span${over ? ` class="seg-overdue-txt" title="${escapeHTML(t("seg.vencida"))}"` : ""}>📅 ${_segFmtD(end)}</span>` : ""}
+    // OJO: la variable de la tarjeta NO puede llamarse `t` — tapaba a t() (i18n)
+    // y el Kanban reventaba ("t is not a function") apenas había una vencida.
+    const cards = items.map(task => {
+      const over = _segIsOverdue(task);
+      const end  = _segParseDate(task.end_date);
+      return `<article class="sg-card${over ? " sg-card--overdue" : ""}">
+        ${SEG_STATE.partner ? "" : `<div class="sg-card__partner">${escapeHTML(task.partner || "—")}</div>`}
+        <div class="sg-card__task">${escapeHTML(task.task)}</div>
+        <div class="sg-card__meta">
+          ${task.project ? `<span class="sg-card__proj"><span class="sg-dot" style="background:${_segProjColor(task.project, task.partner)}"></span>${escapeHTML(task.project)}</span>` : ""}
+          ${task.owner ? `<span class="sg-meta">${iconSvg("user", { size: 12 })}${escapeHTML(task.owner)}</span>` : ""}
+          ${end ? `<span class="sg-meta${over ? " sg-meta--bad" : ""}">${iconSvg("calendar", { size: 12 })}${_segFmtD(end)}</span>` : ""}
+          ${over ? badge(t("seg.vencida"), "bad") : ""}
         </div>
-        ${t.expected_result ? `<div class="seg-card-goal">🎯 ${escapeHTML(t.expected_result)}</div>` : ""}
-      </div>`;
+        ${task.expected_result ? `<div class="sg-card__goal">${iconSvg("target", { size: 12 })}<span>${escapeHTML(task.expected_result)}</span></div>` : ""}
+      </article>`;
     }).join("");
-    return `<div class="seg-col">
-      <div class="seg-col-head" style="border-bottom-color:${st.color}">
-        <span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${st.color};margin-right:6px"></span>
-        ${_segStatusLabel(st.key, getLang())}<span class="seg-col-count">${items.length}</span>
-      </div>
-      <div class="seg-col-body">${cards || `<div class="seg-col-empty">—</div>`}</div>
-    </div>`;
+    return `<section class="sg-col" aria-label="${escapeHTML(_segStatusLabel(st.key, lang))}">
+      <header class="sg-col__head">
+        <span class="sg-dot" style="background:${st.color}"></span>
+        <span class="sg-col__title">${escapeHTML(_segStatusLabel(st.key, lang))}</span>
+        <span class="sg-col__count">${items.length}</span>
+      </header>
+      <div class="sg-col__body">${cards || `<div class="sg-col__empty">—</div>`}</div>
+    </section>`;
   }).join("");
-  return `<div class="section"><div class="seg-kanban">${cols}</div></div>`;
+  return `<div class="sg-kanban">${cols}</div>`;
+}
+
+// ── VISTA EDITOR (admin) ─────────────────────────────────────────────────────
+function _segRenderEditor(partner, isAdmin) {
+  if (!isAdmin) return alertBox({ tone: "info", text: t("seg.soloLectura") });
+  const order = _segProjectOrder(SEG_STATE.draft);
+  const statusOpts = st => SEG_STATUS.map(s => `<option value="${s.key}" ${s.key === st ? "selected" : ""}>${escapeHTML(_segStatusLabel(s.key, getLang()))}</option>`).join("");
+
+  const taskRowHtml = i => {
+    const r = SEG_STATE.draft[i];
+    return `<tr class="sg-ed__task">
+      <td><input class="ui-input ui-input--sm sg-ed__owner" value="${escapeHTML(r.owner)}" data-act-input="segSet" data-i="${i}" data-field="owner" placeholder="${escapeHTML(t("seg.th.owner"))}" aria-label="${escapeHTML(t("seg.th.owner"))}"/></td>
+      <td><input class="ui-input ui-input--sm sg-ed__task-in" value="${escapeHTML(r.task)}" data-act-input="segSet" data-i="${i}" data-field="task" placeholder="${escapeHTML(t("seg.ph.tarea"))}" aria-label="${escapeHTML(t("seg.th.tarea"))}"/></td>
+      <td><input class="ui-input ui-input--sm sg-ed__date" type="date" value="${escapeHTML(r.start_date)}" data-act-change="segSet" data-i="${i}" data-field="start_date" aria-label="${escapeHTML(t("seg.th.inicio"))}"/></td>
+      <td><input class="ui-input ui-input--sm sg-ed__date" type="date" value="${escapeHTML(r.end_date)}" data-act-change="segSet" data-i="${i}" data-field="end_date" aria-label="${escapeHTML(t("seg.th.fin"))}"/></td>
+      <td><input class="ui-input ui-input--sm sg-ed__res" value="${escapeHTML(r.expected_result)}" data-act-input="segSet" data-i="${i}" data-field="expected_result" placeholder="${escapeHTML(t("seg.th.resultado"))}" aria-label="${escapeHTML(t("seg.th.resultado"))}"/></td>
+      <td><select class="ui-select ui-select--sm sg-ed__st" data-act-change="segSet" data-i="${i}" data-field="status" aria-label="${escapeHTML(t("seg.th.estado"))}">${statusOpts(r.status)}</select></td>
+      <td class="sg-ed__del">${btn({ label: t("seg.eliminarTarea"), iconOnly: true, icon: "trash", variant: "ghost", size: "sm", act: "segDeleteRow", data: { i } })}</td>
+    </tr>`;
+  };
+  const groupsHtml = order.map((proj, pIdx) => {
+    const idxs = SEG_STATE.draft.map((r, i) => i).filter(i => (SEG_STATE.draft[i].project || "") === proj);
+    return `<tr class="sg-ed__proj"><td colspan="7">
+        <div class="sg-ed__proj-row">
+          <span class="sg-dot sg-dot--sq" style="background:${_segProjColor(proj, partner)}"></span>
+          <input class="ui-input ui-input--sm sg-ed__proj-name" value="${escapeHTML(proj)}" data-act-change="segRenameProject" data-pidx="${pIdx}" placeholder="${escapeHTML(t("seg.ph.proyecto"))}" aria-label="${escapeHTML(t("seg.ph.proyecto"))}"/>
+          ${btn({ label: t("seg.masTarea"), icon: "plus", variant: "ghost", size: "sm", act: "segAddTaskTo", data: { pidx: pIdx } })}
+          ${btn({ label: t("seg.eliminarProyecto"), icon: "trash", variant: "danger", size: "sm", act: "segDeleteProject", data: { pidx: pIdx }, title: t("seg.eliminarProyectoTip") })}
+        </div></td></tr>${idxs.map(taskRowHtml).join("")}`;
+  }).join("");
+
+  const hayAlgo = SEG_STATE.draft.length || (SEG_STATE.deleted || []).length;
+  const acciones = `<div class="sg-ed__actions">
+      ${btn({ label: t("seg.btnProyecto"), icon: "plus", variant: "secondary", act: "segAddProject" })}
+      ${btn({ label: t("seg.btnTareaSuelta"), icon: "plus", variant: "secondary", act: "segAddTaskTo", data: { pidx: -1 } })}
+      ${btn({ label: t("seg.btnGuardar"), icon: "save", variant: "primary", act: "segSave" })}
+      <span class="sg-ed__note">${t("seg.noGuardado")}</span>
+    </div>`;
+
+  if (!SEG_STATE.draft.length) {
+    return emptyState({
+      icon: "list-check", title: t("seg.sinProyectos"), text: t("seg.editorVacioTxt", { p: partner }),
+      action: rawHtml(btn({ label: t("seg.btnProyecto"), icon: "plus", variant: "primary", act: "segAddProject" }))
+    }) + (hayAlgo ? acciones : "");
+  }
+  return `<div class="ui-table-wrap sg-ed">
+      <table class="ui-table sg-ed__table">
+        <thead><tr>
+          <th>${escapeHTML(t("seg.th.owner"))}</th><th>${escapeHTML(t("seg.th.tarea"))}</th>
+          <th>${escapeHTML(t("seg.th.inicio"))}</th><th>${escapeHTML(t("seg.th.fin"))}</th>
+          <th>${escapeHTML(t("seg.th.resultado"))}</th><th>${escapeHTML(t("seg.th.estado"))}</th><th><span class="ui-sr-only">${escapeHTML(t("seg.eliminarTarea"))}</span></th>
+        </tr></thead>
+        <tbody>${groupsHtml}</tbody>
+      </table>
+    </div>${acciones}`;
+}
+
+function _segGanttSection(partner, isAdmin, sub) {
+  if (!_segRealTasks(SEG_STATE.draft).length) {
+    return emptyState({
+      icon: "calendar", title: t("seg.ganttVacio", { p: partner }),
+      text: isAdmin ? t("seg.ganttVacioTxt") : "",
+      action: isAdmin ? btn({ label: t("seg.ganttCrear"), icon: "plus", variant: "primary", act: "segSetView", data: { view: "editor" } }) : undefined
+    });
+  }
+  return `<section class="sg-sec ui-card sg-sec--card">` + _sgH(`Gantt · ${partner}`, sub) +
+    `<div id="segGantt">${_segBuildGantt(SEG_STATE.draft, { lang: getLang(), partner: SEG_STATE.partner })}</div></section>`;
 }
 
 // ── RENDER DEL TAB ──────────────────────────────────────────────────────────
@@ -446,7 +574,7 @@ export function renderSeguimiento() {
   if (!host) return;
   const partners = _segPartners();
   if (!partners.length) {
-    host.innerHTML = `<div class="empty"><p>${t("seg.cargaRend")}</p></div>`;
+    host.innerHTML = `<div class="sg">${emptyState({ icon: "database", title: t("seg.cargaRendTit"), text: t("seg.cargaRendTxt") })}</div>`;
     return;
   }
   // OJO: acá antes se auto-seleccionaba partners[0] si no había partner elegido.
@@ -456,56 +584,7 @@ export function renderSeguimiento() {
   // significa "todos" — el resumen y el kanban lo entienden.
   const tasks   = _segFilteredTasks();
   const partner = SEG_STATE.partner;
-  const kam     = partner ? _segKamOf(partner) : "";
   const isAdmin = !!STATE.isAdmin;
-  const order   = _segProjectOrder(SEG_STATE.draft);
-
-  const statusOpts = st => SEG_STATUS.map(s => `<option value="${s.key}" ${s.key === st ? "selected" : ""}>${_segStatusLabel(s.key, getLang())}</option>`).join("");
-
-  // Editor (admin) agrupado por proyecto.
-  const taskRowHtml = i => {
-    const r = SEG_STATE.draft[i];
-    return `<tr>
-      <td class="agy-style-550"><input class="crud-input agy-style-551" value="${escapeHTML(r.owner)}" data-act-input="segSet" data-i="${i}" data-field="owner" placeholder="${escapeHTML(t("seg.th.owner"))}"/></td>
-      <td class="agy-style-552"><input class="crud-input agy-style-434" value="${escapeHTML(r.task)}" data-act-input="segSet" data-i="${i}" data-field="task" placeholder="${escapeHTML(t("seg.ph.tarea"))}"/></td>
-      <td class="agy-style-552"><input class="crud-input" type="date" class="agy-style-553" value="${escapeHTML(r.start_date)}" data-act-change="segSet" data-i="${i}" data-field="start_date"/></td>
-      <td class="agy-style-552"><input class="crud-input" type="date" class="agy-style-553" value="${escapeHTML(r.end_date)}" data-act-change="segSet" data-i="${i}" data-field="end_date"/></td>
-      <td class="agy-style-552"><input class="crud-input agy-style-554" value="${escapeHTML(r.expected_result)}" data-act-input="segSet" data-i="${i}" data-field="expected_result" placeholder="${escapeHTML(t("seg.th.resultado"))}"/></td>
-      <td class="agy-style-552"><select class="crud-input agy-style-555" data-act-change="segSet" data-i="${i}" data-field="status">${statusOpts(r.status)}</select></td>
-      <td class="agy-style-552"><button data-act="segDeleteRow" data-i="${i}" title="${escapeHTML(t("seg.eliminarTarea"))}" class="agy-style-556">✕</button></td>
-    </tr>`;
-  };
-  const groupsHtml = order.map((proj, pIdx) => {
-    const idxs = SEG_STATE.draft.map((r, i) => i).filter(i => (SEG_STATE.draft[i].project || "") === proj);
-    const pCol = _segProjColor(proj);
-    const headerCells = `
-      <td colspan="7" class="agy-style-557">
-        <span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${pCol};vertical-align:middle;margin-right:6px"></span>
-        <input class="crud-input agy-style-558" value="${escapeHTML(proj)}" data-act-change="segRenameProject" data-pidx="${pIdx}" placeholder="${escapeHTML(t("seg.ph.proyecto"))}"/>
-        <button data-act="segAddTaskTo" data-pidx="${pIdx}" class="agy-style-559">${t("seg.masTarea")}</button>
-        <button data-act="segDeleteProject" data-pidx="${pIdx}" title="${escapeHTML(t("seg.eliminarProyectoTip"))}" class="agy-style-560">${t("seg.eliminarProyecto")}</button>
-      </td>`;
-    return `<tr>${headerCells}</tr>${idxs.map(taskRowHtml).join("")}`;
-  }).join("");
-
-  const editor = !partner ? "" : isAdmin ? `
-    <div class="agy-style-561">
-      <table class="agy-style-562">
-        <thead><tr class="agy-style-563">
-          <th class="agy-style-564">${t("seg.th.owner")}</th><th class="agy-style-565">${t("seg.th.tarea")}</th>
-          <th class="agy-style-565">${t("seg.th.inicio")}</th><th class="agy-style-565">${t("seg.th.fin")}</th>
-          <th class="agy-style-565">${t("seg.th.resultado")}</th><th class="agy-style-565">${t("seg.th.estado")}</th><th></th>
-        </tr></thead>
-        <tbody>${groupsHtml || `<tr><td colspan="7" class="agy-style-566">${t("seg.sinProyectos")}</td></tr>`}</tbody>
-      </table>
-    </div>
-    <div class="agy-style-567">
-      <button data-act="segAddProject" class="agy-style-568">${t("seg.btnProyecto")}</button>
-      <button data-act="segAddTaskTo" data-pidx="-1" class="agy-style-569">${t("seg.btnTareaSuelta")}</button>
-      <button data-act="segSave" class="agy-style-570">${t("seg.btnGuardar")}</button>
-      <span class="agy-style-571">${t("seg.noGuardado")}</span>
-    </div>`
-    : `<div class="agy-style-572">${t("seg.soloLectura")}</div>`;
 
   // Cuerpo según la vista activa. Solo Gantt y Editor usan el `draft` del
   // partner seleccionado; Resumen y Kanban leen directo de STATE.seguimientoData
@@ -516,26 +595,91 @@ export function renderSeguimiento() {
   } else if (SEG_STATE.view === "kanban") {
     body = _segRenderKanban(tasks);
   } else if (SEG_STATE.view === "gantt") {
-    body = _secH("📊", "#10b981", `Gantt · ${partner}`, t("seg.ganttSub"))
-         + `<div class="section"><div id="segGantt">${_segBuildGantt(SEG_STATE.draft, { lang: getLang() })}</div></div>`;
+    body = _segGanttSection(partner, isAdmin, t("seg.ganttSub"));
   } else {
-    body = _secH("📋", "#0284c7", `${t("seg.titulo")} · ${partner}`, t("seg.editorSub"))
-         + editor
-         + _secH("📊", "#10b981", "Gantt", t("seg.ganttVivo"))
-         + `<div class="section"><div id="segGantt">${_segBuildGantt(SEG_STATE.draft, { lang: getLang() })}</div></div>`;
+    body = `<section class="sg-sec">` + _sgH(t("seg.editorTit", { p: partner }), t("seg.editorSub")) +
+      _segRenderEditor(partner, isAdmin) + `</section>` +
+      (SEG_STATE.draft.length
+        ? `<section class="sg-sec ui-card sg-sec--card">` + _sgH("Gantt", t("seg.ganttVivo")) +
+          `<div id="segGantt">${_segBuildGantt(SEG_STATE.draft, { lang: getLang(), partner: SEG_STATE.partner })}</div></section>`
+        : `<div id="segGantt" hidden></div>`);
   }
 
   host.innerHTML = `
-    <div class="agy-style-573">
+    <div class="sg">
       ${_segControlsHTML()}
-      ${partner && kam ? `<div class="seg-kam-badge"><span style="background:${(KAM_COLORS && KAM_COLORS[kam]) || "#888"}">${escapeHTML(kamLabel(kam))}</span></div>` : ""}
-      <div id="segBody">${body}</div>
+      <div id="segBody" class="sg-body">${body}</div>
     </div>`;
 }
 
+// ── DIÁLOGOS ─────────────────────────────────────────────────────────────────
+// Salir con cambios sin guardar (I12): antes, elegir otro partner recargaba el
+// draft y descartaba en silencio lo tecleado. true = se puede cambiar.
+async function _segPuedeSalir(nuevo) {
+  if (nuevo === SEG_STATE.partner || !_segDraftSucio()) return true;
+  return confirmDialog({
+    title: t("seg.dlg.salirTit"), body: t("seg.confirmSalir", { p: SEG_STATE.partner }),
+    confirmLabel: t("seg.dlg.descartar"), danger: true
+  });
+}
+
+// Pedir un texto en la página (reemplazo de prompt()). Mismo contrato que el
+// nativo: null = canceló; "" = aceptó vacío. Mismas reglas que confirmDialog:
+// DOM con createElement/textContent (CSP), Esc cancela, Enter acepta, foco
+// atrapado y devuelto al cerrar.
+function _segPedirTexto(o) {
+  return new Promise(resolve => {
+    const prevFocus = document.activeElement;
+    const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+    const backdrop = el("div", "ui-dialog-backdrop");
+    const dialog = el("div", "ui-dialog");
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    const h = el("h2", "ui-dialog__title", o.title);
+    h.id = "segDlgT";
+    dialog.setAttribute("aria-labelledby", h.id);
+    const field = el("label", "ui-field");
+    const lbl = el("span", "ui-field__label", o.label);
+    const input = el("input", "ui-input");
+    input.type = "text"; input.autocomplete = "off"; input.value = o.value || "";
+    if (o.placeholder) input.placeholder = o.placeholder;
+    field.append(lbl, input);
+    const actions = el("div", "ui-dialog__actions");
+    const cancel = el("button", "ui-btn ui-btn--secondary", o.cancelLabel || t("dialogo.cancelar"));
+    const ok = el("button", "ui-btn ui-btn--primary", o.okLabel || t("dialogo.confirmar"));
+    cancel.type = ok.type = "button";
+    actions.append(cancel, ok);
+    dialog.append(h, field, actions);
+    backdrop.appendChild(dialog);
+    let done = false;
+    const close = v => {
+      if (done) return;
+      done = true;
+      backdrop.remove();
+      if (prevFocus && typeof prevFocus.focus === "function" && document.contains(prevFocus)) prevFocus.focus();
+      resolve(v);
+    };
+    cancel.addEventListener("click", () => close(null));
+    ok.addEventListener("click", () => close(input.value));
+    backdrop.addEventListener("mousedown", e => { if (e.target === backdrop) close(null); });
+    backdrop.addEventListener("keydown", e => {
+      if (e.key === "Escape") { e.preventDefault(); close(null); return; }
+      if (e.key === "Enter" && e.target === input) { e.preventDefault(); close(input.value); return; }
+      if (e.key === "Tab") {
+        const items = [input, cancel, ok];
+        const i = items.indexOf(document.activeElement);
+        e.preventDefault();
+        items[(i + (e.shiftKey ? items.length - 1 : 1)) % items.length].focus();
+      }
+    });
+    document.body.appendChild(backdrop);
+    input.focus();
+  });
+}
+
 // ── INTERACCIONES ────────────────────────────────────────────────────────────
-export function segOnPartnerChange(p) {
-  if (!_segPuedeSalir(p)) { renderSeguimiento(); return; }   // revierte el control
+export async function segOnPartnerChange(p) {
+  if (!(await _segPuedeSalir(p))) { renderSeguimiento(); return; }   // revierte el control
   SEG_STATE.partner = p; _segLoadDraft(p); renderSeguimiento();
 }
 
@@ -545,21 +689,29 @@ export function segSetKam(k)  { SEG_STATE.kam  = k; renderSeguimiento(); }
 // Volver a "todos": limpia partner Y búsqueda (dejar la búsqueda puesta haría
 // que el resumen siguiera mostrando un solo partner y pareciera que el botón
 // no hizo nada).
-export function segClearPartner() {
-  if (!_segPuedeSalir(null)) return;
+export async function segClearPartner() {
+  if (!(await _segPuedeSalir(null))) return;
   SEG_STATE.partner = null; SEG_STATE.search = ""; SEG_STATE.draft = []; SEG_STATE.deleted = [];
   if (SEG_STATE.view === "gantt" || SEG_STATE.view === "editor") SEG_STATE.view = "resumen";
   renderSeguimiento();
 }
 
-// "Abrir →" del resumen: seleccionar el partner y saltar a su Gantt — el paso
+// "Abrir" del resumen: seleccionar el partner y saltar a su Gantt — el paso
 // natural después de detectar que algo está vencido.
-export function segOpenPartner(p) {
-  if (!_segPuedeSalir(p)) return;
+export async function segOpenPartner(p) {
+  if (!(await _segPuedeSalir(p))) return;
   SEG_STATE.partner = p; SEG_STATE.search = "";
   _segLoadDraft(p);
   SEG_STATE.view = "gantt";
   renderSeguimiento();
+}
+
+// Acción del estado vacío: llevar el foco al buscador y abrir la lista.
+export function segFocusSearch() {
+  const i = document.getElementById("segSearch");
+  if (!i) return;
+  i.focus();
+  segShowPartnerList();
 }
 
 // ── BUSCADOR DE PARTNER (mismo patrón que Presentación 2.0) ─────────────────
@@ -574,13 +726,12 @@ export function _segPaintPartnerList(q) {
   const rest = _segPartners().filter(p => !wt.has(p));
   const match = p => !lower || p.toLowerCase().includes(lower);
   const a = withTasks.filter(match), b = rest.filter(match);
-  if (!a.length && !b.length) { list.innerHTML = `<div class="agy-style-180">${t("seg.sinCoincidencias")}</div>`; return; }
+  if (!a.length && !b.length) { list.innerHTML = `<div class="sg-opt sg-opt--empty">${escapeHTML(t("seg.sinCoincidencias"))}</div>`; return; }
   const opt = (p, has) => {
     const sel = p === SEG_STATE.partner;
-    return `<div class="pv-opt seg-opt${sel ? " seg-opt-sel" : ""}" data-partner="${escapeHTML(p)}" data-act-mousedown="segSelectPartner">
-      <span class="seg-opt-dot" style="background:${STATE.partnerColors[p] || "#ccc"}"></span>
-      <span class="agy-style-181">${escapeHTML(p)}</span>
-      ${has ? `<span class="seg-opt-tag">${t("seg.conSegTag")}</span>` : ""}
+    return `<div class="sg-opt${sel ? " sg-opt--sel" : ""}" role="option" aria-selected="${sel}" data-partner="${escapeHTML(p)}" data-act-mousedown="segSelectPartner">
+      <span class="sg-opt__name">${escapeHTML(p)}</span>
+      ${has ? `<span class="sg-opt__tag">${escapeHTML(t("seg.conSegTag"))}</span>` : ""}
     </div>`;
   };
   list.innerHTML = a.slice(0, 60).map(p => opt(p, true)).join("")
@@ -601,37 +752,39 @@ export function segFilterPartners(q) {
 export function segShowPartnerList() {
   const l = document.getElementById("segPartnerList");
   if (!l) return;
-  l.style.display = "block";
+  l.classList.add("sg-partner-list--open");
   if (!l.innerHTML) { const i = document.getElementById("segSearch"); _segPaintPartnerList(i ? i.value : ""); }
 }
-export function segHidePartnerList() { const l = document.getElementById("segPartnerList"); if (l) l.style.display = "none"; }
+export function segHidePartnerList() { const l = document.getElementById("segPartnerList"); if (l) l.classList.remove("sg-partner-list--open"); }
 // El blur del input dispara ANTES del click en la opción; el delay le da tiempo
 // al mousedown de la opción a correr. Mismo truco que Presentación 2.0.
 export function segHidePartnerListDelayed() { setTimeout(segHidePartnerList, 150); }
-export function segSelectPartner(p) {
-  if (!_segPuedeSalir(p)) {
-    segHidePartnerList();
+export async function segSelectPartner(p) {
+  segHidePartnerList();
+  if (!(await _segPuedeSalir(p))) {
     const i = document.getElementById("segSearch"); if (i) i.value = SEG_STATE.partner || "";
     return;
   }
   SEG_STATE.partner = p; SEG_STATE.search = "";
   _segLoadDraft(p);
-  segHidePartnerList();
   // Desde el resumen, elegir un partner salta al Gantt: es la vista útil una vez
-  // que ya sabés de quién estás hablando.
+  // que ya sabes de quién estás hablando.
   if (SEG_STATE.view === "resumen") SEG_STATE.view = "gantt";
   renderSeguimiento();
 }
 export function segSearchKeydown(e) {
   if (e.key === "Enter") {
-    const f = document.querySelector("#segPartnerList .seg-opt");
+    const f = document.querySelector("#segPartnerList .sg-opt[data-partner]");
     if (f) f.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
     e.preventDefault();
   } else if (e.key === "Escape") { segHidePartnerList(); }
 }
 export function segSet(i, field, val) { if (SEG_STATE.draft[i]) { SEG_STATE.draft[i][field] = val; _segRenderGantt(); } }
-export function segAddProject() {
-  const name = prompt(t("seg.promptProyecto"), "");
+export async function segAddProject() {
+  const name = await _segPedirTexto({
+    title: t("seg.dlg.nuevoProyectoTit"), label: t("seg.promptProyecto"),
+    placeholder: t("seg.ph.proyecto"), okLabel: t("seg.dlg.crear")
+  });
   if (name === null) return;
   SEG_STATE.draft.push({ project: (name || "").trim(), owner: "", task: "", start_date: "", end_date: "", expected_result: "", status: "pendiente" });
   renderSeguimiento();
@@ -649,11 +802,16 @@ export function segRenameProject(pIdx, newName) {
   SEG_STATE.draft.forEach(r => { if ((r.project || "") === oldName) r.project = nn; });
   renderSeguimiento();
 }
-export function segDeleteProject(pIdx) {
+export async function segDeleteProject(pIdx) {
   const order = _segProjectOrder(SEG_STATE.draft);
   const name = order[pIdx]; if (name === undefined) return;
   const gTasks = SEG_STATE.draft.filter(r => (r.project || "") === name);
-  if (!confirm(t("seg.confirmEliminarProyecto", { p: _segProjLabel(name, getLang()), n: gTasks.length }))) return;
+  const ok = await confirmDialog({
+    title: t("seg.dlg.eliminarProyectoTit"),
+    body: t("seg.confirmEliminarProyecto", { p: _segProjLabel(name, getLang()), n: gTasks.length }),
+    confirmLabel: t("seg.dlg.eliminar"), danger: true
+  });
+  if (!ok) return;
   gTasks.forEach(r => { if (r.id) SEG_STATE.deleted.push(r.id); });
   SEG_STATE.draft = SEG_STATE.draft.filter(r => (r.project || "") !== name);
   renderSeguimiento();
@@ -667,7 +825,7 @@ export function segDeleteRow(i) {
 
 // ── GUARDAR (admin-gated: insert nuevas · upsert existentes · delete removidas) ─
 export async function segSave() {
-  if (!STATE.isAdmin) { alert(t("seg.errAdmin")); return; }
+  if (!STATE.isAdmin) { await alertDialog({ title: t("seg.dlg.errTit"), body: t("seg.errAdmin"), tone: "bad" }); return; }
   const partner = SEG_STATE.partner;
   const kam = (typeof getKAMForPartner === "function" && getKAMForPartner(partner)) || "";
   const rows = SEG_STATE.draft.filter(r => (r.task || "").trim());
@@ -683,8 +841,14 @@ export async function segSave() {
   const toInsert = rows.map((r, i) => base(r, i)).filter((_, i) => !rows[i].id);
   const toUpsert = rows.map((r, i) => ({ id: rows[i].id, ...base(r, i) })).filter(x => x.id);
 
-  if (!confirm(t("seg.confirmGuardar", { p: partner, n: rows.length, d: SEG_STATE.deleted.length }))) return;
+  const ok = await confirmDialog({
+    title: t("seg.dlg.guardarTit"),
+    body: t("seg.confirmGuardar", { p: partner, n: rows.length, d: SEG_STATE.deleted.length }),
+    confirmLabel: t("seg.btnGuardar")
+  });
+  if (!ok) return;
 
+  let errMsg = null;
   showLoad(true, t("seg.guardando"));
   try {
     if (SEG_STATE.deleted.length) {
@@ -711,11 +875,12 @@ export async function segSave() {
     renderSeguimiento();
   } catch (err) {
     const msg = (err && err.message) || String(err);
-    if (/42501|row-level security|permission/i.test(msg)) alert(t("seg.errPermiso"));
-    else alert(t("seg.errGuardar") + msg);
+    errMsg = /42501|row-level security|permission/i.test(msg) ? t("seg.errPermiso") : t("seg.errGuardar") + msg;
   } finally {
     showLoad(false);
   }
+  // Después de quitar el overlay de carga: el diálogo no queda tapado.
+  if (errMsg) await alertDialog({ title: t("seg.dlg.errTit"), body: errMsg, tone: "bad" });
 }
 
 // ── SLIDE DEL DECK (Presentación 2.0) — render-only, entra al PDF ──────────────
@@ -736,7 +901,7 @@ export function buildSlide2Seguimiento(partner, idx) {
   const footer = (typeof p2BrandFooter === "function") ? p2BrandFooter(idx) : "";
   return `<div class="agy-style-365">
     ${header}
-    <div class="agy-style-576">${_segBuildGantt(rows, { lang: L })}</div>
+    <div class="sg-slide__body">${_segBuildGantt(rows, { lang: L, partner })}</div>
     ${footer}
   </div>`;
 }
@@ -749,6 +914,7 @@ registerActions({
   segSetKam:         (d, el) => segSetKam(el.value),
   segClearPartner,
   segOpenPartner:    d => segOpenPartner(d.partner),
+  segFocusSearch,
   segFilterPartners: (d, el) => segFilterPartners(el.value),
   segShowPartnerList,
   segHidePartnerListDelayed,

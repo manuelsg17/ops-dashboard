@@ -205,12 +205,6 @@
 .agy-style-256 { font-size:.67rem;color:#aaa;margin-top:2px }
 .agy-style-257 { margin-top:4px }
 .agy-style-258 { font-size:.7rem;color:#aaa;margin-left:5px }
-.agy-style-259 { display:flex;justify-content:space-between;font-size:.78rem;margin-bottom:3px }
-.agy-style-260 { height:8px;background:#e5e5e5;border-radius:5px;overflow:hidden }
-.agy-style-261 { font-weight:400;color:#888 }
-.agy-style-262 { margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap }
-.agy-style-263 { font-size:.75rem;color:#888 }
-.agy-style-264 { margin-left:auto }
 .agy-style-265 { margin:0 0 14px }
 .agy-style-266 { padding:28px 16px;text-align:center;color:#888;font-size:.85rem }
 .agy-style-267 { display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin:8px 0 16px }
@@ -484,44 +478,6 @@
 .agy-style-534 { flex:1 }
 .agy-style-535 { font-size:.92rem;font-weight:800;color:#111 }
 .agy-style-536 { font-size:.7rem;color:#888 }
-.agy-style-537 { font-size:.8rem;color:#aaa;padding:16px;text-align:center }
-.agy-style-538 { padding:8px 8px 5px;border-top:2px solid #eef0f2 }
-.agy-style-539 { font-weight:800;font-size:.74rem;color:#1f2937 }
-.agy-style-540 { font-size:.6rem;color:#9ca3af;margin-left:6px }
-.agy-style-541 { padding:5px 8px 5px 22px;border-bottom:1px solid #f4f4f4;vertical-align:top;text-align:center }
-.agy-style-542 { font-weight:700;font-size:.74rem;color:#111 }
-.agy-style-543 { font-size:.62rem;color:#777;margin-top:1px }
-.agy-style-544 { font-size:.62rem;color:#059669;margin-top:1px }
-.agy-style-545 { padding:5px 8px;border-bottom:1px solid #f4f4f4;vertical-align:top;text-align:center }
-.agy-style-546 { display:inline-block;margin-right:12px;font-size:.62rem;color:#555 }
-.agy-style-547 { display:inline-block;font-size:.62rem;color:#FF0000 }
-.agy-style-548 { display:inline-block;width:2px;height:11px;background:#FF0000;vertical-align:middle;margin-right:4px }
-.agy-style-549 { width:1% }
-.agy-style-550 { padding:3px 4px 3px 20px }
-.agy-style-551 { width:120px }
-.agy-style-552 { padding:3px 4px }
-.agy-style-553 { width:130px }
-.agy-style-554 { width:190px }
-.agy-style-555 { width:118px }
-.agy-style-556 { border:1px solid #fca5a5;background:#fff5f5;color:#b91c1c;border-radius:6px;padding:3px 9px;cursor:pointer;font-weight:700 }
-.agy-style-557 { padding:9px 6px 5px;border-top:2px solid #eef0f2;background:#fbfcfd }
-.agy-style-558 { width:240px;font-weight:800 }
-.agy-style-559 { margin-left:8px;border:1px solid #e5e5e5;background:#fff;border-radius:6px;padding:3px 10px;cursor:pointer;font-weight:700;font-size:.72rem }
-.agy-style-560 { margin-left:6px;border:1px solid #fca5a5;background:#fff5f5;color:#b91c1c;border-radius:6px;padding:3px 10px;cursor:pointer;font-weight:700;font-size:.72rem }
-.agy-style-561 { overflow-x:auto;margin-bottom:10px }
-.agy-style-562 { width:100%;border-collapse:collapse;font-size:.72rem }
-.agy-style-563 { color:#555;font-weight:700;font-size:.6rem;text-transform:uppercase }
-.agy-style-564 { text-align:left;padding:4px 4px 4px 20px }
-.agy-style-565 { text-align:left;padding:4px }
-.agy-style-566 { padding:10px;color:#aaa;font-size:.78rem }
-.agy-style-567 { display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap }
-.agy-style-568 { border:1px solid #0284c7;background:#f0f9ff;color:#0369a1;border-radius:8px;padding:7px 14px;cursor:pointer;font-weight:700;font-size:.8rem }
-.agy-style-569 { border:1px solid #e5e5e5;background:#fff;border-radius:8px;padding:7px 14px;cursor:pointer;font-weight:700;font-size:.8rem }
-.agy-style-570 { border:none;background:#FF0000;color:#fff;border-radius:8px;padding:7px 16px;cursor:pointer;font-weight:700;font-size:.8rem }
-.agy-style-571 { font-size:.7rem;color:#888 }
-.agy-style-572 { font-size:.78rem;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;margin-bottom:12px }
-.agy-style-573 { padding:4px 8px 20px }
-.agy-style-576 { flex:1;min-height:0;overflow:hidden }
 .agy-style-601 { height:1px;background:#e5e5e5;margin:4px 8px }
 .agy-style-603 { display:flex;gap:4px;margin-top:6px;flex-wrap:wrap }
 
