@@ -21,6 +21,7 @@ import "./shared/perf";
 import "./styles/tokens.css";
 import "./styles/components.css";
 import "./styles.css";
+import "./styles/views/metas.css";
 import { createClient } from "@supabase/supabase-js";
 import { t } from "./core/i18n";
 

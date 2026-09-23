@@ -1,0 +1,186 @@
+/* ═════════════════════════════════════════════════════════════════════════
+   views/metas.css — Vista Metas (Ola 6, sep-2026)
+
+   Prefijo `mt-`. Solo tokens semánticos (tokens.css): nada de hex, así el modo
+   oscuro es un único bloque de tokens. Los componentes base (ui-kpi, ui-table,
+   ui-badge, ui-progress, ui-alert, ui-segmented…) viven en components.css; acá
+   solo el acomodo propio de la vista.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+#metasContent { display: flex; flex-direction: column; gap: var(--space-5); }
+
+/* ── Barra de controles ─────────────────────────────────────────────────── */
+.mt-controls {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-3); flex-wrap: wrap;
+}
+.mt-controls__left, .mt-controls__right {
+  display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; min-width: 0;
+}
+.mt-controls__right { margin-left: auto; }
+.mt-field { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-md); color: var(--color-text); }
+.mt-field__label { font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--color-text-muted); white-space: nowrap; }
+.mt-field .ui-select { width: auto; min-width: 150px; }
+
+/* Menú ⋯ (acciones ocasionales / destructivas, fuera del camino) */
+.mt-menu-wrap { position: relative; }
+.mt-menu-btn span { font-size: var(--text-lg); line-height: 1; letter-spacing: 1px; }
+.mt-menu {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 20;
+  min-width: 240px; padding: var(--space-1);
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); box-shadow: var(--shadow-md);
+}
+.mt-menu[hidden] { display: none; }
+.mt-menu__item {
+  display: flex; align-items: center; gap: var(--space-2); width: 100%;
+  padding: var(--space-2) var(--space-3); border: 0; border-radius: var(--radius-sm);
+  background: transparent; cursor: pointer; text-align: left;
+  font-family: var(--font-sans); font-size: var(--text-md); color: var(--color-text);
+}
+.mt-menu__item:hover, .mt-menu__item:focus-visible { background: var(--color-surface-sunken); outline: none; }
+.mt-menu__item--danger { color: var(--color-bad-fg); }
+.mt-menu__item--danger:hover, .mt-menu__item--danger:focus-visible { background: var(--color-bad-bg); }
+
+/* ── Avisos ─────────────────────────────────────────────────────────────── */
+.mt-alerts { display: flex; flex-direction: column; gap: var(--space-2); }
+
+/* ── Secciones ──────────────────────────────────────────────────────────── */
+.mt-sec { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.mt-h2 {
+  display: flex; align-items: center; gap: var(--space-2); margin: 0;
+  font-size: var(--text-lg); font-weight: var(--weight-semibold); color: var(--color-text);
+  line-height: var(--leading-tight);
+}
+.mt-info { display: inline-flex; color: var(--color-text-subtle); cursor: help; }
+.mt-info:hover { color: var(--color-text-muted); }
+
+/* ── Tarjetas KPI del resumen ───────────────────────────────────────────── */
+.mt-kpis { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: var(--space-3); }
+.mt-kpi__sub { font-weight: var(--weight-regular); color: var(--color-text-subtle); }
+.mt-kpi__value--meta { color: var(--color-text-muted); }
+.mt-proj { color: var(--color-text-muted); }
+.mt-tone { font-weight: var(--weight-bold); }
+.mt-tone--ok   { color: var(--color-ok-fg); }
+.mt-tone--warn { color: var(--color-warn-fg); }
+.mt-tone--bad  { color: var(--color-bad-fg); }
+.mt-tone--over { color: var(--color-over-fg); }
+.mt-tone--neutral { color: var(--color-text-muted); }
+
+/* Barra sin semáforo (meta 0): gris, no el azul de "info". */
+.mt-bar.ui-progress--neutral .ui-progress__bar { background: var(--color-text-subtle); }
+
+/* ── Utilidades de celda ────────────────────────────────────────────────── */
+.mt-dot {
+  display: inline-block; flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%;
+  margin-right: var(--space-2); vertical-align: middle;
+}
+.mt-sub  { font-size: var(--text-xs); color: var(--color-text-subtle); font-weight: var(--weight-regular); }
+.mt-note { font-size: var(--text-sm); color: var(--color-text-subtle); font-style: italic; }
+.mt-muted { color: var(--color-text-subtle); }
+.mt-nowrap { white-space: nowrap; }
+.mt-pct { font-variant-numeric: tabular-nums; }
+
+/* ── Tablas por ciudad / KAM ────────────────────────────────────────────── */
+.mt-gtable th, .mt-gtable td { padding: 6px var(--space-3); }
+.mt-gtable tbody tr.mt-grp-first > * { border-top: 1px solid var(--color-border-strong); }
+.mt-gtable tbody tr:first-child > * { border-top: 0; }
+.mt-gtable tbody td { border-bottom-color: transparent; }
+.mt-gtable th.mt-ent { vertical-align: top; }
+.mt-ent {
+  width: 1%; min-width: 150px;
+  font-weight: var(--weight-semibold); background: var(--color-surface);
+}
+.mt-ent__name { display: flex; align-items: center; white-space: nowrap; }
+.mt-ent__badge { margin-top: var(--space-1); cursor: help; }
+.mt-kpiname { color: var(--color-text-muted); white-space: nowrap; }
+.mt-pctcell { min-width: 150px; }
+.mt-pctwrap { display: flex; align-items: center; gap: var(--space-2); }
+.mt-pctwrap .mt-bar { flex: 1 1 auto; min-width: 60px; max-width: 160px; }
+.mt-gtable tbody tr:hover td, .mt-gtable tbody tr:hover th { background: transparent; }
+
+/* ── Partners: herramientas ─────────────────────────────────────────────── */
+.mt-ptools {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap;
+}
+.mt-fchips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.mt-fchip {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  height: 28px; padding: 0 var(--space-3);
+  font-family: var(--font-sans); font-size: var(--text-sm); font-weight: var(--weight-semibold);
+  color: var(--color-text-muted); background: var(--color-surface);
+  border: 1px solid var(--color-border-strong); border-radius: var(--radius-pill); cursor: pointer;
+}
+.mt-fchip:hover { color: var(--color-text); border-color: var(--color-border-input); }
+.mt-fchip[aria-pressed="true"] { color: var(--color-text); background: var(--color-surface-sunken); border-color: var(--color-text-muted); }
+.mt-fchip:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.mt-fchip__n { font-variant-numeric: tabular-nums; color: var(--color-text-subtle); font-weight: var(--weight-regular); }
+.mt-fchip__dot { width: 8px; height: 8px; border-radius: 50%; }
+.mt-fchip--bajo  .mt-fchip__dot { background: var(--color-bad-solid); }
+.mt-fchip--en    .mt-fchip__dot { background: var(--color-ok-solid); }
+.mt-fchip--sobre .mt-fchip__dot { background: var(--color-over-solid); }
+.mt-fchip--sin   .mt-fchip__dot { background: var(--color-border-input); }
+.mt-filtro-vacio {
+  padding: var(--space-6); text-align: center; font-size: var(--text-md); color: var(--color-text-muted);
+  background: var(--color-surface); border: 1px dashed var(--color-border-strong); border-radius: var(--radius-md);
+}
+
+/* ── Partners: tabla ────────────────────────────────────────────────────── */
+.mt-ptable { font-size: var(--text-sm); }
+.mt-ptable th, .mt-ptable td { padding: 5px 6px; }
+.mt-ptable .ui-badge { padding: 1px 5px; }
+.mt-ptable thead th { vertical-align: bottom; }
+.mt-ptable thead th.mt-grp { text-align: center; color: var(--color-text); border-left: 1px solid var(--color-border); }
+.mt-ptable thead th.mt-grp-start,
+.mt-ptable tbody > tr > :nth-child(3n + 4) { border-left: 1px solid var(--color-border); }
+.mt-ptable .mt-pctcell { min-width: 0; white-space: nowrap; }
+.mt-projline { margin-top: 2px; white-space: nowrap; }
+.mt-sortbtn {
+  display: inline-flex; align-items: center; gap: 2px; padding: 0; border: 0; background: none;
+  font: inherit; color: inherit; cursor: pointer; white-space: nowrap;
+}
+.mt-sortbtn:hover { color: var(--color-text); }
+.mt-sortbtn:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
+.mt-ptable th.ui-num .mt-sortbtn { justify-content: flex-end; }
+th[aria-sort="ascending"] .mt-sortbtn, th[aria-sort="descending"] .mt-sortbtn { color: var(--color-text); }
+.mt-sticky { position: sticky; left: 0; z-index: 1; background: var(--color-surface); border-right: 1px solid var(--color-border); }
+.mt-ptable thead th.mt-sticky { z-index: 3; background: var(--color-surface-muted); }
+.mt-ptable tbody tr:hover .mt-sticky { background: var(--color-surface-muted); }
+.mt-pname { font-weight: var(--weight-semibold); white-space: nowrap; max-width: 260px; }
+.mt-pname__txt { display: inline-block; max-width: 170px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+.mt-pname .ui-badge, .mt-pname .mt-info { margin-left: var(--space-1); vertical-align: middle; }
+.mt-row--sinmeta td, .mt-row--sinmeta th { color: var(--color-text-muted); }
+
+/* ── Partners: tarjetas (vista opcional) ────────────────────────────────── */
+.mt-pgrid { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.mt-pcard {
+  display: flex; flex-direction: column; gap: var(--space-2); min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); box-shadow: var(--shadow-sm);
+}
+.mt-pcard .mt-pname { display: flex; align-items: center; max-width: none; font-size: var(--text-base); }
+.mt-pcard .mt-pname__txt { max-width: none; flex: 0 1 auto; min-width: 0; }
+.mt-pcard--sinmeta { background: var(--color-surface-muted); }
+.mt-pcard__sub { display: flex; align-items: center; font-size: var(--text-sm); color: var(--color-text-muted); }
+.mt-pcard__note { font-size: var(--text-xs); color: var(--color-text-subtle); }
+.mt-pk { display: flex; flex-direction: column; gap: 4px; padding-top: var(--space-2); border-top: 1px solid var(--color-border); }
+.mt-pk__top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.mt-pk__label { font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--color-text-muted); }
+.mt-pk__val { font-size: var(--text-sm); font-variant-numeric: tabular-nums; color: var(--color-text); text-align: right; }
+.mt-pk__nums, .mt-pk__proj { font-size: var(--text-xs); color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+.mt-pk__nums strong, .mt-pk__proj strong { color: var(--color-text); }
+
+/* ── Exportación a PDF ──────────────────────────────────────────────────────
+   html2canvas solo captura lo visible de un contenedor con scroll: mientras se
+   exporta, las tablas anchas se despliegan enteras. */
+.mt-exporting .ui-table-wrap { overflow: visible; }
+.mt-exporting .mt-sticky { position: static; }
+/* html2canvas no respeta el `clip` de .ui-sr-only y recorta lo que sigue (el
+   delta salía vacío en el PDF): al exportar, el texto para lectores de
+   pantalla no hace falta. */
+.mt-exporting .ui-sr-only { display: none; }
+/* Mismo motivo: html2canvas deja en blanco el texto de un inline-flex anidado
+   en otro (el badge del delta dentro de .ui-kpi__delta). */
+.mt-exporting .ui-delta { display: inline-block; }
+.mt-exporting .ui-delta .ui-icon { margin-right: 2px; }

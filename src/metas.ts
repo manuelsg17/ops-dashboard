@@ -17,6 +17,10 @@ import { esMesEnCurso } from "./domain/mesEnCurso";
 import { ordenarKams } from "./domain/desgloseKam";
 import { escalaLista, reintentarCuandoEscalaLista } from "./shared/escalaLista";
 import { partesAlcance } from "./shared/alcance";
+// Sistema de diseño (Ola 6): componentes ui-* + diálogos en página.
+import { btn, delta as uiDelta, alertBox, emptyState, icon, goalTone, segmented } from "./shared/ui";
+import { confirmDialog, alertDialog } from "./shared/confirmDialog";
+import { MES_NOMBRES } from "./core/meses";
 
 // ── KAM EFECTIVO DE UNA FILA DE META (B9, sep-2026) ──────────────────────────
 // El loader arma `m.kam = KAM_MAP[clid] || m.kam || ""`: cuando el partner tiene
@@ -176,6 +180,9 @@ export function _metasLine() {
 export async function setMetasLine(line) {
   if ((STATE.metasLine || "comb") === line) return;
   STATE.metasLine = line;
+  // Cada línea tiene KPIs distintos: el orden de la tabla de partners vuelve al
+  // de por defecto (peor cumplimiento primero).
+  _MT.sort = { key: "worst", dir: "asc" };
   // Ver el comentario gemelo en setRendLine: _metasFleetActuals pondera por
   // acceptance_rate, que es una columna diferida.
   if (line === "fleet" && typeof ensureFullRendColumns === "function") {
@@ -184,27 +191,22 @@ export async function setMetasLine(line) {
   }
   if (STATE.curTab === "metas") renderMetas();
 }
+// Selector de línea: control segmentado del sistema de diseño (Ola 6). Se arma a
+// mano (y no con ui.segmented) porque el botón tiene que conservar `data-line`:
+// shell.quitarChipAlcance("linea") y huella.js lo buscan por ese atributo.
 export function metasLineToggleHTML() {
-  const line   = _metasLine();
-  const diario = false;   // las 4 líneas ya funcionan en las 3 escalas
+  const line = _metasLine();
   const defs = [
-    { k: "comb",  emoji: "🔀", label: t("rend.linea.comb"), tip: t("metas.linea.combTip") },
-    { k: "agg",   emoji: "📊", label: t("rend.linea.agg"),  tip: t("metas.linea.aggTip") },
-    { k: "fleet", emoji: "🚗", label: "Fleet",              tip: t("metas.linea.fleetTip") },
-    { k: "tk",    emoji: "🛺", label: "TukTuk",             tip: t("metas.linea.tkTip") }
+    { k: "comb",  ic: "activity", label: t("rend.linea.comb"), tip: t("metas.linea.combTip") },
+    { k: "agg",   ic: "taxi",     label: t("rend.linea.agg"),  tip: t("metas.linea.aggTip") },
+    { k: "fleet", ic: "car",      label: "Fleet",              tip: t("metas.linea.fleetTip") },
+    { k: "tk",    ic: "tuktuk",   label: "TukTuk",             tip: t("metas.linea.tkTip") }
   ];
-  const btns = defs.map(d => {
-    const on  = line === d.k;
-    const dis = diario && d.k !== "agg";
-    return `<button class="mode-btn${on ? " active" : ""}" ${dis ? "disabled" : ""}
-      title="${escapeHTML(dis ? t("rend.diarioSinSubflotaTip") : d.tip)}"
-      ${dis ? "" : `data-act="setMetasLine" data-line="${escapeHTML(d.k)}"`}
-      style="${dis ? "opacity:.4;cursor:not-allowed" : ""}">${d.emoji} ${d.label}</button>`;
-  }).join("");
-  const note = diario
-    ? `<span class="agy-style-213">${t("rend.diarioSinSubflota")}</span>`
-    : "";
-  return `<div class="mode-toggle-row agy-style-214">${btns}${note}</div>`;
+  const btns = defs.map(d =>
+    `<button type="button" class="ui-segmented__btn" aria-pressed="${line === d.k}" title="${escapeHTML(d.tip)}"` +
+    ` data-act="setMetasLine" data-line="${escapeHTML(d.k)}">${icon(d.ic, { size: 14 })}<span>${escapeHTML(d.label)}</span></button>`
+  ).join("");
+  return `<div class="ui-segmented mt-lines" role="group" aria-label="${escapeHTML(t("mt.linea.aria"))}">${btns}</div>`;
 }
 
 // Slice de performance de la línea para la escala actual (Fase 2).
@@ -354,43 +356,330 @@ function _metasProjDays(lastDate) {
   return diasMesReporte(dates[dates.length - 1] || to, STATE.curMode, parseLocalDate);
 }
 
-// Huella de números (shared/huella.ts): envuelve una cifra en un <span> sin
-// clase ni estilo, solo con su data-num. Sin clave devuelve el html tal cual.
-function _hn(numKey, sufijo, html) {
-  return numKey ? `<span${dn(numKey, sufijo)}>${html}</span>` : html;
+// ── PRESENTACIÓN (Ola 6, sep-2026) ───────────────────────────────────────────
+// Todo lo que pinta Metas sale de acá: tarjetas KPI (ui-kpi), tablas compactas
+// por ciudad/KAM, tabla (o tarjetas) por partner y la barra de controles.
+//
+// REGLA DE LA HUELLA (scripts/huella): cada cifra conserva su `data-num` y el
+// MISMO texto que antes (p.ej. "77.0%", "37,248", "1.7M"). El rediseño mueve
+// las cifras de lugar, nunca cambia cómo se formatean.
+//
+// Colores: solo tokens semánticos. El % de cumplimiento usa los MISMOS cortes
+// que pColor()/pEstado() vía ui.goalTone (<80 bad · 80–94 warn · 95–150 ok ·
+// >150 over). Ciudades y KAMs llevan la paleta categórica (--cat-N), nunca el
+// rojo de marca; el color de hash del partner queda solo como un puntito.
+
+// Estado de UI de la sección de partners (no se persiste: cada sesión arranca
+// en tabla, "Todos" y peor cumplimiento primero — que es lo que lee la huella).
+const _MT = { vista: "tabla", filtro: "todos", sort: { key: "worst", dir: "asc" } };
+// Último contexto pintado de la sección de partners: ordenar/filtrar/cambiar de
+// vista repinta SOLO esa sección (no recalcula la pestaña entera).
+let _mtPartnersCtx = null;
+
+const _E = s => escapeHTML(s == null ? "" : String(s));
+// data-num opcional: sin clave no se emite nada (dn() sin partes daría data-num="real").
+const _dn = (numKey, suf) => numKey ? dn(numKey, suf) : "";
+
+// Tono semántico de un % de cumplimiento. Sin meta (>0) no hay semáforo.
+function _mtTone(p, meta) {
+  return meta > 0 ? (goalTone(p) || "bad") : "neutral";
+}
+function _mtPctBadge(p, meta, numKey) {
+  return `<span class="ui-badge ui-badge--${_mtTone(p, meta)} mt-pct"${_dn(numKey, "pct")}>${p.toFixed(1)}%</span>`;
+}
+// Barra de avance (ui-progress). `pp` = % proyectado (franja translúcida detrás).
+function _mtBar(p, pp, meta, extraCls = "") {
+  const clamp = n => Math.max(0, Math.min(100, n));
+  const proj = pp != null && isFinite(pp) && pp > p
+    ? `<div class="ui-progress__proj" style="width:${clamp(pp).toFixed(1)}%"></div>` : "";
+  return `<div class="ui-progress ui-progress--${_mtTone(p, meta)} mt-bar${extraCls ? " " + extraCls : ""}">` +
+    `${proj}<div class="ui-progress__bar" style="width:${clamp(p).toFixed(1)}%"></div></div>`;
+}
+// Puntitos de color: paleta categórica de los tokens para ciudades y KAMs.
+function _mtCatCity(city) {
+  const i = CITIES.indexOf(city);
+  return i >= 0 ? `var(--cat-${(i % 9) + 1})` : "var(--cat-other)";
+}
+function _mtCatKam(kam) {
+  if (!kam || kam === SIN_KAM) return "var(--cat-other)";
+  let h = 0;
+  for (const c of String(kam)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return `var(--cat-${(h % 9) + 1})`;
+}
+function _mtDot(color) {
+  return `<span class="mt-dot" style="background:${color}" aria-hidden="true"></span>`;
+}
+function _mtCuentas(n) {
+  return t(n === 1 ? "mt.cuentas1" : "mt.cuentasN", { n });
+}
+// Encabezado de sección (sin emoji ni "Perú": el encabezado de página ya dice
+// el alcance). `info` = descripción larga de la línea, en tooltip.
+function _mtH2(title, info) {
+  const i = info
+    ? ` <span class="mt-info" title="${_E(info)}" aria-label="${_E(info)}" role="img">${icon("info", { size: 14 })}</span>`
+    : "";
+  return `<h2 class="mt-h2">${_E(title)}${i}</h2>`;
+}
+function _mtAlerts(html) {
+  return html ? `<div class="mt-alerts">${html}</div>` : "";
+}
+
+// Celdas actual / meta / % (+ proyección) de una fila de las tablas por ciudad y
+// por KAM. MISMA lógica de casos que el viejo miniBar: sin meta (>0) solo se
+// muestra el actual; sin actual medible, solo la meta.
+function _mtKpiTds(real, meta, proj, F, numKey, showProj) {
+  if (!_metasProyOn) proj = null;
+  const dash = `<td class="ui-num mt-muted">—</td>`;
+  if (real != null && !(meta > 0)) {
+    return `<td class="ui-num"><span${_dn(numKey, "real")}>${F(real || 0)}</span></td>${dash}` +
+      `<td class="mt-pctcell"><span class="mt-note">${_E(t("metas.sinMetaCargada"))}</span></td>${showProj ? dash : ""}`;
+  }
+  if (real == null) {
+    return `${dash}<td class="ui-num"><span${_dn(numKey, "meta")}>${F(meta || 0)}</span></td>` +
+      `<td class="mt-pctcell"><span class="mt-note">${_E(t("metas.metaSinActual"))}</span></td>${showProj ? dash : ""}`;
+  }
+  const p  = meta > 0 ? (real / meta) * 100 : 0;
+  const pp = meta > 0 && proj != null ? (proj / meta) * 100 : 0;
+  const projTd = !showProj ? "" : proj == null ? dash
+    : `<td class="ui-num"><span${_dn(numKey, "proj")}>${F(proj)}</span> <span class="mt-sub">(${pp.toFixed(1)}%)</span></td>`;
+  return `<td class="ui-num"><span${_dn(numKey, "real")}>${F(real)}</span></td>` +
+    `<td class="ui-num"><span${_dn(numKey, "meta")}>${F(meta)}</span></td>` +
+    `<td class="mt-pctcell"><div class="mt-pctwrap">${_mtPctBadge(p, meta, numKey)}${_mtBar(p, proj == null ? null : pp, meta)}</div></td>` +
+    projTd;
+}
+
+// Tabla compacta por ciudad / por KAM: una fila por KPI, la entidad agrupada.
+// groups: [{ name, dot, count, extra, rows: [{ label, real, meta, proj, F, numKey }] }]
+function _mtGroupTable(entLabel, groups) {
+  // Columna de proyección solo si el mes está en curso Y algún KPI proyecta
+  // (las tasas de Fleet no se proyectan: sería una columna de guiones).
+  const showProj = _metasProyOn && groups.some(g => g.rows.some(r => r && r.proj != null));
+  const head = `<tr><th scope="col">${_E(entLabel)}</th><th scope="col">${_E(t("mt.col.kpi"))}</th>` +
+    `<th scope="col" class="ui-num">${_E(t("mt.col.actual"))}</th><th scope="col" class="ui-num">${_E(t("mt.col.meta"))}</th>` +
+    `<th scope="col">${_E(t("mt.col.pct"))}</th>` +
+    (showProj ? `<th scope="col" class="ui-num">${_E(t("mt.col.proy"))}</th>` : "") + `</tr>`;
+  let body = "";
+  groups.forEach(g => {
+    const rows = g.rows.filter(Boolean);
+    if (!rows.length) return;
+    rows.forEach((r, i) => {
+      body += `<tr class="${i === 0 ? "mt-grp-first" : ""}">` +
+        (i === 0
+          ? `<th scope="rowgroup" rowspan="${rows.length}" class="mt-ent"><div class="mt-ent__name">${_mtDot(g.dot)}${_E(g.name)}</div>` +
+            `<div class="mt-sub">${_E(_mtCuentas(g.count))}</div>${g.extra || ""}</th>`
+          : "") +
+        `<td class="mt-kpiname">${_E(r.label)}</td>` +
+        _mtKpiTds(r.real, r.meta, r.proj, r.F || fmt, r.numKey, showProj) + `</tr>`;
+    });
+  });
+  if (!body) return "";
+  return `<div class="ui-table-wrap"><table class="ui-table mt-gtable"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+}
+
+// ── Sección por partner: tabla ordenable (default) o tarjetas ────────────────
+// Modelo de fila (lo arman el agregador y las vistas de línea):
+//   { partner, cityDisp, kamDisp, kamRaw, sinMeta, color, tip, note,
+//     cells: [{ id, label, mode: "both"|"real"|"meta"|"none",
+//               real, meta, pct, proj, F, numKey, note }] }
+// Estado de la fila (filtros): sin meta · na (nada medible contra meta) ·
+// bajo (algún % < 95) · sobre (todos ≥95 y alguno > 150) · en (el resto).
+function _mtRowStatus(r) {
+  if (r.sinMeta) return "sin";
+  const ps = r.cells.filter(c => c.mode === "both" && c.meta > 0).map(c => c.pct);
+  if (!ps.length) return "na";
+  const min = Math.min(...ps), max = Math.max(...ps);
+  if (min < 95) return "bajo";
+  if (max > 150) return "sobre";
+  return "en";
+}
+function _mtWorst(r) {
+  if (r._st === "sin") return 1e12 + 1;
+  if (r._st === "na")  return 1e12;
+  return Math.min(...r.cells.filter(c => c.mode === "both" && c.meta > 0).map(c => c.pct));
+}
+function _mtSortVal(r, key) {
+  if (key === "worst")   return _mtWorst(r);
+  if (key === "partner") return r.partner;
+  if (key === "city")    return r.cityDisp;
+  if (key === "kam")     return r.kamDisp;
+  const [id, f] = key.split(".");
+  const c = r.cells.find(x => x.id === id);
+  if (!c) return null;
+  if (f === "pct")  return c.mode === "both" && c.meta > 0 ? c.pct : null;
+  if (f === "real") return c.mode === "both" || c.mode === "real" ? c.real : null;
+  return c.mode === "both" || c.mode === "meta" ? c.meta : null;
+}
+function _mtSortRows(rows) {
+  const { key, dir } = _MT.sort;
+  const mul = dir === "desc" ? -1 : 1;
+  return rows.slice().sort((a, b) => {
+    const va = _mtSortVal(a, key), vb = _mtSortVal(b, key);
+    if (va == null && vb == null) return a.partner.localeCompare(b.partner);
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    const c = typeof va === "string" ? va.localeCompare(vb) : va - vb;
+    return c * mul || a.partner.localeCompare(b.partner) || String(a.cityDisp).localeCompare(String(b.cityDisp));
+  });
+}
+function _mtSortTh(key, label, cls = "", attrs = "") {
+  const on = _MT.sort.key === key;
+  const aria = on ? (_MT.sort.dir === "desc" ? "descending" : "ascending") : "none";
+  const arrow = on ? icon(_MT.sort.dir === "desc" ? "arrow-down" : "arrow-up", { size: 12 }) : "";
+  return `<th scope="col" class="${cls}" aria-sort="${aria}"${attrs}><button type="button" class="mt-sortbtn"` +
+    ` data-act="metasSort" data-key="${_E(key)}" title="${_E(t("mt.ordenar", { c: label }))}">${_E(label)}${arrow}</button></th>`;
+}
+
+// Celdas de una fila de partner en la TABLA (actual · meta · % con badge).
+function _mtPartnerTds(c) {
+  const F = c.F || fmt;
+  const dash = `<td class="ui-num mt-muted">—</td>`;
+  if (c.mode === "none") return dash + dash + `<td class="mt-muted">—</td>`;
+  if (c.mode === "real") {
+    return `<td class="ui-num"><span${_dn(c.numKey, "real")}>${F(c.real)}</span></td>${dash}<td class="mt-muted">—</td>`;
+  }
+  if (c.mode === "meta") {
+    return `${dash}<td class="ui-num"><span${_dn(c.numKey, "meta")}>${F(c.meta)}</span></td>` +
+      `<td class="mt-pctcell"><span class="mt-note">${_E(c.note || t("metas.sinActual"))}</span></td>`;
+  }
+  const proj = c.proj != null && _metasProyOn
+    ? `<div class="mt-sub mt-projline">${t("mt.proyCorta", { v: `<span${_dn(c.numKey, "proj")}>${F(c.proj)}</span>` })}</div>` : "";
+  return `<td class="ui-num"><span${_dn(c.numKey, "real")}>${F(c.real)}</span></td>` +
+    `<td class="ui-num"><span${_dn(c.numKey, "meta")}>${F(c.meta)}</span></td>` +
+    `<td class="mt-pctcell">${_mtPctBadge(c.pct, c.meta, c.numKey)}${proj}</td>`;
+}
+
+// Bloque de un KPI en la TARJETA de partner (vista opcional).
+function _mtCardKpi(c) {
+  const F = c.F || fmt;
+  if (c.mode === "none") return "";
+  if (c.mode === "real") {
+    return `<div class="mt-pk"><div class="mt-pk__top"><span class="mt-pk__label">${_E(c.label)}</span>` +
+      `<span class="mt-pk__val"><span${_dn(c.numKey, "real")}>${F(c.real)}</span> · <em>${_E(t("metas.sinMetaSello"))}</em></span></div></div>`;
+  }
+  if (c.mode === "meta") {
+    return `<div class="mt-pk"><div class="mt-pk__top"><span class="mt-pk__label">${_E(c.label)}</span>` +
+      `<span class="mt-pk__val"><strong${_dn(c.numKey, "meta")}>${F(c.meta)}</strong> <span class="mt-note">${_E(t("metas.metaMin"))}${c.note ? " · " + _E(c.note) : ""}</span></span></div></div>`;
+  }
+  const on = c.proj != null && _metasProyOn;
+  const pp = on && c.meta > 0 ? (c.proj / c.meta) * 100 : 0;
+  return `<div class="mt-pk"><div class="mt-pk__top"><span class="mt-pk__label">${_E(c.label)}</span>${_mtPctBadge(c.pct, c.meta, c.numKey)}</div>` +
+    _mtBar(c.pct, on ? pp : null, c.meta) +
+    `<div class="mt-pk__nums">${_E(t("mt.col.actual"))} <strong${_dn(c.numKey, "real")}>${F(c.real)}</strong> · ${_E(t("mt.col.meta"))} <strong${_dn(c.numKey, "meta")}>${F(c.meta)}</strong></div>` +
+    (on ? `<div class="mt-pk__proj">${_E(t("metas.proyeccion"))}: <strong${_dn(c.numKey, "proj")}>${F(c.proj)}</strong> (${pp.toFixed(1)}%)</div>` : "") +
+    `</div>`;
+}
+
+const _MT_FILTROS = ["todos", "bajo", "en", "sobre", "sin"];
+function _mtPartnersHTML(ctx) {
+  const { rows, kpis } = ctx;
+  rows.forEach(r => { r._st = _mtRowStatus(r); });
+  const cnt = { todos: rows.length, bajo: 0, en: 0, sobre: 0, sin: 0 };
+  rows.forEach(r => { if (cnt[r._st] != null) cnt[r._st]++; });
+  if (!_MT_FILTROS.includes(_MT.filtro)) _MT.filtro = "todos";
+  const chips = _MT_FILTROS.map(k =>
+    `<button type="button" class="mt-fchip mt-fchip--${k}" aria-pressed="${_MT.filtro === k}" data-act="metasSetFiltro" data-value="${k}"` +
+    (k === "todos" ? "" : ` title="${_E(t(`mt.filtro.${k}Tip`))}"`) +
+    `>${k === "todos" ? "" : `<span class="mt-fchip__dot" aria-hidden="true"></span>`}${_E(t(`mt.filtro.${k}`))} <span class="mt-fchip__n">${cnt[k]}</span></button>`
+  ).join("");
+  const vista = segmented({
+    options: [{ value: "tabla", label: t("mt.vista.tabla"), icon: "table" },
+              { value: "tarjetas", label: t("mt.vista.tarjetas"), icon: "copy" }],
+    value: _MT.vista, act: "metasSetVista", ariaLabel: t("mt.vista.aria")
+  });
+  const tools = `<div class="mt-ptools" data-html2canvas-ignore="true"><div class="mt-fchips" role="group" aria-label="${_E(t("mt.filtro.aria"))}">${chips}</div>${vista}</div>`;
+
+  const vis = _mtSortRows(_MT.filtro === "todos" ? rows : rows.filter(r => r._st === _MT.filtro));
+  if (!vis.length) return tools + `<div class="mt-filtro-vacio">${_E(t("mt.filtroVacio"))}</div>`;
+
+  const nameCell = (r, tag, attrs = "", cls = "") => {
+    const tip = r.tip ? ` <span class="mt-info" title="${_E(r.tip)}" aria-label="${_E(t("mt.detalle") + ": " + r.tip)}" role="img">${icon("info", { size: 13 })}</span>` : "";
+    const sm = r.sinMeta ? ` <span class="ui-badge ui-badge--neutral">${_E(t("mt.sinMeta"))}</span>` : "";
+    return `<${tag}${attrs} class="mt-pname${cls}">${_mtDot(r.color)}<span class="mt-pname__txt">${_E(r.partner)}</span>${sm}${tip}</${tag}>`;
+  };
+
+  if (_MT.vista === "tarjetas") {
+    const cards = vis.map(r =>
+      `<article class="mt-pcard${r.sinMeta ? " mt-pcard--sinmeta" : ""}">${nameCell(r, "header")}` +
+      `<div class="mt-pcard__sub">${_mtDot(_mtCatKam(r.kamRaw))}${_E(r.kamDisp)} · ${_E(r.cityDisp)}</div>` +
+      r.cells.map(_mtCardKpi).join("") +
+      (r.note ? `<div class="mt-pcard__note">${_E(r.note)}</div>` : "") + `</article>`
+    ).join("");
+    return tools + `<div class="mt-pgrid">${cards}</div>`;
+  }
+
+  const h1 = _mtSortTh("partner", t("mt.col.partner"), "mt-sticky", ` rowspan="2"`) +
+    _mtSortTh("city", t("mt.col.ciudad"), "", ` rowspan="2"`) +
+    _mtSortTh("kam", t("mt.col.kam"), "", ` rowspan="2"`) +
+    kpis.map(k => `<th scope="colgroup" colspan="3" class="mt-grp">${_E(k.label)}</th>`).join("");
+  const h2 = kpis.map(k =>
+    _mtSortTh(`${k.id}.real`, t("mt.col.actual"), "ui-num mt-grp-start") +
+    _mtSortTh(`${k.id}.meta`, t("mt.col.meta"), "ui-num") +
+    _mtSortTh(`${k.id}.pct`, t("mt.col.pct"), "")
+  ).join("");
+  const body = vis.map(r =>
+    `<tr class="${r.sinMeta ? "mt-row--sinmeta" : ""}">` +
+    nameCell(r, "th", ` scope="row"`, " mt-sticky") +
+    `<td class="mt-nowrap">${_E(r.cityDisp)}</td><td class="mt-nowrap">${_E(r.kamDisp)}</td>` +
+    kpis.map(k => {
+      const c = r.cells.find(x => x.id === k.id) || { mode: "none" };
+      return _mtPartnerTds(c);
+    }).join("") + `</tr>`
+  ).join("");
+  return tools + `<div class="ui-table-wrap mt-ptable-wrap"><table class="ui-table mt-ptable">` +
+    `<thead><tr>${h1}</tr><tr>${h2}</tr></thead><tbody>${body}</tbody></table></div>`;
+}
+function _mtPartnersSection(ctx) {
+  _mtPartnersCtx = ctx;
+  return `<section class="mt-sec">${_mtH2(t("mt.porPartner"))}<div id="mtPartners">${_mtPartnersHTML(ctx)}</div></section>`;
+}
+function _mtRepintarPartners() {
+  const el = document.getElementById("mtPartners");
+  if (!el || !_mtPartnersCtx) return;
+  el.innerHTML = _mtPartnersHTML(_mtPartnersCtx);
+}
+export function metasSort(key) {
+  if (!key) return;
+  if (_MT.sort.key === key) _MT.sort.dir = _MT.sort.dir === "asc" ? "desc" : "asc";
+  else {
+    // Texto A→Z; % del peor al mejor; actual/meta del más grande al más chico.
+    const numDesc = /\.(real|meta)$/.test(key);
+    _MT.sort = { key, dir: numDesc ? "desc" : "asc" };
+  }
+  _mtRepintarPartners();
+}
+export function metasSetFiltro(v) {
+  if (!_MT_FILTROS.includes(v)) return;
+  _MT.filtro = v;
+  _mtRepintarPartners();
+}
+export function metasSetVista(v) {
+  if (v !== "tabla" && v !== "tarjetas") return;
+  _MT.vista = v;
+  _mtRepintarPartners();
 }
 
 // Fila meta-vs-actual para un KPI de tasa/valor (sin proyección). meta null → oculta.
-// numKey (opcional): clave de la huella de números.
+// numKey (opcional): clave de la huella de números. (Se conserva la firma; ahora
+// devuelve el bloque de KPI de la tarjeta de partner del sistema de diseño.)
 export function _metaLineRow(label, actual, meta, fmtFn, metaOnlyNote, numKey) {
   if (meta == null && actual == null) return "";
-  if (meta == null) {  // solo actual (sin meta cargada)
-    return `<div class="agy-style-215">
-      <div class="agy-style-216"><span>${label}</span>
-        <span class="agy-style-217">${_hn(numKey, "real", fmtFn(actual))} · <em class="agy-style-22">${t("metas.sinMetaSello")}</em></span></div></div>`;
-  }
-  if (actual == null) {  // solo meta (ej. Utilización, sin actual medible)
-    return `<div class="agy-style-215">
-      <div class="agy-style-216"><span>${label}</span>
-        <span><strong class="agy-style-218"${numKey ? dn(numKey, "meta") : ""}>${fmtFn(meta)}</strong> <span class="agy-style-219">${escapeHTML(t("metas.metaMin"))}${metaOnlyNote ? " · " + metaOnlyNote : ""}</span></span></div></div>`;
-  }
-  const p  = meta > 0 ? (actual / meta) * 100 : 0;
-  const pV = Math.min(p, 100);
-  const over = p > 100 ? `<span class="agy-style-220">🏆</span>` : "";
-  return `
-    <div class="agy-style-196">
-      <div class="agy-style-221">
-        <span>${label}</span>
-        <span class="agy-style-222">
-          <strong style="color:${pColor(p)}"${numKey ? dn(numKey, "pct") : ""}>${p.toFixed(1)}%</strong>
-          <span class="sem ${semCls(p)}"></span>${over}
-        </span>
-      </div>
-      <div class="agy-style-223">
-        ${escapeHTML(t("metas.fact"))}: <strong${numKey ? dn(numKey, "real") : ""}>${fmtFn(actual)}</strong> / ${escapeHTML(t("metas.meta"))}: <strong${numKey ? dn(numKey, "meta") : ""}>${fmtFn(meta)}</strong>
-      </div>
-      ${barProj(pV, pV)}
-    </div>`;
+  const mode = meta == null ? "real" : actual == null ? "meta" : "both";
+  const pct = mode === "both" ? (meta > 0 ? (actual / meta) * 100 : 0) : null;
+  return _mtCardKpi({ label, mode, real: actual, meta, pct, proj: null, F: fmtFn, numKey, note: metaOnlyNote });
+}
+
+// Celda de partner a partir de un KPI de línea: misma regla que tenía la tarjeta
+// (`(m._sinMeta || mv != null) ? av : null`) — no mostrar el actual de un KPI
+// que el partner no tiene en esta línea, salvo en las cuentas SIN ninguna meta.
+function _mtLineCell(k, m, a, numKey) {
+  const mv = k.meta(m);
+  const av0 = a ? k.act(a) : null;
+  const av = (m._sinMeta || mv != null) ? av0 : null;
+  const base = { id: k.id, label: k.label, F: k.fmtFn || fmt, numKey, note: k.note, proj: null };
+  if (mv == null && av == null) return { ...base, mode: "none" };
+  if (mv == null) return { ...base, mode: "real", real: av };
+  if (av == null) return { ...base, mode: "meta", meta: mv };
+  return { ...base, mode: "both", real: av, meta: mv, pct: mv > 0 ? (av / mv) * 100 : 0 };
 }
 
 // ── VISTAS DE LÍNEA (Fleet / TukTuk / Combinado) ─────────────────────────────
@@ -495,19 +784,8 @@ function _metasAggKpi(kpi, units) {
 function _metasEscalaAviso() {
   const m = STATE.curMode;
   if (m === "mensual") return "";
-  const esDiario = m === "diario";
-  const unidad   = esDiario ? t("metas.aviso.unDia") : t("metas.aviso.unaSemana");
-  // El cuerpo lleva <strong> DENTRO de la traduccion (no se escapa) porque el
-  // enfasis cae en palabras distintas segun el idioma. Son cadenas nuestras, no
-  // entrada del usuario: no hay superficie de XSS.
-  return `<div class="metas-escala-aviso">
-    <span class="mea-ico">${esDiario ? "📅" : "🗓️"}</span>
-    <div>
-      <strong>${escapeHTML(t("metas.aviso.titulo"))}</strong>
-      ${t("metas.aviso.cuerpo", { u: unidad })}
-      <span class="mea-hint">${t("metas.aviso.hint")}</span>
-    </div>
-  </div>`;
+  const unidad = m === "diario" ? t("metas.aviso.unDia") : t("metas.aviso.unaSemana");
+  return alertBox({ tone: "warn", title: t("mt.aviso.escala.titulo"), text: t("mt.aviso.escala.texto", { u: unidad }) });
 }
 
 // Aviso de COBERTURA: el rango del sidebar no cubre el mes entero de la meta.
@@ -517,14 +795,11 @@ function _metasEscalaAviso() {
 // él, filtrar una semana se leía como incumplimiento.
 export function _metasCoberturaAviso(cob, mesName) {
   if (!cob || cob.enRango === 0 || cob.enRango >= cob.total) return "";
-  return `<div class="metas-escala-aviso">
-    <span class="mea-ico">🔎</span>
-    <div>
-      <strong>${escapeHTML(t("metas.cobertura.titulo"))}</strong>
-      ${t("metas.cobertura.cuerpo", { n: cob.enRango, total: cob.total, mes: escapeHTML(mesLabel(mesName)) })}
-      <span class="mea-hint">${escapeHTML(t("metas.cobertura.hint"))}</span>
-    </div>
-  </div>`;
+  return alertBox({
+    tone: "warn",
+    title: t("mt.aviso.cob.titulo", { m: mesLabel(mesName) }),
+    text: t("mt.aviso.cob.texto", { n: cob.enRango, total: cob.total })
+  });
 }
 // Aviso de cuentas con actividad y SIN meta cargada. Su actual sí se cuenta en
 // los agregados (para que el total cuadre con Rendimiento), pero no aportan
@@ -532,26 +807,19 @@ export function _metasCoberturaAviso(cob, mesName) {
 // ese % es justo lo que se presenta.
 export function _metasSinMetaAviso(n, mesName) {
   if (!n) return "";
-  return `<div class="metas-escala-aviso">
-    <span class="mea-ico">📋</span>
-    <div>
-      <strong>${escapeHTML(t("metas.sinMeta.titulo"))}</strong>
-      ${t("metas.sinMeta.cuerpo", { n, mes: escapeHTML(mesLabel(mesName)) })}
-      <span class="mea-hint">${escapeHTML(t("metas.sinMeta.hint"))}</span>
-    </div>
-  </div>`;
+  return alertBox({
+    tone: "info",
+    title: t(n === 1 ? "mt.aviso.sinMeta.titulo1" : "mt.aviso.sinMeta.tituloN", { n, m: mesLabel(mesName) }),
+    text: t("mt.aviso.sinMeta.texto")
+  });
 }
 export function _metasSinPeriodosHTML(mesName) {
-  return t("metas.cobertura.sinPeriodos", { mes: escapeHTML(mesLabel(mesName)) });
+  return emptyState({ icon: "calendar", title: t("mt.sinPeriodos.titulo", { m: mesLabel(mesName) }), text: t("mt.sinPeriodos.texto") });
 }
 
-// Barra de controles de Metas: selector de mes + borrado (admin) + PDF.
-// Vive acá porque la usan TANTO el agregador como las vistas de línea — antes
-// solo la pintaba el agregador, así que cambiar a Fleet/TukTuk/Combinado hacía
-// desaparecer el selector de mes y el botón de PDF sin ninguna razón.
 // I13: los filtros del sidebar se restauran de la sesión anterior sin ningún
-// indicador. Se declaran arriba de todo y el tag de la sección deja de decir
-// "Peru" cuando lo que se muestra es un subconjunto.
+// indicador. El encabezado de página (shell) ya los muestra como chips; acá
+// queda un aviso breve dentro del contenido para que también salga en el PDF.
 function _metasAlcance() {
   const f = getCurrentFilters();
   return partesAlcance({
@@ -560,76 +828,146 @@ function _metasAlcance() {
     nTotal: document.querySelectorAll("#pList input").length
   }, t, cityLabel);
 }
-function _metasTagAlcance() {
-  const a = _metasAlcance();
-  return a.length ? escapeHTML(a.join(" · ")) : "Perú";
-}
 function _metasAlcanceHTML() {
   const a = _metasAlcance();
   if (!a.length) return "";
-  return `<div class="metas-escala-aviso"><span class="mea-ico">🔎</span>
-    <div><strong>${escapeHTML(t("metas.alcance", { a: a.join(" · ") }))}</strong></div></div>`;
+  return alertBox({ tone: "info", text: t("metas.alcance", { a: a.join(" · ") }) });
 }
 
-function _metasControlsHTML(mesName, _mesesDisponibles) {  // las opciones salen de opcionesMesMeta (con año)
-  // Selector de mes (solo si hay 2+ meses cargados). Una opción por (mes, AÑO):
-  // ENERO 2026 y ENERO 2027 son opciones distintas (B1).
+// Mes (con año) de la meta mostrada, para textos: "Septiembre 2026".
+function _mtMesTxt(mesName) {
+  const y = _metasMesActualYear(mesName);
+  return mesLabel(mesName) + (y != null ? " " + y : "");
+}
+
+// "Mismo punto del mes anterior" para el delta de las tarjetas del resumen: los
+// períodos del mes previo en las MISMAS posiciones que ocupan los del mes de la
+// meta dentro de su mes (semana 1-2-3 contra semana 1-2-3; en mensual, el mes
+// anterior entero). Si el mes previo no tiene esos períodos, o no están
+// CARGADOS en la ventana (antes de la primera fecha de STATE.rawData), no hay
+// delta: mejor no mostrarlo que compararlo contra ceros.
+function _metasPrevFechas(mesDates) {
+  if (!mesDates || !mesDates.length) return null;
+  // En mensual el período ES el mes: con el mes en curso (parcial) contra el mes
+  // anterior completo no hay "mismo punto" — el delta de N+R/horas diría −25%
+  // por construcción. Solo se compara un mes cerrado contra el anterior.
+  const mensual = STATE.curMode === "mensual";
+  if (mensual && _metasProyOn) return null;
+  const ym = d => reportYM(d, STATE.curMode, parseLocalDate);
+  const r0 = ym(mesDates[0]);
+  const todas = [...(STATE.allDates || [])].sort();
+  const full = todas.filter(d => { const r = ym(d); return r.y === r0.y && r.m === r0.m; });
+  const pos = mesDates.map(d => full.indexOf(d));
+  if (pos.some(p => p < 0)) return null;
+  const pm = r0.m === 1 ? 12 : r0.m - 1, py = r0.m === 1 ? r0.y - 1 : r0.y;
+  const prevAll = todas.filter(d => { const r = ym(d); return r.y === py && r.m === pm; });
+  if (pos.some(p => p >= prevAll.length)) return null;
+  const prev = pos.map(p => prevAll[p]);
+  let minCargada = "";
+  for (const r of STATE.rawData || []) if (!minCargada || r.date < minCargada) minCargada = r.date;
+  if (!minCargada || prev[0] < minCargada) return null;
+  return { fechas: new Set(prev), label: t(mensual ? "mt.vsPrevMes" : "mt.vsPrev", { m: mesLabel(MES_NOMBRES[pm - 1]) }) };
+}
+function _mtDelta(actual, prev) {
+  if (actual == null || prev == null || !(prev > 0)) return null;
+  return ((actual - prev) / prev) * 100;
+}
+
+// Barra de controles de Metas: línea · mes · PDF (acción principal) · menú ⋯
+// con el borrado (admin). Vive acá porque la usan TANTO el agregador como las
+// vistas de línea. Las acciones quedan fuera del PDF (data-html2canvas-ignore).
+function _metasControlsHTML(mesName) {
+  // Una opción por (mes, AÑO): ENERO 2026 y ENERO 2027 son opciones distintas (B1).
   const _ops = opcionesMesMeta(STATE.metasData || []);
   const _sel = _metasMesElegido();
   const _selClave = _sel && _sel.mes === mesName ? _sel.clave : claveMes(mesName, _metasMesActualYear(mesName));
-  const mesSelectorHTML = _ops.length > 1
-    ? `<div class="agy-style-231">
-         <label class="agy-style-232">${escapeHTML(t("metas.mesLabel"))}</label>
-         <select data-act-change="setMetasMes" class="agy-style-233">
-           ${_ops.map(o => `<option value="${escapeHTML(o.clave)}" ${o.clave === _selClave ? "selected" : ""}>${escapeHTML(mesLabel(o.mes) + (o.anio != null ? " " + o.anio : ""))}</option>`).join("")}
-         </select>
-       </div>`
-    : "";
-  // Botón de borrado (solo admin): elimina TODAS las metas del mes mostrado para
-  // poder re-subir el Excel. El enforcement real es RLS (is_admin()); este gate
-  // solo oculta el botón. data-html2canvas-ignore lo excluye del PDF descargable
-  // (el partner no debe verlo).
-  // data-year: sin esto, borrar "AGOSTO" borraría TODOS los años con ese
-  // nombre de mes si algún día conviven (metas.mYear, ver _metasMatchMes).
+  const mesSel = _ops.length > 1
+    ? `<label class="mt-field"><span class="mt-field__label">${escapeHTML(t("mt.mes"))}</span>` +
+      `<select class="ui-select ui-select--sm" data-act-change="setMetasMes">` +
+      _ops.map(o => `<option value="${escapeHTML(o.clave)}" ${o.clave === _selClave ? "selected" : ""}>${escapeHTML(mesLabel(o.mes) + (o.anio != null ? " " + o.anio : ""))}</option>`).join("") +
+      `</select></label>`
+    : `<span class="mt-field"><span class="mt-field__label">${escapeHTML(t("mt.mes"))}</span><strong>${escapeHTML(_mtMesTxt(mesName))}</strong></span>`;
+  // Borrado (solo admin): elimina TODAS las metas del mes mostrado para poder
+  // re-subir el Excel. El enforcement real es RLS (is_admin()); esto solo oculta
+  // el menú. data-year: sin él, borrar "AGOSTO" borraría todos los años.
   const _delYear = _metasMesActualYear(mesName);
-  const delBtnHTML = STATE.isAdmin
-    ? `<button class="apply-btn agy-style-234" data-html2canvas-ignore="true" data-act="deleteMetasMes" data-mes="${escapeHTML(mesName)}" data-year="${_delYear ?? ""}"
-         title="${escapeHTML(t("metas.borrarMesTip", { m: mesLabel(mesName) }))}">
-         ${escapeHTML(t("metas.borrarMes", { m: mesLabel(mesName) }))}
-       </button>`
+  const menu = STATE.isAdmin
+    ? `<div class="mt-menu-wrap">` +
+      `<button type="button" class="ui-btn ui-btn--ghost ui-btn--icon mt-menu-btn" aria-haspopup="menu" aria-expanded="false"` +
+      ` aria-label="${escapeHTML(t("mt.masAcciones"))}" title="${escapeHTML(t("mt.masAcciones"))}" data-act="metasMenuToggle">` +
+      `<span aria-hidden="true">⋯</span></button>` +
+      `<div class="mt-menu" role="menu" hidden>` +
+      `<button type="button" role="menuitem" class="mt-menu__item mt-menu__item--danger" data-act="deleteMetasMes"` +
+      ` data-mes="${escapeHTML(mesName)}" data-year="${_delYear ?? ""}" title="${escapeHTML(t("metas.borrarMesTip", { m: mesLabel(mesName) }))}">` +
+      `${icon("trash", { size: 14 })}<span>${escapeHTML(t("mt.borrarMes", { m: _mtMesTxt(mesName) }))}</span></button>` +
+      `</div></div>`
     : "";
-  return `<div class="agy-style-235">
-    ${mesSelectorHTML}
-    <div class="agy-style-236">
-      ${delBtnHTML}
-      <button class="apply-btn agy-style-237" id="metasPdfBtn" data-act="downloadMetasPDF">${escapeHTML(t("metas.descargarPDF"))}</button>
-    </div>
-  </div>`;
+  return `<div class="mt-controls">` +
+    `<div class="mt-controls__left">${metasLineToggleHTML()}${mesSel}</div>` +
+    `<div class="mt-controls__right" data-html2canvas-ignore="true">` +
+    btn({ label: t("mt.pdf"), variant: "primary", icon: "download", act: "downloadMetasPDF", id: "metasPdfBtn" }) +
+    menu + `</div></div>`;
+}
+
+// Menú ⋯: abre/cierra; se cierra al hacer clic afuera o con Escape.
+function _mtCerrarMenus(excepto) {
+  document.querySelectorAll(".mt-menu-wrap").forEach(w => {
+    if (w === excepto) return;
+    const m = w.querySelector(".mt-menu"), b = w.querySelector(".mt-menu-btn");
+    if (m) m.hidden = true;
+    if (b) b.setAttribute("aria-expanded", "false");
+  });
+}
+export function metasMenuToggle(el) {
+  const w = el && el.closest(".mt-menu-wrap");
+  if (!w) return;
+  const m = w.querySelector(".mt-menu");
+  const abrir = m.hidden;
+  _mtCerrarMenus(w);
+  m.hidden = !abrir;
+  el.setAttribute("aria-expanded", String(abrir));
+  if (abrir) m.querySelector("button")?.focus();
+}
+if (typeof document !== "undefined") {
+  document.addEventListener("click", e => {
+    const w = e.target && e.target.closest ? e.target.closest(".mt-menu-wrap") : null;
+    _mtCerrarMenus(w);
+  });
+  document.addEventListener("keydown", e => {
+    if (e.key !== "Escape") return;
+    const abierto = document.querySelector(".mt-menu:not([hidden])");
+    if (!abierto) return;
+    const b = abierto.closest(".mt-menu-wrap")?.querySelector(".mt-menu-btn");
+    _mtCerrarMenus(null);
+    b?.focus();
+  });
 }
 
 // Renderer común de una línea. `cfg`:
-//   icon/color/title/sub  → cabecera
+//   line/title/info       → id de la línea (huella), título, descripción (tooltip)
 //   metaRows              → filas de STATE.metasData del mes/filtros, ya acotadas
 //   act                   → Map "partner|||city" → actual
+//   actFn(fechasSet)      → recalcula `act` para otro juego de fechas (delta)
 //   kpis                  → descriptores (arriba)
-//   emptyHint             → qué hacer si no hay metas de esta línea
+//   emptyTitle            → título del estado vacío si no hay metas de la línea
 function _renderMetasLineView(cfg) {
-  const { mesName, icon, color, title, sub, metaRows, act, kpis, emptyHint } = cfg;
+  const { mesName, metaRows, act, kpis } = cfg;
   const _nk = (...partes) => ["metas", cfg.line, ...partes].join(".");   // huella de números
 
-  let html = metasLineToggleHTML();
-  html += _metasControlsHTML(mesName, cfg.mesesDisponibles || []);
-  html += _metasAlcanceHTML();
-  html += _metasEscalaAviso();
-  html += _metasCoberturaAviso(cfg.cobertura, mesName);
+  let html = _metasControlsHTML(mesName);
+  // Los avisos de escala y de cobertura hablan de Conductores activos (snapshot)
+  // y de N+R/Horas (flujos) contra una meta mensual: no aplican a Fleet, cuyos
+  // KPIs son tasas que no dependen del largo del período.
+  const tasas = cfg.line === "fleet";
+  let alerts = _metasAlcanceHTML() + (tasas ? "" : _metasEscalaAviso() + _metasCoberturaAviso(cfg.cobertura, mesName));
   if (cfg.cobertura && cfg.cobertura.enRango === 0) {
-    return html + `<div class="section"><div class="agy-style-224">${_metasSinPeriodosHTML(mesName)}</div></div>`;
+    return html + _mtAlerts(alerts) + _metasSinPeriodosHTML(mesName);
   }
-  html += secH(icon, color, t("metas.secMes", { t: title, m: escapeHTML(mesLabel(mesName)) }), sub, _metasTagAlcance());
-
   if (!metaRows.length) {
-    html += `<div class="section"><div class="agy-style-224">${emptyHint}</div></div>`;
-    return html;
+    return html + _mtAlerts(alerts) + emptyState({
+      icon: "target", title: cfg.emptyTitle, text: t("mt.vacio.texto"),
+      action: btn({ label: t("mt.irCalculadora"), variant: "secondary", icon: "calculator", act: "switchTab", data: { tab: "calculator" } })
+    });
   }
 
   // Universo de unidades a mostrar: toda fila de meta de esta línea, más su
@@ -658,16 +996,33 @@ function _renderMetasLineView(cfg) {
     units.push({ m: { partner, city, kam: getKAMForPartner(partner) || SIN_KAM, _sinMeta: true }, a });
   });
   const nSinMeta = units.length - metaRows.length;
-  html += _metasSinMetaAviso(nSinMeta, mesName);
+  alerts += _metasSinMetaAviso(nSinMeta, mesName);
+  html += _mtAlerts(alerts);
 
-  // ── 1. General (Perú) ─────────────────────────────────────────────────────
-  html += `<div class="section"><div class="metric-row agy-style-226">`;
+  // Delta de las tarjetas: mismo cálculo (actFn) sobre los períodos equivalentes
+  // del mes anterior. El total de actual = agregado de TODAS las entradas de
+  // actuals (las filas de meta sin actual no aportan), así que el anterior se
+  // agrega igual para que sean comparables.
+  const prev = cfg.actFn ? _metasPrevFechas(cfg.mesDates) : null;
+  const prevUnits = prev ? [...cfg.actFn(prev.fechas).values()].map(a => ({ m: null, a })) : null;
+  const mesTxt = mesLabel(mesName);
+
+  // ── 1. Resumen ────────────────────────────────────────────────────────────
+  html += `<section class="mt-sec">${_mtH2(t("mt.resumen", { m: _mtMesTxt(mesName) }), cfg.info)}<div class="ui-kpi-grid mt-kpis">`;
   kpis.forEach(k => {
     const g = _metasAggKpi(k, units);
     if (g.meta == null && g.actual == null) return;
-    html += metaResCard(k.label, k.sub || "", g.actual, g.meta, g.proj, k.color || color, k.fmtFn, _nk("pais", k.id));
+    const dlt = prevUnits ? _mtDelta(g.actual, _metasAggKpi(k, prevUnits).actual) : undefined;
+    html += metaResCard(k.label, k.sub || "", g.actual, g.meta, g.proj, null, k.fmtFn, _nk("pais", k.id),
+      g.actual != null ? dlt : undefined, prev ? prev.label : "", mesTxt);
   });
-  html += `</div></div>`;
+  html += `</div></section>`;
+
+  const rowsDe = (us, nk) => kpis.map(k => {
+    const g = _metasAggKpi(k, us);
+    if (g.meta == null && g.actual == null) return null;
+    return { label: k.label, real: g.actual, meta: g.meta, proj: g.proj, F: k.fmtFn, numKey: nk(k) };
+  });
 
   // ── 2. Por Ciudad ─────────────────────────────────────────────────────────
   const byCity = new Map();
@@ -678,33 +1033,17 @@ function _renderMetasLineView(cfg) {
     byCity.get(c).push(u);
   });
   if (byCity.size) {
-    html += secH("🏙️", "#06b6d4", t("metas.secCiudad", { t: title }), t("metas.sub.progProy"), "");
-    html += `<div class="section"><div class="city-grid">`;
     // Orden: CITIES primero (orden canónico del dashboard), después cualquier
     // ciudad que aparezca en metas y no esté en esa lista — que existan es un
     // dato de la BD, no un motivo para esconderlas.
     const cityOrder = [...CITIES.filter(c => byCity.has(c)),
                        ...[...byCity.keys()].filter(c => !CITIES.includes(c)).sort()];
-    cityOrder.forEach(city => {
-      const us  = byCity.get(city) || [];
-      const col = CITY_COLORS[city] || "#888";
-      let rows = "";
-      kpis.forEach(k => {
-        const g = _metasAggKpi(k, us);
-        if (g.meta == null && g.actual == null) return;
-        rows += miniBar(k.label, g.actual, g.meta, g.proj, k.fmtFn, _nk("ciudad", k.id, city));
-      });
-      html += `
-        <div class="city-card" style="border-top-color:${col}">
-          <div class="city-name">
-            <span style="width:10px;height:10px;border-radius:50%;background:${col};display:inline-block"></span>
-            ${escapeHTML(cityLabel(city))}
-            <span class="agy-style-244">(${us.length} cuenta${us.length === 1 ? "" : "s"})</span>
-          </div>
-          ${rows}
-        </div>`;
+    const groups = cityOrder.map(city => {
+      const us = byCity.get(city) || [];
+      return { name: cityLabel(city), dot: _mtCatCity(city), count: us.length,
+               rows: rowsDe(us, k => _nk("ciudad", k.id, city)) };
     });
-    html += `</div></div>`;
+    html += `<section class="mt-sec">${_mtH2(t("mt.porCiudad"))}${_mtGroupTable(t("mt.col.ciudad"), groups)}</section>`;
   }
 
   // ── 3. Por KAM ────────────────────────────────────────────────────────────
@@ -715,67 +1054,26 @@ function _renderMetasLineView(cfg) {
     byKam.get(k).push(u);
   });
   if (byKam.size) {
-    html += secH("👤", "#f59e0b", t("metas.secKam", { t: title }), t("metas.sub.progResp"), "");
-    html += `<div class="section"><div class="agy-style-239">`;
-    [...byKam.keys()].sort().forEach(kam => {
-      const us  = byKam.get(kam) || [];
-      const col = KAM_COLORS[kam] || "#888";
-      let rows = "";
-      kpis.forEach(k => {
-        const g = _metasAggKpi(k, us);
-        if (g.meta == null && g.actual == null) return;
-        rows += miniBar(k.label, g.actual, g.meta, g.proj, k.fmtFn, _nk("kam", k.id, kam));
-      });
-      html += `
-        <div class="city-card" style="border-top-color:${col}">
-          <div class="city-name">
-            <span style="width:10px;height:10px;border-radius:50%;background:${col};display:inline-block"></span>
-            ${escapeHTML(kamLabel(kam))}
-            <span class="agy-style-244">(${us.length} cuenta${us.length === 1 ? "" : "s"})</span>
-          </div>
-          ${rows}
-        </div>`;
+    const groups = [...byKam.keys()].sort().map(kam => {
+      const us = byKam.get(kam) || [];
+      return { name: kamLabel(kam), dot: _mtCatKam(kam), count: us.length,
+               rows: rowsDe(us, k => _nk("kam", k.id, kam)) };
     });
-    html += `</div></div>`;
+    html += `<section class="mt-sec">${_mtH2(t("mt.porKam"))}${_mtGroupTable(t("mt.col.kam"), groups)}</section>`;
   }
 
   // ── 4. Por Partner ────────────────────────────────────────────────────────
-  html += secH("🃏", color, t("metas.secPartner", { t: title }), t("metas.sub.metaVsAct"), "");
-  html += `<div class="section"><div class="partner-grid">`;
-  units.forEach(u => {
-    const m      = u.m;
-    const a      = u.a;
-    const col    = STATE.partnerColors[m.partner] || color;
-    const _kam   = _metasKamDe(m);
-    const kcolor = KAM_COLORS[_kam] || "#888";
-    let rows = "";
-    kpis.forEach(k => {
-      const mv = k.meta(m);
-      const av = a ? k.act(a) : null;
-      // El `mv != null ? av : null` de siempre evita mostrar el actual de un KPI
-      // que este partner no tiene en esta línea. Para las cuentas SIN NINGUNA
-      // meta (las que se suman arriba) hay que exceptuarlo: si no, su tarjeta
-      // saldría vacía y no habría forma de ver a quién le falta cargar meta.
-      // _metaLineRow ya sabe pintar ese caso ("1.234 · sin meta").
-      rows += _metaLineRow(k.label, (m._sinMeta || mv != null) ? av : null, mv, k.fmtFn, k.note,
-        _nk("partner", k.id, `${m.partner}@${m.city}`));
-    });
-    html += `
-      <div class="pcard" style="border-left-color:${col}">
-        <div class="pcard-name">
-          <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${col};margin-right:5px"></span>
-          ${escapeHTML(m.partner)}
-          <span class="agy-style-227">${icon} ${escapeHTML(cfg.badge || title)}</span>
-        </div>
-        <div class="pcard-sub">
-          <span style="width:7px;height:7px;border-radius:50%;background:${kcolor};display:inline-block;margin-right:3px"></span>
-          ${escapeHTML(kamLabel(_kam))} &nbsp;·&nbsp; ${escapeHTML(m.city)}
-        </div>
-        ${rows}
-        ${cfg.partnerFoot && !m._sinMeta ? cfg.partnerFoot(m, a) : ""}
-      </div>`;
+  const rows = units.map(u => {
+    const m = u.m, a = u.a, kam = _metasKamDe(m);
+    return {
+      partner: m.partner, cityDisp: cityLabel(m.city), kamDisp: kamLabel(kam), kamRaw: kam,
+      sinMeta: !!m._sinMeta, color: STATE.partnerColors[m.partner] || "var(--cat-other)",
+      tip:  cfg.partnerTip && !m._sinMeta ? cfg.partnerTip(m, a) : "",
+      note: cfg.partnerNote ? cfg.partnerNote(m, a) : "",
+      cells: kpis.map(k => _mtLineCell(k, m, a, _nk("partner", k.id, `${m.partner}@${m.city}`)))
+    };
   });
-  html += `</div></div>`;
+  html += _mtPartnersSection({ rows, kpis: kpis.map(k => ({ id: k.id, label: k.label })) });
   return html;
 }
 
@@ -796,9 +1094,10 @@ function _metasLineRows(mesName, hasLineMeta, selSet, cityFilter, kamFilter) {
 // del mes por ritmo lineal no significa nada (una tasa no se acumula).
 export function _renderMetasFleet(mesName, fechas, selSet, cityFilter, kamFilter, mesesDisponibles, cobertura) {
   return _renderMetasLineView({
-    mesName, mesesDisponibles, cobertura, line: "fleet", icon: "🚗", color: "#0284c7", title: t("metas.tit.fleet"), badge: "Fleet",
-    sub: t("metas.fleetSub"),
+    mesName, mesesDisponibles, cobertura, line: "fleet", info: t("metas.fleetSub"),
+    mesDates: [...fechas].sort(),
     act: _metasFleetActuals(fechas, selSet, cityFilter),
+    actFn: f => _metasFleetActuals(f, selSet, cityFilter),
     metaRows: _metasLineRows(mesName,
       m => m.mSHcar != null || m.mAcc != null || m.mUtil != null,
       selSet, cityFilter, kamFilter),
@@ -813,37 +1112,39 @@ export function _renderMetasFleet(mesName, fechas, selSet, cityFilter, kamFilter
         meta: m => m.mUtil, act: () => null, proj: null,
         weight: a => a.owned, fmtFn: v => fmt(v) + "%", note: t("metas.sinActual") }
     ],
-    partnerFoot: (m, a) => a
-      ? `<div class="agy-style-230">${escapeHTML(t("metas.autosPropios", { n: fmt(a.ownedNow || 0), b: fmt(a.branded || 0) }))}</div>`
-      : "",
-    emptyHint: t("metas.vacioFleet", { m: escapeHTML(mesLabel(mesName)) })
+    // Autos propios: dato de contexto, no un KPI contra meta → en la tarjeta como
+    // nota y en la tabla como tooltip del partner.
+    partnerNote: (m, a) => a ? t("metas.autosPropios", { n: fmt(a.ownedNow || 0), b: fmt(a.branded || 0) }) : "",
+    partnerTip:  (m, a) => a ? t("metas.autosPropios", { n: fmt(a.ownedNow || 0), b: fmt(a.branded || 0) }) : "",
+    emptyTitle: t("mt.vacio.fleet", { m: mesLabel(mesName) })
   });
 }
 
 // Vista Metas TukTuk: KPIs aditivos (AD/N+R/Brandeados/Horas).
 export function _renderMetasTk(mesName, fechas, selSet, cityFilter, kamFilter, mesesDisponibles, cobertura) {
   return _renderMetasLineView({
-    mesName, mesesDisponibles, cobertura, line: "tk", icon: "🛺", color: "#7e22ce", title: t("metas.tit.tuktuk"), badge: "TukTuk",
-    sub: t("metas.tkSub"),
+    mesName, mesesDisponibles, cobertura, line: "tk", info: t("metas.tkSub"),
+    mesDates: [...fechas].sort(),
     act: _metasTkActuals(fechas, selSet, cityFilter),
+    actFn: f => _metasTkActuals(f, selSet, cityFilter),
     metaRows: _metasLineRows(mesName,
       m => m.mtkAD != null || m.mtkNR != null || m.mtkCars != null || m.mtkSH != null,
       selSet, cityFilter, kamFilter),
     kpis: [
-      { id: "ad", label: t("metas.activeDrivers"), sub: t("metas.ultimoPeriodo"), color: "#7e22ce",
+      { id: "ad", label: t("metas.activeDrivers"), sub: t("metas.ultimoPeriodo"),
         meta: m => m.mtkAD, act: a => a.ad, proj: a => a.projAd,
         snapSeries: a => a.adByDate, fmtFn: v => fmt(v) },
-      { id: "nr", label: t("metas.nuevosReact"), sub: t("metas.acumulado"), color: "#f97316",
+      { id: "nr", label: t("metas.nuevosReact"), sub: t("metas.acumulado"),
         meta: m => m.mtkNR, act: a => a.nr, proj: a => a.projNr, fmtFn: v => fmt(v) },
-      { id: "cars", label: t("metas.brandeados"), sub: t("metas.ultimoPeriodo"), color: "#0284c7",
+      { id: "cars", label: t("metas.brandeados"), sub: t("metas.ultimoPeriodo"),
         // Brandeados NO lleva snapSeries: su proyección es PLANA (= nivel
         // actual), igual que AD desde ago 2026 — la nota histórica del ×1.4 vive en
         // Active Drivers, no de cualquier snapshot.
         meta: m => m.mtkCars, act: a => a.cars, proj: a => a.cars, fmtFn: v => fmt(v) },
-      { id: "sh", label: t("metas.horasConexion"), sub: t("metas.acumulado"), color: "#8b5cf6",
+      { id: "sh", label: t("metas.horasConexion"), sub: t("metas.acumulado"),
         meta: m => m.mtkSH, act: a => a.sh, proj: a => a.projSh, fmtFn: v => fmtSmart(v) }
     ],
-    emptyHint: t("metas.vacioTk", { m: escapeHTML(mesLabel(mesName)) })
+    emptyTitle: t("mt.vacio.tk", { m: mesLabel(mesName) })
   });
 }
 
@@ -864,29 +1165,27 @@ export function _renderMetasComb(mesName, fechas, selSet, cityFilter, kamFilter,
   // el Resumen del deck. Lo que no se puede es sumarla al paraguas.
   const umbrella = v => (v == null || v === 0) ? null : v;
   return _renderMetasLineView({
-    mesName, mesesDisponibles, cobertura, line: "comb", icon: "🔀", color: "#8b5cf6", title: t("metas.tit.comb"), badge: t("rend.linea.comb"),
-    sub: t("metas.combSub"),
+    mesName, mesesDisponibles, cobertura, line: "comb", info: t("metas.combSub"),
+    mesDates: [...fechas].sort(),
     act: _metasCombActuals(fechas, selSet, cityFilter),
+    actFn: f => _metasCombActuals(f, selSet, cityFilter),
     metaRows: _metasLineRows(mesName,
       m => (m.mA || 0) > 0 || (m.mNR || 0) > 0 || (m.mH || 0) > 0 ||
            m.mtkAD != null || m.mtkNR != null || m.mtkSH != null,
       selSet, cityFilter, kamFilter),
     kpis: [
-      { id: "ad", label: t("metas.activeDrivers"), sub: t("metas.ultimoPeriodo"), color: "#8b5cf6",
+      { id: "ad", label: t("metas.activeDrivers"), sub: t("metas.ultimoPeriodo"),
         meta: m => umbrella(m.mA), act: a => a.ad, proj: a => a.projAd,
         snapSeries: a => a.adByDate, fmtFn: v => fmt(v) },
-      { id: "nr", label: t("metas.nuevosReact"), sub: t("metas.acumulado"), color: "#f97316",
+      { id: "nr", label: t("metas.nuevosReact"), sub: t("metas.acumulado"),
         meta: m => umbrella(m.mNR), act: a => a.nr, proj: a => a.projNr, fmtFn: v => fmt(v) },
-      { id: "sh", label: t("metas.horasConexion"), sub: t("metas.acumulado"), color: "#0284c7",
+      { id: "sh", label: t("metas.horasConexion"), sub: t("metas.acumulado"),
         meta: m => umbrella(m.mH), act: a => a.sh, proj: a => a.projSh, fmtFn: v => fmtSmart(v) }
     ],
-    partnerFoot: m => {
-      const hasTk = m.mtkNR != null;
-      return hasTk
-        ? `<div class="agy-style-230" title="${escapeHTML(t("metas.pieCombTkTip"))}">${escapeHTML(t("metas.pieCombTk", { n: fmt(m.mtkNR) }))}</div>`
-        : `<div class="agy-style-230" title="${escapeHTML(t("metas.pieCombTip"))}">${escapeHTML(t("metas.pieComb"))}</div>`;
-    },
-    emptyHint: t("metas.vacioComb", { m: escapeHTML(mesLabel(mesName)) })
+    // Aclaración de la meta paraguas: detalle para quien lo busca (tooltip), no
+    // jerga en la tarjeta ("criterio TukTuk aparte: 28 N+R").
+    partnerTip: m => m.mtkNR != null ? t("mt.pieCombTk", { n: fmt(m.mtkNR) }) : "",
+    emptyTitle: t("mt.vacio.comb", { m: mesLabel(mesName) })
   });
 }
 
@@ -903,7 +1202,7 @@ export function renderMetas() {
     if (c) {
       if (e) e.style.display = "none";
       c.style.display = "";
-      c.innerHTML = `<div class="section"><div class="agy-style-224">${escapeHTML(t("carga.escala", { e: t("mode." + (STATE.curMode || "semanal")) }))}</div></div>`;
+      c.innerHTML = alertBox({ tone: "info", text: t("carga.escala", { e: t("mode." + (STATE.curMode || "semanal")) }) });
     }
     reintentarCuandoEscalaLista("metas", STATE, renderMetas, () => STATE.curTab === "metas");
     return;
@@ -976,7 +1275,13 @@ export function _renderMetasImpl() {
 
   // Build performance data by partner+city+date (full precision).
   // Acotado al MES DE LA META dentro del rango: ver _metasFechasDelMes.
-  const perfF  = getFilteredByDateRange(from, to).filter(r => fechas.has(r.date));
+  //
+  // Ola 6: el armado de `combos` (FACT por partner con y sin meta) se envolvió en
+  // una función para poder correrlo también sobre los períodos equivalentes del
+  // mes anterior (delta de las tarjetas del resumen). Para el mes de la meta es
+  // EXACTAMENTE el mismo código de antes, con las mismas fechas.
+  function _combosPara(fechasX, desde, hasta, conDiag) {
+  const perfF  = getFilteredByDateRange(desde, hasta).filter(r => fechasX.has(r.date));
   const cpMap  = {};
   // Diagnostico: trackear breakdown de los 3 componentes de N+R
   let _diagNP = 0, _diagNS = 0, _diagRE = 0;
@@ -994,8 +1299,8 @@ export function _renderMetasImpl() {
 
   // Diagnostico de N+R: imprime breakdown y advierte si solo hay reactivados
   // (sintoma de que el upload no capturo new_from_partner / new_from_service)
-  if (perfF.length) {
-    if (DEBUG) console.log(`[METAS ${STATE.curMode}] Breakdown N+R en rango ${from} → ${to}:`,
+  if (conDiag && perfF.length) {
+    if (DEBUG) console.log(`[METAS ${STATE.curMode}] Breakdown N+R en rango ${desde} → ${hasta}:`,
       { newPartner: _diagNP, newService: _diagNS, reactivated: _diagRE,
         total: _diagNP + _diagNS + _diagRE });
     if ((_diagNP + _diagNS) === 0 && _diagRE > 0) {
@@ -1010,7 +1315,7 @@ export function _renderMetasImpl() {
 
   // Proyección al cierre: días transcurridos del MES DE LA META (no del mes
   // calendario de la última fecha — en semanal la del 29-jun reporta en julio).
-  const maxDate = cpRows.length ? cpRows.map(r => r.date).sort().at(-1) : (mesDates.at(-1) || to);
+  const maxDate = cpRows.length ? cpRows.map(r => r.date).sort().at(-1) : ([...fechasX].sort().at(-1) || hasta);
   const { daysElapsed, daysRemaining } = diasMesReporte(maxDate, STATE.curMode, parseLocalDate);
 
   // Pre-indexar cpRows por partner y por partner+city UNA vez.
@@ -1133,6 +1438,10 @@ export function _renderMetasImpl() {
       noMeta: true
     });
   });
+  return { perfF, combos, maxDate, daysElapsed, daysRemaining };
+  }
+
+  const { perfF, combos, maxDate, daysElapsed, daysRemaining } = _combosPara(fechas, from, to, true);
 
   // Totals
   const tMA = metas.reduce((s, m) => s + m.mA,  0);
@@ -1160,36 +1469,41 @@ export function _renderMetasImpl() {
   document.getElementById("metasEmpty").style.display   = "none";
   document.getElementById("metasContent").style.display = "";
 
-  let html = metasLineToggleHTML();
-  html += _metasControlsHTML(mesName, mesesDisponibles);
-  html += _metasAlcanceHTML();
-  html += _metasEscalaAviso();
-  html += _metasCoberturaAviso(cobertura, mesName);
+  let html = _metasControlsHTML(mesName);
+  let alerts = _metasAlcanceHTML() + _metasEscalaAviso() + _metasCoberturaAviso(cobertura, mesName);
   if (cobertura.enRango === 0) {
-    document.getElementById("metasContent").innerHTML =
-      html + `<div class="section"><div class="agy-style-224">${_metasSinPeriodosHTML(mesName)}</div></div>`;
+    document.getElementById("metasContent").innerHTML = html + _mtAlerts(alerts) + _metasSinPeriodosHTML(mesName);
     return;
   }
 
-  // ── 1. Peru Summary ───────────────────────────────────────────────────────
-  // Contador de partners en perf SIN meta asignada (sus fact suma al total
-  // pero no tienen plan -> %% pueden verse altos sin contexto).
+  // ── 1. Resumen ────────────────────────────────────────────────────────────
+  // Partners en perf SIN meta asignada: su FACT suma al total pero no tienen
+  // plan → el % puede verse alto sin contexto. Mismo aviso que las líneas.
   const noMetaCount = combos.filter(c => c.noMeta).length;
-  const noMetaBanner = noMetaCount > 0
-    ? `<div class="agy-style-238">
-         ${t(noMetaCount > 1 ? "metas.sinMetaBannerN" : "metas.sinMetaBanner1", { n: noMetaCount, m: escapeHTML(mesLabel(mesName)) })}
-       </div>`
-    : "";
-  html += secH("🎯","#8b5cf6",t("metas.secMes",{ t: t("metas.cumplimiento"), m: escapeHTML(mesLabel(mesName)) }),t("metas.sub.progMes"),_metasTagAlcance());
-  html += `<div class="section">${noMetaBanner}<div class="metric-row">
-    ${metaResCard(t("metric.ad.label"), t("rend.per.ultimaSemana"),  tAD, tMA,  tPAD, "#8b5cf6", undefined, "metas.agg.pais.ad")}
-    ${metaResCard(t("metric.nr.label"), t("metas.acumMesSub"),  tNR, tMNR, tPNR, "#f97316", undefined, "metas.agg.pais.nr")}
-    ${metaResCard(t("metric.sh.label"), t("metas.acumMesSub"),  tSH, tMH,  tPSH, "#06b6d4", undefined, "metas.agg.pais.sh")}
-  </div></div>`;
+  alerts += _metasSinMetaAviso(noMetaCount, mesName);
+  html += _mtAlerts(alerts);
+
+  // Delta vs los períodos equivalentes del mes anterior (mismo _combosPara).
+  const prev = _metasPrevFechas(mesDates);
+  let pAD = null, pNR = null, pSH = null;
+  if (prev) {
+    const pf = [...prev.fechas].sort();
+    const pc = _combosPara(prev.fechas, pf[0], pf[pf.length - 1], false).combos;
+    pAD = pc.reduce((s, c) => s + c.ad, 0);
+    pNR = pc.reduce((s, c) => s + c.nr, 0);
+    pSH = pc.reduce((s, c) => s + c.sh, 0);
+  }
+  const _dl = (a, p) => prev ? _mtDelta(a, p) : undefined;
+  const _pl = prev ? prev.label : "";
+  const mesTxt = mesLabel(mesName);
+  html += `<section class="mt-sec">${_mtH2(t("mt.resumen", { m: _mtMesTxt(mesName) }))}<div class="ui-kpi-grid mt-kpis">
+    ${metaResCard(t("metric.ad.label"), t("rend.per.ultimaSemana"),  tAD, tMA,  tPAD, null, undefined, "metas.agg.pais.ad", _dl(tAD, pAD), _pl, mesTxt)}
+    ${metaResCard(t("metric.nr.label"), t("metas.acumMesSub"),  tNR, tMNR, tPNR, null, undefined, "metas.agg.pais.nr", _dl(tNR, pNR), _pl, mesTxt)}
+    ${metaResCard(t("metric.sh.label"), t("metas.acumMesSub"),  tSH, tMH,  tPSH, null, undefined, "metas.agg.pais.sh", _dl(tSH, pSH), _pl, mesTxt)}
+  </div></section>`;
 
   // ── 2. Por Ciudad ─────────────────────────────────────────────────────────
-  html += secH("🏙️","#06b6d4",t("metas.secCiudad",{ t: t("metas.titulo") }),t("metas.sub.progProy"),"");
-  html += `<div class="section"><div class="city-grid">`;
+  const cityGroups = [];
   CITIES.forEach(city => {
     // Use all metas for this city (ignore cityFilter here to always show all cities)
     const cm = STATE.metasData.filter(m => {
@@ -1244,30 +1558,23 @@ export function _renderMetasImpl() {
     const cmA  = cm.reduce((s, m) => s + m.mA,  0);
     const cmNR = cm.reduce((s, m) => s + m.mNR, 0);
     const cmH  = cm.reduce((s, m) => s + m.mH,  0);
-    const col  = CITY_COLORS[city] || "#888";
-    html += `
-      <div class="city-card" style="border-top-color:${col}">
-        <div class="city-name">
-          <span style="width:10px;height:10px;border-radius:50%;background:${col};display:inline-block"></span>
-          ${escapeHTML(cityLabel(city))}
-        </div>
-        ${miniBar(t("metric.ad.short"),  crAD, cmA,  cpAD, undefined, `metas.agg.ciudad.ad.${city}`)}
-        ${miniBar(t("metric.nr.short"),   crNR, cmNR, cpNR, undefined, `metas.agg.ciudad.nr.${city}`)}
-        ${miniBar(t("metric.sh.short"),   crSH, cmH,  cpSH, undefined, `metas.agg.ciudad.sh.${city}`)}
-      </div>`;
+    cityGroups.push({ name: cityLabel(city), dot: _mtCatCity(city), count: cm.length, rows: [
+      { label: t("metric.ad.short"), real: crAD, meta: cmA,  proj: cpAD, numKey: `metas.agg.ciudad.ad.${city}` },
+      { label: t("metric.nr.short"), real: crNR, meta: cmNR, proj: cpNR, numKey: `metas.agg.ciudad.nr.${city}` },
+      { label: t("metric.sh.short"), real: crSH, meta: cmH,  proj: cpSH, numKey: `metas.agg.ciudad.sh.${city}` }
+    ] });
   });
-  html += `</div></div>`;
+  html += `<section class="mt-sec">${_mtH2(t("mt.porCiudad"))}${_mtGroupTable(t("mt.col.ciudad"), cityGroups)}</section>`;
 
   // ── 3. Por KAM ────────────────────────────────────────────────────────────
   // Partners sin meta ya estan dentro de combos con noMeta=true,
   // suman al FACT del KAM pero no al plan.
-  html += secH("👤","#f59e0b",t("metas.secKam",{ t: t("metas.titulo") }),t("metas.sub.progResp"),"");
-  html += `<div class="section"><div class="agy-style-239">`;
   // Los grupos salen de las cuentas mostradas (con y sin meta), con "No KAM"
   // al final. Antes se mezclaban los valores crudos de KAM_MAP, que traen ""
   // y nunca "No KAM" (B9).
   const allKAMs = ordenarKams(combos.map(c => c.kam), SIN_KAM)
     .filter(k => kamFilter === "all" || k === kamFilter);
+  const kamGroups = [];
   allKAMs.forEach(kam => {
     const kc   = combos.filter(c => c.kam === kam);
     const km   = metas.filter(m => _metasKamDe(m) === kam);
@@ -1286,90 +1593,46 @@ export function _renderMetasImpl() {
     const kpAD = _projADde(kc);
     const kpNR = kc.reduce((s, c) => s + c.projNR, 0);
     const kpSH = kc.reduce((s, c) => s + c.projSH, 0);
-    const col  = KAM_COLORS[kam] || "#888";
-    const totalAccounts = kc.length;
-    const alertHtml = noGoalPartners.length ? `
-      <details class="agy-style-240">
-        <summary class="agy-style-241">
-          ${t("metas.sinMetaAsignadaN", { n: noGoalPartners.length })}
-          <span class="agy-style-242">${t("metas.clickVer")}</span>
-        </summary>
-        <div class="agy-style-243">
-          ${noGoalPartners.map(escapeHTML).join(", ")}
-        </div>
-      </details>` : "";
-    html += `
-      <div class="city-card" style="border-top-color:${col}">
-        <div class="city-name">
-          <span style="width:10px;height:10px;border-radius:50%;background:${col};display:inline-block"></span>
-          ${escapeHTML(kamLabel(kam))}
-          <span class="agy-style-244">(${totalAccounts} cuentas)</span>
-        </div>
-        ${alertHtml}
-        ${miniBar(t("metric.ad.short"), krAD, kmA,  kpAD, undefined, `metas.agg.kam.ad.${kam}`)}
-        ${miniBar(t("metric.nr.short"),  krNR, kmNR, kpNR, undefined, `metas.agg.kam.nr.${kam}`)}
-        ${miniBar(t("metric.sh.short"),  krSH, kmH,  kpSH, undefined, `metas.agg.kam.sh.${kam}`)}
-      </div>`;
+    const extra = noGoalPartners.length
+      ? `<span class="ui-badge ui-badge--neutral mt-ent__badge" title="${escapeHTML(noGoalPartners.join(", "))}">${escapeHTML(t("mt.sinMetaN", { n: noGoalPartners.length }))}</span>`
+      : "";
+    kamGroups.push({ name: kamLabel(kam), dot: _mtCatKam(kam), count: kc.length, extra, rows: [
+      { label: t("metric.ad.short"), real: krAD, meta: kmA,  proj: kpAD, numKey: `metas.agg.kam.ad.${kam}` },
+      { label: t("metric.nr.short"), real: krNR, meta: kmNR, proj: kpNR, numKey: `metas.agg.kam.nr.${kam}` },
+      { label: t("metric.sh.short"), real: krSH, meta: kmH,  proj: kpSH, numKey: `metas.agg.kam.sh.${kam}` }
+    ] });
   });
-  html += `</div></div>`;
+  html += `<section class="mt-sec">${_mtH2(t("mt.porKam"))}${_mtGroupTable(t("mt.col.kam"), kamGroups)}</section>`;
 
   // ── 4. Por Partner ────────────────────────────────────────────────────────
-  html += secH("🃏","#FF0000",t("metas.secPartner",{ t: t("metas.titulo") }),t("metas.sub.progInd"),"");
-  html += `<div class="section"><div class="partner-grid">`;
-  // Ordenar: primero partners con meta, luego sin meta
-  const sortedCombos = [...combos].sort((a, b) =>
-    (a.noMeta ? 1 : 0) - (b.noMeta ? 1 : 0)
-  );
-  sortedCombos.forEach(c => {
-    const col    = STATE.partnerColors[c.partner] || "#ccc";
+  const aggKpis = [
+    { id: "ad", label: t("metric.ad.short") },
+    { id: "nr", label: t("metric.nr.short") },
+    { id: "sh", label: t("metric.sh.short") }
+  ];
+  const rows = combos.map(c => {
     // Huella de números: la entidad es partner@ciudad; sin meta y sin filtro de
     // ciudad la "ciudad" es un rótulo traducido (metas.sinPlan) → solo el partner.
-    const _pk    = m => `metas.agg.partner.${m}.` + (c.noMeta && cityFilter === "all" ? c.partner : `${c.partner}@${c.city}`);
-    const kcolor = KAM_COLORS[c.kam] || "#888";
-    if (c.noMeta) {
-      // Partners SIN meta: mostrar solo FACT, sin plan/proyeccion %
-      html += `
-        <div class="pcard" style="border-left-color:${col};background:#fafaf9">
-          <div class="pcard-name">
-            <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${col};margin-right:5px"></span>
-            ${escapeHTML(c.partner)}
-            <span class="agy-style-245">${escapeHTML(t("metas.sinPlan"))}</span>
-          </div>
-          <div class="pcard-sub">
-            <span style="width:7px;height:7px;border-radius:50%;background:${kcolor};display:inline-block;margin-right:3px"></span>
-            ${escapeHTML(kamLabel(c.kam))} &nbsp;·&nbsp; ${escapeHTML(c.city)}
-          </div>
-          <div class="agy-style-246">
-            <span>${escapeHTML(t("metric.ad.short"))}</span><strong${dn(_pk("ad"), "real")}>${fmt(c.ad)}</strong>
-          </div>
-          <div class="agy-style-247">
-            <span>${escapeHTML(t("metric.nr.short"))}</span><strong${dn(_pk("nr"), "real")}>${fmt(c.nr)}</strong>
-          </div>
-          <div class="agy-style-247">
-            <span>${escapeHTML(t("metric.sh.short"))}</span><strong${dn(_pk("sh"), "real")}>${fmt(c.sh)}</strong>
-          </div>
-          <div class="agy-style-248">
-            * Suma al total del KAM y país aunque no tenga meta.
-          </div>
-        </div>`;
-    } else {
-      html += `
-        <div class="pcard" style="border-left-color:${col}">
-          <div class="pcard-name">
-            <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${col};margin-right:5px"></span>
-            ${escapeHTML(c.partner)}
-          </div>
-          <div class="pcard-sub">
-            <span style="width:7px;height:7px;border-radius:50%;background:${kcolor};display:inline-block;margin-right:3px"></span>
-            ${escapeHTML(kamLabel(c.kam))} &nbsp;·&nbsp; ${escapeHTML(c.city)}
-          </div>
-          ${miniBarFull(t("metric.ad.short"), c.ad, c.mA,  c.projAD, undefined, _pk("ad"))}
-          ${miniBarFull(t("metric.nr.short"),  c.nr, c.mNR, c.projNR, undefined, _pk("nr"))}
-          ${miniBarFull(t("metric.sh.short"),  c.sh, c.mH,  c.projSH, undefined, _pk("sh"))}
-        </div>`;
-    }
+    const _pk = m => `metas.agg.partner.${m}.` + (c.noMeta && cityFilter === "all" ? c.partner : `${c.partner}@${c.city}`);
+    const vals = { ad: [c.ad, c.mA, c.projAD], nr: [c.nr, c.mNR, c.projNR], sh: [c.sh, c.mH, c.projSH] };
+    return {
+      partner: c.partner,
+      cityDisp: cityFilter === "all" ? t("metas.todas") : cityLabel(c.city),
+      kamDisp: kamLabel(c.kam), kamRaw: c.kam,
+      sinMeta: !!c.noMeta, color: STATE.partnerColors[c.partner] || "var(--cat-other)",
+      tip: "", note: "",
+      // Partners CON meta: siempre actual / meta / % (misma regla que el viejo
+      // miniBarFull, que pintaba "0.0%" con meta 0). SIN meta: solo el actual.
+      cells: aggKpis.map(k => {
+        const [real, meta, proj] = vals[k.id];
+        return c.noMeta
+          ? { id: k.id, label: k.label, mode: "real", real, F: fmt, numKey: _pk(k.id) }
+          : { id: k.id, label: k.label, mode: "both", real, meta, proj, F: fmt, numKey: _pk(k.id),
+              pct: meta > 0 ? (real / meta) * 100 : 0 };
+      })
+    };
   });
-  html += `</div></div>`;
+  html += _mtPartnersSection({ rows, kpis: aggKpis });
 
   document.getElementById("metasContent").innerHTML = html;
 }
@@ -1378,43 +1641,45 @@ export function _renderMetasImpl() {
 // a secas "88.4%" se veria como "88". Default fmt() para no tocar los callers
 // del agregador.
 // numKey (opcional): clave de la huella de números (shared/huella.ts).
-export function metaResCard(label, sub, real, meta, proj, color, fmtFn, numKey) {
+//
+// Ola 6: tarjeta KPI del sistema de diseño (dirección B): valor · delta vs el
+// mismo punto del mes anterior · barra de avance contra la meta con el caption
+// "77.0% de la meta de Septiembre (37,248)" · proyección solo en el mes en curso.
+// `color` se conserva en la firma por compatibilidad y ya no se usa (sin
+// arcoíris: el color lo pone el estado del cumplimiento). Los tres últimos
+// parámetros son nuevos y opcionales.
+export function metaResCard(label, sub, real, meta, proj, color, fmtFn, numKey, dlt, prevLabel, mesTxt) {
   const F   = fmtFn || fmt;
   if (!_metasProyOn) proj = null;   // mes cerrado: sin proyección (decisión 4)
+  const lab = `<div class="ui-kpi__label">${_E(label)}${sub ? ` <span class="mt-kpi__sub">· ${_E(sub)}</span>` : ""}</div>`;
+  const dHtml = dlt !== undefined && real != null
+    ? `<span class="ui-kpi__delta"><span${_dn(numKey, "delta")}>${uiDelta(dlt)}</span>` +
+      (prevLabel ? `<span class="ui-kpi__prev">${_E(prevLabel)}</span>` : "") + `</span>`
+    : "";
+  // KPI SIN META cargada (ej. un partner con actividad TukTuk pero sin metas
+  // TukTuk del mes). El camino normal daría "0.0% de plan 0" en rojo — se lee
+  // como incumplimiento grave cuando no hay plan contra qué medir. Se muestra
+  // el valor y se dice.
+  if (real != null && !(meta > 0)) {
+    return `<div class="ui-kpi mt-kpi">${lab}
+      <div class="ui-kpi__row"><span class="ui-kpi__value"${_dn(numKey, "real")}>${F(real || 0)}</span>${dHtml}</div>
+      <div class="ui-kpi__goal"><div class="ui-kpi__caption ui-kpi__caption--none">${_E(t("metas.sinMetaMes"))}</div>
+      ${proj == null ? "" : `<div class="ui-kpi__caption mt-proj">${_E(t("metas.proyeccion"))}: <strong${_dn(numKey, "proj")}>${F(proj)}</strong></div>`}</div>
+    </div>`;
+  }
   // KPI solo-meta (ej. Utilización de Fleet: hay objetivo pero el dato real no
   // llega en el export). Mostrarlo con el camino normal daría "0.0% de plan",
   // que se lee como "no estamos llegando" cuando en realidad no se está
   // midiendo. Se muestra el plan y se dice explícitamente que no hay actual.
-  // KPI SIN META cargada (ej. un partner con actividad TukTuk pero sin metas
-  // TukTuk del mes). El camino normal daria "0.0% de plan 0" en rojo y una
-  // "Proyeccion: 1.104,6 (0.0%)" — se lee como incumplimiento grave cuando en
-  // realidad no hay plan contra que medir. Se muestra el valor y se dice.
-  if (real != null && !(meta > 0)) {
-    return `
-      <div class="meta-sum-card">
-        <div class="mcard-label">${label}</div>
-        <div class="mcard-sub-label">${sub}</div>
-        <div class="mcard-val"${numKey ? dn(numKey, "real") : ""}>${F(real || 0)}</div>
-        <div class="agy-style-250"><span class="agy-style-251">${escapeHTML(t("metas.sinMetaMes"))}</span></div>
-        ${proj == null ? "" : `<div style="font-size:.72rem;color:#888;margin-top:4px">${escapeHTML(t("metas.proyeccion"))}: <strong${numKey ? dn(numKey, "proj") : ""}>${F(proj)}</strong></div>`}
-      </div>`;
-  }
   if (real == null) {
-    return `
-      <div class="meta-sum-card">
-        <div class="mcard-label">${label}</div>
-        <div class="mcard-sub-label">${sub}</div>
-        <div class="mcard-val" style="color:${color}"${numKey ? dn(numKey, "meta") : ""}>${F(meta || 0)}</div>
-        <div class="agy-style-250"><span class="agy-style-251">${escapeHTML(t("metas.metaSinActual"))}</span></div>
-      </div>`;
+    return `<div class="ui-kpi mt-kpi">${lab}
+      <div class="ui-kpi__row"><span class="ui-kpi__value mt-kpi__value--meta"${_dn(numKey, "meta")}>${F(meta || 0)}</span></div>
+      <div class="ui-kpi__goal"><div class="ui-kpi__caption ui-kpi__caption--none">${_E(t("metas.metaSinActual"))}</div></div>
+    </div>`;
   }
-  const p   = meta > 0 ? (real / meta) * 100 : 0;
-  const pp  = meta > 0 ? (proj / meta) * 100 : 0;
-  const pV  = Math.min(p,  100); // visual bar width
-  const ppV = Math.min(pp, 100);
-  const overBadge = p > 100
-    ? `<span class="agy-style-249" title="${escapeHTML(t("metas.superasPlan"))}">${escapeHTML(t("metas.overachievement"))}</span>`
-    : "";
+  const p  = meta > 0 ? (real / meta) * 100 : 0;
+  const pp = meta > 0 && proj != null ? (proj / meta) * 100 : 0;
+  const tone = _mtTone(p, meta);
   const cumplTip = t("metas.cumplTip", { f: F(real), p: F(meta) });
   // Dos reglas distintas y a propósito: los FLUJOS (N+R, horas) se extrapolan
   // por ritmo del mes; los SNAPSHOTS (Active Drivers) proyectan máx del rango
@@ -1423,131 +1688,69 @@ export function metaResCard(label, sub, real, meta, proj, color, fmtFn, numKey) 
   // El texto del tooltip TIENE que decir lo que el código hace: una vez se
   // "corrigió" el cálculo para que coincidiera con un tooltip impreciso, al
   // revés de lo que correspondía.
-  const projTip = escapeHTML(t(STATE.curMode === "mensual" ? "metas.projTipMensual" : "metas.projTip"));
-  return `
-    <div class="meta-sum-card">
-      <div class="mcard-label">${label}</div>
-      <div class="mcard-sub-label">${sub}</div>
-      <div class="mcard-val"${numKey ? dn(numKey, "real") : ""}>${F(real)}</div>
-      <div class="agy-style-250" title="${cumplTip}">
-        <span style="font-size:.85rem;font-weight:700;color:${pColor(p)}"${numKey ? dn(numKey, "pct") : ""}>${p.toFixed(1)}% </span>
-        <span class="sem ${semCls(p)}"></span>
-        ${overBadge}
-        <span class="agy-style-251">${escapeHTML(t("metas.dePlan", { n: F(meta) }))}</span>${numKey ? `<span${dn(numKey, "meta")} hidden>${F(meta)}</span>` : ""}
-      </div>
-      <div class="agy-style-252">${barProj(pV, proj == null ? null : ppV)}</div>
-      ${proj == null ? "" : `<div style="font-size:.72rem;color:${pColor(pp)};margin-top:4px" title="${projTip}">
-        ${escapeHTML(t("metas.proyeccion"))}: <strong${numKey ? dn(numKey, "proj") : ""}>${F(proj)}</strong> (${pp.toFixed(1)}%)
-      </div>`}
-    </div>`;
+  const projTip = t(STATE.curMode === "mensual" ? "metas.projTipMensual" : "metas.projTip");
+  const caption = t("mt.captionMeta", {
+    p: `<span class="mt-tone mt-tone--${tone}"${_dn(numKey, "pct")}>${p.toFixed(1)}%</span>`,
+    m: _E(mesTxt || ""),
+    n: `<span${_dn(numKey, "meta")}>${F(meta)}</span>`
+  });
+  return `<div class="ui-kpi mt-kpi">${lab}
+    <div class="ui-kpi__row"><span class="ui-kpi__value"${_dn(numKey, "real")}>${F(real)}</span>${dHtml}</div>
+    <div class="ui-kpi__goal">
+      ${_mtBar(p, proj == null ? null : pp, meta)}
+      <div class="ui-kpi__caption" title="${_E(cumplTip)}">${caption}</div>
+      ${proj == null ? "" : `<div class="ui-kpi__caption mt-proj" title="${_E(projTip)}">${t("mt.proyCierre", {
+        v: `<strong${_dn(numKey, "proj")}>${F(proj)}</strong>`, p: `<span class="mt-tone mt-tone--${_mtTone(pp, meta)}">${pp.toFixed(1)}%</span>` })}</div>`}
+    </div>
+  </div>`;
 }
 
+// Bloque compacto meta-vs-actual (se conserva la firma exportada). Misma lógica
+// de casos que las tablas por ciudad/KAM.
 export function miniBar(label, real, meta, proj, fmtFn, numKey) {
-  const F   = fmtFn || fmt;
+  const F = fmtFn || fmt;
   if (!_metasProyOn) proj = null;   // mes cerrado: sin proyección (decisión 4)
-  if (real != null && !(meta > 0)) {   // sin meta — ver la nota en metaResCard
-    return `<div class="agy-style-253">
-      <div class="agy-style-254">
-        <span class="agy-style-255">${label}</span>
-        <span class="agy-style-222"><strong${numKey ? dn(numKey, "real") : ""}>${F(real || 0)}</strong></span>
-      </div>
-      <div class="agy-style-256">${escapeHTML(t("metas.sinMetaCargada"))}</div>
-    </div>`;
-  }
-  if (real == null) {   // solo meta — ver la nota en metaResCard
-    return `<div class="agy-style-253">
-      <div class="agy-style-254">
-        <span class="agy-style-255">${label}</span>
-        <span class="agy-style-222"><strong${numKey ? dn(numKey, "meta") : ""}>${F(meta || 0)}</strong></span>
-      </div>
-      <div class="agy-style-256">${escapeHTML(t("metas.metaSinActual"))}</div>
-    </div>`;
-  }
-  const p   = meta > 0 ? (real / meta) * 100 : 0;
-  const pp  = meta > 0 ? (proj / meta) * 100 : 0;
-  const pV  = Math.min(p,  100);
-  const ppV = Math.min(pp, 100);
-  const overBadge = p > 100
-    ? `<span class="agy-style-220">🏆</span>`
-    : "";
-  return `
-    <div class="agy-style-253">
-      <div class="agy-style-254">
-        <span class="agy-style-255">${label}</span>
-        <span class="agy-style-222">
-          <strong style="color:${pColor(p)}"${numKey ? dn(numKey, "pct") : ""}>${p.toFixed(1)}%</strong>
-          <span class="sem ${semCls(p)}"></span>
-          ${overBadge}
-        </span>
-      </div>
-      ${barProj(pV, proj == null ? null : ppV)}
-      <div class="agy-style-256">
-        ${escapeHTML(t("metas.fact"))}: ${_hn(numKey, "real", F(real))} / ${escapeHTML(t("metas.plan"))}: ${_hn(numKey, "meta", F(meta))}${proj == null ? "" : ` /
-        ${escapeHTML(t("metas.proy"))} <span style="color:${pColor(pp)};font-weight:700"${numKey ? dn(numKey, "proj") : ""}>${F(proj)}</span>`}
-      </div>
-    </div>`;
+  return _mtCardKpi(real != null && !(meta > 0)
+    ? { label, mode: "real", real: real || 0, F, numKey }
+    : real == null
+      ? { label, mode: "meta", meta: meta || 0, F, numKey, note: t("metas.sinActual") }
+      : { label, mode: "both", real, meta, proj, F, numKey, pct: meta > 0 ? (real / meta) * 100 : 0 });
 }
 
 export function miniBarFull(label, real, meta, proj, fmtFn, numKey) {
-  const F   = fmtFn || fmt;
+  const F = fmtFn || fmt;
   if (!_metasProyOn) proj = null;   // mes cerrado: sin proyección (decisión 4)
-  const p   = meta > 0 ? (real / meta) * 100 : 0;
-  const pp  = meta > 0 ? (proj / meta) * 100 : 0;
-  const pV  = Math.min(p,  100);
-  const ppV = Math.min(pp, 100);
-  const overBadge = p > 100
-    ? `<span class="agy-style-220">🏆</span>`
-    : "";
-  return `
-    <div class="agy-style-196">
-      <div class="agy-style-221">
-        <span>${label}</span>
-        <span class="agy-style-222">
-          <strong style="color:${pColor(p)}"${numKey ? dn(numKey, "pct") : ""}>${p.toFixed(1)}%</strong>
-          <span class="sem ${semCls(p)}"></span>
-          ${overBadge}
-        </span>
-      </div>
-      <div class="agy-style-223">
-        ${escapeHTML(t("metas.fact"))}: <strong${numKey ? dn(numKey, "real") : ""}>${F(real)}</strong> / ${escapeHTML(t("metas.plan"))}: <strong${numKey ? dn(numKey, "meta") : ""}>${F(meta)}</strong>
-      </div>
-      ${barProj(pV, proj == null ? null : ppV)}
-      ${proj == null ? "" : `<div style="font-size:.67rem;color:${pColor(pp)};margin-top:2px">
-        ${escapeHTML(t("metas.proyeccion"))}: <strong${numKey ? dn(numKey, "proj") : ""}>${F(proj)}</strong> (${pp.toFixed(1)}%)
-      </div>`}
-    </div>`;
+  return _mtCardKpi({ label, mode: "both", real, meta, proj, F, numKey, pct: meta > 0 ? (real / meta) * 100 : 0 });
 }
 
+// Barra de avance real + proyección (pR/pP en %). Se conserva la firma.
 export function barProj(pR, pP) {
-  let h = `<div class="bar-bg">`;
-  if (pP > pR)
-    h += `<div class="bar-proj" style="width:${Math.min(pP,100)}%;background:${pColor(pP)}"></div>`;
-  h += `<div class="bar-real" style="width:${pR}%;background:${pColor(pR)}"></div>`;
-  // Marca de proyección SIEMPRE visible: con la regla plana (ago 2026) la
-  // proyección de AD coincide con el avance, así que la extensión tenue de
-  // arriba nunca se dibuja y parecía que "no había proyección".
-  if (pP != null && !isNaN(pP))
-    h += `<div class="bar-tick" style="left:calc(${Math.min(Math.max(pP,0),100).toFixed(1)}% - 1px)"></div>`;
-  return h + `</div>`;
+  return _mtBar(pR, pP, 1);
 }
 
 export async function downloadMetasPDF() {
   logAccess("download_pdf", "metas");
   const content = document.getElementById("metasContent");
   if (!content) return;
-  const btn = document.getElementById("metasPdfBtn");
-  if (btn) { btn.textContent = "⏳ Generando..."; btn.disabled = true; }
+  const btnEl = document.getElementById("metasPdfBtn");
+  const btnTxt = btnEl && btnEl.querySelector("span");
+  if (btnEl) { btnEl.disabled = true; if (btnTxt) btnTxt.textContent = t("metas.generandoPDF"); }
+  _mtCerrarMenus(null);
 
+  // Las tablas anchas viven en un contenedor con scroll horizontal: html2canvas
+  // solo captura lo visible de un scroll. Mientras se exporta, el contenido se
+  // despliega entero (.mt-exporting) y se captura su ancho real.
+  content.classList.add("mt-exporting");
   try {
     await ensurePdfLibs();
     const { jsPDF } = window.jspdf;
     const totalH  = content.scrollHeight;
-    const pageW   = 1280;
-    const pageH   = 720;
     const scale   = 1.5;
+    const width   = Math.max(content.offsetWidth, content.scrollWidth);
     const canvas  = await html2canvas(content, {
-      width: content.offsetWidth,
+      width,
       height: totalH,
+      windowWidth: Math.max(document.documentElement.clientWidth, width),
       scale,
       useCORS: true,
       logging: false,
@@ -1577,9 +1780,10 @@ export async function downloadMetasPDF() {
     stampPDF(pdf, `Metas — ${mes.replace("_", " ")}`);
     pdf.save(`Metas_${mes}.pdf`);
   } catch(err) {
-    alert(t("metas.err.pdf") + err.message);
+    await alertDialog({ title: t("mt.pdfError"), body: t("metas.err.pdf") + (err && err.message || err), tone: "bad" });
   } finally {
-    if (btn) { btn.textContent = t("metas.descargarPDF"); btn.disabled = false; }
+    content.classList.remove("mt-exporting");
+    if (btnEl) { btnEl.disabled = false; if (btnTxt) btnTxt.textContent = t("mt.pdf"); }
   }
 }
 
@@ -1589,6 +1793,7 @@ export async function downloadMetasPDF() {
 // mixto de uploads viejos ("JUNIO"/"Junio"/"junio") que el loader normaliza a
 // UPPERCASE en cliente. Guard de admin defensivo; el enforcement real es RLS.
 export async function deleteMetasMes(mes, year) {
+  _mtCerrarMenus(null);
   if (!STATE.isAdmin) {
     showBanner(false, t("metas.err.admin"));
     return;
@@ -1607,13 +1812,24 @@ export async function deleteMetasMes(mes, year) {
     m.mes === mesU.toUpperCase() && (yearN == null || m.mYear === yearN)
   ).length;
   const mesTxt = mesLabel(mesU) + (yearN ? " " + yearN : "");
-  if (!confirm(t(n === 1 ? "metas.confirmBorrar1" : "metas.confirmBorrarN", { m: mesTxt, n }))) return;
+  // Confirmación en la página (no confirm()): se ve el conteo exacto y hay que
+  // teclear el nombre del mes — lo irreversible no se acepta por reflejo.
+  const ok = await confirmDialog({
+    title: t("mt.borrar.titulo", { m: mesTxt }),
+    body: t(n === 1 ? "mt.borrar.cuerpo1" : "mt.borrar.cuerpoN", { m: mesTxt, n }),
+    confirmLabel: t("mt.borrar.ok"),
+    danger: true,
+    requireText: mesLabel(mesU)
+  });
+  if (!ok) return;
 
   showLoad(true, t("metas.borrando", { m: mesTxt }));
   try {
-    let q = sb.from("metas").delete().ilike("mes", mesU);
+    // count:"exact" → PostgREST devuelve cuántas filas borró DE VERDAD (RLS
+    // incluido): el aviso informa ese número, no el conteo local.
+    let q = sb.from("metas").delete({ count: "exact" }).ilike("mes", mesU);
     if (yearN != null) q = q.eq("mes_year", yearN);
-    const { error } = await q;
+    const { error, count } = await q;
     if (error) throw error;
 
     // Si el mes borrado era la selección manual del selector, limpiarla para que
@@ -1623,7 +1839,7 @@ export async function deleteMetasMes(mes, year) {
       STATE.metasMesSelYear = null;
     }
 
-    showBanner(true, t("metas.borradas", { m: mesTxt }));
+    showBanner(true, t("mt.borradas", { m: mesTxt, n: count ?? n }));
     await loadFromSupabase();   // refresca STATE.metasData + re-renderiza el tab activo
 
     // loadFromSupabase solo re-renderiza Metas si quedan filas; si ya no quedan,
@@ -1650,5 +1866,9 @@ registerActions({
   setMetasLine:    d => setMetasLine(d.line),
   setMetasMes:     (d, el) => setMetasMes(el.value),
   deleteMetasMes:  d => deleteMetasMes(d.mes, d.year),
+  metasMenuToggle: (d, el) => metasMenuToggle(el),
+  metasSort:       d => metasSort(d.key),
+  metasSetFiltro:  d => metasSetFiltro(d.value),
+  metasSetVista:   d => metasSetVista(d.value),
   downloadMetasPDF
 });
