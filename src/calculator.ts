@@ -1119,9 +1119,9 @@ export function _calcSec4_distribucion(agg, distTotals, monthLabel) {
           <thead>
             <tr>
               <th>${escapeHTML(t("calc.col.partner"))}</th><th>${escapeHTML(t("calc.col.ciudad"))}</th>
-              <th class="tn">% AD</th><th class="tn">AD meta</th>
-              <th class="tn">% SH</th><th class="tn">SH meta</th>
-              <th class="tn">% N+R</th><th class="tn">N+R meta</th>
+              <th class="tn">% AD</th><th class="tn">${t("calc.col.kpiMeta", { k: "AD" })}</th>
+              <th class="tn">% SH</th><th class="tn">${t("calc.col.kpiMeta", { k: "SH" })}</th>
+              <th class="tn">% N+R</th><th class="tn">${t("calc.col.kpiMeta", { k: "N+R" })}</th>
             </tr>
           </thead>
           <tbody>${rowsHtml || `<tr><td colspan="8" class="agy-style-120">${escapeHTML(t("calc.sinDatos"))}</td></tr>`}</tbody>

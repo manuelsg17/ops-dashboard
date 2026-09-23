@@ -16,7 +16,7 @@
 // los agregados de abajo son "su total" sin filtrar nada explícitamente.
 
 import { registerActions } from "./shared/actions.js";
-import { t } from "./core/i18n";
+import { t, mesLabel } from "./core/i18n";
 import { logAccess } from "./shared/accessLog.js";
 import { stampPDF } from "./shared/pdfmeta.js";
 import { ensurePdfLibs } from "./shared/lazyLibs.js";
@@ -261,7 +261,7 @@ function _portalMetas(line, rows) {
       m => (pesoU.get(`${m.partner}|||${m.city}`) || {})[peso]);
     const mShCar = wMeta("mSHcar", "owned"), mAcc = wMeta("mAcc", "trips"), mUtil = wMeta("mUtil", "owned");
     if (mShCar == null && mAcc == null && mUtil == null) return "";
-    return secH("🎯", "#0284c7", t("portal.metasFlota", { m: escapeHTML(mes) }), t("portal.metasFlotaSub"), "") +
+    return secH("🎯", "#0284c7", t("portal.metasFlota", { m: escapeHTML(mesLabel(mes)) }), t("portal.metasFlotaSub"), "") +
       `<div class="section">
         ${_portalMetaRow(t("portal.shCarInterno"), shCar, mShCar, null, v => fmt(v), "portal.metas.fleet.shCar")}
         ${_portalMetaRow(t("portal.aceptacion"), accept, mAcc, null, v => fmt(v) + "%", "portal.metas.fleet.accept")}
@@ -273,7 +273,7 @@ function _portalMetas(line, rows) {
 
   if (mA == null && mNR == null && mH == null) return "";
   const tit = line === "tk" ? "portal.metasTk" : line === "comb" ? "portal.metasComb" : "portal.metas";
-  return secH("🎯", "#8b5cf6", t(tit, { m: escapeHTML(mes) }),
+  return secH("🎯", "#8b5cf6", t(tit, { m: escapeHTML(mesLabel(mes)) }),
       proyOn ? t("portal.metasSubEnCurso") : t("portal.metasSubCerrado"), "") +
     `<div class="section">
       ${_portalMetaRow(t("metric.ad.label"), adAct, mA, proyOn ? projAD(adSerie, last) : null, fmt, `portal.metas.${line}.ad`)}

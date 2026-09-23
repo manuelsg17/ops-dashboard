@@ -372,7 +372,7 @@ export function _metaLineRow(label, actual, meta, fmtFn, metaOnlyNote, numKey) {
   if (actual == null) {  // solo meta (ej. Utilización, sin actual medible)
     return `<div class="agy-style-215">
       <div class="agy-style-216"><span>${label}</span>
-        <span><strong class="agy-style-218"${numKey ? dn(numKey, "meta") : ""}>${fmtFn(meta)}</strong> <span class="agy-style-219">meta${metaOnlyNote ? " · " + metaOnlyNote : ""}</span></span></div></div>`;
+        <span><strong class="agy-style-218"${numKey ? dn(numKey, "meta") : ""}>${fmtFn(meta)}</strong> <span class="agy-style-219">${escapeHTML(t("metas.metaMin"))}${metaOnlyNote ? " · " + metaOnlyNote : ""}</span></span></div></div>`;
   }
   const p  = meta > 0 ? (actual / meta) * 100 : 0;
   const pV = Math.min(p, 100);

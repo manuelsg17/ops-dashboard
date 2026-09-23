@@ -17,6 +17,7 @@
 // mundo, incluida la pantalla de login.
 import Chart from "chart.js/auto";
 import { logAccess } from "./shared/accessLog.js";
+import { SIN_KAM } from "./core/config.js";
 import ChartDataLabels from "chartjs-plugin-datalabels";
 import { ensurePdfLibs } from "./shared/lazyLibs.js";
 Chart.register(ChartDataLabels);
@@ -487,7 +488,7 @@ export function buildSlide2Cover(partner, dates) {
       </div>
       <div class="agy-style-348">${modeLabel} · ${period}</div>
       ${cities ? `<div class="agy-style-349">${escapeHTML(cities)}</div>` : `<div class="agy-style-350"></div>`}
-      ${kam ? `<div class="agy-style-351">${P2T("Ejecutivo de Cuenta", "Account Manager", "Менеджер по работе с партнёром")}: <strong class="agy-style-352">${escapeHTML(kam)}</strong></div>` : ""}
+      ${kam && kam !== SIN_KAM /* "No KAM" es un bucket interno: no se le muestra al partner */ ? `<div class="agy-style-351">${P2T("Ejecutivo de Cuenta", "Account Manager", "Менеджер по работе с партнёром")}: <strong class="agy-style-352">${escapeHTML(kam)}</strong></div>` : ""}
     </div>`;
 }
 
@@ -524,11 +525,11 @@ export function destroyPresent2Charts() {
 // (Taxi ya es mode-aware porque _byCityDate/rawData/allDates se reconstruyen en switchMode.)
 // Bandas de cohorte para comparar al partner contra su grupo de tamaño.
 export const P2_BANDS = [
-  { key: "t1",   range: [0, 1],  color: "#dc2626", es: "Top 1",       en: "Top 1" },
-  { key: "t23",  range: [1, 3],  color: "#f59e0b", es: "Top 2-3",     en: "Top 2-3" },
-  { key: "t45",  range: [3, 5],  color: "#0284c7", es: "Top 4-5",     en: "Top 4-5" },
-  { key: "t610", range: [5, 10], color: "#a855f7", es: "Top 6-10",    en: "Top 6-10" },
-  { key: "t5",   range: [0, 5],  color: "#10b981", es: "Prom. Top 5", en: "Avg Top 5" }
+  { key: "t1",   range: [0, 1],  color: "#dc2626", es: "Top 1",       en: "Top 1",     ru: "Топ 1" },
+  { key: "t23",  range: [1, 3],  color: "#f59e0b", es: "Top 2-3",     en: "Top 2-3",   ru: "Топ 2-3" },
+  { key: "t45",  range: [3, 5],  color: "#0284c7", es: "Top 4-5",     en: "Top 4-5",   ru: "Топ 4-5" },
+  { key: "t610", range: [5, 10], color: "#a855f7", es: "Top 6-10",    en: "Top 6-10",  ru: "Топ 6-10" },
+  { key: "t5",   range: [0, 5],  color: "#10b981", es: "Prom. Top 5", en: "Avg Top 5", ru: "Средн. Топ 5" }
 ];
 
 // Conservada solo por compatibilidad con quien la importe: los accesores del
@@ -1586,9 +1587,9 @@ export function buildSlide2Resumen(partner, dates, idx) {
           <span class="rs-sub">${P2T("lo que te pedimos cada mes", "what we ask each month", "что мы просим каждый месяц")}</span></div>
         <div class="rs-chips">
           <div class="rs-chip"><span>${P2T("Horas / conductor base", "Hours / base driver", "Часов / базовый водитель")}</span>
-            <b style="color:${col1}">${h.valor == null ? "—" : p2Dec(h.valor, 1) + " h"}</b>
+            <b style="color:${col1}">${h.valor == null ? "—" : p2Dec(h.valor, 1) + " " + P2T("h", "h", "ч")}</b>
             <i style="color:${col1}">${h.valor == null ? naTxt
-              : (h.estado === "cumple" ? (P2T("✓ cumple", "✓ meets", "✓ соответствует")) : (P2T("✗ no cumple", "✗ below", "✗ не соответствует"))) + ` · mín ${TK_HORAS_BASE_MIN} h`}</i></div>
+              : (h.estado === "cumple" ? (P2T("✓ cumple", "✓ meets", "✓ соответствует")) : (P2T("✗ no cumple", "✗ below", "✗ не соответствует"))) + " · " + P2T(`mín ${TK_HORAS_BASE_MIN} h`, `min ${TK_HORAS_BASE_MIN} h`, `мин. ${TK_HORAS_BASE_MIN} ч`)}</i></div>
           <div class="rs-chip"><span>${xl("kpi.nr", PRESENT2_STATE.lang)}</span>
             <b>${p2Num(d.nr)}</b>
             <i${pct2 != null ? ` style="color:${pColor(pct2)}"` : ""}>${pct2 != null
@@ -2563,7 +2564,7 @@ export function _p2FcPalancasHTML(C) {
   // 4) Horas por conductor (SH/AD) — aprovechamiento de la base.
   const shad = L.prod.shPerAd, tr = L.prod.shPerAdTrend;
   cards.push(_p2FcMiniCard(P2T("Horas / conductor", "Hours / driver", "Часов / водитель"),
-    shad != null ? p2Dec(shad, 1) + "h" : "—",
+    shad != null ? p2Dec(shad, 1) + P2T("h", "h", "ч") : "—",
     tr != null ? ((tr >= 0 ? "▲ +" : "▼ ") + tr.toFixed(0) + "% vs 3m") : (P2T("al mes", "per month", "в месяц")),
     tr == null ? "#111" : tr >= 0 ? "#10b981" : "#FF0000",
     P2T("Horas de conexión promedio por conductor activo en el mes. Mide qué tan aprovechada está tu base: si cae, tienes gente registrada pero poco activa.",
@@ -2816,7 +2817,7 @@ export function renderPresent2() {
           <label class="agy-style-433">${P2T("Mes meta", "Goal month", "Месяц цели")}</label>
           <select data-act-change="present2SetAvanceMes" class="agy-style-438">
             <option value="">${P2T("Auto (según filtro)", "Auto (by filter)", "Авто (по фильтру)")}</option>
-            ${p2MetaMeses().map(m => `<option value="${escapeHTML(m)}" ${PRESENT2_STATE.avanceMesSel === m ? "selected" : ""}>${escapeHTML(m)}</option>`).join("")}
+            ${p2MetaMeses().map(m => `<option value="${escapeHTML(m)}" ${PRESENT2_STATE.avanceMesSel === m ? "selected" : ""}>${escapeHTML(p2MesLabel(m))}</option>`).join("")}
           </select>
         </div>` : ""}
         <div class="agy-style-439">

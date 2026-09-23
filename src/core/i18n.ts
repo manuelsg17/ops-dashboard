@@ -1991,6 +1991,16 @@ export const I18N: Record<string, Record<string, string>> = {
   "bdg.tip": { es: "Actual: {a} vs {c}: {p} → {v}%",
               en: "Current: {a} vs {c}: {p} → {v}%",
               ru: "Сейчас: {a} против {c}: {p} → {v}%" },
+
+  // ── Metas: sufijo meta (Ola 3) ────────────────────────────────────────────
+  "metas.metaMin": { es: "meta",
+                    en: "goal",
+                    ru: "цель" },
+
+  // ── Calculadora: encabezado de meta por KPI (Ola 3) ───────────────────────
+  "calc.col.kpiMeta": { es: "{k} meta",
+                       en: "{k} goal",
+                       ru: "{k} цель" },
 };
 
 let _lang = "es";
