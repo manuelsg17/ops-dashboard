@@ -1631,7 +1631,7 @@ export function buildSlide2Resumen(partner, dates, idx) {
       </div>
       <div class="rs-card rs-comp">
         <div class="rs-h"><span class="rs-n">#</span>${P2T("¿De dónde viene?", "Where does it come from?", "Откуда это берётся?")}
-          <span class="rs-sub">${P2T(`Perú · ${comp.length === 1 ? "la vertical que operás" : `las ${comp.length} suman el total`}`,
+          <span class="rs-sub">${P2T(`Perú · ${comp.length === 1 ? "la vertical que operas" : `las ${comp.length} suman el total`}`,
             `Peru · ${comp.length === 1 ? "the vertical you operate" : `the ${comp.length} sum to total`}`,
             `Перу · ${comp.length === 1 ? "ваша вертикаль" : `${comp.length} в сумме дают итог`}`)}</span></div>
         <table class="rs-t">${cols}<thead>${th(L.ad, L.nr, L.sh)}</thead><tbody>${filasComp}</tbody></table>
@@ -1935,7 +1935,7 @@ export function p2EmbudoBloque(partner, dates) {
   return `<div class="px-card px-embudo">
     <div class="px-h">${escapeHTML(P2T("Captación → activación", "Acquisition → activation", "Привлечение → активация"))}</div>
     <div class="eb-top">${escapeHTML(P2T(
-      `${p2Num(Math.round(yo.perfiles))} perfiles registrados por vos`,
+      `${p2Num(Math.round(yo.perfiles))} perfiles registrados por ti`,
       `${p2Num(Math.round(yo.perfiles))} profiles you registered`,
       `${p2Num(Math.round(yo.perfiles))} профилей зарегистрировано вами`))}${hayMed ? ` · ${escapeHTML(P2T("línea = mediana", "line = median", "линия = медиана"))}` : ""}</div>
     <div class="eb-tabla">${filas}</div>
@@ -2539,7 +2539,7 @@ export function _p2FcPalancasHTML(C) {
   const churnTxt = L.churn != null ? P2T(` · ${p2Num(Math.round(L.churn))} se fueron`, ` · ${p2Num(Math.round(L.churn))} left`, ` · ${p2Num(Math.round(L.churn))} ушли`) : "";
   cards.push(_p2FcMiniCard(P2T("Retención", "Retention", "Удержание"), retTxt,
     ret100 != null ? P2T(`${ret100} de 100 siguen${churnTxt}`, `${ret100} of 100 stay${churnTxt}`, `${ret100} из 100 остаются${churnTxt}`) : "", retCol,
-    P2T("De tus conductores activos del mes pasado, cuántos siguen activos este mes. Es la palanca más barata: menos fugas = necesitás menos nuevos para crecer.",
+    P2T("De tus conductores activos del mes pasado, cuántos siguen activos este mes. Es la palanca más barata: menos fugas = necesitas menos nuevos para crecer.",
         "Of last month's active drivers, how many stay active this month. Cheapest lever: fewer leaks = fewer new drivers needed to grow.",
         "Сколько из ваших активных водителей прошлого месяца остаются активными в этом. Самый дешёвый рычаг: меньше потерь — меньше новых нужно для роста.")));
   // 2) Nuevos + Reactivados — tu motor de entrada este mes.
@@ -2566,7 +2566,7 @@ export function _p2FcPalancasHTML(C) {
     shad != null ? p2Dec(shad, 1) + "h" : "—",
     tr != null ? ((tr >= 0 ? "▲ +" : "▼ ") + tr.toFixed(0) + "% vs 3m") : (P2T("al mes", "per month", "в месяц")),
     tr == null ? "#111" : tr >= 0 ? "#10b981" : "#FF0000",
-    P2T("Horas de conexión promedio por conductor activo en el mes. Mide qué tan aprovechada está tu base: si cae, tenés gente registrada pero poco activa.",
+    P2T("Horas de conexión promedio por conductor activo en el mes. Mide qué tan aprovechada está tu base: si cae, tienes gente registrada pero poco activa.",
         "Average supply hours per active driver in the month. How used your base is: if it falls, drivers are registered but barely active.",
         "Среднее число часов на линии на одного активного водителя за месяц. Показывает, насколько задействована ваша база: если падает — водители зарегистрированы, но почти не работают.")));
   // 5) Hacia la meta (si el partner tiene meta de AD cargada). Muestra los NUEVOS+REACT
@@ -2587,12 +2587,12 @@ export function _p2FcPalancasHTML(C) {
       onTrack ? P2T(`tu ritmo (~${p2Num(now)}) alcanza`, `your pace (~${p2Num(now)}) suffices`, `ваш темп (~${p2Num(now)}) достаточен`)
               : P2T(`hoy ~${p2Num(now)} · faltan ${p2Num(shortBy)}`, `today ~${p2Num(now)} · short ${p2Num(shortBy)}`, `сейчас ~${p2Num(now)} · не хватает ${p2Num(shortBy)}`),
       onTrack ? "#10b981" : "#0284c7",
-      P2T(`Aunque tu meta de AD (${p2Num(Math.round(C.target))}) sea parecida a hoy (${p2Num(Math.round(L.adNow))}), cada mes se te van conductores por rotación (retención ${retA}). Para sostener/llegar a la meta necesitás ~${p2Num(need)} nuevos+reactivados en el mes; hoy promediás ~${p2Num(now)}${shortBy > 0 ? ` (te faltan ~${p2Num(shortBy)})` : ""}. Alternativa: subir la retención de ${retA} a ${retB}.`,
+      P2T(`Aunque tu meta de AD (${p2Num(Math.round(C.target))}) sea parecida a hoy (${p2Num(Math.round(L.adNow))}), cada mes se te van conductores por rotación (retención ${retA}). Para sostener/llegar a la meta necesitas ~${p2Num(need)} nuevos+reactivados en el mes; hoy promedias ~${p2Num(now)}${shortBy > 0 ? ` (te faltan ~${p2Num(shortBy)})` : ""}. Alternativa: subir la retención de ${retA} a ${retB}.`,
           `Even if your AD goal (${p2Num(Math.round(C.target))}) is close to today (${p2Num(Math.round(L.adNow))}), churn takes drivers each month (retention ${retA}). To hold/reach it you need ~${p2Num(need)} new+reactivated in the month; today you average ~${p2Num(now)}${shortBy > 0 ? ` (short ~${p2Num(shortBy)})` : ""}. Alternative: raise retention from ${retA} to ${retB}.`,
           `Даже если цель по активным водителям (${p2Num(Math.round(C.target))}) близка к сегодняшнему уровню (${p2Num(Math.round(L.adNow))}), каждый месяц часть водителей уходит (удержание ${retA}). Чтобы удержать или достичь цели, нужно ~${p2Num(need)} новых+реактивированных за месяц; сейчас в среднем ~${p2Num(now)}${shortBy > 0 ? ` (не хватает ~${p2Num(shortBy)})` : ""}. Альтернатива: поднять удержание с ${retA} до ${retB}.`)));
   }
   const title = P2T("Palancas de crecimiento", "Growth levers", "Рычаги роста");
-  const subt = P2T("Lo que mueve tu # de Conductores Activos. La proyección de arriba asume que se mantienen — mejorá una y sube.",
+  const subt = P2T("Lo que mueve tu # de Conductores Activos. La proyección de arriba asume que se mantienen — mejora una y sube.",
                    "What moves your Active-Driver count. The forecast above assumes they hold — improve one and it rises.",
                    "Что двигает ваше число активных водителей. Прогноз выше исходит из того, что показатели не меняются — улучшите один, и он вырастет.");
   return `<div class="agy-style-405">
@@ -2670,7 +2670,7 @@ export function buildSlide2Forecast(partner, dates, idx) {
       <span class="agy-style-424">${swUp}${P2T("Si crece (máx)", "If grows (max)", "Если растёт (макс.)")}</span>
       <span class="agy-style-425">${swDown}${P2T("Si decrece (mín)", "If drops (min)", "Если падает (мин.)")}</span>
       ${avg != null ? `<span class="agy-style-426">✓ ${P2T(`Validado con tus ${nBack} meses más recientes · ±${avg.toFixed(0)}%`, `Validated on your ${nBack} most recent months · ±${avg.toFixed(0)}%`, `Проверено на ваших ${nBack} последних месяцах · ±${avg.toFixed(0)}%`)}</span>` : ""}
-      <span class="agy-style-427">${P2T("Al ritmo actual — mové las palancas ↓ para cambiarla", "At current pace — move the levers ↓ to change it", "При текущем темпе — двигайте рычаги ↓, чтобы изменить")}</span>
+      <span class="agy-style-427">${P2T("Al ritmo actual — mueve las palancas ↓ para cambiarla", "At current pace — move the levers ↓ to change it", "При текущем темпе — двигайте рычаги ↓, чтобы изменить")}</span>
     </div>`;
   const detail = PRESENT2_STATE._exporting ? "" : _p2FcDetailHTML(C);
   const expBanner = `<div class="agy-style-428">
@@ -2821,7 +2821,7 @@ export function renderPresent2() {
         </div>` : ""}
         <div class="agy-style-439">
           <button data-act="switchTab" data-tab="rend" class="agy-style-440">← ${P2T("Volver", "Back", "Назад")}</button>
-          <button class="png-btn" data-act="present2TogglePdfPanel" title="${escapeHTML(P2T("Elegí qué hojas entran al PDF", "Choose which sheets go into the PDF", "Выберите страницы для PDF"))}">🗂 ${escapeHTML(P2T("Hojas", "Sheets", "Страницы"))} ${_p2PdfCount()}</button>
+          <button class="png-btn" data-act="present2TogglePdfPanel" title="${escapeHTML(P2T("Elige qué hojas entran al PDF", "Choose which sheets go into the PDF", "Выберите страницы для PDF"))}">🗂 ${escapeHTML(P2T("Hojas", "Sheets", "Страницы"))} ${_p2PdfCount()}</button>
           <button class="apply-btn agy-style-441" data-act="p2AbrirChequeoExport">⬇ ${escapeHTML(P2T("Descargar PDF", "Download PDF", "Скачать PDF"))}</button>
         </div>
       </div>
@@ -3133,7 +3133,7 @@ export async function downloadPresent2PDF() {
   logAccess("download_pdf", "presentacion2:" + (PRESENT2_STATE.partner || "?"));
   const partner = PRESENT2_STATE.partner;
   if (!partner) { alert("Selecciona un partner primero."); return; }
-  try { await ensurePdfLibs(); } catch (e) { alert("No se pudieron cargar las librerías de PDF. Reintentá."); return; }
+  try { await ensurePdfLibs(); } catch (e) { alert("No se pudieron cargar las librerías de PDF. Reintenta."); return; }
   destroyPresent2Charts();
   await new Promise(r => setTimeout(r, 100));
 

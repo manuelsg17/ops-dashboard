@@ -542,9 +542,9 @@ export function switchTab(tab) {
           if (STATE.curTab !== tab) return;
           const box = lazyBox || document.getElementById(`tab-${tab}`);
           if (box) {
-            box.innerHTML = `<div class="empty"><p>No se pudo cargar esta sección.</p>
+            box.innerHTML = `<div class="empty"><p>${escapeHTML(t("app.errSeccion"))}</p>
               <p style="font-size:.78rem;color:#888">${escapeHTML((err && err.message) || String(err))}</p>
-              <button class="btn" data-act="reloadApp">Reintentar</button></div>`;
+              <button class="btn" data-act="reloadApp">${escapeHTML(t("app.reintentar"))}</button></div>`;
           }
           return;
         }

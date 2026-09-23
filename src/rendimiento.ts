@@ -239,12 +239,11 @@ export function _renderRendImpl() {
     empty.style.display   = "none";
     content.style.display = "";
     const f       = getCurrentFilters();
-    const kamLbl  = f.kam  !== "all" ? ` de <strong>${escapeHTML(f.kam)}</strong>` : "";
-    const cityLbl = f.city !== "all" ? ` en <strong>${cityLabel(f.city)}</strong>` : "";
+    const kamLbl  = f.kam  !== "all" ? t("rend.sinOverlap.kam", { k: escapeHTML(kamLabel(f.kam)) }) : "";
+    const cityLbl = f.city !== "all" ? t("rend.sinOverlap.ciudad", { c: escapeHTML(cityLabel(f.city)) }) : "";
     content.innerHTML = rendLineToggleHTML() +
       `<div class="section"><div class="agy-style-266">
-        No hay partners${kamLbl} con datos${cityLbl} en el rango de fechas seleccionado.<br>
-        La data SÍ está cargada — esta combinación de filtros no tiene overlap. Ajusta ciudad, KAM, fechas o partners.
+        ${t("rend.sinOverlap", { kam: kamLbl, ciudad: cityLbl })}
       </div></div>`;
     return;
   }

@@ -87,7 +87,7 @@ export function p2Lectura(ctx) {
   const ad = kpis.find(k => k.key === "ad"), sh = kpis.find(k => k.key === "sh");
   if (ad && sh && ad.meta > 0 && sh.meta > 0 && ad.pct >= META_CUMPLIDA_PCT && sh.pct < META_CUMPLIDA_PCT) {
     out.push(T(
-      `Tenés los conductores (${ad.pct.toFixed(0)}% de la meta) pero no las horas (${sh.pct.toFixed(0)}%): la gente ya está adentro y conecta menos de lo previsto — es un tema de actividad, no de captación.`,
+      `Tienes los conductores (${ad.pct.toFixed(0)}% de la meta) pero no las horas (${sh.pct.toFixed(0)}%): la gente ya está adentro y conecta menos de lo previsto — es un tema de actividad, no de captación.`,
       `You have the drivers (${ad.pct.toFixed(0)}% of target) but not the hours (${sh.pct.toFixed(0)}%): they are already onboard and connecting less than planned — an activity issue, not an acquisition one.`,
       `Водители есть (${ad.pct.toFixed(0)}% от цели), а часов нет (${sh.pct.toFixed(0)}%): люди уже в парке, но выходят на линию меньше плана — это вопрос активности, а не набора.`));
   }
