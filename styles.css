@@ -698,78 +698,6 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
   display: block; margin-top: 5px; font-size: 0.7rem; color: #3b82f6;
 }
 
-/* ── CALCULADORA: metas ya guardadas + modo de guardado (ago 2026) ──────────
-   El KAM abría la calculadora en 0 aunque ya tuviera metas cargadas, y guardar
-   reescribía el reparto entero. Estos estilos sostienen las dos señales nuevas:
-   qué fila YA tiene meta en la base, y qué valor difiere de lo guardado. */
-.calc-badge-saved {
-  display: inline-block; margin-left: 6px; padding: 1px 6px;
-  font-size: 0.58rem; font-weight: 800; letter-spacing: .02em;
-  color: #065f46; background: #d1fae5; border-radius: 10px; vertical-align: middle;
-}
-/* El campo lleva un "%" pegado adentro: sin él, dos filas de inputs numéricos
-   con las mismas etiquetas (metas arriba, porcentajes abajo) se confunden y
-   alguien escribe 1701 donde va 17. */
-.calc-tkpct-campo { position: relative; }
-.calc-tkpct-campo .sb-inp { padding-right: 26px; }
-.calc-tkpct-pct {
-  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
-  font-size: .78rem; font-weight: 700; color: #9ca3af; pointer-events: none;
-}
-/* El absoluto que sale del %: es el número que se declara en el Loyalty Program,
-   y de paso confirma que el campo de arriba es un porcentaje. */
-.calc-tkpct-abs {
-  margin-top: 4px; font-size: .76rem; font-weight: 800; color: #0f766e;
-}
-/* Porción TukTuk de la meta de una fila. Debajo del input y en teal, no como
-   otra columna: son 3 números más por fila y la tabla ya tiene 8 columnas. */
-.calc-tk-sub {
-  margin-top: 3px; text-align: right;
-  font-size: .68rem; font-weight: 700; color: #0f766e; white-space: nowrap;
-}
-/* Botón secundario junto a "Descargar Imagen" — contorno, no relleno: es la
-   acción menos frecuente (descargar TODAS de una), no debe competir visualmente
-   con la principal. */
-.calc-btn-outline {
-  padding: 7px 14px; font-size: .78rem; font-weight: 700;
-  border: 1.5px solid #10b981; border-radius: 8px;
-  background: #fff; color: #10b981; cursor: pointer;
-}
-.calc-btn-outline:hover { background: #ecfdf5; }
-/* Aviso del carve-out de TukTuk (pozo sin dónde caer, % fuera de rango).
-   Ámbar y no rojo a propósito: el reparto SÍ se hizo y la meta cierra — lo que
-   avisa es que probablemente falte taggear un fleetroom, no que algo falló. */
-.calc-tkpct-aviso {
-  margin-top: 10px; padding: 8px 10px;
-  font-size: .72rem; line-height: 1.45;
-  color: #92400e; background: #fffbeb;
-  border: 1px solid #fcd34d; border-radius: 8px;
-}
-/* Ámbar = distinto de lo que hay en la base; al guardar se sobrescribe. */
-.calc-inp-dirty {
-  border-color: #f59e0b !important;
-  background: #fffbeb;
-  box-shadow: 0 0 0 2px rgba(245, 158, 11, .15);
-}
-.calc-mode-box {
-  border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px;
-  margin-bottom: 12px; background: #fafafa;
-}
-.calc-mode-title {
-  font-size: 0.7rem; font-weight: 800; letter-spacing: .04em;
-  text-transform: uppercase; color: #6b7280; margin-bottom: 8px;
-}
-.calc-mode-opt {
-  display: flex; gap: 8px; align-items: flex-start;
-  padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 8px;
-  background: #fff; cursor: pointer; margin-bottom: 6px;
-  font-size: 0.78rem; line-height: 1.35;
-}
-.calc-mode-opt:last-child { margin-bottom: 0; }
-.calc-mode-opt.active { border-color: #10b981; background: #f0fdf4; }
-.calc-mode-opt input { margin-top: 2px; flex: 0 0 auto; cursor: pointer; }
-.calc-mode-desc { color: #6b7280; font-size: 0.7rem; }
-
 /* ── AVISO DE VERSIÓN NUEVA (ago 2026) ─────────────────────────────────────
    Reemplaza al location.reload() automático que había ante un chunk 404 tras
    un deploy. Recargar sin avisar tiraba filtros y rango de fechas, y si al
@@ -1652,5 +1580,4 @@ body.role-partner #uploadDropdown { display: none !important; }
   .sidebar .mode-btn, .sidebar .preset-btn, .sidebar .sb-sel, .sidebar .sb-inp, .sb-row button { min-height: 44px; }
   .shell-nav .ui-sidenav__item { height: 44px; }
   .shell-icon-btn { width: 44px; height: 44px; }
-  .calc-inp { min-height: 40px; font-size: 0.9rem; }
 }
