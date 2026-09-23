@@ -1,14 +1,14 @@
 
-/* --- AUTO-EXTRACTED INLINE STYLES --- */
+/* --- AUTO-EXTRACTED INLINE STYLES ---
+   Lo que queda es casi todo de las HOJAS del deck de Presentación (superficie
+   de exportación: siempre clara, con sus colores propios — ver styles.css).
+   Las pocas clases que se ven en la app (54, 84-86, 535-536) usan tokens. */
 .agy-style-51 { color:#FF0000 }
-.agy-style-54 { font-size:.75rem;color:#aaa }
-.agy-style-84 { font-size:.75rem;color:#065f46;flex:1 }
-.agy-style-85 { font-size:.75rem;color:#FF0000;flex:1 }
-.agy-style-86 { font-weight:600;color:#555 }
+.agy-style-54 { font-size:.75rem;color:var(--color-text-subtle) }
+.agy-style-84 { font-size:.75rem;color:var(--color-ok-fg);flex:1 }
+.agy-style-85 { font-size:.75rem;color:var(--color-bad-fg);flex:1 }
+.agy-style-86 { font-weight:600;color:var(--color-text-muted) }
 .agy-style-175 { display:flex;align-items:center;gap:10px;margin-bottom:12px }
-.agy-style-226 { grid-template-columns:repeat(auto-fit,minmax(150px,1fr)) }
-.agy-style-257 { margin-top:4px }
-.agy-style-258 { font-size:.7rem;color:#aaa;margin-left:5px }
 .agy-style-282 { flex:1;min-width:0 }
 .agy-style-307 { display:flex;gap:6px }
 .agy-style-321 { overflow-x:auto }
@@ -113,19 +113,10 @@
 .agy-style-428 { flex:0 0 auto;background:#fef2f2;border:1px solid #fca5a5;border-radius:7px;padding:5px 10px;margin-bottom:6px;font-size:.62rem;color:#b91c1c;font-weight:700;display:flex;align-items:center;gap:8px }
 .agy-style-429 { font-size:.9rem;line-height:1 }
 .agy-style-430 { flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:8px }
-.agy-style-443 { width:100%;aspect-ratio:16/9;background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.12);overflow:hidden }
+.agy-style-443 { width:100%;aspect-ratio:16/9;background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.12);overflow:hidden;color:#111 }
 .agy-style-532 { display:flex;align-items:center;gap:10px;margin:18px 0 8px;padding:0 4px }
 .agy-style-533 { font-size:1.1rem }
 .agy-style-534 { flex:1 }
-.agy-style-535 { font-size:.92rem;font-weight:800;color:#111 }
-.agy-style-536 { font-size:.7rem;color:#888 }
+.agy-style-535 { font-size:.92rem;font-weight:800;color:var(--color-text) }
+.agy-style-536 { font-size:.7rem;color:var(--color-text-muted) }
 
-/* ── SELECTOR DE IDIOMA (barra superior) ─────────────────────────────────── */
-.lang-switch { display:inline-flex; gap:2px; margin-right:10px; vertical-align:middle; }
-.lang-btn {
-  background:transparent; border:1px solid transparent; border-radius:6px;
-  padding:3px 6px; font-size:.95rem; line-height:1; cursor:pointer; opacity:.45;
-  transition:opacity .12s, border-color .12s, background .12s;
-}
-.lang-btn:hover  { opacity:.85; background:rgba(255,255,255,.08); }
-.lang-btn.active { opacity:1; border-color:rgba(255,255,255,.35); background:rgba(255,255,255,.12); }
