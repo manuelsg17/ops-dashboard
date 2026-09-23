@@ -9,6 +9,11 @@
 -- mismo camino de autorizacion, no un atajo.
 --
 -- Password de los 4: local-dev-1234
+--
+-- kam@local.test lleva ademas `app_metadata.kam = 'Ana'` (mismo mecanismo que
+-- produccion para que la Calculadora preseleccione el KAM del login — ver
+-- STATE.myKam). El mapeo del usuario partner a sus CLIDs (partner_users) NO va
+-- aca: tiene FK a `partners`, que recien existe tras seed_synthetic.sql.
 -- ============================================================
 
 -- Los `''` de los *_token NO son decorativos: gotrue escanea esas columnas a
@@ -28,15 +33,16 @@ select
   'authenticated', 'authenticated', u.email,
   crypt('local-dev-1234', gen_salt('bf')),
   now(), now(), now(),
-  jsonb_build_object('provider','email','providers',jsonb_build_array('email'),'role',u.rol),
+  jsonb_strip_nulls(jsonb_build_object('provider','email','providers',jsonb_build_array('email'),
+                                       'role',u.rol,'kam',u.kam)),
   '{}'::jsonb,
   '', '', '', '', '', '', ''
 from (values
-  ('11111111-1111-1111-1111-111111111111','admin@local.test',  'admin'),
-  ('22222222-2222-2222-2222-222222222222','kam@local.test',    'kam'),
-  ('33333333-3333-3333-3333-333333333333','viewer@local.test', 'viewer'),
-  ('44444444-4444-4444-4444-444444444444','partner@local.test','partner')
-) as u(id, email, rol)
+  ('11111111-1111-1111-1111-111111111111','admin@local.test',  'admin',   null),
+  ('22222222-2222-2222-2222-222222222222','kam@local.test',    'kam',     'Ana'),
+  ('33333333-3333-3333-3333-333333333333','viewer@local.test', 'viewer',  null),
+  ('44444444-4444-4444-4444-444444444444','partner@local.test','partner', null)
+) as u(id, email, rol, kam)
 on conflict (id) do nothing;
 
 -- Identidad de email: sin esto gotrue rechaza el login con password.
