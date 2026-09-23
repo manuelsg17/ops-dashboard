@@ -301,15 +301,15 @@ export function p2SenalesEjecutivas(ctx: SenalCtx): Senal[] {
       if (ratio >= U.picoMejor) {
         out.push({ sev: "ok", kind: "pico_mejor",
           title: T("En su mejor nivel histórico", "At its best historical level", "На историческом максимуме"),
-          detail: T(`${a} conductores activos = ${r}% del pico (${p})`,
-                    `${a} active drivers = ${r}% of the peak (${p})`,
-                    `${a} активных водителей = ${r}% от пика (${p})`) });
+          detail: T(`hoy ${a} · ${r}% del pico (${p})`,
+                    `now ${a} · ${r}% of the peak (${p})`,
+                    `сейчас ${a} · ${r}% от пика (${p})`) });
       } else if (ratio < U.picoBajo) {
         out.push({ sev: "mid", kind: "pico_bajo",
           title: T("Por debajo del potencial ya demostrado", "Below its proven potential", "Ниже уже достигнутого потенциала"),
-          detail: T(`${a} conductores activos = ${r}% del pico (${p})`,
-                    `${a} active drivers = ${r}% of the peak (${p})`,
-                    `${a} активных водителей = ${r}% от пика (${p})`) });
+          detail: T(`hoy ${a} · ${r}% del pico (${p})`,
+                    `now ${a} · ${r}% of the peak (${p})`,
+                    `сейчас ${a} · ${r}% от пика (${p})`) });
       }
     }
   }
