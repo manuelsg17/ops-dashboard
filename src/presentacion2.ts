@@ -48,7 +48,13 @@ import { t, getLang } from "./core/i18n";
 import { btn, segmented, alertBox, emptyState } from "./shared/ui";
 import { iconSvg } from "./shared/icons";
 import { alertDialog, confirmDialog } from "./shared/confirmDialog";
-import { chartTokens, cssVar } from "./shared/chartTheme";
+import { chartTokens as _chartTokensEn, cssVar as _cssVarEn, lightScope } from "./shared/chartTheme";
+import { opcionesCapturaClara } from "./shared/exportClaro";
+// Las hojas del deck son un DOCUMENTO (se exportan a PDF para el partner):
+// siempre claras, también en pantalla con la app en oscuro (Ola 7). Sus
+// gráficos leen los tokens del tema claro, no los de <html>.
+const chartTokens = () => _chartTokensEn(lightScope());
+const cssVar = (n, fb) => _cssVarEn(n, fb, lightScope());
 import { embudoCohorte, canalCohorte, FILTRO_DEFECTO, COHORTE_MIN, EMBUDO_COLS, CANALES } from "./domain/conversionCohorte";
 import { mesNombre } from "./core/meses";
 import * as forecast from "./forecast.js";
@@ -3281,7 +3287,7 @@ export function renderPresent2() {
         ${p2NavHTML()}
       </div>
       ${p2FreshnessWarn()}
-      <div id="slide2Container" class="agy-style-443">
+      <div id="slide2Container" class="agy-style-443" data-theme="light">
         <div id="slide2Inner" class="agy-style-362"></div>
       </div>
     </div>`;
@@ -3621,6 +3627,7 @@ export async function downloadPresent2PDF() {
       const dates = p2SelectedDates(from, to, STATE.curMode);   // dataset-aware por slide
       const div = document.createElement("div");
       div.setAttribute("data-p2slide", "1");
+      div.setAttribute("data-theme", "light");
       div.style.cssText = `position:fixed;left:${s.charts ? "0" : "-9999px"};top:0;width:1280px;height:720px;overflow:hidden;background:#fff;z-index:99998;font-family:${P2_PDF_FONT}`;
       div.innerHTML = s.build(partner, dates, i);
       document.body.appendChild(div);
@@ -3639,10 +3646,10 @@ export async function downloadPresent2PDF() {
       // exporta. backgroundColor explícito evita cualquier borde translúcido en el
       // recorte. PNG (sin compresión JPEG) para que texto y líneas finas de los
       // charts salgan nítidos, no borrosos.
-      const canvas = await html2canvas(div, {
+      const canvas = await html2canvas(div, opcionesCapturaClara({
         width: 1280, height: 720, windowWidth: 1280, windowHeight: 720,
         scale: P2_EXPORT_SCALE, useCORS: true, logging: false, backgroundColor: "#fff"
-      });
+      }));
       if (s.charts) {
         div.querySelectorAll("canvas").forEach(c => { const ch = Chart.getChart(c); if (ch) ch.destroy(); });
         PRESENT2_STATE.charts = [];

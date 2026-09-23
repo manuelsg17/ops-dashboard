@@ -2385,6 +2385,11 @@ export const I18N: Record<string, Record<string, string>> = {
   "au7.kamOk":           { es: "{e} quedó vinculado a {k}. La persona debe volver a iniciar sesión para que se aplique.", en: "{e} is now linked to {k}. The person must sign in again for it to apply.", ru: "{e} теперь связан с {k}. Чтобы изменение вступило в силу, человеку нужно войти заново." },
   "au7.kamQuitadoOk":    { es: "{e} ya no tiene KAM vinculado. La persona debe volver a iniciar sesión para que se aplique.", en: "{e} no longer has a linked KAM. The person must sign in again for it to apply.", ru: "У {e} больше нет связанного KAM. Чтобы изменение вступило в силу, человеку нужно войти заново." },
   "au7.kamError":        { es: "No se pudo guardar el KAM vinculado: ", en: "Could not save the linked KAM: ", ru: "Не удалось сохранить связанного KAM: " },
+  // ── Tema claro / oscuro (Ola 7) — menú de sesión ─────────────────────────
+  "tema.titulo":  { es: "Tema",    en: "Theme",  ru: "Тема" },
+  "tema.claro":   { es: "Claro",   en: "Light",  ru: "Светлая" },
+  "tema.oscuro":  { es: "Oscuro",  en: "Dark",   ru: "Тёмная" },
+  "tema.sistema": { es: "Sistema", en: "System", ru: "Системная" },
 };
 
 let _lang = "es";

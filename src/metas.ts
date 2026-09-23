@@ -1,5 +1,6 @@
 //@ts-nocheck
 import { ensurePdfLibs } from "./shared/lazyLibs.js";
+import { opcionesCapturaClara } from "./shared/exportClaro";
 import { t, mesLabel, kamLabel } from "./core/i18n";
 import { dn } from "./shared/huella";
 import { logAccess } from "./shared/accessLog.js";
@@ -1855,15 +1856,17 @@ export async function downloadMetasPDF() {
     const totalH  = content.scrollHeight;
     const scale   = 1.5;
     const width   = Math.max(content.offsetWidth, content.scrollWidth);
-    const canvas  = await html2canvas(content, {
+    // Siempre claro (Ola 7): el PDF no depende del tema de quien exporta.
+    const canvas  = await html2canvas(content, opcionesCapturaClara({
       width,
       height: totalH,
       windowWidth: Math.max(document.documentElement.clientWidth, width),
       scale,
       useCORS: true,
       logging: false,
-      scrollY: -window.scrollY
-    });
+      scrollY: -window.scrollY,
+      backgroundColor: "#ffffff"
+    }));
 
     const imgData   = canvas.toDataURL("image/jpeg", 0.90);
     const imgW      = canvas.width;

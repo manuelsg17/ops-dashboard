@@ -501,7 +501,7 @@ export function switchTab(tab) {
     };
     const lazyBox = LAZY_TAB_CONTENT[tab] && document.getElementById(LAZY_TAB_CONTENT[tab]);
     if (lazyBox && !lazyBox.innerHTML.trim()) {
-      lazyBox.innerHTML = `<div style="padding:60px 0;text-align:center;color:#888;font-size:.85rem">Cargando…</div>`;
+      lazyBox.innerHTML = `<div style="padding:60px 0;text-align:center;color:var(--color-text-muted);font-size:.85rem">Cargando…</div>`;
     }
 
     // Restaurar filtros guardados
@@ -546,7 +546,7 @@ export function switchTab(tab) {
           const box = lazyBox || document.getElementById(`tab-${tab}`);
           if (box) {
             box.innerHTML = `<div class="empty"><p>${escapeHTML(t("app.errSeccion"))}</p>
-              <p style="font-size:.78rem;color:#888">${escapeHTML((err && err.message) || String(err))}</p>
+              <p style="font-size:.78rem;color:var(--color-text-muted)">${escapeHTML((err && err.message) || String(err))}</p>
               <button class="btn" data-act="reloadApp">${escapeHTML(t("app.reintentar"))}</button></div>`;
           }
           return;
@@ -1070,6 +1070,9 @@ alCerrarSesion(() => {
 import { t, setLang, getLang, aplicarI18nEstatico, selectorIdiomaHTML, kamLabel } from "./core/i18n";
 import { SIN_KAM } from "./core/config.js";
 import { logAccess } from "./shared/accessLog.js";
+import { guardarPref, leerPref, instalarTema, EVENTO_TEMA } from "./shared/theme";
+import { iconSvg } from "./shared/icons";
+import { escapeHTML } from "./core/security";
 import { instalarShell, renderShellNav, renderPageHeader, schedulePageHeader, syncNavActive,
          closeNavDrawer, syncFiltrosAria, syncMenusAria } from "./shell";
 
@@ -1084,8 +1087,57 @@ export function _initUiLang() {
   try { document.documentElement.lang = getLang(); } catch (_) {}
   const cont = document.getElementById("langSwitch");
   if (cont) cont.innerHTML = selectorIdiomaHTML();
+  _pintarMenuTema();
   aplicarI18nEstatico();
 }
+
+// ── Tema claro / oscuro (Ola 7) ──────────────────────────────────────────────
+// Vive en el menú de sesión (el email). La preferencia se guarda y se aplica
+// en shared/theme.ts; public/theme-init.js ya la aplicó antes del primer
+// pintado, así que acá solo se pinta el menú y se reacciona a los cambios.
+const _OPCIONES_TEMA = [
+  { v: "light",  icon: "sun",     k: "tema.claro" },
+  { v: "dark",   icon: "moon",    k: "tema.oscuro" },
+  { v: "system", icon: "monitor", k: "tema.sistema" }
+];
+export function _pintarMenuTema() {
+  const el = document.getElementById("themeMenu");
+  if (!el) return;
+  const pref = leerPref();
+  const tit = escapeHTML(t("tema.titulo"));
+  el.innerHTML =
+    `<div class="user-menu-group" role="group" aria-label="${tit}">` +
+      `<div class="user-menu-title" aria-hidden="true">${tit}</div>` +
+      _OPCIONES_TEMA.map(o =>
+        `<button type="button" class="user-menu-item user-menu-item--opt" data-act="setTheme" data-pref="${o.v}" aria-pressed="${pref === o.v}">` +
+          iconSvg(o.icon, { size: 16 }) + `<span>${escapeHTML(t(o.k))}</span>` +
+          (pref === o.v ? iconSvg("check", { size: 16, className: "user-menu-check" }) : "") +
+        `</button>`).join("") +
+    `</div><div class="user-menu-sep" role="separator"></div>`;
+}
+
+export function setTheme(pref) {
+  guardarPref(pref);
+  _pintarMenuTema();
+}
+
+// Los gráficos NO leen CSS en vivo: ApexCharts hornea los colores del tema en
+// el SVG al dibujar. Al cambiar el tema (elección, sistema, o una exportación
+// que fuerza el claro) se re-dibujan los de la vista activa. Presentación no
+// hace falta: sus hojas son siempre claras (data-theme="light").
+function _repintarPorTema() {
+  _pintarMenuTema();
+  if (!STATE.rawData || !STATE.rawData.length) return;
+  if (STATE.userRole === "partner") {
+    if (typeof renderPartnerPortal === "function") { if (typeof destroyAllCharts === "function") destroyAllCharts(); renderPartnerPortal(); }
+    return;
+  }
+  if (STATE.curTab === "rend" && typeof renderRend === "function") {
+    if (typeof destroyAllCharts === "function") destroyAllCharts();
+    renderRend();
+  }
+}
+if (typeof window !== "undefined") window.addEventListener(EVENTO_TEMA, _repintarPorTema);
 
 export function setUiLang(code) {
   if (!setLang(code)) return;
@@ -1098,6 +1150,7 @@ export function setUiLang(code) {
   try { document.documentElement.lang = code; } catch (_) {}
   const cont = document.getElementById("langSwitch");
   if (cont) cont.innerHTML = selectorIdiomaHTML();
+  _pintarMenuTema();
   aplicarI18nEstatico();
   // Re-render de la pestana activa: casi todo el texto se genera con template
   // literals, asi que repintar solo los data-i18n deja el contenido en el idioma
@@ -1131,6 +1184,7 @@ registerActions({
   // ~113px de la barra). El handler de botón se conserva por si algo lo sigue
   // usando; el del select lee el value.
   setUiLangSel: (d, el) => setUiLang(el.value),
+  setTheme: d => setTheme(d.pref),
   // sidebar / filtros
   setDatePreset: d => setDatePreset(d.preset),
   onKAMChange, selectAll, deselectAll, toggleSidebar,
@@ -1149,6 +1203,8 @@ registerActions({
   cfgIrCargas
 });
 
+// Tema: theme-init.js ya lo aplicó; esto engancha el "Sistema" en vivo.
+instalarTema();
 // Arranca el idioma apenas carga el modulo: la pantalla de LOGIN tambien se
 // traduce, no solo la app ya autenticada.
 _initUiLang();

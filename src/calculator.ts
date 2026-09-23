@@ -1,5 +1,6 @@
 //@ts-nocheck
 import { ensureHtml2Canvas } from "./shared/lazyLibs.js";
+import { opcionesCapturaClara, tokenClaro } from "./shared/exportClaro";
 import { t, mesLabel, kamLabel, getLang } from "./core/i18n";
 import { btn, badge, alertBox, emptyState, icon, segmented } from "./shared/ui";
 import { confirmDialog, alertDialog } from "./shared/confirmDialog";
@@ -2341,10 +2342,11 @@ export async function calcDeleteMetasKam() {
 // Captura #calcExportCard tal cual está en el DOM en ese instante y dispara la
 // descarga del PNG. Compartido por la descarga de UNA tarjeta y por "todas".
 async function _calcCapturarYDescargar(card, nombrePartner) {
-  // Fondo = el token de superficie (no un hex fijo): la tarjeta tiene esquinas
-  // redondeadas y el PNG no debe quedar con esquinas transparentes.
-  const fondo = getComputedStyle(document.documentElement).getPropertyValue("--color-surface").trim() || null;
-  const canvas = await html2canvas(card, { scale: 2, useCORS: true, backgroundColor: fondo });
+  // Fondo = el token de superficie EN CLARO (no un hex fijo): la tarjeta tiene
+  // esquinas redondeadas y el PNG no debe quedar con esquinas transparentes.
+  // La tarjeta se le manda al partner: sale clara aunque la app esté en oscuro.
+  const fondo = tokenClaro("--color-surface", "#ffffff");
+  const canvas = await html2canvas(card, opcionesCapturaClara({ scale: 2, useCORS: true, backgroundColor: fondo }));
   const a = document.createElement("a");
   a.href = canvas.toDataURL("image/png");
   a.download = `meta_${nombrePartner || "partner"}.png`;

@@ -343,7 +343,7 @@ td.ui-num > .ui-delta { margin-left: auto; }
   content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px;
   border-radius: var(--radius-pill); background: var(--color-brand);
 }
-.ui-sidenav__item[aria-current="page"] .ui-icon { color: var(--color-brand); }
+.ui-sidenav__item[aria-current="page"] .ui-icon { color: var(--color-brand-text); }
 .ui-sidenav__item:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 
 /* ── Diálogo (confirmDialog / alertDialog) ───────────────────────────────── */
