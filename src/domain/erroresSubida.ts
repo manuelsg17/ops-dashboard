@@ -11,6 +11,8 @@
 // parser. El único caso que sigue mirando el mensaje es la caída de red: el
 // navegador la entrega como un TypeError sin ningún código.
 
+import { t } from "../core/i18n";
+
 export type CodigoErrorSubida =
   | "cancelado"    // el usuario canceló una confirmación: no se escribió nada
   | "validacion"   // el archivo no pasó nuestras validaciones (mensaje propio)
@@ -67,26 +69,24 @@ export function clasificarErrorSubida(err: unknown): CodigoErrorSubida {
   return "desconocido";
 }
 
-export const ETIQUETA_TIPO_SUBIDA: Record<string, string> = {
-  rendimiento: "Rendimiento Semanal", rendimientoMensual: "Rendimiento Mensual",
-  rendimientoDiario: "Rendimiento Diario", conversion: "Conversión",
-  metas: "Metas", data: "Partners", flotas: "Flotas"
+// Nombre visible de cada tipo de carga (en el idioma de la interfaz).
+const _TIPO_KEY: Record<string, string> = {
+  rendimiento: "subida.tipo.rendimiento", rendimientoMensual: "subida.tipo.rendimientoMensual",
+  rendimientoDiario: "subida.tipo.rendimientoDiario", conversion: "subida.tipo.conversion",
+  metas: "subida.tipo.metas", data: "subida.tipo.data", flotas: "subida.tipo.flotas"
 };
+export function etiquetaTipoSubida(tipo: string): string {
+  return _TIPO_KEY[tipo] ? t(_TIPO_KEY[tipo]) : tipo;
+}
 
-/** Mensaje para el usuario. `tipo` es el tipo de carga de handleFile. */
+/** Mensaje para el usuario. `tipo` es el tipo de carga de handleFile. Los textos
+ *  viven en core/i18n (subida.err.*); la CLASIFICACIÓN sigue siendo por código. */
 export function describirErrorSubida(tipo: string, err: unknown): string {
   const e = (err || {}) as { message?: string; details?: string };
-  const base = e.message || "Error desconocido";
-  const lbl = ETIQUETA_TIPO_SUBIDA[tipo] || tipo;
-  switch (clasificarErrorSubida(err)) {
-    case "cancelado":  return `Carga de ${lbl} cancelada: no se guardó nada.`;
-    case "validacion": return `${lbl}: ${base}`;
-    case "permiso":    return `Tu usuario no tiene permiso para cargar ${lbl}: la base de datos rechazó la escritura.`;
-    case "auth":       return "Tu sesión venció. Cierra sesión, vuelve a entrar y sube el archivo de nuevo.";
-    case "red":        return `Sin conexión con la base de datos. Revisa tu internet y vuelve a subir ${lbl}.`;
-    case "conflicto":  return `El archivo de ${lbl} trae filas con la misma clave repetida (o que chocan con otras ya guardadas). No se guardó ese lote. Detalle: ${base}`;
-    case "formato":    return `Error de formato en ${lbl}: hay campos vacíos, texto donde va un número o columnas que la base no reconoce. Detalle: ${base}`;
-    case "esquema":    return `La base de datos no tiene la estructura que espera esta versión del dashboard (${base}). Falta aplicar una migración: avísale al administrador.`;
-    default:           return `Error al procesar ${lbl}: ${base}`;
-  }
+  const base = e.message || t("subida.err.sinDetalle");
+  const lbl = etiquetaTipoSubida(tipo);
+  const codigo = clasificarErrorSubida(err);
+  if (codigo === "validacion") return `${lbl}: ${base}`;
+  const k = codigo === "desconocido" ? "subida.err.desconocido" : `subida.err.${codigo}`;
+  return t(k, { lbl, base });
 }

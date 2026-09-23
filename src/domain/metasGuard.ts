@@ -1,3 +1,4 @@
+import { t } from "../core/i18n";
 // Validación de las filas de metas ANTES de escribirlas.
 //
 // POR QUÉ EXISTE ESTE ARCHIVO: el 13-ago-2026 la Calculadora guardó 14 filas de
@@ -63,8 +64,5 @@ export function validarMetas(rows: MetaRow[] | null | undefined): MetasCheck {
 
 /** Mensaje al usuario. Separado de la validación para poder testear ambos. */
 export function mensajeMetasInvalidas(faltantes: string[]): string {
-  return `No se guardó nada: la meta de ${faltantes.join(" y ")} da 0.\n\n` +
-    "Causa habitual: no cargaste los objetivos del KAM arriba (arrancan en 0), " +
-    "o saliste del campo sin que se aplicara el valor.\n\n" +
-    "Se frenó a propósito: guardar así BORRARÍA las metas que ya tienes de ese mes.";
+  return t("metasGuard.cero", { k: faltantes.join(t("metasGuard.y")) });
 }

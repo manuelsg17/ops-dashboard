@@ -35,6 +35,7 @@ import { projectFlow, retentionSeries, seriesByDate, snapshotValue,
          pacingFlujo, median, fechasEnRango, tasaAcum, sumarTasa, leerTasa } from "./domain/metrics.js";
 import { p2Lectura, p2Accion, META_CUMPLIDA_PCT } from "./domain/lectura.js";
 import { reportYM, diasMesReporte, MES_NOMBRES } from "./shared/mesReporte.js";
+import { makeT, pick, fmtL, fmtSmartL, fmtDecL, mesL, xl, ciudadL, EXPORT_STR } from "./core/i18nExport";
 import * as forecast from "./forecast.js";
 Object.assign(window, forecast);
 
@@ -128,30 +129,26 @@ export function p2SlideKey(entry) {
 // idioma de la app: el KAM navega en español y exporta el PDF en ruso.
 //
 // No usa t() de core/i18n a propósito: ese lee un idioma GLOBAL (`_lang`) y acá
-// hacen falta dos idiomas vivos a la vez. El precio es tener las cadenas del
-// deck en el sitio donde se usan; a cambio, cada frase se lee junto a su cálculo
-// (y son frases de negocio, no etiquetas de UI: cambian con el contenido).
-//
-// `ru` opcional → cae a inglés, que es el idioma puente del equipo. Nunca cae a
-// español: un texto en español dentro de un deck ruso parece un error de datos.
+// hacen falta dos idiomas vivos a la vez. Resuelve con core/i18nExport (el MISMO
+// resolver que la tarjeta de la Calculadora y la lectura ejecutiva): `ru`
+// opcional → cae a inglés, nunca a español.
 export function P2T(es, en, ru) {
-  const l = PRESENT2_STATE.lang;
-  return l === "en" ? en : l === "ru" ? (ru || en) : es;
+  return pick({ es, en, ru }, PRESENT2_STATE.lang);
 }
+// Traductor + formateadores del idioma ACTUAL del deck. Se pide en cada uso
+// (no se cachea) porque el idioma cambia con el selector sin recargar.
+export function p2X() { return makeT(PRESENT2_STATE.lang); }
+// Números del deck en el idioma del deck: en español son idénticos a fmt() /
+// fmtSmart() de siempre; en ruso "2 415" y "12,5" en vez de "2,415" y "12.5".
+export function p2Num(v) { return fmtL(v, PRESENT2_STATE.lang); }
+export function p2Smart(v) { return fmtSmartL(v, PRESENT2_STATE.lang); }
+export function p2Dec(v, d) { return fmtDecL(v, d, PRESENT2_STATE.lang); }
 // Nombre del mes en el idioma del DECK. metas.mes viene de la BD como nombre en
 // español ("JULIO"), así que sin esto un deck en ruso mostraba "JULIO" en el
 // encabezado de la hoja que recibe el partner.
-const P2_MES_RU = ["Январь","Февраль","Март","Апрель","Май","Июнь",
-                   "Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
-const P2_MES_EN = ["January","February","March","April","May","June",
-                   "July","August","September","October","November","December"];
 export function p2MesLabel(mesName) {
   if (!mesName) return "—";
-  const i = P2_MES_NOMBRES.indexOf(String(mesName).trim().toUpperCase());
-  if (i < 0) return mesName;                 // ISO "2026-07" u otro: se deja tal cual
-  const l = PRESENT2_STATE.lang;
-  return l === "en" ? P2_MES_EN[i] : l === "ru" ? P2_MES_RU[i]
-       : mesName.charAt(0) + mesName.slice(1).toLowerCase();
+  return mesL(mesName, PRESENT2_STATE.lang);   // ISO "2026-07" u otro: se deja tal cual
 }
 export const P2_LANGS = [
   { k: "es", lbl: "ES" }, { k: "en", lbl: "EN" }, { k: "ru", lbl: "RU" }
@@ -385,7 +382,6 @@ export function p2ModeInfo() {
 // coinciden, casi siempre significa que faltó subir uno de los dos datasets (el
 // KAM suele actualizar todo junto). Compara solo dentro de la misma granularidad.
 export function p2FreshnessWarn() {
-  const es = PRESENT2_STATE.lang === "es";
   const taxiDates = STATE.allDates || [];
   const tkDates   = STATE[_p2TkKey("Dates")] || [];   // slice de la escala activa (las 3)
   if (!taxiDates.length || !tkDates.length) return "";   // un lado no existe → no comparo
@@ -395,9 +391,11 @@ export function p2FreshnessWarn() {
   const ahead    = tkBehind ? "Taxi" : "TukTuk",   aheadMax  = tkBehind ? taxiMax : tkMax;
   const behind   = tkBehind ? "TukTuk" : "Taxi",   behindMax = tkBehind ? tkMax : taxiMax;
   const mi = p2ModeInfo();
-  const msg = es
-    ? `Posible dato faltante (${mi.label}): <b>${escapeHTML(ahead)}</b> llega a <b>${d2s(aheadMax)}</b> pero <b>${escapeHTML(behind)}</b> solo a <b>${d2s(behindMax)}</b>. Si actualizas todo junto, revisa si falta subir el <b>${escapeHTML(behind)}</b> de <b>${d2s(aheadMax)}</b>.`
-    : `Possible missing data (${mi.label}): <b>${escapeHTML(ahead)}</b> reaches <b>${d2s(aheadMax)}</b> but <b>${escapeHTML(behind)}</b> only <b>${d2s(behindMax)}</b>. If you upload everything together, check whether <b>${escapeHTML(behind)}</b> for <b>${d2s(aheadMax)}</b> is missing.`;
+  const A = escapeHTML(ahead), B = escapeHTML(behind), aM = d2s(aheadMax), bM = d2s(behindMax);
+  const msg = P2T(
+    `Posible dato faltante (${mi.label}): <b>${A}</b> llega a <b>${aM}</b> pero <b>${B}</b> solo a <b>${bM}</b>. Si actualizas todo junto, revisa si falta subir el <b>${B}</b> de <b>${aM}</b>.`,
+    `Possible missing data (${mi.label}): <b>${A}</b> reaches <b>${aM}</b> but <b>${B}</b> only <b>${bM}</b>. If you upload everything together, check whether <b>${B}</b> for <b>${aM}</b> is missing.`,
+    `Возможно, не хватает данных (${mi.label}): <b>${A}</b> доходит до <b>${aM}</b>, а <b>${B}</b> только до <b>${bM}</b>. Если вы загружаете всё вместе, проверьте, не пропущена ли загрузка <b>${B}</b> за <b>${aM}</b>.`);
   return `<div class="agy-style-333">
     <span class="agy-style-334">⚠️</span><span class="agy-style-335">${msg}</span></div>`;
 }
@@ -445,7 +443,7 @@ export function p2BrandFooter(idx) {
   const total = PRESENT2_STATE._deckLen || P2_SLIDES.length;
   return `<div class="agy-style-341">
     <span>YANGO Partners · ${P2T("Confidencial", "Confidential", "Конфиденциально")}</span>
-    <span>${P2T("pág", "page", "стр.")} ${(idx || 0) + 1}/${total}</span>
+    <span>${xl("pagina", PRESENT2_STATE.lang)} ${(idx || 0) + 1}/${total}</span>
   </div>`;
 }
 
@@ -466,7 +464,7 @@ export function p2CoverLogo(partner, col) {
 export function buildSlide2Cover(partner, dates) {
   const col = (STATE.partnerColors && STATE.partnerColors[partner]) || "#FF0000";
   const kam = (typeof getKAMForPartner === "function" ? getKAMForPartner(partner) : "") || "";
-  const cities = p2PartnerCities(partner).map(cityLabel).join(" · ");
+  const cities = p2PartnerCities(partner).map(c => ciudadL(c, PRESENT2_STATE.lang)).join(" · ");
   // Ventana REAL que muestran las demás slides (p2SelectedDates: en mensual = tail4,
   // ignora el "Desde" crudo) — NUNCA leer #dateFrom/#dateTo directo aquí: la carátula
   // rotulaba un período distinto al que cubren KPIs por Nivel/Data Raw (bug de auditoría).
@@ -827,7 +825,7 @@ export function p2Chart(canvasId, dates, partnerVals, cityVals, cohortLines, col
   const pWoWLabel = isPct
     ? partnerVals.map((v, i) => (i === 0 || v == null || partnerVals[i - 1] == null) ? null : (v - partnerVals[i - 1]) * 100)
     : pWoW;
-  const fmtV = v => isPct ? (v == null ? "" : (v * 100).toFixed(1) + "%") : fmt(v);
+  const fmtV = v => isPct ? (v == null ? "" : p2Dec((v * 100), 1) + "%") : p2Num(v);
   // Marca Yango: la línea del partner SIEMPRE en rojo Yango; el color del KPI
   // (`color`) se usa como acento sutil en el relleno del área.
   // GROSORES (ago 2026): la matriz muestra hasta 4 niveles × 4 KPIs = 16
@@ -849,7 +847,7 @@ export function p2Chart(canvasId, dates, partnerVals, cityVals, cohortLines, col
     const cMax = Math.max(1, ...cityVals.filter(v => v != null));
     const cNorm = cityVals.map(v => v == null ? null : (v / cMax) * pMax);
     datasets.push({
-      label: PRESENT2_STATE.lang === "es" ? "Ciudad" : "City", data: cNorm,
+      label: xl("ciudad", PRESENT2_STATE.lang), data: cNorm,
       borderColor: "#c4c4c4", borderWidth: 1, borderDash: [3, 3], pointRadius: 1.5,
       pointBorderWidth: 0, tension: 0.3, fill: false, spanGaps: true, _raw: cityVals
     });
@@ -901,7 +899,7 @@ export function p2Chart(canvasId, dates, partnerVals, cityVals, cohortLines, col
           // Margen entre etiquetas para que "auto" no las pegue una contra otra.
           padding: { top: 1, bottom: 1, left: 2, right: 2 },
           clamp: true,
-          formatter: (_, ctx) => { const w = pWoWLabel[ctx.dataIndex]; return (w >= 0 ? "+" : "") + w.toFixed(1) + (isPct ? "pp" : "%"); },
+          formatter: (_, ctx) => { const w = pWoWLabel[ctx.dataIndex]; return (w >= 0 ? "+" : "") + p2Dec(w, 1) + (isPct ? "pp" : "%"); },
           color: ctx => wowColor(pWoW[ctx.dataIndex]),
           font: { size: 7, weight: "bold" }, anchor: "end", align: "top", offset: 3
         }
@@ -922,21 +920,21 @@ export function p2Chart(canvasId, dates, partnerVals, cityVals, cohortLines, col
 // ── KPIs de la matriz ─────────────────────────────────────────────────────────
 // Matriz: 4 KPIs (los que el KAM revisa de un vistazo). Comisión y Retención se
 // quitaron de los gráficos por densidad; siguen en el Data Raw.
-export function p2KpiDefs(es) {
+export function p2KpiDefs() {
   return [
-    { key: "ad",    label: P2T("Conductores Activos", "Active Drivers", "Активные водители"),   color: "#FF0000", kind: "num" },
-    { key: "nr",    label: P2T("Nuevos + Reactivados", "New + Reactivated", "Новые + реактивированные"), color: "#f97316", kind: "num" },
-    { key: "sh",    label: P2T("Horas de Conexión", "Supply Hours", "Часы на линии"),        color: "#8b5cf6", kind: "num" },
-    { key: "trips", label: P2T("Viajes", "Trips", "Поездки"),                          color: "#10b981", kind: "num" }
+    { key: "ad",    label: xl("kpi.ad", PRESENT2_STATE.lang),   color: "#FF0000", kind: "num" },
+    { key: "nr",    label: xl("kpi.nr", PRESENT2_STATE.lang), color: "#f97316", kind: "num" },
+    { key: "sh",    label: xl("kpi.sh", PRESENT2_STATE.lang),        color: "#8b5cf6", kind: "num" },
+    { key: "trips", label: xl("kpi.trips", PRESENT2_STATE.lang),                          color: "#10b981", kind: "num" }
   ];
 }
 // Variante Fleet: los 4 KPIs EXACTOS del reporte real del partner (confirmado
 // por captura del usuario) — N+R, Acceptance Rate, Owned Fleet Active Cars,
 // Internal Fleet SH/Auto Activo. Se QUITA AD de la matriz en modo Fleet (info
 // de agregador completa sigue disponible en Data Raw y Avance).
-export function p2KpiDefsFleet(es) {
+export function p2KpiDefsFleet() {
   return [
-    { key: "nr",                   label: P2T("Nuevos + Reactivados", "New + Reactivated", "Новые + реактивированные"), color: "#f97316", kind: "num" },
+    { key: "nr",                   label: xl("kpi.nr", PRESENT2_STATE.lang), color: "#f97316", kind: "num" },
     { key: "accept",               label: "Acceptance Rate",                                 color: "#10b981", kind: "pct" },
     { key: "ownedFleetActiveCars", label: P2T("Owned Fleet Active Cars", "Owned Fleet Active Cars", "Активные авто собственного автопарка"), color: "#0284c7", kind: "num" },
     { key: "shCarInt",             label: P2T("Internal Fleet SH/Auto", "Internal Fleet SH/Car", "Часы внутреннего автопарка / авто"),     color: "#8b5cf6", kind: "ratio1" }
@@ -947,25 +945,24 @@ export function p2KpiDefsFleet(es) {
 export function p2Levels(partner) {
   const cities = p2PartnerCities(partner);
   const levels = cities.length > 1
-    ? [{ id: "PE", city: null, label: "Perú", color: "#111" }]
+    ? [{ id: "PE", city: null, label: xl("peru", PRESENT2_STATE.lang), color: "#111" }]
     : [];
-  cities.forEach(c => levels.push({ id: c.toLowerCase().replace(/[^a-z0-9]/g, ""), city: c, label: cityLabel(c), color: CITY_COLORS[c] || "#888" }));
+  cities.forEach(c => levels.push({ id: c.toLowerCase().replace(/[^a-z0-9]/g, ""), city: c, label: ciudadL(c, PRESENT2_STATE.lang), color: CITY_COLORS[c] || "#888" }));
   return levels;
 }
 
 export function p2FmtVal(kind, v) {
   if (v == null || isNaN(v)) return (kind === "pct" || kind === "ratio1") ? "—" : "0";
-  if (kind === "pct")    return (v * 100).toFixed(1) + "%";
-  if (kind === "money")  return "$" + fmtSmart(v);
-  if (kind === "ratio1") return v.toFixed(1);
-  return fmt(v);
+  if (kind === "pct")    return p2Dec((v * 100), 1) + "%";
+  if (kind === "money")  return "$" + p2Smart(v);
+  if (kind === "ratio1") return p2Dec(v, 1);
+  return p2Num(v);
 }
 
 // ── SLIDE 0: MATRIZ (niveles × KPIs) ──────────────────────────────────────────
 export function buildSlide2Matrix(partner, dates, idx) {
-  const es = PRESENT2_STATE.lang === "es";
   const fleetMode = p2IsFleetMode(partner);
-  const kpis = fleetMode ? p2KpiDefsFleet(es) : p2KpiDefs(es);
+  const kpis = fleetMode ? p2KpiDefsFleet() : p2KpiDefs();
   const levels = p2Levels(partner);
   const from = dates[0], to = dates[dates.length - 1];
   const rows = levels.map(lv => {
@@ -980,11 +977,11 @@ export function buildSlide2Matrix(partner, dates, idx) {
       const prev = arr.length > 1 ? arr[arr.length - 2] : null;
       let badge = "", bColor = "#aaa";
       if (k.kind === "pct") {
-        if (last != null && prev != null) { const d = (last - prev) * 100; bColor = d >= 0 ? "#10b981" : "#FF0000"; badge = (d >= 0 ? "+" : "") + d.toFixed(1) + "pp"; }
+        if (last != null && prev != null) { const d = (last - prev) * 100; bColor = d >= 0 ? "#10b981" : "#FF0000"; badge = (d >= 0 ? "+" : "") + p2Dec(d, 1) + "pp"; }
       } else if (last != null && prev != null && prev !== 0) {
         // last != null: si el ultimo periodo no trae autos de flota (shCarInt=null), NO
         // mostrar un badge "-100%" fantasma — debe quedar "—" (mismo guard que la rama pct).
-        const w = (last - prev) / prev * 100; bColor = w >= 0 ? "#10b981" : "#FF0000"; badge = (w >= 0 ? "+" : "") + w.toFixed(1) + "%";
+        const w = (last - prev) / prev * 100; bColor = w >= 0 ? "#10b981" : "#FF0000"; badge = (w >= 0 ? "+" : "") + p2Dec(w, 1) + "%";
       }
       return `
         <div class="agy-style-356">
@@ -1013,7 +1010,7 @@ export function buildSlide2Matrix(partner, dates, idx) {
 
 export function buildSlide2MatrixCharts(partner, dates, root) {
   const fleetMode = p2IsFleetMode(partner);
-  const kpis = fleetMode ? p2KpiDefsFleet(PRESENT2_STATE.lang === "es") : p2KpiDefs(PRESENT2_STATE.lang === "es");
+  const kpis = fleetMode ? p2KpiDefsFleet() : p2KpiDefs();
   const FLEET_KEYS = { shCarInt: 1, accept: 1, ownedFleetActiveCars: 1 };   // sin cohorte v1; trend ponderado
   const levels = p2Levels(partner);
   levels.forEach(lv => {
@@ -1047,11 +1044,11 @@ export function buildSlide2MatrixCharts(partner, dates, root) {
 // columnas indistintas: el ojo encuentra primero el bloque y después el dato.
 // Pedido de Manuel (ago 2026): agrupar, NO recortar — el partner no tiene
 // acceso al CSV y esta tabla es su única fuente.
-export function p2RawCols(es) {
+export function p2RawCols() {
   return [
-    { key: "trips", label: P2T("Viajes", "Trips", "Поездки"),                 kind: "num", grp: "vol" },
-    { key: "sh",    label: P2T("Horas de Conexión", "Supply Hours", "Часы на линии"), kind: "num", grp: "vol" },
-    { key: "ad",    label: P2T("Conductores Activos", "Active Drivers", "Активные водители"), kind: "num", grp: "vol" },
+    { key: "trips", label: xl("kpi.trips", PRESENT2_STATE.lang),                 kind: "num", grp: "vol" },
+    { key: "sh",    label: xl("kpi.sh", PRESENT2_STATE.lang), kind: "num", grp: "vol" },
+    { key: "ad",    label: xl("kpi.ad", PRESENT2_STATE.lang), kind: "num", grp: "vol" },
     { key: "newd",  label: P2T("Nuevos", "New Drivers", "Новые водители"),           kind: "num", grp: "vol" },
     { key: "react", label: P2T("Reactivados", "Reactivated", "Реактивированные"),      kind: "num", grp: "vol" },
     { key: "nr",    label: "N+R",              kind: "num", grp: "vol" },
@@ -1065,9 +1062,9 @@ export function p2RawCols(es) {
 // Fleet: TODAS las columnas de agregador (p2RawCols, sin quitar nada — incluye
 // Trips/SH, Trips/AD, SH/AD) + 3 fleet-específicas al final (aditivo, no reemplaza; el
 // partner Fleet quiere ver info de agregador Y de fleet juntas).
-export function p2RawColsFleet(es) {
+export function p2RawColsFleet() {
   return [
-    ...p2RawCols(es),
+    ...p2RawCols(),
     { key: "ownedFleetActiveCars", label: "Owned Fleet Active Cars", kind: "num", grp: "fleet" },
     { key: "shCarInt",             label: P2T("Internal Fleet SH/Auto", "Internal Fleet SH/Car", "Часы внутреннего автопарка / авто"),     kind: "ratio1", grp: "fleet" },
     { key: "accept",               label: "Acceptance Rate", kind: "pct", grp: "fleet" }
@@ -1075,20 +1072,19 @@ export function p2RawColsFleet(es) {
 }
 export function p2FmtRaw(kind, v) {
   if (v == null || isNaN(v)) return "—";
-  if (kind === "pct")    return (v * 100).toFixed(1) + "%";
-  if (kind === "money")  return "$" + fmt(v);
-  if (kind === "ratio")  return v.toFixed(2);
+  if (kind === "pct")    return p2Dec((v * 100), 1) + "%";
+  if (kind === "money")  return "$" + p2Num(v);
+  if (kind === "ratio")  return p2Dec(v, 2);
   // ratio1: MISMA precisión que KPIs por Nivel/Avance (p2FmtVal, toFixed(1)) — antes
   // Internal Fleet SH/Auto salía con 2 decimales acá y 1 decimal en el resto del deck
   // para el mismo período (inconsistencia de auditoría).
-  if (kind === "ratio1") return v.toFixed(1);
-  return fmt(v);
+  if (kind === "ratio1") return p2Dec(v, 1);
+  return p2Num(v);
 }
 
 export function buildSlide2Raw(partner, dates, pct, idx) {
-  const es = PRESENT2_STATE.lang === "es";
   const fleetMode = p2IsFleetMode(partner);
-  const cols = fleetMode ? p2RawColsFleet(es) : p2RawCols(es);
+  const cols = fleetMode ? p2RawColsFleet() : p2RawCols();
   const levels = p2Levels(partner);
   const from = dates[0], to = dates[dates.length - 1];
   const tables = levels.map(lv => {
@@ -1122,8 +1118,8 @@ export function buildSlide2Raw(partner, dates, pct, idx) {
         const prev = m[c.key][i - 1];
         let txt = "—", bg = "#fafafa", col = "#888";
         if (cur != null && prev != null) {
-          if (c.kind === "pct") { const d = (cur - prev) * 100; col = d >= 0 ? "#065f46" : "#7f1d1d"; bg = d >= 0 ? "#d1fae5" : "#fee2e2"; txt = (d >= 0 ? "+" : "") + d.toFixed(1) + "pp"; }
-          else if (prev !== 0)  { const w = (cur - prev) / prev * 100; col = w >= 0 ? "#065f46" : "#7f1d1d"; bg = w >= 0 ? "#d1fae5" : "#fee2e2"; txt = (w >= 0 ? "+" : "") + w.toFixed(1) + "%"; }
+          if (c.kind === "pct") { const d = (cur - prev) * 100; col = d >= 0 ? "#065f46" : "#7f1d1d"; bg = d >= 0 ? "#d1fae5" : "#fee2e2"; txt = (d >= 0 ? "+" : "") + p2Dec(d, 1) + "pp"; }
+          else if (prev !== 0)  { const w = (cur - prev) / prev * 100; col = w >= 0 ? "#065f46" : "#7f1d1d"; bg = w >= 0 ? "#d1fae5" : "#fee2e2"; txt = (w >= 0 ? "+" : "") + p2Dec(w, 1) + "%"; }
         }
         return `<td class="${gs.trim()}" style="text-align:right;padding:3px 6px;font-size:.64rem;background:${bg};color:${col};font-weight:600;border-bottom:1px solid #fff">${txt}</td>`;
       }).join("");
@@ -1313,16 +1309,16 @@ export function p2AvanceColor(pct) { return pColor(pct); }
 
 // Tarjeta "Referencia" (sin meta en BD, ej. Fleet): valor actual + badge WoW,
 // estilo visualmente distinto (fondo celeste) de las tarjetas con meta real.
-export function p2RefCard(label, arr, kind, es) {
+export function p2RefCard(label, arr, kind) {
   const last = arr[arr.length - 1], prev = arr.length > 1 ? arr[arr.length - 2] : null;
-  const fmtN = kind === "pct" ? (v => v == null ? "—" : (v * 100).toFixed(1) + "%")
-             : kind === "ratio1" ? (v => v == null ? "—" : v.toFixed(1))
-             : fmt;
+  const fmtN = kind === "pct" ? (v => v == null ? "—" : p2Dec((v * 100), 1) + "%")
+             : kind === "ratio1" ? (v => v == null ? "—" : p2Dec(v, 1))
+             : p2Num;
   let badge = "", bColor = "#aaa";
   if (kind === "pct") {
-    if (last != null && prev != null) { const d = (last - prev) * 100; bColor = d >= 0 ? "#10b981" : "#FF0000"; badge = (d >= 0 ? "+" : "") + d.toFixed(1) + "pp"; }
+    if (last != null && prev != null) { const d = (last - prev) * 100; bColor = d >= 0 ? "#10b981" : "#FF0000"; badge = (d >= 0 ? "+" : "") + p2Dec(d, 1) + "pp"; }
   } else if (last != null && prev != null && prev !== 0) {
-    const w = (last - prev) / prev * 100; bColor = w >= 0 ? "#10b981" : "#FF0000"; badge = (w >= 0 ? "+" : "") + w.toFixed(1) + "%";
+    const w = (last - prev) / prev * 100; bColor = w >= 0 ? "#10b981" : "#FF0000"; badge = (w >= 0 ? "+" : "") + p2Dec(w, 1) + "%";
   }
   return `<div class="agy-style-376">
     <div class="agy-style-377">
@@ -1351,7 +1347,7 @@ export function p2ProyeccionVisible(mesName) {
 
 // projV null → sin línea de proyección (KPIs de tasa/snapshot no proyectan).
 // Tampoco en un mes META ya cerrado (decisión 4, p2ProyeccionVisible).
-export function _p2MetaCard(label, real, goal, projV, fmtN, es) {
+export function _p2MetaCard(label, real, goal, projV, fmtN) {
   if (projV != null && !p2ProyeccionVisible(p2AvanceMes())) projV = null;
   const pct = goal > 0 ? (real / goal) * 100 : 0;
   const col = p2AvanceColor(pct);
@@ -1374,7 +1370,7 @@ export function _p2MetaCard(label, real, goal, projV, fmtN, es) {
   </div>`;
 }
 // Tarjeta solo-meta (sin actual medible, ej. Utilización Fleet).
-export function _p2MetaOnlyCard(label, goal, fmtN, note, es) {
+export function _p2MetaOnlyCard(label, goal, fmtN, note) {
   return `<div class="agy-style-389">
     <span class="agy-style-390">${escapeHTML(label)}</span>
     <div class="agy-style-379">${fmtN(goal)}</div>
@@ -1384,7 +1380,7 @@ export function _p2MetaOnlyCard(label, goal, fmtN, note, es) {
 
 // % honesto: NO redondear 99.5-99.99 a "100%" (parecería meta cumplida sin estarlo).
 // <100 → 1 decimal (99.6%); ≥100 → entero (106%). Espeja el criterio de la pestaña Metas.
-export function _p2PctTxt(pct) { return (pct >= 100 ? pct.toFixed(0) : Math.min(pct, 99.9).toFixed(1)) + "%"; }
+export function _p2PctTxt(pct) { return (pct >= 100 ? pct.toFixed(0) : p2Dec(Math.min(pct, 99.9), 1)) + "%"; }
 // ── SLIDE: RESUMEN / SCORECARD (ago 2026) ─────────────────────────────────────
 // Consolida en UNA hoja lo que hoy toma tres (Avance Combinado + Avance vs Meta
 // + 🛺 Avance vs Meta). Responde de un vistazo: ¿cómo voy, en qué ciudad, y en
@@ -1437,7 +1433,7 @@ export function p2SliceVertical(vertical) {
 // Celda de cumplimiento: actual / meta + % coloreado. Sin meta → guion, NUNCA
 // 0% (un 0% se lee como incumplimiento cuando en realidad no se mide).
 function _scCell(real, meta, fmtN) {
-  if (!meta) return `<td class="sc-num sc-nometa">${fmtN(real)}<span class="sc-sub">sin meta</span></td>`;
+  if (!meta) return `<td class="sc-num sc-nometa">${fmtN(real)}<span class="sc-sub">${xl("sinMeta", PRESENT2_STATE.lang)}</span></td>`;
   const pct = (real / meta) * 100;
   return `<td class="sc-num">
     <span class="sc-val">${fmtN(real)}</span><span class="sc-meta">/ ${fmtN(meta)}</span>
@@ -1446,7 +1442,6 @@ function _scCell(real, meta, fmtN) {
 }
 
 export function buildSlide2Resumen(partner, dates, idx) {
-  const es = PRESENT2_STATE.lang === "es";
   const savedDs = PRESENT2_STATE.dataset;
   const mesName = p2AvanceMes();
 
@@ -1480,7 +1475,7 @@ export function buildSlide2Resumen(partner, dates, idx) {
   // Cada celda lleva su barra: el subrayado da el "cuán lleno" de un vistazo
   // sin costar una fila entera de alto.
   const celda = (real, meta, f) => {
-    if (!meta) return `<td class="rs-c rs-nm">${f(real)}<i>${P2T("sin meta", "no target", "без цели")}</i></td>`;
+    if (!meta) return `<td class="rs-c rs-nm">${f(real)}<i>${xl("sinMeta", PRESENT2_STATE.lang)}</i></td>`;
     const pct = (real / meta) * 100, col = pColor(pct);
     return `<td class="rs-c">
       <span class="rs-v">${f(real)}</span><span class="rs-m">/ ${f(meta)}</span>
@@ -1495,9 +1490,9 @@ export function buildSlide2Resumen(partner, dates, idx) {
     const m = p2MetaFor(partner, lv.city, mesName);
     return `<tr>
       <td class="rs-l"><span class="rs-d" style="background:${lv.color}"></span>${escapeHTML(lv.label)}</td>
-      ${celda((a.lastAD||0)+(b.lastAD||0), m.mA||0, fmt)}
-      ${celda((a.nr||0)+(b.nr||0),         m.mNR||0, fmt)}
-      ${celda((a.sh||0)+(b.sh||0),         m.mH||0, fmtSmart)}
+      ${celda((a.lastAD||0)+(b.lastAD||0), m.mA||0, p2Num)}
+      ${celda((a.nr||0)+(b.nr||0),         m.mNR||0, p2Num)}
+      ${celda((a.sh||0)+(b.sh||0),         m.mH||0, p2Smart)}
     </tr>`;
   }).join("");
 
@@ -1533,9 +1528,9 @@ export function buildSlide2Resumen(partner, dates, idx) {
   const totAD = comp.reduce((s, v) => s + v.ad, 0) || 1;
   const filasComp = comp.map(v => `<tr>
       <td class="rs-l"><span class="rs-d" style="background:${v.col}"></span>${v.lbl}</td>
-      <td class="rs-c"><span class="rs-v">${fmt(v.ad)}</span><span class="rs-p rs-share">${(v.ad/totAD*100).toFixed(0)}%</span></td>
-      <td class="rs-c"><span class="rs-v">${fmt(v.nr)}</span></td>
-      <td class="rs-c"><span class="rs-v">${fmtSmart(v.sh)}</span></td>
+      <td class="rs-c"><span class="rs-v">${p2Num(v.ad)}</span><span class="rs-p rs-share">${(v.ad/totAD*100).toFixed(0)}%</span></td>
+      <td class="rs-c"><span class="rs-v">${p2Num(v.nr)}</span></td>
+      <td class="rs-c"><span class="rs-v">${p2Smart(v.sh)}</span></td>
     </tr>`).join("");
 
   // ── Zona 3: Fleet — lente sobre Taxi, no una vertical ────────────────────
@@ -1552,10 +1547,10 @@ export function buildSlide2Resumen(partner, dates, idx) {
     const tieneFleet = (fs.ownedFleetActiveCars || []).some(v => v > 0);
     const m = p2MetaFor(partner, null, mesName);
     const chips = [
-      { l: P2T("Autos propios", "Owned cars", "Собственные авто"), v: ult(fs.ownedFleetActiveCars), f: v => v == null ? "—" : fmt(v) },
-      { l: P2T("SH / auto", "SH / car", "Часы / авто"),       v: ult(fs.shCarInt),            f: v => v == null ? "—" : v.toFixed(1), meta: m.mSHcar },
-      { l: P2T("Aceptación", "Acceptance", "Принятие"),    v: ult(fs.accept),              f: v => v == null ? "—" : (v*100).toFixed(1)+"%", meta: m.mAcc, esPct: true },
-      { l: P2T("Utilización", "Utilization", "Загрузка"),  v: null,                        f: () => m.mUtil != null ? fmt(m.mUtil)+"%" : "—", soloMeta: true }
+      { l: P2T("Autos propios", "Owned cars", "Собственные авто"), v: ult(fs.ownedFleetActiveCars), f: v => v == null ? "—" : p2Num(v) },
+      { l: xl("kpi.shcar", PRESENT2_STATE.lang),       v: ult(fs.shCarInt),            f: v => v == null ? "—" : p2Dec(v, 1), meta: m.mSHcar },
+      { l: xl("kpi.accept", PRESENT2_STATE.lang),    v: ult(fs.accept),              f: v => v == null ? "—" : p2Dec((v*100), 1)+"%", meta: m.mAcc, esPct: true },
+      { l: xl("kpi.util", PRESENT2_STATE.lang),  v: null,                        f: () => m.mUtil != null ? p2Num(m.mUtil)+"%" : "—", soloMeta: true }
     ];
     if (tieneFleet) fleetHTML = `<div class="rs-card rs-fleet">
       <div class="rs-h"><span class="rs-n">#</span>Fleet <span class="rs-sub">${P2T("dentro de Taxi", "within Taxi", "внутри Такси")}</span></div>
@@ -1591,14 +1586,14 @@ export function buildSlide2Resumen(partner, dates, idx) {
           <span class="rs-sub">${P2T("lo que te pedimos cada mes", "what we ask each month", "что мы просим каждый месяц")}</span></div>
         <div class="rs-chips">
           <div class="rs-chip"><span>${P2T("Horas / conductor base", "Hours / base driver", "Часов / базовый водитель")}</span>
-            <b style="color:${col1}">${h.valor == null ? "—" : h.valor.toFixed(1) + " h"}</b>
+            <b style="color:${col1}">${h.valor == null ? "—" : p2Dec(h.valor, 1) + " h"}</b>
             <i style="color:${col1}">${h.valor == null ? naTxt
               : (h.estado === "cumple" ? (P2T("✓ cumple", "✓ meets", "✓ соответствует")) : (P2T("✗ no cumple", "✗ below", "✗ не соответствует"))) + ` · mín ${TK_HORAS_BASE_MIN} h`}</i></div>
-          <div class="rs-chip"><span>${P2T("Nuevos + Reactivados", "New + Reactivated", "Новые + реактивированные")}</span>
-            <b>${fmt(d.nr)}</b>
+          <div class="rs-chip"><span>${xl("kpi.nr", PRESENT2_STATE.lang)}</span>
+            <b>${p2Num(d.nr)}</b>
             <i${pct2 != null ? ` style="color:${pColor(pct2)}"` : ""}>${pct2 != null
-              ? `${_p2PctTxt(pct2)} ${P2T("de meta", "of target", "от цели")} (${fmt(mNuevos)})`
-              : (P2T("sin meta cargada", "no target", "цель не загружена"))}</i></div>
+              ? `${_p2PctTxt(pct2)} ${P2T("de meta", "of target", "от цели")} (${p2Num(mNuevos)})`
+              : xl("sinMetaCargada", PRESENT2_STATE.lang)}</i></div>
         </div>
       </div>`;
     }
@@ -1608,9 +1603,9 @@ export function buildSlide2Resumen(partner, dates, idx) {
   // así los encabezados de una caen exactamente sobre los de la otra.
   const cols = `<colgroup><col class="rs-c1"><col class="rs-cm"><col class="rs-cm"><col class="rs-cm"></colgroup>`;
   const th = (a, b, c) => `<tr><th></th><th>${a}</th><th>${b}</th><th>${c}</th></tr>`;
-  const L = { ad: P2T("Conductores Activos", "Active Drivers", "Активные водители"),
+  const L = { ad: xl("kpi.ad", PRESENT2_STATE.lang),
               nr: P2T("Nuevos + Reactivados", "New + React", "Новые + реакт."),
-              sh: P2T("Horas de Conexión", "Supply Hours", "Часы на линии") };
+              sh: xl("kpi.sh", PRESENT2_STATE.lang) };
 
   // Numeración de las zonas: CORRELATIVA sobre las que de verdad se muestran, y
   // en el ORDEN EN QUE APARECEN. Estaba fija (1,2,3,4) y un partner sin Fleet
@@ -1625,9 +1620,10 @@ export function buildSlide2Resumen(partner, dates, idx) {
     ${p2BrandHeader(partner, (P2T("Resumen", "Summary", "Итоги")) + " · " + p2MesLabel(mesName),
       P2T("Cumplimiento del mes y de dónde viene", "Monthly attainment and where it comes from", "Выполнение месяца и его источники"))}
     <div class="rs-wrap">
-      ${rangoParcial ? `<div class="px-aviso">${es
-        ? `El rango filtrado cubre <b>${mesDates.length} de ${todasDelMes.length}</b> períodos del mes: <b>Nuevos + Reactivados</b> y <b>Horas de Conexión</b> acumulan solo esos, así que su % contra la meta <b>mensual</b> queda corto por el recorte del rango, no por desempeño.`
-        : `The filtered range covers <b>${mesDates.length} of ${todasDelMes.length}</b> periods of the month: <b>New + Reactivated</b> and <b>Supply Hours</b> accumulate only those, so their % against a <b>monthly</b> target falls short due to the range cut, not performance.`}</div>` : ""}
+      ${rangoParcial ? `<div class="px-aviso">${P2T(
+          `El rango filtrado cubre <b>${mesDates.length} de ${todasDelMes.length}</b> períodos del mes: <b>Nuevos + Reactivados</b> y <b>Horas de Conexión</b> acumulan solo esos, así que su % contra la meta <b>mensual</b> queda corto por el recorte del rango, no por desempeño.`,
+          `The filtered range covers <b>${mesDates.length} of ${todasDelMes.length}</b> periods of the month: <b>New + Reactivated</b> and <b>Supply Hours</b> accumulate only those, so their % against a <b>monthly</b> target falls short due to the range cut, not performance.`,
+          `Выбранный диапазон охватывает <b>${mesDates.length} из ${todasDelMes.length}</b> периодов месяца: <b>новые + реактивированные</b> и <b>часы на линии</b> накапливаются только за них, поэтому их % от <b>месячной</b> цели занижен из-за границ диапазона, а не из-за результатов.`)}</div>` : ""}
       <div class="rs-card">
         <div class="rs-h"><span class="rs-n">#</span>${P2T("¿Cumplo la meta del mes?", "Am I meeting the target?", "Выполняю ли я цель месяца?")}
           <span class="rs-sub">${P2T("Taxi + TukTuk — la meta cubre las dos", "Taxi + TukTuk", "Такси + ТукТук — цель покрывает обе линии")}</span></div>
@@ -1826,11 +1822,11 @@ export function p2BenchStrip(partner, dates) {
   if (coh.length < 3) return "";   // con menos de 3 pares la mediana no dice nada
   const med = {};
   const D = [
-    { k: "accept",    l: P2T("Aceptación", "Acceptance", "Принятие"),        f: v => (v * 100).toFixed(1) + "%", alto: true },
-    { k: "tripsHr",   l: P2T("Viajes / hora", "Trips / hour", "Поездок / час"), f: v => v.toFixed(2),            alto: true },
-    { k: "hrsDriver", l: P2T("Horas / conductor", "Hours / driver", "Часов / водитель"), f: v => fmt(Math.round(v)), alto: true },
-    { k: "mph",       l: P2T("USD / hora", "USD / hour", "USD / час"),       f: v => "$" + v.toFixed(2),         alto: true },
-    { k: "bad",       l: P2T("% mal calif.", "% badly rated", "% плохих оценок"), f: v => (v * 100).toFixed(1) + "%", alto: false }
+    { k: "accept",    l: xl("kpi.accept", PRESENT2_STATE.lang),        f: v => p2Dec((v * 100), 1) + "%", alto: true },
+    { k: "tripsHr",   l: P2T("Viajes / hora", "Trips / hour", "Поездок / час"), f: v => p2Dec(v, 2),            alto: true },
+    { k: "hrsDriver", l: P2T("Horas / conductor", "Hours / driver", "Часов / водитель"), f: v => p2Num(Math.round(v)), alto: true },
+    { k: "mph",       l: P2T("USD / hora", "USD / hour", "USD / час"),       f: v => "$" + p2Dec(v, 2),         alto: true },
+    { k: "bad",       l: P2T("% mal calif.", "% badly rated", "% плохих оценок"), f: v => p2Dec((v * 100), 1) + "%", alto: false }
   ];
   D.forEach(d => { med[d.k] = median(coh.map(m => m[d.k])); });
   const chips = D.map(d => {
@@ -1844,7 +1840,7 @@ export function p2BenchStrip(partner, dates) {
       <b style="color:${col}">${d.f(mio)}</b>
       <i>${escapeHTML(P2T("mediana", "median", "медиана"))} ${d.f(m)}</i></div>`;
   }).join("");
-  const donde = C.ciudades.length === 1 ? cityLabel(C.ciudades[0])
+  const donde = C.ciudades.length === 1 ? ciudadL(C.ciudades[0], PRESENT2_STATE.lang)
               : P2T("tus ciudades", "your cities", "ваших городах");
   // Por qué MEDIANA y no promedio: el promedio se mueve con un solo caso
   // extremo (sin el corte de 50 activos, el máximo de USD/hora es 12,13 contra
@@ -1924,9 +1920,9 @@ export function p2EmbudoBloque(partner, dates) {
   const faltan = m1 != null ? Math.round(Math.max(0, (m1 - yo.r1) * yo.perfiles)) : 0;
   const pie = faltan >= 5
     ? `<div class="eb-pie eb-pie-rojo">${escapeHTML(P2T(
-        `+${fmt(faltan)} conductores con la tasa de tus pares, sin traer una persona más`,
-        `+${fmt(faltan)} drivers at your peers' rate, without adding a single person`,
-        `+${fmt(faltan)} водителей при ставке коллег, без единого нового человека`))}</div>`
+        `+${p2Num(faltan)} conductores con la tasa de tus pares, sin traer una persona más`,
+        `+${p2Num(faltan)} drivers at your peers' rate, without adding a single person`,
+        `+${p2Num(faltan)} водителей при ставке коллег, без единого нового человека`))}</div>`
     : hayMed
     ? `<div class="eb-pie">${escapeHTML(P2T(
         "Tu activación está a la par de tus pares.",
@@ -1939,9 +1935,9 @@ export function p2EmbudoBloque(partner, dates) {
   return `<div class="px-card px-embudo">
     <div class="px-h">${escapeHTML(P2T("Captación → activación", "Acquisition → activation", "Привлечение → активация"))}</div>
     <div class="eb-top">${escapeHTML(P2T(
-      `${fmt(Math.round(yo.perfiles))} perfiles registrados por vos`,
-      `${fmt(Math.round(yo.perfiles))} profiles you registered`,
-      `${fmt(Math.round(yo.perfiles))} профилей зарегистрировано вами`))}${hayMed ? ` · ${escapeHTML(P2T("línea = mediana", "line = median", "линия = медиана"))}` : ""}</div>
+      `${p2Num(Math.round(yo.perfiles))} perfiles registrados por vos`,
+      `${p2Num(Math.round(yo.perfiles))} profiles you registered`,
+      `${p2Num(Math.round(yo.perfiles))} профилей зарегистрировано вами`))}${hayMed ? ` · ${escapeHTML(P2T("línea = mediana", "line = median", "линия = медиана"))}` : ""}</div>
     <div class="eb-tabla">${filas}</div>
     ${pie}
   </div>`;
@@ -1960,10 +1956,10 @@ export function _p2BenchCtx(partner, dates) {
   const coh = C.grupos.map(p2OpsMetrics).filter(m => m.ad >= 50);
   if (coh.length < 3) return null;
   const D = [
-    { k: "accept",    label: P2T("Aceptación", "Acceptance", "Принятие"),                 f: v => (v * 100).toFixed(1) + "%" },
-    { k: "tripsHr",   label: P2T("Viajes por hora", "Trips per hour", "Поездок в час"),   f: v => v.toFixed(2) },
-    { k: "hrsDriver", label: P2T("Horas por conductor", "Hours per driver", "Часов на водителя"), f: v => fmt(Math.round(v)) },
-    { k: "mph",       label: P2T("USD por hora", "USD per hour", "USD в час"),            f: v => "$" + v.toFixed(2) }
+    { k: "accept",    label: xl("kpi.accept", PRESENT2_STATE.lang),                 f: v => p2Dec((v * 100), 1) + "%" },
+    { k: "tripsHr",   label: P2T("Viajes por hora", "Trips per hour", "Поездок в час"),   f: v => p2Dec(v, 2) },
+    { k: "hrsDriver", label: P2T("Horas por conductor", "Hours per driver", "Часов на водителя"), f: v => p2Num(Math.round(v)) },
+    { k: "mph",       label: P2T("USD por hora", "USD per hour", "USD в час"),            f: v => "$" + p2Dec(v, 2) }
   ];
   const gaps = D.map(d => {
     const mio = yo[d.k], m = median(coh.map(x => x[d.k]));
@@ -2047,7 +2043,7 @@ export function p2TrayectoriaBloque(partner, dates) {
   const badge = (p, alto = true) => {
     if (p == null) return `<em class="tr-var">—</em>`;
     const bueno = alto ? p >= 0 : p <= 0;
-    return `<em class="tr-var" style="color:${bueno ? "#10b981" : "#FF0000"}">${p >= 0 ? "↑" : "↓"} ${Math.abs(p).toFixed(1)}%</em>`;
+    return `<em class="tr-var" style="color:${bueno ? "#10b981" : "#FF0000"}">${p >= 0 ? "↑" : "↓"} ${p2Dec(Math.abs(p), 1)}%</em>`;
   };
   const ultRet = [...ret].reverse().find(v => v != null);
   // La cifra grande es SIEMPRE la del ULTIMO periodo, nunca el acumulado del
@@ -2057,12 +2053,12 @@ export function p2TrayectoriaBloque(partner, dates) {
   // dia) y el pie lo dice.
   const ult = arr => arr[arr.length - 1];
   const PANELES = [
-    { l: P2T("Conductores Activos", "Active Drivers", "Активные водители"), c: "#FF0000",
-      serie: ad, v: fmt(ult(ad) || 0), badge: badge(varPct(ad)) },
-    { l: P2T("Nuevos + Reactivados", "New + Reactivated", "Новые + реактивированные"), c: "#f97316",
-      serie: nr, v: fmt(ult(nr) || 0), badge: badge(varPct(nr)) },
-    { l: P2T("Horas de Conexión", "Supply Hours", "Часы на линии"), c: "#0284c7",
-      serie: sh, v: fmtSmart(ult(sh) || 0), badge: badge(varPct(sh)) },
+    { l: xl("kpi.ad", PRESENT2_STATE.lang), c: "#FF0000",
+      serie: ad, v: p2Num(ult(ad) || 0), badge: badge(varPct(ad)) },
+    { l: xl("kpi.nr", PRESENT2_STATE.lang), c: "#f97316",
+      serie: nr, v: p2Num(ult(nr) || 0), badge: badge(varPct(nr)) },
+    { l: xl("kpi.sh", PRESENT2_STATE.lang), c: "#0284c7",
+      serie: sh, v: p2Smart(ult(sh) || 0), badge: badge(varPct(sh)) },
     // Retención: la palanca más barata. Sin ella, la tendencia de AD no se
     // explica — un partner puede traer mucha gente y no crecer porque se le va
     // por el otro lado.
@@ -2095,7 +2091,6 @@ export function p2TrayectoriaBloque(partner, dates) {
 }
 
 export function buildSlide2Portada(partner, dates, idx) {
-  const es = PRESENT2_STATE.lang === "es";
   const savedDs = PRESENT2_STATE.dataset;
   const mesName = p2AvanceMes();
 
@@ -2124,12 +2119,12 @@ export function buildSlide2Portada(partner, dates, idx) {
 
   // Paraguas Taxi + TukTuk: es lo que la meta cubre.
   const kpis = [
-    { key: "ad", lbl: P2T("Conductores Activos", "Active Drivers", "Активные водители"),
-      real: (taxiAct.lastAD || 0) + (tkAct.lastAD || 0), meta: meta.mA || 0, fmt, flujo: false },
-    { key: "nr", lbl: P2T("Nuevos + Reactivados", "New + Reactivated", "Новые + реактивированные"),
-      real: (taxiAct.nr || 0) + (tkAct.nr || 0), meta: meta.mNR || 0, fmt, flujo: true },
-    { key: "sh", lbl: P2T("Horas de Conexión", "Supply Hours", "Часы на линии"),
-      real: (taxiAct.sh || 0) + (tkAct.sh || 0), meta: meta.mH || 0, fmt: fmtSmart, flujo: true }
+    { key: "ad", lbl: xl("kpi.ad", PRESENT2_STATE.lang),
+      real: (taxiAct.lastAD || 0) + (tkAct.lastAD || 0), meta: meta.mA || 0, fmt: p2Num, flujo: false },
+    { key: "nr", lbl: xl("kpi.nr", PRESENT2_STATE.lang),
+      real: (taxiAct.nr || 0) + (tkAct.nr || 0), meta: meta.mNR || 0, fmt: p2Num, flujo: true },
+    { key: "sh", lbl: xl("kpi.sh", PRESENT2_STATE.lang),
+      real: (taxiAct.sh || 0) + (tkAct.sh || 0), meta: meta.mH || 0, fmt: p2Smart, flujo: true }
   ].map(k => ({ ...k, pct: k.meta > 0 ? (k.real / k.meta) * 100 : 0 }));
 
   // Datos por ciudad para la regla de "dónde está la brecha".
@@ -2207,7 +2202,7 @@ export function buildSlide2Portada(partner, dates, idx) {
     if (!k.meta) return `<div class="px-kpi px-na">
       <div class="px-lbl">${escapeHTML(k.lbl)}</div>
       <div class="px-val">${k.fmt(k.real)}</div>
-      <div class="px-nota">${P2T("sin meta cargada", "no target", "цель не загружена")}</div></div>`;
+      <div class="px-nota">${xl("sinMetaCargada", PRESENT2_STATE.lang)}</div></div>`;
     const col = pColor(k.pct);
     const falta = k.meta - k.real;
     return `<div class="px-kpi">
@@ -2238,13 +2233,16 @@ export function buildSlide2Portada(partner, dates, idx) {
         <span class="px-vtxt" style="color:${vColor}">${escapeHTML(vTxt)}</span>
         <span class="px-vsub">${P2T(`${diasRestantes ? `quedan ${diasRestantes} días` : "mes cerrado"}`, `${diasRestantes ? `${diasRestantes} days left` : "month closed"}`, `${diasRestantes ? `осталось ${diasRestantes} дн.` : "месяц закрыт"}`)}</span>
       </div>
-      ${coberturaParcial ? `<div class="px-aviso">${es
-        ? `${rangoParcial
+      ${coberturaParcial ? `<div class="px-aviso">${P2T(
+          `${rangoParcial
             ? `El rango filtrado cubre <b>${mesDates.length} de ${todasDelMes.length}</b> períodos del mes.`
-            : `Este partner reportó <b>${conDato} de ${totalPer}</b> períodos del mes.`} <b>Nuevos + Reactivados</b> y <b>Horas de Conexión</b> acumulan solo esos, así que su % contra la meta <b>mensual</b> queda corto por ${rangoParcial ? "el recorte del rango" : "datos faltantes"}, no por desempeño. Para leer el cumplimiento real, ampliá el rango a todo el mes. Conductores Activos no se ve afectado (es un nivel, no se acumula).`
-        : `${rangoParcial
+            : `Este partner reportó <b>${conDato} de ${totalPer}</b> períodos del mes.`} <b>Nuevos + Reactivados</b> y <b>Horas de Conexión</b> acumulan solo esos, así que su % contra la meta <b>mensual</b> queda corto por ${rangoParcial ? "el recorte del rango" : "datos faltantes"}, no por desempeño. Para leer el cumplimiento real, amplía el rango a todo el mes. Conductores Activos no se ve afectado (es un nivel, no se acumula).`,
+          `${rangoParcial
             ? `The filtered range covers <b>${mesDates.length} of ${todasDelMes.length}</b> periods of the month.`
-            : `This partner reported <b>${conDato} of ${totalPer}</b> periods this month.`} <b>New + Reactivated</b> and <b>Supply Hours</b> only accumulate those, so their % against a <b>monthly</b> target falls short due to ${rangoParcial ? "the range cut" : "missing data"}, not performance. Widen the range to the full month to read real attainment. Active Drivers is unaffected (it is a level).`}</div>` : ""}
+            : `This partner reported <b>${conDato} of ${totalPer}</b> periods this month.`} <b>New + Reactivated</b> and <b>Supply Hours</b> only accumulate those, so their % against a <b>monthly</b> target falls short due to ${rangoParcial ? "the range cut" : "missing data"}, not performance. Widen the range to the full month to read real attainment. Active Drivers is unaffected (it is a level).`,
+          `${rangoParcial
+            ? `Выбранный диапазон охватывает <b>${mesDates.length} из ${todasDelMes.length}</b> периодов месяца.`
+            : `Этот партнёр предоставил данные за <b>${conDato} из ${totalPer}</b> периодов месяца.`} <b>Новые + реактивированные</b> и <b>часы на линии</b> накапливаются только за них, поэтому их % от <b>месячной</b> цели занижен из-за ${rangoParcial ? "границ диапазона" : "недостающих данных"}, а не из-за результатов. Чтобы увидеть реальное выполнение, расширьте диапазон на весь месяц. Активные водители не затронуты (это уровень, а не накопление).`)}</div>` : ""}
       <div class="px-kpis">${barras}</div>
       <div class="px-abajo${embudoHTML ? "" : " px-abajo-solo"}">
         <div class="px-col">
@@ -2363,25 +2361,25 @@ export function p2ComputeAlerts(partner, dates) {
       const a = ad.slice(-3);
       if (a[0] > a[1] && a[1] > a[2]) out.push({ sev: "high", level: lv.label, kind: "ad3drop",
         title: P2T(`AD cae 3 ${mi.units} ${mi.seg}`, `AD down 3 ${mi.units} ${mi.seg}`, `Активные водители падают 3 ${mi.units} ${mi.seg}`),
-        detail: `${fmt(a[0])} → ${fmt(a[2])}` });
+        detail: `${p2Num(a[0])} → ${p2Num(a[2])}` });
     }
     // (b) caída WoW > 5% en ciudad
     if (lv.city && lw != null && lw < T.wowDropCity) out.push({ sev: "high", level: lv.label, kind: "wowdrop",
       title: P2T(`Caída ${mi.pop} en Conductores Activos`, `${mi.pop} drop in Active Drivers`, `Падение ${mi.pop} по активным водителям`),
-      detail: `${lw.toFixed(1)}%` });
+      detail: `${p2Dec(lw, 1)}%` });
     // (c) retención < retMin (85%)
     if (lastRet != null && lastRet < T.retMin) out.push({ sev: "mid", level: lv.label, kind: "retention",
       title: P2T(`Retención bajo ${(T.retMin * 100).toFixed(0)}%`, `Retention below ${(T.retMin * 100).toFixed(0)}%`, `Удержание ниже ${(T.retMin * 100).toFixed(0)}%`),
-      detail: `${(lastRet * 100).toFixed(1)}%` });
+      detail: `${p2Dec((lastRet * 100), 1)}%` });
     // (d) mínimos por tamaño de park
     if (lastAD > 0 && lastAD < T.smallParkAD) {
       if (shPerAd != null && shPerAd < T.smallShPerAdMin) out.push({ sev: "mid", level: lv.label, kind: "smallpark_sh",
         title: P2T(`Park chico con SH/AD bajo`, `Small park, low SH/AD`, `Небольшой парк, низкие часы/водитель`),
-        detail: `${shPerAd.toFixed(1)} ${P2T("h/cond", "h/driver", "ч/вод.")}` });
+        detail: `${p2Dec(shPerAd, 1)} ${P2T("h/cond", "h/driver", "ч/вод.")}` });
     } else if (lastAD < T.midParkAD) {
       if ((tripsPerAd != null && tripsPerAd < T.midTripsPerAdMin)) out.push({ sev: "mid", level: lv.label, kind: "midpark_trips",
         title: P2T(`Park medio con Trips/AD bajo`, `Mid park, low Trips/AD`, `Средний парк, мало поездок/водитель`),
-        detail: `${tripsPerAd.toFixed(1)} ${P2T("viajes/cond", "trips/driver", "поездок/вод.")}` });
+        detail: `${p2Dec(tripsPerAd, 1)} ${P2T("viajes/cond", "trips/driver", "поездок/вод.")}` });
     } else if (lastAD > 0) {
       // No duplicar señal: si ya salió "wowdrop" (caída >5% en ciudad) o "retención" (mismo
       // umbral retMin===retLargeMin) para este nivel, NO emitir largepark_decline encima —
@@ -2413,15 +2411,14 @@ export function p2GroupAlerts(alerts) {
   return [...groups.values()];
 }
 export function buildSlide2Alerts(partner, dates, idx) {
-  const es = PRESENT2_STATE.lang === "es";
   // P2_ALERT_THRESHOLDS (retención 85%, SH/AD, Trips/AD) está calibrado para cadencia
   // SEMANAL. Aplicado tal cual en Mensual/Diario dispara falsas alarmas partner-facing (ej.
   // un 82% de retención MENSUAL no es comparable a un 82% semanal). En vez de inventar
   // multiplicadores sin validar con datos reales, se restringe la slide a Semanal (ver auditoría).
   if (STATE.curMode !== "semanal") {
-    const msg = es
-      ? "Alertas disponibles solo en escala Semanal (los umbrales están calibrados para esa cadencia)."
-      : "Alerts available only at Weekly scale (thresholds are calibrated for that cadence).";
+    const msg = P2T("Alertas disponibles solo en escala Semanal (los umbrales están calibrados para esa cadencia).",
+      "Alerts available only at Weekly scale (thresholds are calibrated for that cadence).",
+      "Сигналы доступны только в недельном масштабе (пороги откалиброваны под эту периодичность).");
     return `<div class="agy-style-365">
       ${p2BrandHeader(partner, P2T("Alertas / Next Steps", "Alerts / Next Steps", "Сигналы / Следующие шаги"), P2T("Señales automáticas para accionar con el partner", "Automatic signals to act on with the partner", "Автоматические сигналы для работы с партнёром"))}
       <div class="agy-style-396">${msg}</div>
@@ -2458,16 +2455,17 @@ export function buildSlide2Alerts(partner, dates, idx) {
 // vía p2Vals). Ignora el `dates` tail-4 del deck y toma TODO el historial con p2AllDates().
 // Solo tiene sentido en escala mensual → gate como buildSlide2Alerts.
 export const P2_FC_KPIS = [
-  { key: "ad",    es: "Conductores Activos", en: "Active Drivers", color: "#FF0000", kind: "num"  },
-  { key: "sh",    es: "Horas de Conexión",   en: "Supply Hours",   color: "#8b5cf6", kind: "numK" },
-  { key: "gmv",   es: "GMV",                 en: "GMV",            color: "#0284c7", kind: "money" },
-  { key: "trips", es: "Viajes",              en: "Trips",          color: "#10b981", kind: "num"  }
+  // Nombres de los KPI: los de core/i18nExport (EXPORT_STR), iguales en todo el deck.
+  { key: "ad",    ...EXPORT_STR["kpi.ad"],    color: "#FF0000", kind: "num"  },
+  { key: "sh",    ...EXPORT_STR["kpi.sh"],    color: "#8b5cf6", kind: "numK" },
+  { key: "gmv",   es: "GMV", en: "GMV", ru: "GMV", color: "#0284c7", kind: "money" },
+  { key: "trips", ...EXPORT_STR["kpi.trips"], color: "#10b981", kind: "num"  }
 ];
 export function _p2FcFmt(kind, v) {
   if (v == null || isNaN(v)) return "—";
-  if (kind === "money") return "$" + fmtSmart(v);
-  if (kind === "numK")  return fmtSmart(v);
-  return fmt(Math.round(v));
+  if (kind === "money") return "$" + p2Smart(v);
+  if (kind === "numK")  return p2Smart(v);
+  return p2Num(Math.round(v));
 }
 // Serie mensual por KPI (Perú = Σ ciudades del partner) + inputs de palancas, desde el
 // dataset activo. p2Vals suma ciudades por mes; para AD/autos (snapshot) la suma de niveles
@@ -2529,16 +2527,16 @@ export function _p2FcMiniCard(label, value, hint, color, tip) {
     <div class="agy-style-404">${hint}</div>
   </div>`;
 }
-export function _p2FcPalancasHTML(C, es) {
+export function _p2FcPalancasHTML(C) {
   const L = C.levers;
   if (!L) return "";
   const cards = [];
   // 1) Retención — cuántos de tus activos del mes pasado siguen activos este mes.
   const ret = L.retention;
-  const retTxt = ret != null ? (ret * 100).toFixed(1) + "%" : "—";
+  const retTxt = ret != null ? p2Dec((ret * 100), 1) + "%" : "—";
   const retCol = ret == null ? "#111" : ret >= 0.85 ? "#10b981" : ret >= 0.70 ? "#f59e0b" : "#FF0000";
   const ret100 = ret != null ? Math.round(ret * 100) : null;
-  const churnTxt = L.churn != null ? P2T(` · ${fmt(Math.round(L.churn))} se fueron`, ` · ${fmt(Math.round(L.churn))} left`, ` · ${fmt(Math.round(L.churn))} ушли`) : "";
+  const churnTxt = L.churn != null ? P2T(` · ${p2Num(Math.round(L.churn))} se fueron`, ` · ${p2Num(Math.round(L.churn))} left`, ` · ${p2Num(Math.round(L.churn))} ушли`) : "";
   cards.push(_p2FcMiniCard(P2T("Retención", "Retention", "Удержание"), retTxt,
     ret100 != null ? P2T(`${ret100} de 100 siguen${churnTxt}`, `${ret100} of 100 stay${churnTxt}`, `${ret100} из 100 остаются${churnTxt}`) : "", retCol,
     P2T("De tus conductores activos del mes pasado, cuántos siguen activos este mes. Es la palanca más barata: menos fugas = necesitás menos nuevos para crecer.",
@@ -2546,7 +2544,7 @@ export function _p2FcPalancasHTML(C, es) {
         "Сколько из ваших активных водителей прошлого месяца остаются активными в этом. Самый дешёвый рычаг: меньше потерь — меньше новых нужно для роста.")));
   // 2) Nuevos + Reactivados — tu motor de entrada este mes.
   cards.push(_p2FcMiniCard(P2T("Nuevos + React.", "New + React.", "Новые + реакт."),
-    fmt(Math.round(L.newT + L.react)),
+    p2Num(Math.round(L.newT + L.react)),
     L.leadDependency != null ? P2T(`${(L.leadDependency * 100).toFixed(0)}% vía leads Yango`, `${(L.leadDependency * 100).toFixed(0)}% via Yango leads`, `${(L.leadDependency * 100).toFixed(0)}% через лиды Yango`) : (P2T("sumados este mes", "added this month", "добавлено за месяц")), "#111",
     P2T("Conductores que ingresaron o reactivaste este mes (nuevos del partner + de leads Yango + reactivados). Tu motor de entrada.",
         "Drivers you added or reactivated this month (partner-sourced + Yango leads + reactivated). Your intake engine.",
@@ -2565,7 +2563,7 @@ export function _p2FcPalancasHTML(C, es) {
   // 4) Horas por conductor (SH/AD) — aprovechamiento de la base.
   const shad = L.prod.shPerAd, tr = L.prod.shPerAdTrend;
   cards.push(_p2FcMiniCard(P2T("Horas / conductor", "Hours / driver", "Часов / водитель"),
-    shad != null ? shad.toFixed(1) + "h" : "—",
+    shad != null ? p2Dec(shad, 1) + "h" : "—",
     tr != null ? ((tr >= 0 ? "▲ +" : "▼ ") + tr.toFixed(0) + "% vs 3m") : (P2T("al mes", "per month", "в месяц")),
     tr == null ? "#111" : tr >= 0 ? "#10b981" : "#FF0000",
     P2T("Horas de conexión promedio por conductor activo en el mes. Mide qué tan aprovechada está tu base: si cae, tenés gente registrada pero poco activa.",
@@ -2577,7 +2575,7 @@ export function _p2FcPalancasHTML(C, es) {
   // disparaba por gap de NIVEL (meta==hoy → gap 0 → "en meta" engañoso, aunque falten N+R).
   const t = C.target ? fcLeversToTarget(L, C.target) : null;
   if (t) {
-    const goalLbl = P2T(`Para tu meta (${fmt(Math.round(C.target))} AD)`, `To hit goal (${fmt(Math.round(C.target))} AD)`, `Для вашей цели (${fmt(Math.round(C.target))} АВ)`);
+    const goalLbl = P2T(`Para tu meta (${p2Num(Math.round(C.target))} AD)`, `To hit goal (${p2Num(Math.round(C.target))} AD)`, `Для вашей цели (${p2Num(Math.round(C.target))} АВ)`);
     const need = Math.round(t.newNeeded);
     const now  = Math.round(t.newNow || 0);
     const shortBy = need - now;
@@ -2585,13 +2583,13 @@ export function _p2FcPalancasHTML(C, es) {
     const retA = t.retNow    != null ? (t.retNow    * 100).toFixed(0) + "%" : "—";
     const retB = t.retNeeded != null ? (t.retNeeded * 100).toFixed(0) + "%" : "—";
     cards.push(_p2FcMiniCard(goalLbl,
-      (onTrack ? "✓ " : "") + fmt(need) + (P2T(" N+R/mes", " N+R/mo", " Н+Р/мес")),
-      onTrack ? P2T(`tu ritmo (~${fmt(now)}) alcanza`, `your pace (~${fmt(now)}) suffices`, `ваш темп (~${fmt(now)}) достаточен`)
-              : P2T(`hoy ~${fmt(now)} · faltan ${fmt(shortBy)}`, `today ~${fmt(now)} · short ${fmt(shortBy)}`, `сейчас ~${fmt(now)} · не хватает ${fmt(shortBy)}`),
+      (onTrack ? "✓ " : "") + p2Num(need) + (P2T(" N+R/mes", " N+R/mo", " Н+Р/мес")),
+      onTrack ? P2T(`tu ritmo (~${p2Num(now)}) alcanza`, `your pace (~${p2Num(now)}) suffices`, `ваш темп (~${p2Num(now)}) достаточен`)
+              : P2T(`hoy ~${p2Num(now)} · faltan ${p2Num(shortBy)}`, `today ~${p2Num(now)} · short ${p2Num(shortBy)}`, `сейчас ~${p2Num(now)} · не хватает ${p2Num(shortBy)}`),
       onTrack ? "#10b981" : "#0284c7",
-      P2T(`Aunque tu meta de AD (${fmt(Math.round(C.target))}) sea parecida a hoy (${fmt(Math.round(L.adNow))}), cada mes se te van conductores por rotación (retención ${retA}). Para sostener/llegar a la meta necesitás ~${fmt(need)} nuevos+reactivados en el mes; hoy promediás ~${fmt(now)}${shortBy > 0 ? ` (te faltan ~${fmt(shortBy)})` : ""}. Alternativa: subir la retención de ${retA} a ${retB}.`,
-          `Even if your AD goal (${fmt(Math.round(C.target))}) is close to today (${fmt(Math.round(L.adNow))}), churn takes drivers each month (retention ${retA}). To hold/reach it you need ~${fmt(need)} new+reactivated in the month; today you average ~${fmt(now)}${shortBy > 0 ? ` (short ~${fmt(shortBy)})` : ""}. Alternative: raise retention from ${retA} to ${retB}.`,
-          `Даже если цель по активным водителям (${fmt(Math.round(C.target))}) близка к сегодняшнему уровню (${fmt(Math.round(L.adNow))}), каждый месяц часть водителей уходит (удержание ${retA}). Чтобы удержать или достичь цели, нужно ~${fmt(need)} новых+реактивированных за месяц; сейчас в среднем ~${fmt(now)}${shortBy > 0 ? ` (не хватает ~${fmt(shortBy)})` : ""}. Альтернатива: поднять удержание с ${retA} до ${retB}.`)));
+      P2T(`Aunque tu meta de AD (${p2Num(Math.round(C.target))}) sea parecida a hoy (${p2Num(Math.round(L.adNow))}), cada mes se te van conductores por rotación (retención ${retA}). Para sostener/llegar a la meta necesitás ~${p2Num(need)} nuevos+reactivados en el mes; hoy promediás ~${p2Num(now)}${shortBy > 0 ? ` (te faltan ~${p2Num(shortBy)})` : ""}. Alternativa: subir la retención de ${retA} a ${retB}.`,
+          `Even if your AD goal (${p2Num(Math.round(C.target))}) is close to today (${p2Num(Math.round(L.adNow))}), churn takes drivers each month (retention ${retA}). To hold/reach it you need ~${p2Num(need)} new+reactivated in the month; today you average ~${p2Num(now)}${shortBy > 0 ? ` (short ~${p2Num(shortBy)})` : ""}. Alternative: raise retention from ${retA} to ${retB}.`,
+          `Даже если цель по активным водителям (${p2Num(Math.round(C.target))}) близка к сегодняшнему уровню (${p2Num(Math.round(L.adNow))}), каждый месяц часть водителей уходит (удержание ${retA}). Чтобы удержать или достичь цели, нужно ~${p2Num(need)} новых+реактивированных за месяц; сейчас в среднем ~${p2Num(now)}${shortBy > 0 ? ` (не хватает ~${p2Num(shortBy)})` : ""}. Альтернатива: поднять удержание с ${retA} до ${retB}.`)));
   }
   const title = P2T("Palancas de crecimiento", "Growth levers", "Рычаги роста");
   const subt = P2T("Lo que mueve tu # de Conductores Activos. La proyección de arriba asume que se mantienen — mejorá una y sube.",
@@ -2606,11 +2604,11 @@ export function _p2FcPalancasHTML(C, es) {
   </div>`;
 }
 // Detalle solo-vivo para el KAM (NO va al PDF): método + precisión por KPI.
-export function _p2FcDetailHTML(C, es) {
+export function _p2FcDetailHTML(C) {
   const chips = P2_FC_KPIS.map(k => {
     const r = C.fc[k.key];
     const acc = r.mape != null ? "±" + r.mape.toFixed(0) + "%" : "—";
-    return `<span class="agy-style-409"><b>${escapeHTML(P2T(k.es, k.en, k.ru || k.en))}</b>: ${escapeHTML(fcMethodName(r.method, es))} · ${acc}</span>`;
+    return `<span class="agy-style-409"><b>${escapeHTML(P2T(k.es, k.en, k.ru || k.en))}</b>: ${escapeHTML(fcMethodName(r.method, PRESENT2_STATE.lang))} · ${acc}</span>`;
   }).join("");
   return `<div class="agy-style-410">
     <div class="agy-style-411">${P2T("Detalle KAM (no se incluye en el PDF)", "KAM detail (not in PDF)", "Детали для KAM (не входит в PDF)")}</div>
@@ -2618,7 +2616,6 @@ export function _p2FcDetailHTML(C, es) {
   </div>`;
 }
 export function buildSlide2Forecast(partner, dates, idx) {
-  const es = PRESENT2_STATE.lang === "es";
   const shell = inner => `<div class="agy-style-365">
     ${p2BrandHeader(partner, (P2T("Proyección · próximos 3 meses", "Forecast · next 3 months", "Прогноз · ближайшие 3 месяца")),
       P2T("Qué esperar si la tendencia sigue igual — y qué mover para crecer", "What to expect if the trend holds — and what to move to grow", "Чего ждать, если тренд сохранится, и что менять для роста"))}
@@ -2638,7 +2635,7 @@ export function buildSlide2Forecast(partner, dates, idx) {
     const f3 = r.forecast[r.forecast.length - 1];
     const growth = last ? (f3 - last) / last * 100 : null;
     const gcol = growth == null ? "#888" : growth >= 0 ? "#10b981" : "#FF0000";
-    const gtxt = growth == null ? "" : (growth >= 0 ? "+" : "") + growth.toFixed(1) + "%";
+    const gtxt = growth == null ? "" : (growth >= 0 ? "+" : "") + p2Dec(growth, 1) + "%";
     const acc = r.mape != null ? "±" + r.mape.toFixed(0) + "%" : "—";
     // Cada tarjeta es una celda del grid 2×2 (altura acotada por grid-template-rows:1fr) →
     // el canvas nunca se desborda sobre las palancas de abajo.
@@ -2675,7 +2672,7 @@ export function buildSlide2Forecast(partner, dates, idx) {
       ${avg != null ? `<span class="agy-style-426">✓ ${P2T(`Validado con tus ${nBack} meses más recientes · ±${avg.toFixed(0)}%`, `Validated on your ${nBack} most recent months · ±${avg.toFixed(0)}%`, `Проверено на ваших ${nBack} последних месяцах · ±${avg.toFixed(0)}%`)}</span>` : ""}
       <span class="agy-style-427">${P2T("Al ritmo actual — mové las palancas ↓ para cambiarla", "At current pace — move the levers ↓ to change it", "При текущем темпе — двигайте рычаги ↓, чтобы изменить")}</span>
     </div>`;
-  const detail = PRESENT2_STATE._exporting ? "" : _p2FcDetailHTML(C, es);
+  const detail = PRESENT2_STATE._exporting ? "" : _p2FcDetailHTML(C);
   const expBanner = `<div class="agy-style-428">
       <span class="agy-style-429">🧪</span>
       <span>${P2T("EXPERIMENTAL · en validación — no compartir con partners aún. No se incluye en el PDF.", "EXPERIMENTAL · under validation — do not share with partners yet. Not included in the PDF.", "ЭКСПЕРИМЕНТ · на проверке — пока не делиться с партнёрами. Не входит в PDF.")}</span>
@@ -2685,7 +2682,7 @@ export function buildSlide2Forecast(partner, dates, idx) {
     ${partialNote}
     ${legend}
     <div class="agy-style-430">${cards}</div>
-    ${_p2FcPalancasHTML(C, es)}
+    ${_p2FcPalancasHTML(C)}
     ${detail}`);
 }
 // Gráfico por KPI: historia (sólida) + proyección (punteada) + banda sombreada.
@@ -2701,7 +2698,7 @@ export function p2ForecastChart(canvasId, labels, hist, fcObj, color, kind, root
   const upper  = pad(nH - 1).concat(bridge, fcObj.upper);
   const lower  = pad(nH - 1).concat(bridge, fcObj.lower);
   const lastIdx = labels.length - 1;
-  const fmtV = v => v == null ? "" : (kind === "money" ? "$" + fmtSmart(v) : kind === "numK" ? fmtSmart(v) : fmt(Math.round(v)));
+  const fmtV = v => v == null ? "" : (kind === "money" ? "$" + p2Smart(v) : kind === "numK" ? p2Smart(v) : p2Num(Math.round(v)));
   const UP = "#10b981", DN = "#dc2626";   // verde = si crece (máx) · rojo = si decrece (mín)
   const chart = new Chart(canvas, {
     type: "line",
@@ -3217,7 +3214,7 @@ export async function downloadPresent2PDF() {
       // y el scale de html2canvas coincidan (P2_EXPORT_SCALE), no el formato.
       pdf.addImage(canvas.toDataURL("image/jpeg", 1.0), "JPEG", 0, 0, 1280, 720);
     }
-    stampPDF(pdf, `Presentación — ${partner}`);
+    stampPDF(pdf, `${P2T("Presentación", "Presentation", "Презентация")} — ${partner}`);
     pdf.save(`${partner}_Presentacion2_${to}.pdf`);
   } catch (err) {
     console.error(err);

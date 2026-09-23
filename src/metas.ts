@@ -1,6 +1,6 @@
 //@ts-nocheck
 import { ensurePdfLibs } from "./shared/lazyLibs.js";
-import { t, mesLabel } from "./core/i18n";
+import { t, mesLabel, kamLabel } from "./core/i18n";
 import { dn } from "./shared/huella";
 import { logAccess } from "./shared/accessLog.js";
 // Núcleo de cálculo compartido (snapshot vs flujo, proyecciones, ponderados).
@@ -562,7 +562,7 @@ function _metasAlcance() {
 }
 function _metasTagAlcance() {
   const a = _metasAlcance();
-  return a.length ? escapeHTML(a.join(" · ")) : "Peru";
+  return a.length ? escapeHTML(a.join(" · ")) : "Perú";
 }
 function _metasAlcanceHTML() {
   const a = _metasAlcance();
@@ -594,8 +594,8 @@ function _metasControlsHTML(mesName, _mesesDisponibles) {  // las opciones salen
   const _delYear = _metasMesActualYear(mesName);
   const delBtnHTML = STATE.isAdmin
     ? `<button class="apply-btn agy-style-234" data-html2canvas-ignore="true" data-act="deleteMetasMes" data-mes="${escapeHTML(mesName)}" data-year="${_delYear ?? ""}"
-         title="Borra todas las metas de ${escapeHTML(mesName)} para re-subir el Excel">
-         🗑️ Eliminar metas de ${escapeHTML(mesName)}
+         title="${escapeHTML(t("metas.borrarMesTip", { m: mesLabel(mesName) }))}">
+         ${escapeHTML(t("metas.borrarMes", { m: mesLabel(mesName) }))}
        </button>`
     : "";
   return `<div class="agy-style-235">
@@ -730,7 +730,7 @@ function _renderMetasLineView(cfg) {
         <div class="city-card" style="border-top-color:${col}">
           <div class="city-name">
             <span style="width:10px;height:10px;border-radius:50%;background:${col};display:inline-block"></span>
-            ${escapeHTML(kam)}
+            ${escapeHTML(kamLabel(kam))}
             <span class="agy-style-244">(${us.length} cuenta${us.length === 1 ? "" : "s"})</span>
           </div>
           ${rows}
@@ -769,7 +769,7 @@ function _renderMetasLineView(cfg) {
         </div>
         <div class="pcard-sub">
           <span style="width:7px;height:7px;border-radius:50%;background:${kcolor};display:inline-block;margin-right:3px"></span>
-          ${escapeHTML(_kam)} &nbsp;·&nbsp; ${escapeHTML(m.city)}
+          ${escapeHTML(kamLabel(_kam))} &nbsp;·&nbsp; ${escapeHTML(m.city)}
         </div>
         ${rows}
         ${cfg.partnerFoot && !m._sinMeta ? cfg.partnerFoot(m, a) : ""}
@@ -816,8 +816,7 @@ export function _renderMetasFleet(mesName, fechas, selSet, cityFilter, kamFilter
     partnerFoot: (m, a) => a
       ? `<div class="agy-style-230">${escapeHTML(t("metas.autosPropios", { n: fmt(a.ownedNow || 0), b: fmt(a.branded || 0) }))}</div>`
       : "",
-    emptyHint: `No hay metas <strong>Fleet</strong> cargadas para ${escapeHTML(mesName)}.<br>
-      Genéralas desde la <strong>Calculadora → Fleet</strong> y guárdalas, o ajusta el filtro.`
+    emptyHint: t("metas.vacioFleet", { m: escapeHTML(mesLabel(mesName)) })
   });
 }
 
@@ -844,8 +843,7 @@ export function _renderMetasTk(mesName, fechas, selSet, cityFilter, kamFilter, m
       { id: "sh", label: t("metas.horasConexion"), sub: t("metas.acumulado"), color: "#8b5cf6",
         meta: m => m.mtkSH, act: a => a.sh, proj: a => a.projSh, fmtFn: v => fmtSmart(v) }
     ],
-    emptyHint: `No hay metas <strong>TukTuk</strong> cargadas para ${escapeHTML(mesName)}.<br>
-      Genéralas desde la <strong>Calculadora → TukTuk</strong> y guárdalas, o ajusta el filtro.`
+    emptyHint: t("metas.vacioTk", { m: escapeHTML(mesLabel(mesName)) })
   });
 }
 
@@ -885,11 +883,10 @@ export function _renderMetasComb(mesName, fechas, selSet, cityFilter, kamFilter,
     partnerFoot: m => {
       const hasTk = m.mtkNR != null;
       return hasTk
-        ? `<div class="agy-style-230" title="La meta del mes ya cubre Taxi + TukTuk; meta_tk_nr es la del criterio TukTuk, no se suma acá">Meta del mes = Taxi + TukTuk · criterio TukTuk aparte: ${fmt(m.mtkNR)} N+R</div>`
-        : `<div class="agy-style-230" title="La meta del mes cubre Taxi + TukTuk juntos">Meta del mes = Taxi + TukTuk</div>`;
+        ? `<div class="agy-style-230" title="${escapeHTML(t("metas.pieCombTkTip"))}">${escapeHTML(t("metas.pieCombTk", { n: fmt(m.mtkNR) }))}</div>`
+        : `<div class="agy-style-230" title="${escapeHTML(t("metas.pieCombTip"))}">${escapeHTML(t("metas.pieComb"))}</div>`;
     },
-    emptyHint: `No hay metas cargadas para ${escapeHTML(mesName)} con el filtro actual.<br>
-      Genéralas desde la <strong>Calculadora</strong> y guárdalas, o ajusta el filtro.`
+    emptyHint: t("metas.vacioComb", { m: escapeHTML(mesLabel(mesName)) })
   });
 }
 
@@ -1306,7 +1303,7 @@ export function _renderMetasImpl() {
       <div class="city-card" style="border-top-color:${col}">
         <div class="city-name">
           <span style="width:10px;height:10px;border-radius:50%;background:${col};display:inline-block"></span>
-          ${escapeHTML(kam)}
+          ${escapeHTML(kamLabel(kam))}
           <span class="agy-style-244">(${totalAccounts} cuentas)</span>
         </div>
         ${alertHtml}
@@ -1341,7 +1338,7 @@ export function _renderMetasImpl() {
           </div>
           <div class="pcard-sub">
             <span style="width:7px;height:7px;border-radius:50%;background:${kcolor};display:inline-block;margin-right:3px"></span>
-            ${escapeHTML(c.kam)} &nbsp;·&nbsp; ${escapeHTML(c.city)}
+            ${escapeHTML(kamLabel(c.kam))} &nbsp;·&nbsp; ${escapeHTML(c.city)}
           </div>
           <div class="agy-style-246">
             <span>${escapeHTML(t("metric.ad.short"))}</span><strong${dn(_pk("ad"), "real")}>${fmt(c.ad)}</strong>
@@ -1365,7 +1362,7 @@ export function _renderMetasImpl() {
           </div>
           <div class="pcard-sub">
             <span style="width:7px;height:7px;border-radius:50%;background:${kcolor};display:inline-block;margin-right:3px"></span>
-            ${escapeHTML(c.kam)} &nbsp;·&nbsp; ${escapeHTML(c.city)}
+            ${escapeHTML(kamLabel(c.kam))} &nbsp;·&nbsp; ${escapeHTML(c.city)}
           </div>
           ${miniBarFull(t("metric.ad.short"), c.ad, c.mA,  c.projAD, undefined, _pk("ad"))}
           ${miniBarFull(t("metric.nr.short"),  c.nr, c.mNR, c.projNR, undefined, _pk("nr"))}
@@ -1427,11 +1424,7 @@ export function metaResCard(label, sub, real, meta, proj, color, fmtFn, numKey) 
   // El texto del tooltip TIENE que decir lo que el código hace: una vez se
   // "corrigió" el cálculo para que coincidiera con un tooltip impreciso, al
   // revés de lo que correspondía.
-  const projTip = STATE.curMode === "mensual"
-    ? `Flujos (N+R, horas): no se extrapolan, el período mensual ya viene completo. `
-      + `Active Drivers: período de mayor AD del rango × 1.4 (potencial).`
-    : `Flujos (N+R, horas): total acumulado × días del mes / días transcurridos. `
-      + `Active Drivers: período de mayor AD del rango × 1.4 (potencial).`;
+  const projTip = escapeHTML(t(STATE.curMode === "mensual" ? "metas.projTipMensual" : "metas.projTip"));
   return `
     <div class="meta-sum-card">
       <div class="mcard-label">${label}</div>
@@ -1614,12 +1607,10 @@ export async function deleteMetasMes(mes, year) {
   const n = STATE.metasData.filter(m =>
     m.mes === mesU.toUpperCase() && (yearN == null || m.mYear === yearN)
   ).length;
-  if (!confirm(
-    `¿Confirmas borrar las metas de ${mesU}${yearN ? " " + yearN : ""} (${n} registro${n === 1 ? "" : "s"})?\n\n` +
-    `Útil para re-subir el Excel corregido. Esta acción NO se puede deshacer.`
-  )) return;
+  const mesTxt = mesLabel(mesU) + (yearN ? " " + yearN : "");
+  if (!confirm(t(n === 1 ? "metas.confirmBorrar1" : "metas.confirmBorrarN", { m: mesTxt, n }))) return;
 
-  showLoad(true, `Eliminando metas de ${mesU}...`);
+  showLoad(true, t("metas.borrando", { m: mesTxt }));
   try {
     let q = sb.from("metas").delete().ilike("mes", mesU);
     if (yearN != null) q = q.eq("mes_year", yearN);
@@ -1633,7 +1624,7 @@ export async function deleteMetasMes(mes, year) {
       STATE.metasMesSelYear = null;
     }
 
-    showBanner(true, `Metas de ${mesU} eliminadas. Vuelve a subir el Excel para recargarlas.`);
+    showBanner(true, t("metas.borradas", { m: mesTxt }));
     await loadFromSupabase();   // refresca STATE.metasData + re-renderiza el tab activo
 
     // loadFromSupabase solo re-renderiza Metas si quedan filas; si ya no quedan,
@@ -1645,7 +1636,7 @@ export async function deleteMetasMes(mes, year) {
       if (cont)  cont.style.display  = "none";
     }
   } catch (err) {
-    showBanner(false, `Error al eliminar metas: ${err.message}`);
+    showBanner(false, t("metas.errBorrar") + err.message);
     console.error("deleteMetasMes:", err.message);
   } finally {
     showLoad(false);

@@ -1,3 +1,4 @@
+import { t } from "../core/i18n";
 // ─────────────────────────────────────────────────────────────────────────────
 // REPARTO CON CARVE-OUT DE TUKTUK
 //
@@ -78,7 +79,7 @@ export function repartirPorLinea(
   // no suma la meta y nadie sabría por qué.
   let p = +pctTk || 0;
   if (p < 0 || p > 1) {
-    avisos.push(`El % de TukTuk (${(p * 100).toFixed(1)}%) está fuera de 0–100. Se tomó ${p < 0 ? "0" : "100"}%.`);
+    avisos.push(t("reparto.pctFuera", { p: (p * 100).toFixed(1), v: p < 0 ? "0" : "100" }));
     p = p < 0 ? 0 : 1;
   }
 
@@ -99,14 +100,11 @@ export function repartirPorLinea(
   // Un pozo sin base no se puede repartir. Se pasa al otro para que la meta del
   // KAM siga cerrando —perder la diferencia sería peor—, pero SIEMPRE avisando.
   if (potTk > 0 && sumTk === 0) {
-    avisos.push(
-      `Se declaró ${(p * 100).toFixed(1)}% de TukTuk pero esta cartera no tiene actividad TukTuk en el mes base. ` +
-      `Esa parte se repartió entre los partners de Taxi. Si el KAM sí tiene TukTuk, falta taggear su fleetroom.`);
+    avisos.push(t("reparto.sinTk", { p: (p * 100).toFixed(1) }));
     potCar += potTk; potTk = 0;
   }
   if (potCar > 0 && sumCar === 0 && sumTk > 0) {
-    avisos.push(
-      `La cartera es 100% TukTuk en el mes base, así que la parte Taxi de la meta se repartió entre TukTuk.`);
+    avisos.push(t("reparto.soloTk"));
     potTk += potCar; potCar = 0;
   }
 

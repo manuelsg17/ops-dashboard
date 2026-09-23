@@ -730,7 +730,7 @@ export function popKAM() {
   const n = k => (k === SIN_KAM ? ` (${STATE.KAM_PARTNERS[k].size})` : "");
   document.getElementById("kamFilter").innerHTML =
     `<option value="all">${escapeHTML(t("sidebar.todos"))}</option>` +
-    kams.map(k => `<option value="${escapeHTML(k)}">${escapeHTML(k + n(k))}</option>`).join("");
+    kams.map(k => `<option value="${escapeHTML(k)}">${escapeHTML(kamLabel(k) + n(k))}</option>`).join("");
 }
 
 // ── SIDEBAR: PARTNERS ────────────────────────────────────────────────────────
@@ -1072,7 +1072,7 @@ function _renderConfigPartners() {
       <div class="mcard" style="border-left:3px solid ${color}">
         <div class="mcard-label">
           <span style="width:8px;height:8px;border-radius:50%;background:${color};display:inline-block"></span>
-          ${escapeHTML(kam)}
+          ${escapeHTML(kamLabel(kam))}
         </div>
         <div class="mcard-val">${count}</div>
         <div class="agy-style-54">${escapeHTML(t("cfg.clidsAsignados"))}</div>
@@ -1084,7 +1084,7 @@ function _renderConfigPartners() {
   // que se repinta solo (renderConfigResults) → el input no se re-crea y conserva
   // el foco al escribir (fix Fase 7).
   const cfgKamF   = CONFIG_STATE.kamFilter;
-  const kamFilterOpts = kams.map(k => `<option value="${escapeHTML(k)}"${cfgKamF===k?" selected":""}>${escapeHTML(k)}</option>`).join("");
+  const kamFilterOpts = kams.map(k => `<option value="${escapeHTML(k)}"${cfgKamF===k?" selected":""}>${escapeHTML(kamLabel(k))}</option>`).join("");
   html += `
     <div class="agy-style-69">${escapeHTML(t("cfg.partnersClids"))}</div>
     <div class="agy-style-70">
@@ -1184,7 +1184,7 @@ export function renderConfigResults() {
       // Escapar valores para evitar XSS (CLID con apostrofes/HTML)
       const clidH    = escapeHTML(clid);
       const partnerH = escapeHTML(partner);
-      const kamH     = kam ? escapeHTML(kam) : `<span class="agy-style-77">${escapeHTML(SIN_KAM)}</span>`;
+      const kamH     = kam ? escapeHTML(kam) : `<span class="agy-style-77">${escapeHTML(kamLabel(SIN_KAM))}</span>`;
       // Para uso dentro de comillas simples de onclick, escapar apostrofes
       const isFleet  = !!(STATE.CLID_IS_FLEET  || {})[clid];
       const isTuktuk = !!(STATE.CLID_IS_TUKTUK || {})[clid];
@@ -1255,7 +1255,7 @@ export function kamMakeEditable(clid) {
   if (kam && !kams.includes(kam)) kams.push(kam);
   // Sin KAM: opción vacía seleccionada. Antes quedaba seleccionado el PRIMER KAM
   // de la lista sin que nadie lo eligiera, y "Guardar" se lo asignaba.
-  const editKamOpts = (kam ? "" : `<option value="" selected>— ${escapeHTML(SIN_KAM)} —</option>`) +
+  const editKamOpts = (kam ? "" : `<option value="" selected>— ${escapeHTML(kamLabel(SIN_KAM))} —</option>`) +
     kams.map(k => `<option value="${escapeHTML(k)}"${k===kam?" selected":""}>${escapeHTML(k)}</option>`).join("");
   const clidH    = escapeHTML(clid);
   const partnerH = escapeHTML(partner);
@@ -1302,7 +1302,7 @@ export async function kamCrudEdit(clid) {
   if (!partner || !kam) { showBanner(false, t("cfg.completaNombreKam")); return; }
   const isFleet  = document.getElementById(`edit_fleet_${clid}`)?.checked || false;
   const isTuktuk = document.getElementById(`edit_tuktuk_${clid}`)?.checked || false;
-  if (!_puedeUI("partners.escribir")) { showBanner(false, MSG_SIN_FILAS); return; }
+  if (!_puedeUI("partners.escribir")) { showBanner(false, msgSinFilas()); return; }
   showLoad(true, t("cfg.guardando"));
   // .select(): sin él no hay forma de distinguir "guardado" de "RLS no tocó
   // nada" (I3) — un UPDATE bloqueado no da error, afecta 0 filas.
@@ -1311,8 +1311,8 @@ export async function kamCrudEdit(clid) {
     .select("clid");
   showLoad(false);
   if (error) { showBanner(false, t("cfg.errorGuardar") + error.message); return; }
-  if (!data || !data.length) { showBanner(false, MSG_SIN_FILAS); return; }
-  await _refrescarYAvisar(t("cfg.guardadoOk"), "Partner guardado");
+  if (!data || !data.length) { showBanner(false, msgSinFilas()); return; }
+  await _refrescarYAvisar(t("cfg.guardadoOk"), t("cfg.hecho.partnerGuardado"));
 }
 
 export async function kamCrudAdd() {
@@ -1330,20 +1330,20 @@ export async function kamCrudAdd() {
   }
   const isFleet  = document.getElementById("newFleet")?.checked || false;
   const isTuktuk = document.getElementById("newTuktuk")?.checked || false;
-  if (!_puedeUI("partners.escribir")) { showBanner(false, MSG_SIN_FILAS); return; }
+  if (!_puedeUI("partners.escribir")) { showBanner(false, msgSinFilas()); return; }
   showLoad(true, t("cfg.guardando"));
   const { data, error } = await sb.from("partners")
     .upsert([{ clid, partner, kam, activo: true, is_fleet: isFleet, is_tuktuk: isTuktuk }], { onConflict: "clid" })
     .select("clid");
   showLoad(false);
   if (error) { showBanner(false, t("cfg.errorAgregar") + error.message); return; }
-  if (!data || !data.length) { showBanner(false, MSG_SIN_FILAS); return; }
-  await _refrescarYAvisar(t("cfg.clidAgregado"), "CLID agregado");
+  if (!data || !data.length) { showBanner(false, msgSinFilas()); return; }
+  await _refrescarYAvisar(t("cfg.clidAgregado"), t("cfg.hecho.clidAgregado"));
 }
 
 export async function kamCrudDelete(clid) {
   const partner = STATE.CLID_MAP[clid] || clid;
-  if (!_puedeUI("partners.borrar")) { showBanner(false, MSG_SIN_FILAS); return; }
+  if (!_puedeUI("partners.borrar")) { showBanner(false, msgSinFilas()); return; }
   if (!confirm(t("cfg.confirmEliminarClid", { p: partner, c: clid }))) return;
   showLoad(true, t("cfg.eliminando"));
   // I3: el DELETE bloqueado por RLS (partners_admin_delete = solo admin) NO da
@@ -1351,8 +1351,8 @@ export async function kamCrudDelete(clid) {
   const { data, error } = await sb.from("partners").delete().eq("clid", clid).select("clid");
   showLoad(false);
   if (error) { showBanner(false, t("cfg.errorEliminar") + error.message); return; }
-  if (!data || !data.length) { showBanner(false, MSG_SIN_FILAS); return; }
-  await _refrescarYAvisar(t("cfg.eliminadoOk", { p: partner }), `Partner "${partner}" eliminado`);
+  if (!data || !data.length) { showBanner(false, msgSinFilas()); return; }
+  await _refrescarYAvisar(t("cfg.eliminadoOk", { p: partner }), t("cfg.hecho.partnerEliminado", { p: partner }));
 }
 
 // I4: después de ESCRIBIR, el verde solo si la pantalla quedó refrescada
@@ -1364,7 +1364,7 @@ async function _refrescarYAvisar(msgOk, queSeHizo) {
   const ok = await refrescarTrasEscritura();
   if (STATE.curTab === "config") renderConfig();
   showBanner(ok, ok ? msgOk
-    : `${queSeHizo} en la base de datos, pero no se pudo refrescar la pantalla. Recarga la página — no vuelvas a guardar.`);
+    : t("comun.hechoSinRefresco", { q: queSeHizo }));
 }
 
 // Espejo de RLS para decidir qué controles mostrar (domain/permisosUI.ts).
@@ -1478,7 +1478,7 @@ export async function deleteDashboardData() {
   }
   showLoad(false);
   if (previstas === 0) {
-    showBanner(false, `No hay filas de ${labels[table]} para ${mes ? etiquetaMes : "borrar"}: no se eliminó nada.`);
+    showBanner(false, mes ? t("cfg.sinFilasMes", { t: labels[table], m: etiquetaMes }) : t("cfg.sinFilas", { t: labels[table] }));
     return;
   }
   if (!confirm(t("cfg.confirmarBorrado", { s: scope, t: labels[table] }) +
@@ -1492,7 +1492,7 @@ export async function deleteDashboardData() {
     const { count: borradas, error } = await aplicarFiltro(sb.from(table).delete({ count: "exact" }));
     if (error) throw error;
     const n = borradas ?? 0;
-    if (n === 0) { showBanner(false, MSG_SIN_FILAS); return; }
+    if (n === 0) { showBanner(false, msgSinFilas()); return; }
 
     monthInp.value = "";
     if (table === "metas") { STATE.metasMesSel = null; STATE.metasMesSelYear = null; }
@@ -1501,9 +1501,9 @@ export async function deleteDashboardData() {
     // activa se vuelve a armar en el acto — antes quedaba mostrando lo borrado).
     const ok = await refrescarTrasEscritura();
     const msg = t("cfg.eliminadoTabla", { t: labels[table], m: mes ? `(${etiquetaMes})` : t("cfg.todo") }) +
-      ` · ${n.toLocaleString("es-PE")} fila(s)` +
-      (n !== previstas ? ` (se esperaban ${previstas.toLocaleString("es-PE")})` : "");
-    showBanner(ok, ok ? msg : `${msg}. No se pudo refrescar la pantalla: recarga la página.`);
+      " · " + t("cfg.nFilas", { n: n.toLocaleString("es-PE") }) +
+      (n !== previstas ? " " + t("cfg.seEsperaban", { n: previstas.toLocaleString("es-PE") }) : "");
+    showBanner(ok, ok ? msg : `${msg}. ${t("comun.sinRefresco")}`);
     if (STATE.curTab === "config") renderConfig();
   } catch (err) {
     showBanner(false, t("cfg.errorEliminar") + err.message);
@@ -1519,7 +1519,7 @@ import { registerActions } from "./shared/actions.js";
 // los globales, y estas se llaman desde handlers que corren despues — pero el
 // import deja la dependencia a la vista, que es el punto.
 import { guardarLogoPartner, borrarLogoPartner, ensurePartnerLogos, refrescarTrasEscritura } from "./data.js";
-import { puede as puedeUI, MSG_SIN_FILAS } from "./domain/permisosUI";
+import { puede as puedeUI, msgSinFilas } from "./domain/permisosUI";
 import { filtroMetasDeMes } from "./domain/borrarDatos";
 import { alCerrarSesion } from "./shared/sesion";
 
@@ -1529,7 +1529,7 @@ alCerrarSesion(() => {
   CONFIG_STATE.page = 0; CONFIG_STATE.search = ""; CONFIG_STATE.kamFilter = "all";
   CONFIG_STATE.section = "partners";
 });
-import { t, setLang, getLang, aplicarI18nEstatico, selectorIdiomaHTML } from "./core/i18n";
+import { t, setLang, getLang, aplicarI18nEstatico, selectorIdiomaHTML, kamLabel } from "./core/i18n";
 import { SIN_KAM } from "./core/config.js";
 import { logAccess } from "./shared/accessLog.js";
 

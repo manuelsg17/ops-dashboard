@@ -529,7 +529,7 @@ export function _renderFlotasView() {
           </td>
           <td class="agy-style-27" title="Fleet">${cb("is_fleet", isFleet)}</td>
           <td class="agy-style-27" title="TukTuk">${cb("is_tuktuk", isTuktuk, sugg ? "outline:2px solid #f59e0b" : "")}</td>
-          <td class="agy-style-27" title="Excluir de Taxi">${cb("exclude_from_taxi", isExcl)}</td>
+          <td class="agy-style-27" title="${escapeHTML(t("raw.excluirTaxi"))}">${cb("exclude_from_taxi", isExcl)}</td>
           <td class="agy-style-27" title="${escapeHTML(t("raw.deliveryTip"))}">${cb("is_delivery", isDeliv)}</td>
           <td class="agy-style-27" title="${escapeHTML(t("raw.cargoTip"))}">${cb("is_cargo", isCargo)}</td>
         </tr>`;
@@ -681,7 +681,7 @@ export async function flotaSaveEdit(clid) {
       await createFlota(clid, payload);
     }
     RAW_STATE.editingClid = null;
-    await _rawRefrescarYAvisar(t("raw.flotaActualizada"), "Flota actualizada");
+    await _rawRefrescarYAvisar(t("raw.flotaActualizada"), t("raw.hecho.flotaActualizada"));
   } catch (err) {
     showBanner(false, t("raw.errorGuardar") + err.message);
     console.error(err);
@@ -705,7 +705,7 @@ export async function flotaToggleActivo(clid, nuevoEstado) {
       await createFlota(clid, { activo: nuevoEstado, nombre_asignado: existing });
     }
     await _rawRefrescarYAvisar(nuevoEstado ? t("raw.flotaReactivada") : t("raw.flotaInactiva"),
-      nuevoEstado ? "Flota reactivada" : "Flota marcada inactiva");
+      nuevoEstado ? t("raw.hecho.flotaReactivada") : t("raw.hecho.flotaInactiva"));
   } catch (err) {
     showBanner(false, t("raw.error") + err.message);
     console.error(err);
@@ -722,7 +722,7 @@ export async function flotaSetFlag(clid, key, checked, partnerFallback, kamFallb
   showLoad(true, t("raw.guardando"));
   try {
     await setPartnerFlag(clid, key, checked, partnerFallback, kamFallback);
-    await _rawRefrescarYAvisar(t("raw.actualizado"), "Clasificación guardada");
+    await _rawRefrescarYAvisar(t("raw.actualizado"), t("raw.hecho.clasificacion"));
   } catch (err) {
     showBanner(false, t("raw.error") + err.message);
     console.error(err);
@@ -745,7 +745,7 @@ export async function fleetroomSetFlag(dbId, key, checked, name, clid, kam, city
     const exclusive = { is_delivery: "is_cargo", is_cargo: "is_delivery" }[key];
     const patch = checked && exclusive ? { [key]: checked, [exclusive]: false } : { [key]: checked };
     await setFleetroomFlags(dbId, patch, { clid, name, kam, city });
-    await _rawRefrescarYAvisar(t("raw.actualizado"), "Clasificación de la sub-flota guardada");
+    await _rawRefrescarYAvisar(t("raw.actualizado"), t("raw.hecho.clasificacionSubflota"));
   } catch (err) {
     showBanner(false, t("raw.error") + err.message);
     console.error(err);
@@ -762,7 +762,7 @@ async function _rawRefrescarYAvisar(msgOk, queSeHizo) {
   const ok = await refrescarTrasEscritura();
   renderRawData();
   showBanner(ok, ok ? msgOk
-    : `${queSeHizo} en la base de datos, pero no se pudo refrescar la pantalla. Recarga la página — no vuelvas a guardar.`);
+    : t("comun.hechoSinRefresco", { q: queSeHizo }));
 }
 
 // Espejo de RLS para decidir qué controles de escritura mostrar (I3).
@@ -1028,7 +1028,7 @@ export function _renderReconView() {
         <td></td>
         <td class="agy-style-517">
           <span class="agy-style-518">\u21B3</span>
-          <span class="agy-style-499">${escapeHTML(f.name || "(sin nombre)")}</span>
+          <span class="agy-style-499">${escapeHTML(f.name || t("raw.sinNombre"))}</span>
           <span class="agy-style-519" title="${escapeHTML(f.db_id)}">${dbShort}</span>
         </td>
         ${numCells(f.agg)}
@@ -1051,7 +1051,7 @@ export function _renderReconView() {
     </div>`;
 
   if (clids.length > 400) {
-    html += `<div class="agy-style-212">Mostrando primeros 400 de ${fmt(clids.length)} CLIDs. Us\u00E1 el buscador para filtrar.</div>`;
+    html += `<div class="agy-style-212">${t("raw.primeros400", { n: fmt(clids.length) })}</div>`;
   }
   return html;
 }

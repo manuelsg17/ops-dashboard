@@ -18,6 +18,7 @@
 // foco vuelve al elemento que lo tenía.
 
 import { iconSvg } from "./icons";
+import { t } from "../core/i18n";
 
 export interface ConfirmDialogOptions {
   title: string;
@@ -107,9 +108,9 @@ export function confirmDialog(o: ConfirmDialogOptions): Promise<boolean> {
     const prevFocus = document.activeElement as HTMLElement | null;
     const { backdrop, dialog, actions, content } = _build("alertdialog", o.title, o.body, o.danger ? "bad" : null);
 
-    const cancel = _el("button", "ui-btn ui-btn--secondary", o.cancelLabel ?? "Cancelar");
+    const cancel = _el("button", "ui-btn ui-btn--secondary", o.cancelLabel ?? t("dialogo.cancelar"));
     cancel.type = "button";
-    const ok = _el("button", `ui-btn ${o.danger ? "ui-btn--danger-solid" : "ui-btn--primary"}`, o.confirmLabel ?? "Confirmar");
+    const ok = _el("button", `ui-btn ${o.danger ? "ui-btn--danger-solid" : "ui-btn--primary"}`, o.confirmLabel ?? t("dialogo.confirmar"));
     ok.type = "button";
     actions.append(cancel, ok);
 
@@ -117,7 +118,7 @@ export function confirmDialog(o: ConfirmDialogOptions): Promise<boolean> {
     if (o.requireText) {
       const lbl = _el("label", "ui-dialog__confirm-text");
       const txt = _el("span");
-      txt.append("Para confirmar, escribe ", _el("code", undefined, o.requireText));
+      txt.append(t("dialogo.paraConfirmar") + " ", _el("code", undefined, o.requireText));
       input = _el("input", "ui-input");
       input.type = "text";
       input.autocomplete = "off";
@@ -163,7 +164,7 @@ export function alertDialog(o: AlertDialogOptions): Promise<void> {
   return new Promise<void>(resolve => {
     const prevFocus = document.activeElement as HTMLElement | null;
     const { backdrop, dialog, actions } = _build("dialog", o.title, o.body, o.tone ?? "info");
-    const ok = _el("button", "ui-btn ui-btn--primary", o.okLabel ?? "Entendido");
+    const ok = _el("button", "ui-btn ui-btn--primary", o.okLabel ?? t("dialogo.entendido"));
     ok.type = "button";
     actions.appendChild(ok);
 

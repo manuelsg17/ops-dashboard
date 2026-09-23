@@ -18,6 +18,7 @@ import "./styles/tokens.css";
 import "./styles/components.css";
 import "./styles.css";
 import { createClient } from "@supabase/supabase-js";
+import { t } from "./core/i18n";
 
 // NINGUNA librería pesada se importa acá. XLSX (uploads), Chart.js (solo
 // Presentación 2.0), jsPDF/html2canvas (solo exportar PDF) y ApexCharts
@@ -65,14 +66,14 @@ export function _avisarVersionNueva() {
   bar.id = "newVersionBar";
   bar.className = "new-version-bar";
   const txt = document.createElement("span");
-  txt.textContent = "Hay una versión nueva del dashboard. Actualizá para que todas las pestañas carguen bien.";
+  txt.textContent = t("version.nueva");
   const btn = document.createElement("button");
-  btn.textContent = "Actualizar ahora";
+  btn.textContent = t("version.actualizar");
   btn.onclick = () => { sessionStorage.removeItem("_chunkReloadOnce"); location.reload(); };
   const cerrar = document.createElement("button");
   cerrar.className = "nvb-close";
   cerrar.textContent = "✕";
-  cerrar.title = "Seguir con esta versión";
+  cerrar.title = t("version.seguir");
   cerrar.onclick = () => bar.remove();
   bar.append(txt, btn, cerrar);
   document.body.appendChild(bar);

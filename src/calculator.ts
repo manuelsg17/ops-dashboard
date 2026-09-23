@@ -1,6 +1,8 @@
 //@ts-nocheck
 import { ensureHtml2Canvas } from "./shared/lazyLibs.js";
-import { t } from "./core/i18n";
+import { t, mesLabel, kamLabel } from "./core/i18n";
+import { MES_NOMBRES, mesNombre } from "./core/meses";
+import { EXPORT_STR, pick, fmtL, fmtSmartL, localeDe, ciudadL } from "./core/i18nExport";
 import { validarMetas, mensajeMetasInvalidas } from "./domain/metasGuard";
 import { repartirPorLinea, pesoNaturalTk, splitPorFraccion } from "./domain/repartoLinea.js";
 import { hayProgresoSinGuardar, draftAplica, debePreseleccionarKam } from "./domain/calcDraft.js";
@@ -631,7 +633,7 @@ export function _calcHeader(m, allKAMs, status) {
           <label class="agy-style-95">KAM</label>
           <select id="calcKamSel" class="sb-sel agy-style-96" data-act-change="calcOnKamChange">
             <option value="all" ${CALC_STATE.kam === "all" ? "selected" : ""}>${escapeHTML(t("calc.todosKam"))}</option>
-            ${allKAMs.map(k => `<option value="${escapeHTML(k)}" ${CALC_STATE.kam === k ? "selected" : ""}>${escapeHTML(k)}</option>`).join("")}
+            ${allKAMs.map(k => `<option value="${escapeHTML(k)}" ${CALC_STATE.kam === k ? "selected" : ""}>${escapeHTML(kamLabel(k))}</option>`).join("")}
           </select>
         </div>
         <div class="agy-style-97">
@@ -689,8 +691,8 @@ export function renderCalculator() {
   if (!rows.length) {
     el.innerHTML = `
       <div class="empty">
-        <p>Carga datos de <strong>Rendimiento Mensual</strong> para usar la Calculadora.</p>
-        <p class="agy-style-101">Sugerencia: ve a Configuración → "Actualizar información" → Rendimiento Mensual.</p>
+        <p>${t("calc.vacio")}</p>
+        <p class="agy-style-101">${t("calc.vacioSub")}</p>
       </div>`;
     return;
   }
@@ -1028,7 +1030,7 @@ export function _calcPctTableHTML(agg, cartTotals, cityTotals, M) {
           <tr><th rowspan="2">Partner</th><th rowspan="2">Ciudad</th>${topHead}</tr>
           <tr>${subHead}</tr>
         </thead>
-        <tbody>${rowsHtml || `<tr><td colspan="${nCols}" class="agy-style-120">Sin datos.</td></tr>`}</tbody>
+        <tbody>${rowsHtml || `<tr><td colspan="${nCols}" class="agy-style-120">${t("estado.sinDatos")}.</td></tr>`}</tbody>
         <tfoot class="agy-style-121">
           <tr><td colspan="2">Total cartera</td>${footCells}</tr>
         </tfoot>
@@ -1308,25 +1310,15 @@ export function calcSetSaveMode(mode) {
   renderCalculator();
 }
 
-// ── Vista compartible: i18n ES/EN + crecimiento vs último mes ─────────────────
-export const CALC_MES_EN = ["January","February","March","April","May","June",
-  "July","August","September","October","November","December"];
-// El ruso NO cae a español ante un mes faltante (no debería pasar nunca, los 12
-// están completos) — cae a inglés, igual que el resto de la tarjeta: un texto
-// en español dentro de una tarjeta rusa se lee como un error de datos, uno en
-// inglés se lee como un idioma puente aceptable. Mismo criterio que P2T en
-// presentacion2.ts.
-export const CALC_MES_RU = ["Январь","Февраль","Март","Апрель","Май","Июнь",
-  "Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
+// ── Vista compartible: i18n ES/EN/RU + crecimiento vs último mes ──────────────
+// Meses: tabla única de core/meses.ts. El ruso nunca se combina con otro idioma
+// (ver CALC_EXPORT_STR); "es-en" une con " / " solo si los nombres difieren.
 export function _calcMonthLabel(iso, lang) {
   if (!iso || !/^\d{4}-\d{2}$/.test(iso)) return "";
   const [y, mm] = iso.split("-").map(Number);
-  const esN = CALC_MES_NOMBRES[mm - 1] || "";
-  const es  = esN ? esN.charAt(0) + esN.slice(1).toLowerCase() : "";
-  const en  = CALC_MES_EN[mm - 1] || "";
-  if (lang === "es") return `${es} ${y}`;
-  if (lang === "en") return `${en} ${y}`;
-  if (lang === "ru") return `${CALC_MES_RU[mm - 1] || en} ${y}`;
+  if (mm < 1 || mm > 12) return "";
+  if (lang === "es" || lang === "en" || lang === "ru") return `${mesNombre(mm - 1, lang)} ${y}`;
+  const es = mesNombre(mm - 1, "es"), en = mesNombre(mm - 1, "en");
   return es === en ? `${es} ${y}` : `${es} ${y} / ${en} ${y}`;
 }
 
@@ -1334,16 +1326,12 @@ export function _calcMonthLabel(iso, lang) {
 // con " / "; el ruso nunca se combina, siempre va solo — mezclar cirílico con
 // otro alfabeto en la misma línea es ilegible, a diferencia de ES/EN que
 // comparten alfabeto).
+// Solo las frases PROPIAS de la tarjeta. Los nombres de KPI y "Ciudad" salen de
+// core/i18nExport (EXPORT_STR), los mismos del deck: antes la tarjeta decía
+// "Active Drivers" en español y el deck "Conductores Activos" para la misma
+// métrica, en dos documentos que recibe el mismo partner.
 export const CALC_EXPORT_STR = {
   proposal:    { es: "Metas Yango — Propuesta", en: "Yango Goals — Proposal", ru: "Цели Yango — Предложение" },
-  city:        { es: "Ciudad", en: "City", ru: "Город" },
-  ad:          { es: "Active Drivers", en: "Active Drivers", ru: "Активные водители" },
-  sh:          { es: "Supply Hours", en: "Supply Hours", ru: "Часы на линии" },
-  nr:          { es: "N+R", en: "N+R", ru: "Новые+реактив." },
-  cars:        { es: "Brandeados", en: "Branded", ru: "Брендированные" },
-  shcar:       { es: "SH/Auto", en: "SH/Car", ru: "Часы/авто" },
-  accept:      { es: "Aceptación", en: "Acceptance", ru: "Принятие заказов" },
-  util:        { es: "Utilización", en: "Utilization", ru: "Утилизация" },
   // Los tres títulos de bloque comparten estructura ("Meta <línea>") a propósito:
   // son lo primero que el partner lee de cada tabla, y tienen que dejar clara la
   // línea de negocio ANTES de cualquier número — es la razón de ser de este pedido
@@ -1357,19 +1345,31 @@ export const CALC_EXPORT_STR = {
   fleetKpi:    { es: "Meta Fleet · KPIs de calidad", en: "Fleet Goal · quality KPIs", ru: "Цель Fleet · KPI качества" },
   newBadge:    { es: "nuevo", en: "new", ru: "новое" },
   generated:   { es: "Propuesta generada", en: "Proposal generated", ru: "Предложение создано" },
+  noData:      { es: "Sin datos para este partner.", en: "No data for this partner.", ru: "Нет данных по этому партнёру." },
+  goalVsLast:  { es: "Meta vs último mes", en: "Goal vs last month", ru: "Цель vs прошлый месяц" },
   legendGoal:  { es: "Número grande = meta propuesta", en: "Large number = proposed goal", ru: "Крупное число = предложенная цель" },
   legendLast:  { es: "debajo = resultado del último mes y crecimiento pedido",
                  en: "below = last month result and requested growth",
                  ru: "ниже = результат прошлого месяца и запрошенный рост" }
 };
+// Claves de la tarjeta que resuelven a una etiqueta compartida de EXPORT_STR.
+const _CALC_LAB_COMPARTIDA = {
+  city: "ciudad", ad: "kpi.ad", sh: "kpi.sh", nr: "kpi.nrCorto", cars: "kpi.cars",
+  shcar: "kpi.shcar", accept: "kpi.accept", util: "kpi.util"
+};
+// lang: "es" | "en" | "ru" | "es-en" (bilingüe → une con " / "; el ruso nunca
+// se combina, siempre va solo — mezclar cirílico con otro alfabeto en la misma
+// línea es ilegible, a diferencia de ES/EN que comparten alfabeto).
 export function _calcLab(key, lang) {
-  const s = CALC_EXPORT_STR[key];
+  const s = CALC_EXPORT_STR[key] || EXPORT_STR[_CALC_LAB_COMPARTIDA[key]];
   if (!s) return key;
-  if (lang === "es") return s.es;
-  if (lang === "en") return s.en;
-  if (lang === "ru") return s.ru || s.en;
-  return s.es === s.en ? s.es : `${s.es} / ${s.en}`;
+  if (lang === "es" || lang === "en" || lang === "ru") return pick(s, lang);
+  const es = pick(s, "es"), en = pick(s, "en");
+  return es === en ? es : `${es} / ${en}`;
 }
+// Idioma de los NÚMEROS de la tarjeta: la bilingüe ES/EN usa el formato de
+// siempre (es-PE); en/ru, el suyo ("2 415" y "12,5" en ruso).
+export function _calcNumLang(lang) { return lang === "en" || lang === "ru" ? lang : "es"; }
 
 // Celda de tabla: meta (número grande) + resultado del último mes y % de crecimiento
 // pedido (verde si sube, rojo si baja, gris si es mantener). actual = valor real del
@@ -1389,7 +1389,7 @@ export function _calcGoalCell(goal, actual, fmtFn, lang) {
     const pct  = ((goal - actual) / actual) * 100;
     const sign = pct >= 0 ? "+" : "";
     const gc   = pct > 0.5 ? "#059669" : pct < -0.5 ? "#dc2626" : "#6b7280";
-    const pctT = `${sign}${pct.toLocaleString("es-PE", { maximumFractionDigits: 0 })}%`;
+    const pctT = `${sign}${pct.toLocaleString(localeDe(_calcNumLang(lang)), { maximumFractionDigits: 0 })}%`;
     sub = `<div class="agy-style-151">${fmtFn(actual)} <span style="color:${gc};font-weight:800">${pctT}</span></div>`;
   } else {
     sub = `<div class="agy-style-155">${_calcLab("newBadge", lang)}</div>`;
@@ -1399,7 +1399,7 @@ export function _calcGoalCell(goal, actual, fmtFn, lang) {
 
 // Leyenda del formato meta / último mes. Bilingüe → dos líneas (no " / " en frase).
 export function _calcExportLegend(lang) {
-  const line  = l => `${CALC_EXPORT_STR.legendGoal[l]} · ${CALC_EXPORT_STR.legendLast[l]}`;
+  const line  = l => `${pick(CALC_EXPORT_STR.legendGoal, l)} · ${pick(CALC_EXPORT_STR.legendLast, l)}`;
   const style = "margin-top:10px;font-size:.62rem;color:#9ca3af;line-height:1.5";
   if (lang === "es") return `<div style="${style}">${line("es")}</div>`;
   if (lang === "en") return `<div style="${style}">${line("en")}</div>`;
@@ -1412,6 +1412,9 @@ export function _calcExportLegend(lang) {
 // un partner con TukTuk aparece con su volumen combinado, igual que en la meta.
 export function _calcSec5_exportPartner(agg, totals, lastMonth) {
   const lang = CALC_STATE.exportLang || "es-en";
+  const nl = _calcNumLang(lang);
+  const fN = v => fmtL(v, nl), fS = v => fmtSmartL(v, nl);
+  const ciu = c => escapeHTML(ciudadL(c, nl));
   const g = CALC_STATE.kamGoals;
   const partners = [...new Set([...agg.values()].map(e => e.partner))].sort();
   if (!partners.length) {
@@ -1460,7 +1463,7 @@ export function _calcSec5_exportPartner(agg, totals, lastMonth) {
       const shGoal = _calcGoalFor(e.partner, e.city, "sh", b.sh);
       const nrGoal = _calcGoalFor(e.partner, e.city, "nr", b.nr);
       const nr = e.np + e.ns + e.re;
-      return `<tr><td class="agy-style-157">${escapeHTML(e.city)}</td>${_calcGoalCell(adGoal, e.ad, fmt, lang)}${_calcGoalCell(shGoal, e.sh, fmtSmart, lang)}${_calcGoalCell(nrGoal, nr, fmt, lang)}</tr>`;
+      return `<tr><td class="agy-style-157">${ciu(e.city)}</td>${_calcGoalCell(adGoal, e.ad, fN, lang)}${_calcGoalCell(shGoal, e.sh, fS, lang)}${_calcGoalCell(nrGoal, nr, fN, lang)}</tr>`;
     }).join("");
     taxiBlock = _tabla(`🚕 ${_calcLab("combinedTitle", lang)}`, rows);
   } else if (taxiItems.length) {
@@ -1494,10 +1497,10 @@ export function _calcSec5_exportPartner(agg, totals, lastMonth) {
       // (y viceversa) — una fila en 0 no es información, es ruido que el
       // partner tiene que descartar a ojo.
       if (adTaxiGoal > 0 || adTaxiAct > 0 || shTaxiGoal > 0 || shTaxiAct > 0 || nrTaxiGoal > 0 || nrTaxiAct > 0) {
-        filasTaxi.push(`<tr><td class="agy-style-157">${escapeHTML(e.city)}</td>${_calcGoalCell(adTaxiGoal, adTaxiAct, fmt, lang)}${_calcGoalCell(shTaxiGoal, shTaxiAct, fmtSmart, lang)}${_calcGoalCell(nrTaxiGoal, nrTaxiAct, fmt, lang)}</tr>`);
+        filasTaxi.push(`<tr><td class="agy-style-157">${ciu(e.city)}</td>${_calcGoalCell(adTaxiGoal, adTaxiAct, fN, lang)}${_calcGoalCell(shTaxiGoal, shTaxiAct, fS, lang)}${_calcGoalCell(nrTaxiGoal, nrTaxiAct, fN, lang)}</tr>`);
       }
       if (adTkGoal > 0 || adTkAct > 0 || shTkGoal > 0 || shTkAct > 0 || nrTkGoal > 0 || nrTkAct > 0) {
-        filasTk.push(`<tr><td class="agy-style-157">${escapeHTML(e.city)}</td>${_calcGoalCell(adTkGoal, adTkAct, fmt, lang)}${_calcGoalCell(shTkGoal, shTkAct, fmtSmart, lang)}${_calcGoalCell(nrTkGoal, nrTkAct, fmt, lang)}</tr>`);
+        filasTk.push(`<tr><td class="agy-style-157">${ciu(e.city)}</td>${_calcGoalCell(adTkGoal, adTkAct, fN, lang)}${_calcGoalCell(shTkGoal, shTkAct, fS, lang)}${_calcGoalCell(nrTkGoal, nrTkAct, fN, lang)}</tr>`);
       }
     });
     if (filasTaxi.length) taxiBlock = _tabla(`🚕 ${_calcLab("taxiTitle", lang)}`, filasTaxi.join(""));
@@ -1509,9 +1512,9 @@ export function _calcSec5_exportPartner(agg, totals, lastMonth) {
   // negro, sin meta "—" (nudge para fijarla), y debajo la referencia del último mes.
   const isFleetCard = taxiItems.some(e => _calcIsFleet(e.partner));
   const FLEET_KPI = [
-    { k: "shcar",  fmt: v => fmt(v),       ref: e => _calcFleetRef(e).shcar },
-    { k: "accept", fmt: v => fmt(v) + "%", ref: e => _calcFleetRef(e).accept },
-    { k: "util",   fmt: v => fmt(v) + "%", ref: e => null }
+    { k: "shcar",  fmt: v => fN(v),       ref: e => _calcFleetRef(e).shcar },
+    { k: "accept", fmt: v => fN(v) + "%", ref: e => _calcFleetRef(e).accept },
+    { k: "util",   fmt: v => fN(v) + "%", ref: e => null }
   ];
   const fleetBlock = (isFleetCard && taxiItems.length) ? (() => {
     const rows = taxiItems.map(e => {
@@ -1525,7 +1528,7 @@ export function _calcSec5_exportPartner(agg, totals, lastMonth) {
           : "";
         return `<td class="tn agy-style-161">${big}${sub}</td>`;
       }).join("");
-      return `<tr><td class="agy-style-157">${escapeHTML(e.city)}</td>${cells}</tr>`;
+      return `<tr><td class="agy-style-157">${ciu(e.city)}</td>${cells}</tr>`;
     }).join("");
     const heads = [{h:_calcLab("city",lang),a:"left"},{h:_calcLab("shcar",lang)},{h:_calcLab("accept",lang)},{h:_calcLab("util",lang)}].map(_th).join("");
     return `
@@ -1542,12 +1545,8 @@ export function _calcSec5_exportPartner(agg, totals, lastMonth) {
   // Fleet ya era condicional (isFleetCard), TukTuk ahora lo es de la misma forma.
   const hasData  = !!(taxiBlock || tkBlock || fleetBlock);
   const refMonth = _calcMonthLabel(lastMonth || "", lang);
-  const subLabel = {
-    es: "Meta vs último mes", en: "Goal vs last month", ru: "Цель vs прошлый месяц",
-    "es-en": "Meta vs último mes / Goal vs last month"
-  }[lang] || "Meta vs último mes";
-  const genDate  = new Date().toLocaleDateString(
-    lang === "ru" ? "ru-RU" : lang === "en" ? "en-US" : "es-PE");
+  const subLabel = _calcLab("goalVsLast", lang);
+  const genDate  = new Date().toLocaleDateString(localeDe(nl));
   // RU no se combina con nada (ver el comentario de CALC_EXPORT_STR): cirílico
   // mezclado con otro alfabeto en la misma línea es ilegible, a diferencia de
   // ES/EN que comparten alfabeto y sí tienen su combo bilingüe de siempre.
@@ -1557,12 +1556,12 @@ export function _calcSec5_exportPartner(agg, totals, lastMonth) {
   }).join("");
 
   return `
-    ${_secH("📤", "#10b981", "Vista compartible por partner", "Tarjeta compartible bilingüe · " + subLabel + (refMonth ? " (" + refMonth + ")" : "") + " · sin mezclar otros partners")}
+    ${_secH("📤", "#10b981", t("calc.vistaCompartible"), t("calc.tarjetaSub", { s: subLabel + (refMonth ? " (" + refMonth + ")" : "") }))}
     <div class="section">
       <div class="agy-style-167">
         <div class="agy-style-168">
           <label class="agy-style-169">Partner</label>
-          <input type="text" id="calcExportSearch" class="sb-inp" placeholder="Buscar partner..." autocomplete="off"
+          <input type="text" id="calcExportSearch" class="sb-inp" placeholder="${escapeHTML(t("calc.buscarPartner"))}" autocomplete="off"
             value="${escapeHTML(sel)}" class="agy-style-170"
             data-act-input="calcFilterExportPartners"
             data-act-focus="calcShowExportList"
@@ -1571,11 +1570,11 @@ export function _calcSec5_exportPartner(agg, totals, lastMonth) {
           <div id="calcExportList" class="agy-style-171"></div>
         </div>
         <div>
-          <label class="agy-style-169">Idioma / Language</label>
+          <label class="agy-style-169">${t("calc.idiomaTarjeta")}</label>
           <div class="agy-style-172">${langBtns}</div>
         </div>
-        <button class="agy-style-173" data-act="calcDownloadPartnerImage">📥 Descargar Imagen</button>
-        <button class="calc-btn-outline" data-act="calcDownloadAllPartnerImages" title="Descarga una imagen por cada partner de la cartera de ${escapeHTML(CALC_STATE.kam === "all" ? "un KAM (elegilo primero)" : CALC_STATE.kam)}, en el idioma elegido arriba">📦 Descargar todas (${partners.length})</button>
+        <button class="agy-style-173" data-act="calcDownloadPartnerImage">${t("calc.descargarImagen")}</button>
+        <button class="calc-btn-outline" data-act="calcDownloadAllPartnerImages" title="${escapeHTML(t("calc.descargarTodasTip", { kam: CALC_STATE.kam === "all" ? t("calc.unKamElegilo") : CALC_STATE.kam }))}">${t("calc.descargarTodas", { n: partners.length })}</button>
       </div>
 
       <div id="calcExportCard" class="agy-style-174">
@@ -1589,7 +1588,7 @@ export function _calcSec5_exportPartner(agg, totals, lastMonth) {
           </div>
         </div>
         ${taxiBlock}${tkBlock}${fleetBlock}
-        ${hasData ? _calcExportLegend(lang) : `<div class="agy-style-156">Sin datos para este partner.</div>`}
+        ${hasData ? _calcExportLegend(lang) : `<div class="agy-style-156">${_calcLab("noData", lang)}</div>`}
         <div class="agy-style-179">
           ${_calcLab("generated", lang)}: ${genDate}
         </div>
@@ -1713,15 +1712,15 @@ export function calcOnExportPartnerChange(v) {
 
 export function calcResetEdits() {
   if (!Object.keys(CALC_STATE.edits).length) return;
-  if (!confirm("¿Borrar todas las ediciones manuales y volver a la distribución automática?")) return;
+  if (!confirm(t("calc.confirmResetEdits"))) return;
   CALC_STATE.edits = {};
   CALC_STATE._utilSeeded = {};   // permite re-sembrar Utilización = 85
   renderCalculator();
 }
 
 // ── CONSTRUCCIÓN DE FILAS DE METAS (fuente única: CSV + guardado directo) ──────
-export const CALC_MES_NOMBRES = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
-  "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
+// Claves de BD de metas.mes: la tabla única de core/meses.ts (nunca se traduce).
+export const CALC_MES_NOMBRES = MES_NOMBRES;
 export function _calcNextMonth(monthStr) {
   if (!monthStr || !/^\d{4}-\d{2}$/.test(monthStr)) return "2026-01";
   const [y, m] = monthStr.split("-").map(Number);
@@ -1861,7 +1860,7 @@ export function calcExportExcel() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  showBanner(true, "Plantilla de metas exportada · súbela en Configuración → Metas");
+  showBanner(true, t("calc.plantillaExportada"));
 }
 
 // Guarda las metas del KAM directo en Supabase (sin round-trip de Excel).
@@ -1975,30 +1974,27 @@ export async function calcSaveMetas() {
   const a = _calcAggDistSums(m.aggLast1, m.distTot1, g);
   const nAgg   = rows.filter(r => r.meta_active_drivers != null).length;
   const nFleet = rows.filter(r => r.meta_sh_car != null || r.meta_acceptance != null || r.meta_utilization != null).length;
+  const mesTxt = `${mesLabel(mesName)} ${mesYear}`;
   const summary = soloCambios
-    ? `Actualizar SOLO lo que cambiaste · ${CALC_STATE.kam} · ${mesName} ${mesYear}\n\n` +
-      `• ${rows.length} partner-ciudad con algún valor distinto al guardado\n` +
-      (nAgg ? `• Agregador: ${nAgg} fila(s)\n` : "") +
-      (nFleet ? `• Fleet: ${nFleet} fila(s)\n` : "") +
-      `\nLos KPIs y partners que NO tocaste quedan EXACTAMENTE como están en la\n` +
-      `base de datos. Lo que sí tocaste se sobrescribe con el valor nuevo.\n\n` +
-      `¿Confirmar?`
-    : `Guardar el REPARTO COMPLETO de ${CALC_STATE.kam} para ${mesName} ${mesYear}\n\n` +
-      `• Agregador (Taxi + TukTuk): ${nAgg} partner-ciudad · AD ${fmt(a.sumAD)} · SH ${fmt(a.sumSH)} · N+R ${fmt(a.sumNR)}\n` +
+    ? t("calc.conf.soloCab", { kam: CALC_STATE.kam, mes: mesTxt }) + "\n\n" +
+      t("calc.conf.soloFilas", { n: rows.length }) + "\n" +
+      (nAgg ? t("calc.conf.aggFilas", { n: nAgg }) + "\n" : "") +
+      (nFleet ? t("calc.conf.fleetFilas", { n: nFleet }) + "\n" : "") +
+      "\n" + t("calc.conf.soloPie")
+    : t("calc.conf.completoCab", { kam: CALC_STATE.kam, mes: mesTxt }) + "\n\n" +
+      t("calc.conf.completoAgg", { n: nAgg, ad: fmt(a.sumAD), sh: fmt(a.sumSH), nr: fmt(a.sumNR) }) + "\n" +
       // El desglose TukTuk también se escribe, así que también se confirma: es
       // lo que el KAM va a declarar en los Loyalty Programs y no debería
       // enterarse después de haber apretado guardar.
       (_calcTieneTkPct()
-        ? `• De eso, TukTuk: AD ${fmt(Math.round(a.sumAD * (+CALC_STATE.tkPct.ad || 0) / 100))}` +
-          ` · SH ${fmt(Math.round(a.sumSH * (+CALC_STATE.tkPct.sh || 0) / 100))}` +
-          ` · N+R ${fmt(Math.round(a.sumNR * (+CALC_STATE.tkPct.nr || 0) / 100))}\n`
+        ? t("calc.conf.completoTk", {
+            ad: fmt(Math.round(a.sumAD * (+CALC_STATE.tkPct.ad || 0) / 100)),
+            sh: fmt(Math.round(a.sumSH * (+CALC_STATE.tkPct.sh || 0) / 100)),
+            nr: fmt(Math.round(a.sumNR * (+CALC_STATE.tkPct.nr || 0) / 100)) }) + "\n"
         : "") +
-      (nFleet ? `• Fleet: ${nFleet} partner-ciudad con meta\n` : "") +
-      `\nTotal filas: ${rows.length}\n\n` +
-      `⚠️ Esto REEMPLAZA las metas de ${mesName} ${mesYear} de TODOS los partners del\n` +
-      `reparto, incluidos los que no tocaste. Si solo querías ajustar algunos,\n` +
-      `cancela y elegí "Solo lo que cambié".\n\n` +
-      `¿Confirmar y guardar en la base de datos?`;
+      (nFleet ? t("calc.conf.completoFleet", { n: nFleet }) + "\n" : "") +
+      "\n" + t("calc.conf.completoTotal", { n: rows.length }) + "\n\n" +
+      t("calc.conf.completoPie", { mes: mesTxt });
   // FRENO ANTI-CEROS. La lógica vive en domain/metasGuard.ts (pura y testeada
   // con las filas reales del incidente del 13-ago-2026, cuando un guardado en
   // cero borró las metas de AGOSTO). Acá solo se aplica.
@@ -2015,15 +2011,15 @@ export async function calcSaveMetas() {
   } else {
     const ceros = _calcCerosQueBorran(rows);
     if (ceros.length && !confirm(
-      `⚠️ Vas a poner en CERO ${ceros.length} meta(s) que hoy tienen un valor cargado:\n\n` +
+      t("calc.conf.cerosCab", { n: ceros.length }) + "\n\n" +
       ceros.slice(0, 12).join("\n") +
-      (ceros.length > 12 ? `\n…y ${ceros.length - 12} más` : "") +
-      `\n\nUn 0 se guarda como meta 0, no "borra la fila". ¿Es lo que querés?`
+      (ceros.length > 12 ? "\n" + t("calc.conf.yMas", { n: ceros.length - 12 }) : "") +
+      "\n\n" + t("calc.conf.cerosPie")
     )) return;
   }
 
   if (!STATE._mensualLoaded) {
-    alert("Los datos mensuales aún se están cargando. Espera unos segundos y vuelve a intentar.");
+    alert(t("calc.mensualCargando"));
     return;
   }
 
@@ -2103,9 +2099,9 @@ export async function calcSaveMetas() {
     // justamente lo que pasó (reporte de Manuel, 15-sep-2026).
     showBanner(refrescoOk, refrescoOk
       ? (soloCambios
-        ? `${payload.length} meta(s) actualizadas · ${CALC_STATE.kam} · ${mesName} ${mesYear}`
-        : `Metas de ${CALC_STATE.kam} guardadas para ${mesName} ${mesYear} (${payload.length} filas)`)
-      : `Metas GUARDADAS en la base de datos (${payload.length} filas · ${mesName} ${mesYear}), pero no se pudo refrescar la pantalla. Recarga la página para verlas — no vuelvas a guardar.`);
+        ? t("calc.okActualizadas", { n: payload.length, kam: CALC_STATE.kam, mes: mesTxt })
+        : t("calc.okGuardadas", { n: payload.length, kam: CALC_STATE.kam, mes: mesTxt }))
+      : t("calc.okSinRefresco", { n: payload.length, mes: mesTxt }));
     renderCalculator();
     if (STATE.curTab === "metas" && typeof renderMetas === "function") renderMetas();
   } catch (err) {
@@ -2151,13 +2147,8 @@ export async function calcDeleteMetasKam() {
 
   if (!afectadas.length) { alert(t("calc.borrarKamSinMetas", { k: CALC_STATE.kam, m: mesName })); return; }
 
-  if (!confirm(
-    `Eliminar las metas de ${CALC_STATE.kam} para ${mesName} ${mesYear}\n\n` +
-    `• ${afectadas.length} fila(s) (partner-ciudad)\n` +
-    `• Solo de este KAM: las de los demás KAMs no se tocan\n\n` +
-    `Esta acción NO se puede deshacer. Después vas a tener que volver a cargar\n` +
-    `las metas de ${CALC_STATE.kam} para ${mesName}.\n\n¿Confirmar?`
-  )) return;
+  const mesTxt = `${mesLabel(mesName)} ${mesYear ?? ""}`.trim();
+  if (!confirm(t("calc.conf.borrarKam", { kam: CALC_STATE.kam, mes: mesTxt, n: afectadas.length, m: mesLabel(mesName) }))) return;
 
   showLoad(true, t("calc.borrandoMetas"));
   try {
@@ -2170,21 +2161,21 @@ export async function calcDeleteMetasKam() {
     const { data: enBase, error: selErr } = await _conReintento(() => sel);
     if (selErr) throw selErr;
     const ids = (enBase || []).filter(r => claves.has(claveFila(r.clid, normCity(r.city)))).map(r => r.id);
-    if (!ids.length) throw new Error("las filas a eliminar ya no están en la base (¿otra sesión las borró?). Recarga la página.");
+    if (!ids.length) throw new Error(t("calc.errFilasYaNoEstan"));
     // 2) Borrar por id y pedir de vuelta lo borrado: RLS bloquea un DELETE sin
     //    error (0 filas), así que el conteo real sale de la respuesta.
     const { data: borradas, error } = await _conReintento(() =>
       sb.from("metas").delete().in("id", ids).select("id"));
     if (error) throw error;
     const nBorradas = (borradas || []).length;
-    if (!nBorradas) throw new Error("42501: la base no eliminó ninguna fila (permisos).");
+    if (!nBorradas) throw new Error("42501: " + t("calc.errNadaBorrado"));
     const refrescoOk = await loadFromSupabase();
     CALC_STATE.savedKey = "";   // re-leer lo guardado (ahora vacío para este KAM)
     const parcial = nBorradas !== afectadas.length
-      ? ` — ATENCIÓN: se esperaban ${afectadas.length}; revisa en Metas qué quedó.` : "";
+      ? " — " + t("calc.borradoParcial", { n: afectadas.length }) : "";
     showBanner(refrescoOk && !parcial, refrescoOk
-      ? `Metas de ${CALC_STATE.kam} eliminadas para ${mesName} ${mesYear} (${nBorradas} filas)${parcial}`
-      : `Metas ELIMINADAS de la base de datos (${nBorradas} filas · ${mesName} ${mesYear}), pero no se pudo refrescar la pantalla. Recarga la página.${parcial}`);
+      ? t("calc.okBorradas", { kam: CALC_STATE.kam, mes: mesTxt, n: nBorradas }) + parcial
+      : t("calc.okBorradasSinRefresco", { mes: mesTxt, n: nBorradas }) + parcial);
     renderCalculator();
     if (STATE.curTab === "metas" && typeof renderMetas === "function") renderMetas();
   } catch (err) {
@@ -2238,7 +2229,7 @@ export async function calcDownloadPartnerImage() {
 // memoria. Una pausa corta entre cada una alcanza para que el navegador las
 // procese sin bloquearlas.
 export async function calcDownloadAllPartnerImages() {
-  if (CALC_STATE.kam === "all") { alert("Elige un KAM específico (no \"Todos los KAMs\") para descargar sus tarjetas."); return; }
+  if (CALC_STATE.kam === "all") { alert(t("calc.eligeKamTarjetas")); return; }
   const m = _calcComputeModel();
   // MISMO universo que arma la tarjeta individual (_calcSec5_exportPartner):
   // los partners con datos del KAM en el último mes. No el universo más amplio
@@ -2312,7 +2303,7 @@ export function _calcPaintExportList(q) {
   const lower = (q || "").toLowerCase().trim();
   const filtered = lower ? all.filter(p => p.toLowerCase().includes(lower)) : all;
   if (!filtered.length) {
-    list.innerHTML = `<div class="agy-style-180">Sin coincidencias</div>`;
+    list.innerHTML = `<div class="agy-style-180">${t("seg.sinCoincidencias")}</div>`;
     return;
   }
   list.innerHTML = filtered.slice(0, 100).map(p => {

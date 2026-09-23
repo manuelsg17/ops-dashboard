@@ -4,8 +4,9 @@
 // pueda usar la MISMA regla sin arrastrar el chunk lazy de presentacion2
 // (Chart.js) a su bundle. Pura: recibe curMode explícito en vez de leer STATE.
 
-export const MES_NOMBRES = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
-  "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
+// Claves de BD de los meses: la tabla vive en core/meses.ts (única). Se
+// re-exporta acá porque presentacion2/partnerPortal ya la importaban de este módulo.
+export { MES_NOMBRES } from "../core/meses";
 
 // En SEMANAL, una semana Lun–Dom pertenece al mes donde cae su JUEVES
 // (inicio+3 = día mediano) — así la semana que arranca el Lun 29-jun cuenta
