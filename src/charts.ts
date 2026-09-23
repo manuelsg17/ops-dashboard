@@ -2,6 +2,8 @@
 // charts.js — Toda la lógica de ApexCharts
 import { escapeHTML } from "./core/security";
 import { fechaLocalISO } from "./shared/fechaLocal";
+import { topNMasOtros, MAX_SERIES_CON_MARCADORES } from "./shared/topSeries";
+import { t } from "./core/i18n";
 
 // ── TOOLTIP FLOTANTE ──────────────────────────────────────────────────────────
 // El listener de mousemove se agrega solo cuando el tooltip está visible y se
@@ -40,19 +42,23 @@ export function hideFloatTip() {
 }
 
 // ── MULTI-LINE CHART (one series per partner) ─────────────────────────────────
+// V6 (Ola 2): top 8 por Active Drivers del último período + "Otros" (ver
+// shared/topSeries.ts). Antes una serie por partner: ~70 en producción.
+const _COLOR_OTROS = "#9ca3af";
 export function buildMultiLine(elId, dates, partners, byDate, metric, fallbackColor) {
-  const colors  = partners.map(p => STATE.partnerColors[p] || fallbackColor);
-  const series  = partners.map(p => ({
-    name: p,
-    data: dates.map(d => {
-      const dp = byDate[d]?.[p];
-      if (!dp) return 0;
-      if (metric === "nr") return dp.newPartner + dp.newService + dp.reactivated;
-      if (metric === "sh") return dp.supplyHours;
-      if (metric === "tr") return dp.trips || 0;
-      return dp.activeDrivers;
-    })
-  }));
+  const valor = (p, d) => {
+    const dp = byDate[d]?.[p];
+    if (!dp) return 0;
+    if (metric === "nr") return dp.newPartner + dp.newService + dp.reactivated;
+    if (metric === "sh") return dp.supplyHours;
+    if (metric === "tr") return dp.trips || 0;
+    return dp.activeDrivers;
+  };
+  const ultima = dates[dates.length - 1];
+  const peso = p => byDate[ultima]?.[p]?.activeDrivers || 0;
+  const { series: top, resto } = topNMasOtros(partners, dates, valor, peso, 8);
+  const series = top.map(s => s.otros ? { name: t("rend.tend.otros", { n: resto }), data: s.data, _ejeAparte: true } : s);
+  const colors = top.map(s => s.otros ? _COLOR_OTROS : (STATE.partnerColors[s.name] || fallbackColor));
   buildLineChart(elId, dates, series, colors);
 }
 
@@ -100,6 +106,20 @@ export function destroyAllCharts() {
   });
 }
 
+// Eje Y. Con una serie "Otros" (V6, marcada `_ejeAparte`) esa serie va en su
+// PROPIO eje, a la derecha: es la suma de decenas de partners y en el mismo eje
+// aplastaba a las 8 líneas del top contra el piso del gráfico (medido: ~14.000
+// contra ~3.000 del partner más grande en el seed local).
+function _ejesY(series) {
+  const etiquetas = color => ({ formatter: v => fmt(v), style: { fontSize: "10px", ...(color ? { colors: color } : {}) } });
+  const iOtros = series.findIndex(sr => sr._ejeAparte);
+  if (iOtros < 0) return { labels: etiquetas() };
+  const primera = series.find(sr => !sr._ejeAparte);
+  return series.map((sr, i) => i === iOtros
+    ? { seriesName: sr.name, opposite: true, labels: etiquetas("#9ca3af") }
+    : { seriesName: primera ? primera.name : sr.name, show: sr === primera, labels: etiquetas() });
+}
+
 // ── BASE LINE CHART ───────────────────────────────────────────────────────────
 export function buildLineChart(elId, dates, series, colors) {
   if (!window.ApexCharts) { ensureApex().then(() => buildLineChart(elId, dates, series, colors)); return; }
@@ -116,7 +136,8 @@ export function buildLineChart(elId, dates, series, colors) {
         mouseLeave: () => hideFloatTip()
       }
     },
-    stroke:  { curve: "smooth", width: 2 },
+    // "Otros" (V6) punteada: es una suma, no un partner más.
+    stroke:  { curve: "smooth", width: 2, dashArray: series.map(sr => (sr._ejeAparte ? 4 : 0)) },
     colors,
     xaxis: {
       categories: dates.map(d2s),
@@ -124,20 +145,18 @@ export function buildLineChart(elId, dates, series, colors) {
       axisBorder: { show: false },
       axisTicks:  { show: false }
     },
-    yaxis: {
-      labels: {
-        formatter: v => fmt(v),
-        style:     { fontSize: "10px" }
-      }
-    },
+    yaxis: _ejesY(series),
     legend: {
-      show:         series.length <= 8,
+      // 9 = top 8 + "Otros" de buildMultiLine: la leyenda vuelve a ser legible.
+      show:         series.length <= MAX_SERIES_CON_MARCADORES + 1,
       position:     "bottom",
       fontSize:     "10px",
       itemMargin:   { horizontal: 4, vertical: 2 }
     },
     grid:    { borderColor: "#f0f0f0", strokeDashArray: 4 },
-    markers: { size: 3, strokeWidth: 0, hover: { size: 5 } },
+    // Con más de 8 series, sin marcadores (cientos de círculos SVG que se
+    // repintan en cada hover); el punto sigue apareciendo al pasar el mouse.
+    markers: { size: series.length > MAX_SERIES_CON_MARCADORES ? 0 : 3, strokeWidth: 0, hover: { size: 5 } },
     tooltip: {
       custom({ series: s, dataPointIndex: di, w }) {
         const date = w.globals.labels[di];
@@ -155,7 +174,7 @@ export function buildLineChart(elId, dates, series, colors) {
   if (prev) {
     // Si el elemento sigue en DOM, actualizar series sin recrear el chart (mucho más rápido)
     if (prev.el && document.body.contains(prev.el)) {
-      prev.updateOptions({ series, colors: opts.colors }, false, false, false);
+      prev.updateOptions({ series, colors: opts.colors, markers: opts.markers, legend: opts.legend, yaxis: opts.yaxis, stroke: opts.stroke }, false, false, false);
       return;
     }
     // Elemento fue destruido por innerHTML — el chart quedo huerfano con su
