@@ -204,15 +204,15 @@ Navegación lateral por grupos y rol, encabezado de página con chips de alcance
 | 6 — rediseño por vista | Integrada (`e26fa54`) | Calculadora, Metas, Configuración + Data Raw, Rendimiento, Presentación (+ retiro de Vista Partner), Seguimiento + Portal, y una pasada de integración (meta de Rendimiento y Metas desde una sola función `metasResumenPais`; cruce Rendimiento↔Metas en 73 comparaciones, 0 diferencias). **Huella completa vs Ola 3: 0 cifras cambiadas, 0 quitadas, 24 nuevas** (variaciones de Metas). 484 tests |
 | 7 — modo oscuro + limpieza de CSS | En curso | — |
 
-Decisiones abiertas para Manuel (surgidas en la Ola 6):
-1. Metas → filtro "Sobre meta" usa el corte vigente de la app (>150%, el morado de "revisa la meta"). ¿O ≥100%?
-2. Metas mensual con el mes en curso no muestra variación (un mes parcial contra uno completo siempre da negativo). ¿OK?
-3. Deck: la banda "Top 1" es un solo partner (su valor se ve en el tooltip en pantalla, no en el PDF). ¿Se quita?
-4. Deck: las hojas nuevas (embudo, canales, N+R por origen) entran al PDF por defecto. ¿O a mano?
-5. Calculadora: eliminar las metas de un KAM pide confirmación pero no exige teclear el nombre. ¿Agregar esa protección?
-6. "Salir" cierra la sesión en todos los dispositivos (signOut global). ¿Solo el dispositivo actual?
-7. Usuarios → "KAM vinculado" es solo lectura: fijarlo desde la app exige una acción nueva en la Edge Function `admin-users` y desplegarla en producción.
-8. Móvil: se quitó el botón flotante de Filtros (tapaba contenido); para filtrar se usa el botón del encabezado.
+Decisiones de Manuel sobre lo surgido en la Ola 6 (24-sep-2026):
+1. Metas → "Sobre meta" = **≥100%**. Filtros: Sobre = todos los KPIs ≥100%; Bajo = alguno <95%; En meta = el resto. Los colores (pColor 80/95/150) no cambian.
+2. Variación en mensual con el mes en curso: **se queda oculta** (ok).
+3. Deck: **quitar la banda "Top 1"** (es un solo partner, identificable).
+4. Hojas nuevas del deck: **entran al PDF por defecto** (sí).
+5. Calculadora → borrar metas del KAM: **escribir el mes para confirmar** (como en Metas).
+6. "Salir": **sigue cerrando todas las sesiones** (signOut global).
+7. "KAM vinculado": **prepararlo** (acción `setKam` en `admin-users`, probada en local); el despliegue a producción de la Edge Function requiere un visto bueno final aparte.
+8. Filtros en móvil sin botón flotante: Manuel lo revisa y confirma.
 
 Nota de producto (pregunta para Manuel, no es regresión): "Salir" llama a `sb.auth.signOut()` sin `scope`, que por defecto es **global**: cerrar sesión en un dispositivo cierra la sesión del mismo usuario en todos los demás. Así se cerró dos veces la sesión de prueba del coordinador cuando un agente probó "Salir" con el mismo usuario.
 
