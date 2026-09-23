@@ -337,7 +337,7 @@ function _segControlsHTML() {
   const partner = SEG_STATE.partner;
   const kam = partner ? _segKamOf(partner) : "";
   const contexto = partner ? `<div class="sg-context">
-      <span class="ui-chip"><span class="ui-chip__key">Partner:</span><span class="ui-chip__val" title="${escapeHTML(partner)}">${escapeHTML(partner)}</span>
+      <span class="ui-chip"><span class="ui-chip__key">${escapeHTML(t("seg.partner"))}:</span><span class="ui-chip__val" title="${escapeHTML(partner)}">${escapeHTML(partner)}</span>
         <button type="button" class="ui-chip__remove" data-act="segClearPartner" aria-label="${escapeHTML(t("seg.volverTodos"))}" title="${escapeHTML(t("seg.volverTodos"))}">${iconSvg("x", { size: 12 })}</button></span>
       ${kam ? badge(t("seg.kamDe", { k: kamLabel(kam) }), "neutral", { icon: "user" }) : ""}
     </div>` : "";
@@ -345,7 +345,7 @@ function _segControlsHTML() {
   return `
     <div class="sg-toolbar ui-card">
       <div class="ui-field sg-field sg-field--search">
-        <label class="ui-field__label" for="segSearch">Partner</label>
+        <label class="ui-field__label" for="segSearch">${escapeHTML(t("seg.partner"))}</label>
         <div class="sg-search">
           <span class="sg-search__icon">${iconSvg("search", { size: 14 })}</span>
           <input id="segSearch" type="text" class="ui-input ui-input--sm sg-search__input" autocomplete="off"
@@ -414,7 +414,7 @@ function _segRenderResumen(tasks) {
   const lang = getLang();
   html += `<div class="ui-table-wrap"><table class="ui-table ui-table--sticky-first sg-summary">
     <thead><tr>
-      <th>Partner</th><th>KAM</th><th class="ui-num">${escapeHTML(t("seg.th.proyectos"))}</th>
+      <th>${escapeHTML(t("seg.partner"))}</th><th>KAM</th><th class="ui-num">${escapeHTML(t("seg.th.proyectos"))}</th>
       <th class="ui-num" title="${escapeHTML(t("seg.th.vencidasTip"))}">${escapeHTML(t("seg.kpi.vencidas"))}</th>
       ${SEG_STATUS.map(st => `<th class="ui-num">${escapeHTML(_segStatusLabel(st.key, lang))}</th>`).join("")}
       <th class="ui-num">${escapeHTML(t("seg.th.proxima"))}</th><th><span class="ui-sr-only">${escapeHTML(t("seg.abrir"))}</span></th>
