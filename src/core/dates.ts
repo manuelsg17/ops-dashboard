@@ -10,3 +10,16 @@ export function parseLocalDate(s) {
   const m = String(s).match(/^(\d{4})-(\d{1,2})(?:-(\d{1,2}))?/);
   return m ? new Date(+m[1], +m[2] - 1, +(m[3] || 1)) : new Date(s);
 }
+
+// Fecha "YYYY-MM-DD" en hora de LIMA, para nombres de archivo (I11).
+// `new Date().toISOString().slice(0, 10)` da la fecha UTC: después de las 19:00
+// en Lima ya es "mañana", y un export de la noche del lunes salía fechado martes.
+// Zona fija America/Lima (no la del navegador): el archivo no debe depender de
+// dónde está quien exporta. `en-CA` formatea como YYYY-MM-DD. MISMA semántica
+// que shared/fechaLocal.ts#fechaLocalISO de la otra rama de la Ola 1 — se
+// unifican al integrar.
+export function fechaLimaISO(d: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Lima", year: "numeric", month: "2-digit", day: "2-digit"
+  }).format(d);
+}

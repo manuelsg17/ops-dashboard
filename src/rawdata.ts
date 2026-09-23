@@ -100,14 +100,16 @@ export function renderRawData() {
   }
 
   // ── Date selects ─────────────────────────────────────────────────────────
+  // I6: ciudades y fechas vienen de la base / del Excel: escapadas como
+  // cualquier otro dato (una ciudad con `"` rompía el atributo value).
   const dateFromOpts = allDates.map(d =>
-    `<option value="${d}"${d === RAW_STATE.dateFrom ? " selected" : ""}>${d2s(d)}</option>`
+    `<option value="${escapeHTML(d)}"${d === RAW_STATE.dateFrom ? " selected" : ""}>${escapeHTML(d2s(d))}</option>`
   ).join("");
   const dateToOpts = allDates.map(d =>
-    `<option value="${d}"${d === RAW_STATE.dateTo ? " selected" : ""}>${d2s(d)}</option>`
+    `<option value="${escapeHTML(d)}"${d === RAW_STATE.dateTo ? " selected" : ""}>${escapeHTML(d2s(d))}</option>`
   ).join("");
   const cityOpts = allCities.map(c =>
-    `<option value="${c}"${RAW_STATE.city === c ? " selected" : ""}>${c}</option>`
+    `<option value="${escapeHTML(c)}"${RAW_STATE.city === c ? " selected" : ""}>${escapeHTML(c)}</option>`
   ).join("");
 
   // ── Build HTML ───────────────────────────────────────────────────────────
@@ -239,22 +241,19 @@ export function exportRawCSV() {
     return true;
   });
 
+  // I10: logAccess como el resto de las exportaciones (Monitoreo cuenta las
+  // descargas) y celdas RFC 4180 + fórmulas neutralizadas (shared/csv.ts):
+  // antes un `"` en el nombre corría las columnas y un nombre que empezara con
+  // `=` se ejecutaba como fórmula al abrirlo en Excel.
+  logAccess("download_csv", "data_raw");
   const header = ["Fecha", "Partner", "KAM", "Ciudad", "AD", "N+R", "Horas", "Comision", "Viajes"];
-  const lines  = [header.join(",")];
+  const lines  = [filaCSV(header)];
   rows.forEach(r => {
     const nr = r.newPartner + r.newService + r.reactivated;
-    // Wrap text fields in quotes to handle commas
-    lines.push([
-      r.date,
-      `"${r.partner}"`,
-      `"${r.kam || ""}"`,
-      `"${r.city || ""}"`,
-      r.activeDrivers,
-      nr,
-      r.supplyHours,
-      r.commission,
-      r.trips
-    ].join(","));
+    lines.push(filaCSV([
+      r.date, r.partner, r.kam || "", r.city || "",
+      r.activeDrivers, nr, r.supplyHours, r.commission, r.trips
+    ]));
   });
 
   // UTF-8 BOM so Excel opens with correct encoding
@@ -262,7 +261,7 @@ export function exportRawCSV() {
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement("a");
   a.href     = url;
-  a.download = `data_raw_${RAW_STATE.dateFrom}_${RAW_STATE.dateTo}.csv`;
+  a.download = `data_raw_${RAW_STATE.dateFrom || "inicio"}_${RAW_STATE.dateTo || fechaLimaISO()}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -393,7 +392,7 @@ export function _renderFlotasView() {
   const inactivas = rows.filter(r => !r.activo).length;
 
   const allCities = [...new Set([...STATE.rawDataFull.map(r => r.city), ...Object.values(flotasMap).map(f => f.ciudad)].filter(Boolean))].sort();
-  const cityOpts = allCities.map(c => `<option value="${c}"${RAW_STATE.city===c?" selected":""}>${cityLabel(c)}</option>`).join("");
+  const cityOpts = allCities.map(c => `<option value="${escapeHTML(c)}"${RAW_STATE.city===c?" selected":""}>${escapeHTML(cityLabel(c))}</option>`).join("");
 
   let html = secH("\uD83D\uDE9A", "#FF0000", t("raw.vistaFlotas"),
     t("raw.vistaFlotasSub", { n: fmt(rows.length), c: fmt(conConfig), s: fmt(sinConfig), i: fmt(inactivas) }), "");
@@ -479,13 +478,15 @@ export function _renderFlotasView() {
     // un string JS de un handler inline — un solo contexto, un solo escape.
     const pFall = escapeHTML(r.nombre_efectivo === "\u2014" ? "" : r.nombre_efectivo);
     const kFall = escapeHTML(r.kam_efectivo === "\u2014" ? "" : r.kam_efectivo);
+    // I3: escribe a `partners` → solo si RLS lo va a aceptar.
+    const dis = _rawPuede("partners.escribir") ? "" : "disabled";
     return `
           <td class="agy-style-27">
-            <input type="checkbox" title="${escapeHTML(t("raw.fleetTip"))}" data-act-change="flotaSetFlag" data-clid="${clidH}" data-key="is_fleet" data-pfall="${pFall}" data-kfall="${kFall}" ${isFleet ? "checked" : ""}/>
+            <input type="checkbox" title="${escapeHTML(t("raw.fleetTip"))}" data-act-change="flotaSetFlag" data-clid="${clidH}" data-key="is_fleet" data-pfall="${pFall}" data-kfall="${kFall}" ${isFleet ? "checked" : ""} ${dis}/>
           </td>
           <td class="agy-style-27">
             ${suggested ? `<div title="${escapeHTML(t("raw.nombreSugiereTuktukExcel"))}" class="agy-style-474">\u{1F6FA}?</div>` : ""}
-            <input type="checkbox" title="${escapeHTML(t("raw.tuktukTip"))}" data-act-change="flotaSetFlag" data-clid="${clidH}" data-key="is_tuktuk" data-pfall="${pFall}" data-kfall="${kFall}" ${isTuktuk ? "checked" : ""} style="${suggested ? "outline:2px solid #f59e0b" : ""}"/>
+            <input type="checkbox" title="${escapeHTML(t("raw.tuktukTip"))}" data-act-change="flotaSetFlag" data-clid="${clidH}" data-key="is_tuktuk" data-pfall="${pFall}" data-kfall="${kFall}" ${isTuktuk ? "checked" : ""} ${dis} style="${suggested ? "outline:2px solid #f59e0b" : ""}"/>
           </td>
           <td class="agy-style-27"><span class="agy-style-90" title="${escapeHTML(t("raw.excluirTaxiTip"))}">\u2014</span></td>
           <td class="agy-style-27"><span class="agy-style-90" title="${escapeHTML(t("raw.soloFleetroomTip"))}">\u2014</span></td>
@@ -512,8 +513,11 @@ export function _renderFlotasView() {
         const isDeliv  = !!(STATE.FLEETROOM_IS_DELIVERY  || {})[dbId];
         const isCargo  = !!(STATE.FLEETROOM_IS_CARGO     || {})[dbId];
         const sugg     = !isTuktuk && _tuktukSuggested(name);
+        // I3: fleetrooms solo admin o write:config (un KAM NO): deshabilitado
+        // en vez de dejar tildar algo que la base va a rechazar.
+        const disFr = _rawPuede("fleetrooms.escribir") ? "" : "disabled";
         const cb = (key, checked, extraStyle = "") =>
-          `<input type="checkbox" data-act-change="fleetroomSetFlag" data-dbid="${dbIdH}" data-key="${escapeHTML(key)}" data-name="${nameH}" data-clid="${clidH}" data-kam="${kamCtx}" data-city="${cityCtx}" ${checked ? "checked" : ""} style="${extraStyle}"/>`;
+          `<input type="checkbox" data-act-change="fleetroomSetFlag" data-dbid="${dbIdH}" data-key="${escapeHTML(key)}" data-name="${nameH}" data-clid="${clidH}" data-kam="${kamCtx}" data-city="${cityCtx}" ${checked ? "checked" : ""} ${disFr} style="${extraStyle}"/>`;
         const dbShort = escapeHTML(String(dbId).slice(0, 10));
         return `
         <tr class="agy-style-475">
@@ -541,7 +545,7 @@ export function _renderFlotasView() {
     if (isEditing) {
       // \u2500\u2500\u2500 FILA EN MODO EDICION \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
       const cityOpts = cityOptList.map(c =>
-        `<option value="${c}"${r.ciudad===c?" selected":""}>${cityLabel(c)}</option>`).join("");
+        `<option value="${escapeHTML(c)}"${r.ciudad===c?" selected":""}>${escapeHTML(cityLabel(c))}</option>`).join("");
       const currentKamFlota = r.kam_flota || "";
       const kamOpts  = `<option value="">${escapeHTML(t("raw.sinKamOpt"))}</option>` +
         kamOptList.map(k => `<option value="${escapeHTML(k)}"${currentKamFlota===k?" selected":""}>${escapeHTML(k)}</option>`).join("");
@@ -613,10 +617,10 @@ export function _renderFlotasView() {
           ${_flotaFlagCells(r, clidH, hasFleetrooms)}
           <td class="agy-style-27">${badge}</td>
           <td class="agy-style-503">
-            <button data-act="flotaStartEdit" data-clid="${clidH}" title="${escapeHTML(t("raw.editarTip"))}" class="agy-style-504">\u270F\uFE0F</button>
+            ${!_rawPuede("flotas.escribir") ? `<span class="agy-style-89">\u2014</span>` : `<button data-act="flotaStartEdit" data-clid="${clidH}" title="${escapeHTML(t("raw.editarTip"))}" class="agy-style-504">\u270F\uFE0F</button>
             ${r.tieneFlota
               ? `<button data-act="flotaToggleActivo" data-clid="${clidH}" data-activo="${!r.activo ? 1 : 0}" title="${r.activo?t("raw.marcarInactiva"):t("raw.reactivar")}" style="padding:3px 8px;font-size:.7rem;background:${r.activo?"#fff5f5":"#f0fdf4"};border:1px solid ${r.activo?"#fecaca":"#86efac"};color:${r.activo?"#b91c1c":"#166534"};border-radius:5px;cursor:pointer">${r.activo?"\uD83D\uDEAB":"\u2713"}</button>`
-              : `<button data-act="flotaToggleActivo" data-clid="${clidH}" data-activo="0" title="${escapeHTML(t("raw.marcarInactivaCrear"))}" class="agy-style-505">\uD83D\uDEAB</button>`}
+              : `<button data-act="flotaToggleActivo" data-clid="${clidH}" data-activo="0" title="${escapeHTML(t("raw.marcarInactivaCrear"))}" class="agy-style-505">\uD83D\uDEAB</button>`}`}
           </td>
         </tr>`;
       // Sub-filas por fleetroom (solo lectura; el tagging es por db_id// Sub-filas por fleetroom (solo lectura; el tagging es por db_id).
@@ -677,9 +681,7 @@ export async function flotaSaveEdit(clid) {
       await createFlota(clid, payload);
     }
     RAW_STATE.editingClid = null;
-    showBanner(true, t("raw.flotaActualizada"));
-    await loadFromSupabase();
-    renderRawData();
+    await _rawRefrescarYAvisar(t("raw.flotaActualizada"), "Flota actualizada");
   } catch (err) {
     showBanner(false, t("raw.errorGuardar") + err.message);
     console.error(err);
@@ -702,9 +704,8 @@ export async function flotaToggleActivo(clid, nuevoEstado) {
       const existing = STATE.CLID_MAP[clid] || "";
       await createFlota(clid, { activo: nuevoEstado, nombre_asignado: existing });
     }
-    showBanner(true, nuevoEstado ? t("raw.flotaReactivada") : t("raw.flotaInactiva"));
-    await loadFromSupabase();
-    renderRawData();
+    await _rawRefrescarYAvisar(nuevoEstado ? t("raw.flotaReactivada") : t("raw.flotaInactiva"),
+      nuevoEstado ? "Flota reactivada" : "Flota marcada inactiva");
   } catch (err) {
     showBanner(false, t("raw.error") + err.message);
     console.error(err);
@@ -721,9 +722,7 @@ export async function flotaSetFlag(clid, key, checked, partnerFallback, kamFallb
   showLoad(true, t("raw.guardando"));
   try {
     await setPartnerFlag(clid, key, checked, partnerFallback, kamFallback);
-    showBanner(true, t("raw.actualizado"));
-    await loadFromSupabase();
-    renderRawData();
+    await _rawRefrescarYAvisar(t("raw.actualizado"), "Clasificación guardada");
   } catch (err) {
     showBanner(false, t("raw.error") + err.message);
     console.error(err);
@@ -746,15 +745,29 @@ export async function fleetroomSetFlag(dbId, key, checked, name, clid, kam, city
     const exclusive = { is_delivery: "is_cargo", is_cargo: "is_delivery" }[key];
     const patch = checked && exclusive ? { [key]: checked, [exclusive]: false } : { [key]: checked };
     await setFleetroomFlags(dbId, patch, { clid, name, kam, city });
-    showBanner(true, t("raw.actualizado"));
-    await loadFromSupabase();
-    renderRawData();
+    await _rawRefrescarYAvisar(t("raw.actualizado"), "Clasificación de la sub-flota guardada");
   } catch (err) {
     showBanner(false, t("raw.error") + err.message);
     console.error(err);
   } finally {
     showLoad(false);
   }
+}
+
+// I4: el verde solo si la pantalla quedó refrescada (patrón de calcSaveMetas).
+// B8: refrescarTrasEscritura también invalida mensual/diario/conversión — el
+// tagging de un fleetroom o una flota desactivada cambian esos datasets, y
+// antes no llegaban hasta recargar la página.
+async function _rawRefrescarYAvisar(msgOk, queSeHizo) {
+  const ok = await refrescarTrasEscritura();
+  renderRawData();
+  showBanner(ok, ok ? msgOk
+    : `${queSeHizo} en la base de datos, pero no se pudo refrescar la pantalla. Recarga la página — no vuelvas a guardar.`);
+}
+
+// Espejo de RLS para decidir qué controles de escritura mostrar (I3).
+function _rawPuede(accion) {
+  return puedeUI(accion, { rol: STATE.userRole, perms: STATE.perms });
 }
 
 // Sugerencia (NO filtro): true si el Nombre Excel de un CLID matchea algún
@@ -811,17 +824,14 @@ export function exportFlotasCSV() {
       (f && f.nombre_asignado) || "",
       (f && f.kam) || (raw && raw.kam) || "",
       (f ? (f.activo !== false ? "true" : "false") : "true")
-    ].map(v => {
-      const s = String(v ?? "");
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    });
-    lines.push(row.join(","));
+    ];
+    lines.push(filaCSV(row));
   });
   const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `flotas_${new Date().toISOString().slice(0,10)}.csv`;
+  a.download = `flotas_${fechaLimaISO()}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -928,9 +938,9 @@ export function _renderReconView() {
   });
 
   // \u2500\u2500 Controles \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-  const dateFromOpts = allDates.map(d => `<option value="${d}"${d === RAW_STATE.dateFrom ? " selected" : ""}>${d2s(d)}</option>`).join("");
-  const dateToOpts   = allDates.map(d => `<option value="${d}"${d === RAW_STATE.dateTo   ? " selected" : ""}>${d2s(d)}</option>`).join("");
-  const cityOpts     = allCities.map(c => `<option value="${c}"${RAW_STATE.city === c ? " selected" : ""}>${cityLabel(c)}</option>`).join("");
+  const dateFromOpts = allDates.map(d => `<option value="${escapeHTML(d)}"${d === RAW_STATE.dateFrom ? " selected" : ""}>${escapeHTML(d2s(d))}</option>`).join("");
+  const dateToOpts   = allDates.map(d => `<option value="${escapeHTML(d)}"${d === RAW_STATE.dateTo   ? " selected" : ""}>${escapeHTML(d2s(d))}</option>`).join("");
+  const cityOpts     = allCities.map(c => `<option value="${escapeHTML(c)}"${RAW_STATE.city === c ? " selected" : ""}>${escapeHTML(cityLabel(c))}</option>`).join("");
   const singlePeriod = RAW_STATE.dateFrom === RAW_STATE.dateTo;
 
   let html = secH("\uD83E\uDDFE", "#0284c7", t("raw.recon"),
@@ -1097,10 +1107,8 @@ export function exportReconCSV() {
     const clase = cl.label.replace(/[\u{1F6FA}\u26D4\u{1F697}]/gu, "").replace(/\s*\(omitido\)/, "").trim() || "Taxi";
     const fleetShCar = a.ofcars > 0 ? (a.ifsh / a.ofcars) : "";
     const accept = a.accDen > 0 ? (a.accNum / a.accDen) : "";
-    const row = [g.clid, g.db_id, g.name, g.partner, g.kam, clase, cl.omit ? "SI" : "",
-      a.ad, a.sh, a.nuevos, a.react, a.nuevos + a.react, a.trips, a.gmv, a.comm, fleetShCar, accept, a.ofcars]
-      .map(v => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; });
-    lines.push(row.join(","));
+    lines.push(filaCSV([g.clid, g.db_id, g.name, g.partner, g.kam, clase, cl.omit ? "SI" : "",
+      a.ad, a.sh, a.nuevos, a.react, a.nuevos + a.react, a.trips, a.gmv, a.comm, fleetShCar, accept, a.ofcars]));
   });
 
   const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
@@ -1118,6 +1126,10 @@ export function exportReconCSV() {
 import { registerActions } from "./shared/actions.js";
 import { t } from "./core/i18n";
 import { logAccess } from "./shared/accessLog.js";
+import { filaCSV } from "./shared/csv";
+import { fechaLimaISO } from "./core/dates";
+import { puede as puedeUI } from "./domain/permisosUI";
+import { refrescarTrasEscritura } from "./data.js";
 
 registerActions({
   // tabla de registros
