@@ -2,7 +2,8 @@
 // charts.js — Toda la lógica de ApexCharts
 import { escapeHTML } from "./core/security";
 import { fechaLocalISO } from "./shared/fechaLocal";
-import { topNMasOtros, MAX_SERIES_CON_MARCADORES } from "./shared/topSeries";
+import { MAX_SERIES_CON_MARCADORES } from "./shared/topSeries";
+import { apexBase, chartTokens, seriesColor } from "./shared/chartTheme";
 import { t } from "./core/i18n";
 
 // ── TOOLTIP FLOTANTE ──────────────────────────────────────────────────────────
@@ -42,24 +43,45 @@ export function hideFloatTip() {
 }
 
 // ── MULTI-LINE CHART (one series per partner) ─────────────────────────────────
-// V6 (Ola 2): top 8 por Active Drivers del último período + "Otros" (ver
-// shared/topSeries.ts). Antes una serie por partner: ~70 en producción.
-const _COLOR_OTROS = "#9ca3af";
-export function buildMultiLine(elId, dates, partners, byDate, metric, fallbackColor) {
-  const valor = (p, d) => {
-    const dp = byDate[d]?.[p];
-    if (!dp) return 0;
-    if (metric === "nr") return dp.newPartner + dp.newService + dp.reactivated;
-    if (metric === "sh") return dp.supplyHours;
-    if (metric === "tr") return dp.trips || 0;
-    return dp.activeDrivers;
-  };
+// Ola 6: los 8 partners más grandes por Active Drivers del último período, SIN
+// la serie "Otros". La Ola 2 la dibujaba en un segundo eje Y (a la derecha) y
+// se prestaba a confusión: dos escalas en el mismo gráfico se leen como una.
+// Ahora lo que queda fuera se dice en el pie del gráfico (lo arma rendimiento.ts
+// con rendTopPartners: "8 de N partners…; el resto suma X"). Colores de la
+// paleta categórica por posición en el ranking (el orden es el mismo en los
+// cuatro gráficos, así que un color significa el mismo partner en todos).
+export const TOP_PARTNERS_TENDENCIA = 8;
+export function rendTopPartners(dates, partners, byDate) {
   const ultima = dates[dates.length - 1];
   const peso = p => byDate[ultima]?.[p]?.activeDrivers || 0;
-  const { series: top, resto } = topNMasOtros(partners, dates, valor, peso, 8);
-  const series = top.map(s => s.otros ? { name: t("rend.tend.otros", { n: resto }), data: s.data, _ejeAparte: true } : s);
-  const colors = top.map(s => s.otros ? _COLOR_OTROS : (STATE.partnerColors[s.name] || fallbackColor));
-  buildLineChart(elId, dates, series, colors);
+  return partners.slice()
+    .sort((a, b) => peso(b) - peso(a) || (a < b ? -1 : a > b ? 1 : 0))
+    .slice(0, TOP_PARTNERS_TENDENCIA);
+}
+export function valorMetricaPartner(byDate, p, d, metric) {
+  const dp = byDate[d]?.[p];
+  if (!dp) return 0;
+  if (metric === "nr") return dp.newPartner + dp.newService + dp.reactivated;
+  if (metric === "sh") return dp.supplyHours;
+  if (metric === "tr") return dp.trips || 0;
+  return dp.activeDrivers;
+}
+export function buildMultiLine(elId, dates, partners, byDate, metric, _fallbackColor) {
+  const top = rendTopPartners(dates, partners, byDate);
+  const tk = chartTokens();
+  const series = top.map(p => ({ name: p, data: dates.map(d => valorMetricaPartner(byDate, p, d, metric)) }));
+  buildLineChart(elId, dates, series, top.map((_, i) => seriesColor(i, tk)), { chart: { height: 330 } });
+}
+
+// Índice base 100 (comparativa por ciudad de Rendimiento): cada serie dividida
+// por su PRIMER valor > 0 del rango. Los puntos anteriores a esa base (serie en
+// 0 al inicio) quedan como hueco (null), no en 0: no hay contra qué indexarlos.
+// Un decimal. Puro.
+export function indiceBase100(data) {
+  const i0 = data.findIndex(v => v > 0);
+  if (i0 < 0) return data.map(() => null);
+  const base = data[i0];
+  return data.map((v, i) => (i < i0 || v == null || !Number.isFinite(v)) ? null : Math.round((v / base) * 1000) / 10);
 }
 
 // ── SINGLE-LINE CHART (one series for a city aggregate) ──────────────────────
@@ -106,56 +128,50 @@ export function destroyAllCharts() {
   });
 }
 
-// Eje Y. Con una serie "Otros" (V6, marcada `_ejeAparte`) esa serie va en su
-// PROPIO eje, a la derecha: es la suma de decenas de partners y en el mismo eje
-// aplastaba a las 8 líneas del top contra el piso del gráfico (medido: ~14.000
-// contra ~3.000 del partner más grande en el seed local).
-function _ejesY(series) {
-  const etiquetas = color => ({ formatter: v => fmt(v), style: { fontSize: "10px", ...(color ? { colors: color } : {}) } });
-  const iOtros = series.findIndex(sr => sr._ejeAparte);
-  if (iOtros < 0) return { labels: etiquetas() };
-  const primera = series.find(sr => !sr._ejeAparte);
-  return series.map((sr, i) => i === iOtros
-    ? { seriesName: sr.name, opposite: true, labels: etiquetas("#9ca3af") }
-    : { seriesName: primera ? primera.name : sr.name, show: sr === primera, labels: etiquetas() });
+// Merge profundo mínimo para combinar el tema (chartTheme.apexBase) con las
+// opciones de cada gráfico. Los arrays se reemplazan, no se mezclan.
+function _merge(base, over) {
+  if (Array.isArray(over) || over === null || typeof over !== "object") return over;
+  const out = { ...(base && typeof base === "object" && !Array.isArray(base) ? base : {}) };
+  Object.keys(over).forEach(k => {
+    const v = over[k];
+    out[k] = (v && typeof v === "object" && !Array.isArray(v) && typeof v !== "function")
+      ? _merge(out[k], v) : v;
+  });
+  return out;
 }
 
 // ── BASE LINE CHART ───────────────────────────────────────────────────────────
-export function buildLineChart(elId, dates, series, colors) {
-  if (!window.ApexCharts) { ensureApex().then(() => buildLineChart(elId, dates, series, colors)); return; }
-  const opts = {
+// `extra` (opcional): opciones propias de un gráfico, mezcladas al final (p.ej.
+// el formato del eje Y del índice base 100 de Rendimiento).
+export function buildLineChart(elId, dates, series, colors, extra) {
+  if (!window.ApexCharts) { ensureApex().then(() => buildLineChart(elId, dates, series, colors, extra)); return; }
+  // Tema común (Ola 6): tipografía ≥11 px, grilla y ejes recesivos, paleta y
+  // leyenda desde los tokens (shared/chartTheme.ts). Un solo eje Y siempre.
+  const opts = _merge(apexBase(), {
     series,
     chart: {
       type:       "line",
-      height:     200,
-      toolbar:    { show: false },
-      zoom:       { enabled: false },
-      fontFamily: "inherit",
+      height:     220,
       animations: { enabled: false },
       events: {
         mouseLeave: () => hideFloatTip()
       }
     },
-    // "Otros" (V6) punteada: es una suma, no un partner más.
-    stroke:  { curve: "smooth", width: 2, dashArray: series.map(sr => (sr._ejeAparte ? 4 : 0)) },
+    stroke:  { curve: "straight", width: 2 },
     colors,
     xaxis: {
       categories: dates.map(d2s),
-      labels:     { style: { fontSize: "10px" }, rotate: -30 },
-      axisBorder: { show: false },
-      axisTicks:  { show: false }
+      labels:     { rotate: -45, hideOverlappingLabels: true, trim: false }
     },
-    yaxis: _ejesY(series),
+    yaxis: { forceNiceScale: true, labels: { formatter: v => fmt(v) } },
+    grid:  { padding: { left: 16, right: 12 } },
     legend: {
-      // 9 = top 8 + "Otros" de buildMultiLine: la leyenda vuelve a ser legible.
-      show:         series.length <= MAX_SERIES_CON_MARCADORES + 1,
-      position:     "bottom",
-      fontSize:     "10px",
-      itemMargin:   { horizontal: 4, vertical: 2 }
+      show:         series.length > 1 && series.length <= MAX_SERIES_CON_MARCADORES + 1,
+      position:     "bottom"
     },
-    grid:    { borderColor: "#f0f0f0", strokeDashArray: 4 },
     // Con más de 8 series, sin marcadores (cientos de círculos SVG que se
-    // repintan en cada hover); el punto sigue apareciendo al pasar el mouse.
+    // repintan en cada hover); con pocas, un punto chico por período.
     markers: { size: series.length > MAX_SERIES_CON_MARCADORES ? 0 : 3, strokeWidth: 0, hover: { size: 5 } },
     tooltip: {
       custom({ series: s, dataPointIndex: di, w }) {
@@ -168,13 +184,14 @@ export function buildLineChart(elId, dates, series, colors) {
         return "<div style='display:none'></div>";
       }
     }
-  };
+  });
+  if (extra) Object.assign(opts, _merge(opts, extra));
 
   const prev = STATE.charts[elId];
   if (prev) {
     // Si el elemento sigue en DOM, actualizar series sin recrear el chart (mucho más rápido)
     if (prev.el && document.body.contains(prev.el)) {
-      prev.updateOptions({ series, colors: opts.colors, markers: opts.markers, legend: opts.legend, yaxis: opts.yaxis, stroke: opts.stroke }, false, false, false);
+      prev.updateOptions({ series, colors: opts.colors, markers: opts.markers, legend: opts.legend, yaxis: opts.yaxis, stroke: opts.stroke, xaxis: opts.xaxis }, false, false, false);
       return;
     }
     // Elemento fue destruido por innerHTML — el chart quedo huerfano con su
@@ -209,7 +226,7 @@ export function buildLineChart(elId, dates, series, colors) {
 //    cada frame de la transición.
 function _prepararContenedor(el) {
   el.style.minWidth = "0";
-  const card = el.closest && el.closest(".chart-card");
+  const card = el.closest && el.closest(".chart-card, .rd-chart");
   if (card) card.style.minWidth = "0";
   _observarAnchoMain();
 }
@@ -241,26 +258,25 @@ function _observarAnchoMain() {
 export function buildDonutChart(elId, labels, series, colors) {
   if (!window.ApexCharts) { ensureApex().then(() => buildDonutChart(elId, labels, series, colors)); return; }
   const total = series.reduce((a, b) => a + b, 0);
-  const opts = {
+  const tk = chartTokens();
+  const opts = _merge(apexBase(tk), {
     series,
     labels,
     colors,
     chart: {
       type:       "donut",
-      height:     220,
-      fontFamily: "inherit",
+      height:     240,
       animations: { enabled: false }
     },
-    stroke: { width: 1, colors: ["#fff"] },
+    stroke: { width: 1, colors: [tk.surface] },
     dataLabels: {
       enabled:   true,
+      style:     { fontSize: "11px" },
       formatter: (_, o) => fmt(o.w.globals.series[o.seriesIndex])
     },
     legend: {
       show:       labels.length <= 8,
-      position:   "bottom",
-      fontSize:   "10px",
-      itemMargin: { horizontal: 4, vertical: 2 }
+      position:   "bottom"
     },
     plotOptions: {
       pie: {
@@ -268,14 +284,14 @@ export function buildDonutChart(elId, labels, series, colors) {
           size: "62%",
           labels: {
             show: true,
-            total: { show: true, label: "Total", formatter: () => fmt(total) },
+            total: { show: true, label: t("rend.ch.total"), formatter: () => fmt(total) },
             value: { formatter: v => fmt(Number(v)) }
           }
         }
       }
     },
     tooltip: { y: { formatter: v => fmt(v) } }
-  };
+  });
 
   const prev = STATE.charts[elId];
   if (prev) {

@@ -24,6 +24,7 @@ import "./styles/views/config.css"; import "./styles/views/rawdata.css";   // Ol
 import "./styles.css";
 import "./styles/views/calculator.css";
 import "./styles/views/metas.css";
+import "./styles/views/rendimiento.css";
 import { createClient } from "@supabase/supabase-js";
 import { t } from "./core/i18n";
 
