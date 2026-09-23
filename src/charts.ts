@@ -1,5 +1,7 @@
 //@ts-nocheck
 // charts.js — Toda la lógica de ApexCharts
+import { escapeHTML } from "./core/security";
+import { fechaLocalISO } from "./shared/fechaLocal";
 
 // ── TOOLTIP FLOTANTE ──────────────────────────────────────────────────────────
 // El listener de mousemove se agrega solo cuando el tooltip está visible y se
@@ -22,7 +24,7 @@ export function showFloatTip(date, rows) {
     ? rows.map(r =>
         `<div class="ft-r">
            <span class="ft-dot" style="background:${r.color}"></span>
-           <span class="ft-n">${r.name}</span>
+           <span class="ft-n">${escapeHTML(r.name)}</span>
            <span class="ft-v">${fmt(r.val)}</span>
          </div>`).join("")
     : `<div class="agy-style-54">Sin datos</div>`;
@@ -165,11 +167,51 @@ export function buildLineChart(elId, dates, series, colors) {
 
   const el = document.getElementById(elId);
   if (!el) return;
+  _prepararContenedor(el);
 
   const ch = new ApexCharts(el, opts);
   ch.render();
   STATE.charts[elId] = ch;
   ChartRegistry.register(elId, ch);
+}
+
+// ── AJUSTE DE ANCHO (I5, sep-2026) ────────────────────────────────────────────
+// Al abrir la barra lateral los gráficos se salían del contenedor (123 px de
+// desborde medido a 1440 px). Dos causas, las dos resueltas acá sin tocar app.ts:
+//
+// 1. Las grillas de gráficos son `repeat(N, 1fr)`, y `1fr` es minmax(auto, 1fr):
+//    el mínimo de cada celda es el ancho de su CONTENIDO — el SVG ya dibujado.
+//    Aunque ApexCharts re-midiera, el padre seguía sosteniendo el ancho viejo y
+//    medía eso. `min-width: 0` en la tarjeta y en el contenedor suelta la celda.
+// 2. El único disparador era un `resize` a los 220 ms del toggle, que switchTab
+//    cancela y que no cubre otros cambios de ancho. Un ResizeObserver sobre
+//    `.main` reacciona a CUALQUIER cambio de ancho del área de contenido
+//    (toggle, rotación del iPad, ventana), con debounce para no redibujar en
+//    cada frame de la transición.
+function _prepararContenedor(el) {
+  el.style.minWidth = "0";
+  const card = el.closest && el.closest(".chart-card");
+  if (card) card.style.minWidth = "0";
+  _observarAnchoMain();
+}
+
+let _roMain = null, _roTimer = null, _anchoMain = 0;
+function _observarAnchoMain() {
+  if (_roMain || typeof ResizeObserver === "undefined") return;
+  const main = document.querySelector(".main");
+  if (!main) return;
+  _anchoMain = main.clientWidth;
+  _roMain = new ResizeObserver(entries => {
+    const w = Math.round(entries[0]?.contentRect?.width || 0);
+    if (!w || Math.abs(w - _anchoMain) < 2) return;   // solo cambios de ANCHO
+    _anchoMain = w;
+    clearTimeout(_roTimer);
+    _roTimer = setTimeout(() => {
+      // ApexCharts re-mide en `resize` de window (redrawOnWindowResize, default).
+      if (STATE.charts && Object.keys(STATE.charts).length) window.dispatchEvent(new Event("resize"));
+    }, 160);
+  });
+  _roMain.observe(main);
 }
 
 // ── DONUT CHART (composición / parts-of-whole, snapshot — NO serie de tiempo) ─
@@ -228,6 +270,7 @@ export function buildDonutChart(elId, labels, series, colors) {
 
   const el = document.getElementById(elId);
   if (!el) return;
+  _prepararContenedor(el);
 
   const ch = new ApexCharts(el, opts);
   ch.render();
@@ -242,7 +285,7 @@ export function dlChart(chartId, name) {
   ch.dataURI().then(({ imgURI }) => {
     const a = document.createElement("a");
     a.href     = imgURI;
-    a.download = `yango_${name}_${new Date().toISOString().slice(0, 10)}.png`;
+    a.download = `yango_${name}_${fechaLocalISO()}.png`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
