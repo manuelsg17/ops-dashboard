@@ -78,33 +78,63 @@ function _tx(mode, fn) {
   }));
 }
 
-function _key(userId) { return `core:${userId || "anon"}`; }
+// `parte`: "core" (semanal + tablas maestras, el snapshot de siempre) o la
+// escala alternativa ("mensual" / "diario", Ola 2 V3) — cada una en su propia
+// clave, así guardar una no reescribe los MB de la otra.
+function _key(userId, parte = "core") { return `${parte}:${userId || "anon"}`; }
+// Marca de "verificado contra la red y sin cambios" (Ola 2, V4): cuando los
+// datos frescos son idénticos al snapshot no se reescribe todo el registro,
+// solo esta fecha. La antigüedad efectiva del snapshot es la más nueva de las dos.
+function _keyVerif(userId, parte = "core") { return `${parte}-verif:${userId || "anon"}`; }
 
 // Guarda el snapshot. Fire-and-forget por diseño: si IndexedDB falla (cuota
 // llena, modo privado, storage bloqueado), la app sigue andando exactamente
 // igual — solo pierde el arranque instantáneo de la próxima vez.
-export function snapshotSave(payload) {
+// Sin usuario NO se guarda: tras un logout (o una sesión que no se pudo
+// validar, ver auth.ts) una carga en vuelo no puede dejar datos bajo "anon".
+export function snapshotSave(payload, parte = "core") {
   const userId = (STATE && STATE.userId) || null;
+  if (!userId) return Promise.resolve();
   const rec = { v: SCHEMA_V, userId, at: Date.now(), ...payload };
-  return _tx("readwrite", s => s.put(rec, _key(userId))).catch(err => {
+  return _tx("readwrite", s => {
+    s.delete(_keyVerif(userId, parte));
+    return s.put(rec, _key(userId, parte));
+  }).catch(err => {
     if (typeof DEBUG !== "undefined" && DEBUG) console.warn("snapshotSave falló:", err);
   });
+}
+
+// "Los datos de red son idénticos a este snapshot": renueva su antigüedad sin
+// reescribirlo (V4). Mismo fire-and-forget que snapshotSave.
+export function snapshotTouch(parte = "core") {
+  const userId = (STATE && STATE.userId) || null;
+  if (!userId) return Promise.resolve();
+  return _tx("readwrite", s => s.put({ at: Date.now() }, _keyVerif(userId, parte))).catch(() => {});
 }
 
 // Devuelve el snapshot del usuario actual, o null si no hay / está vencido /
 // es de otro esquema. Nunca lanza: en el peor caso devuelve null y la carga
 // sigue por el camino de red de siempre.
-export function snapshotLoad() {
+export function snapshotLoad(parte = "core") {
   const userId = (STATE && STATE.userId) || null;
-  return _tx("readonly", s => s.get(_key(userId))).then(rec => {
+  if (!userId) return Promise.resolve(null);
+  let recReq, verifReq;
+  return _tx("readonly", s => {
+    recReq   = s.get(_key(userId, parte));
+    verifReq = s.get(_keyVerif(userId, parte));
+    return recReq;
+  }).then(() => {
+    const rec = recReq && recReq.result;
     if (!rec) return null;
     if (rec.v !== SCHEMA_V) return null;
     // Defensa extra sobre el keying por usuario: si por lo que sea la clave no
     // coincidiera con el dueño del snapshot, no se usa. Mostrarle a alguien los
     // datos de otra cuenta es mucho peor que un arranque lento.
     if ((rec.userId || null) !== userId) return null;
-    if (Date.now() - (rec.at || 0) > MAX_AGE_MS) return null;
-    return rec;
+    const verif = verifReq && verifReq.result;
+    const at = Math.max(rec.at || 0, (verif && verif.at) || 0);
+    if (Date.now() - at > MAX_AGE_MS) return null;
+    return { ...rec, at };
   }).catch(() => null);
 }
 

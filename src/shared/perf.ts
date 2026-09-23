@@ -44,6 +44,12 @@ export function perfMark(name: string): void {
   if (!(name in _marks)) _marks[name] = Math.round(performance.now());
 }
 
+const _notas: Record<string, unknown> = {};
+/** Dato de diagnóstico suelto (p.ej. por qué no se saltó el segundo render). */
+export function perfNote(name: string, value: unknown): void {
+  if (PERF_ON) _notas[name] = value;
+}
+
 /** Mide la duración (ms de hilo principal) de un bloque síncrono. */
 export function perfMeasure<T>(name: string, fn: () => T): T {
   if (!PERF_ON) return fn();
@@ -104,6 +110,7 @@ if (PERF_ON) {
     const primerPintado = Math.min(_marks["paint:cache"] ?? Infinity, _marks["net:applied"] ?? Infinity);
     return {
       marks: { ..._marks },
+      notas: { ..._notas },
       requests: reqs,
       depthAntesDelPrimerPintado: isFinite(primerPintado) ? perfDepthBefore(primerPintado) : null,
       depthAntesDeRed: _marks["net:applied"] != null ? perfDepthBefore(_marks["net:applied"]) : null
