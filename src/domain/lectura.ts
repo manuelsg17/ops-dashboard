@@ -218,3 +218,135 @@ export function p2Accion(ctx) {
     `Reactivate drivers: ${k.fmt(falta)} active missing${donde ? `, ${k.fmt(donde.g)} of them in ${donde.n}` : ""}.`,
     `Реактивировать водителей: не хватает ${k.fmt(falta)} активных${donde ? `, из них ${k.fmt(donde.g)} в ${donde.n}` : ""}.`);
 }
+
+// ── SEÑALES EJECUTIVAS (Ola 6, sep 2026) ─────────────────────────────────────
+// Cinco reglas que vivían SOLO en Vista Partner (_pvExecutiveSummary) y se
+// mudaron acá al retirarla (decisión 2 del plan sep-2026). Van a la hoja de
+// Alertas del deck, junto a las señales por ciudad de p2ComputeAlerts, con la
+// misma forma { sev, kind, title, detail } — así las agrupa y pinta igual.
+//
+// Mismos umbrales que tenía Vista Partner (no se recalibraron: cambiarlos es una
+// decisión de negocio, no de migración):
+//   1. Volatilidad: coeficiente de variación del AD ≥ 25% (con ≥6 períodos en el
+//      rango y ≥4 con AD > 0 — con menos, cualquier serie parece volátil).
+//   2. Pico histórico: AD actual ≥ 95% del pico del historial cargado (señal
+//      POSITIVA) o < 60% (potencial ya demostrado que hoy no se usa). Mismo
+//      gate de ≥6 períodos que la volatilidad, como en Vista Partner.
+//   3. Comisión por viaje: cae ≥ 10% contra el período anterior.
+//   4. Dependencia de leads Yango: ≥ 50% de los nuevos+reactivados del último
+//      período vienen de Yango (con ≥ 5 en total). Solo si el partner recibe
+//      leads (alguna vez tuvo nuevos por servicio).
+//   5. Brecha entre ciudades: la de más AD tiene ≥ 2,5× la de menos (con AD > 0).
+//
+// PURA: los números entran ya calculados; el formato entra como funciones.
+export const SENALES_UMBRALES = {
+  cvMin: 0.25, cvMinPeriodos: 6, cvMinConDato: 4,
+  picoMejor: 95, picoBajo: 60,
+  comisionCaidaPct: 10,
+  dependenciaShare: 0.5, dependenciaMinNuevos: 5,
+  brechaRatio: 2.5
+};
+
+export interface SenalCtx {
+  lang?: string;
+  es?: boolean;
+  /** AD por período del rango (suma de las ciudades del partner), en orden. */
+  serieAD: number[];
+  /** Unidad de período ya traducida y en plural ("semanas", "months"…). */
+  unidades: string;
+  /** Máximo AD por período en TODO el historial cargado del partner. */
+  picoAD: number;
+  /** Último período: nuevos+reactivados totales y los que vienen de Yango. */
+  nuevos?: { total: number; yango: number } | null;
+  /** ¿El partner recibe leads Yango? (alguna vez tuvo nuevos por servicio). */
+  recibeLeads?: boolean;
+  /** Comisión y viajes del período anterior y del último. */
+  comision?: { comPrev: number; viajesPrev: number; comAct: number; viajesAct: number } | null;
+  /** AD del último período por ciudad (etiqueta ya traducida). */
+  ciudades: { label: string; ad: number }[];
+  fmt: (n: number) => string;
+  fmtDec: (n: number, d: number) => string;
+}
+
+export interface Senal { sev: "mid" | "ok"; kind: string; title: string; detail: string }
+
+export function p2SenalesEjecutivas(ctx: SenalCtx): Senal[] {
+  const U = SENALES_UMBRALES;
+  const T = (es: string, en: string, ru: string) => _T(ctx, es, en, ru);
+  const out: Senal[] = [];
+  const serie = (ctx.serieAD || []).map(x => +x || 0);
+  const adActual = serie.length ? serie[serie.length - 1] : 0;
+
+  if (serie.length >= U.cvMinPeriodos) {
+    // 1. Volatilidad (desvío poblacional / media, sobre los períodos con AD).
+    const conDato = serie.filter(x => x > 0);
+    if (conDato.length >= U.cvMinConDato) {
+      const media = conDato.reduce((s, x) => s + x, 0) / conDato.length;
+      const varianza = conDato.reduce((s, x) => s + (x - media) ** 2, 0) / conDato.length;
+      const cv = media > 0 ? Math.sqrt(varianza) / media : 0;
+      if (cv >= U.cvMin) {
+        const pct = ctx.fmtDec(cv * 100, 0);
+        out.push({ sev: "mid", kind: "volatilidad",
+          title: T("Conductores activos muy variables", "Highly volatile active drivers", "Сильные колебания активных водителей"),
+          detail: T(`varían ${pct}% sobre su promedio en ${conDato.length} ${ctx.unidades}`,
+                    `they swing ${pct}% around their average over ${conDato.length} ${ctx.unidades}`,
+                    `колебания ${pct}% от среднего за ${conDato.length} ${ctx.unidades}`) });
+      }
+    }
+    // 2. Pico histórico.
+    const pico = +ctx.picoAD || 0;
+    if (pico > 0 && adActual > 0) {
+      const ratio = (adActual / pico) * 100;
+      const r = ctx.fmtDec(ratio, 0), a = ctx.fmt(adActual), p = ctx.fmt(pico);
+      if (ratio >= U.picoMejor) {
+        out.push({ sev: "ok", kind: "pico_mejor",
+          title: T("En su mejor nivel histórico", "At its best historical level", "На историческом максимуме"),
+          detail: T(`${a} conductores activos = ${r}% del pico (${p})`,
+                    `${a} active drivers = ${r}% of the peak (${p})`,
+                    `${a} активных водителей = ${r}% от пика (${p})`) });
+      } else if (ratio < U.picoBajo) {
+        out.push({ sev: "mid", kind: "pico_bajo",
+          title: T("Por debajo del potencial ya demostrado", "Below its proven potential", "Ниже уже достигнутого потенциала"),
+          detail: T(`${a} conductores activos = ${r}% del pico (${p})`,
+                    `${a} active drivers = ${r}% of the peak (${p})`,
+                    `${a} активных водителей = ${r}% от пика (${p})`) });
+      }
+    }
+  }
+
+  // 3. Comisión por viaje.
+  const C = ctx.comision;
+  if (C && C.viajesPrev > 0 && C.comPrev > 0 && C.viajesAct > 0 && C.comAct > 0) {
+    const antes = C.comPrev / C.viajesPrev, ahora = C.comAct / C.viajesAct;
+    const caida = ((antes - ahora) / antes) * 100;
+    if (caida >= U.comisionCaidaPct) {
+      out.push({ sev: "mid", kind: "comision_viaje",
+        title: T("Comisión por viaje a la baja", "Commission per trip declining", "Комиссия за поездку снижается"),
+        detail: `$${ctx.fmtDec(antes, 2)} → $${ctx.fmtDec(ahora, 2)} (−${ctx.fmtDec(caida, 1)}%)` });
+    }
+  }
+
+  // 4. Dependencia de leads Yango.
+  const N = ctx.nuevos;
+  if (ctx.recibeLeads && N && N.total >= U.dependenciaMinNuevos && N.yango / N.total >= U.dependenciaShare) {
+    const pct = ctx.fmtDec((N.yango / N.total) * 100, 0), y = ctx.fmt(N.yango), tot = ctx.fmt(N.total);
+    out.push({ sev: "mid", kind: "dependencia_leads",
+      title: T("Alta dependencia de leads Yango", "High reliance on Yango leads", "Сильная зависимость от лидов Yango"),
+      detail: T(`${pct}% de los nuevos y reactivados (${y} de ${tot})`,
+                `${pct}% of new and reactivated (${y} of ${tot})`,
+                `${pct}% новых и реактивированных (${y} из ${tot})`) });
+  }
+
+  // 5. Brecha entre ciudades.
+  const conAD = (ctx.ciudades || []).filter(c => c.ad > 0).sort((a, b) => b.ad - a.ad);
+  if (conAD.length >= 2) {
+    const mejor = conAD[0], peor = conAD[conAD.length - 1];
+    const ratio = mejor.ad / peor.ad;
+    if (ratio >= U.brechaRatio) {
+      out.push({ sev: "mid", kind: "brecha_ciudades",
+        title: T("Brecha grande entre ciudades", "Large gap between cities", "Большой разрыв между городами"),
+        detail: `${mejor.label} ${ctx.fmt(mejor.ad)} vs ${peor.label} ${ctx.fmt(peor.ad)} (${ctx.fmtDec(ratio, 1)}×)` });
+    }
+  }
+  return out;
+}
