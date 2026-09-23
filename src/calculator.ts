@@ -2024,8 +2024,13 @@ export async function calcSaveMetas() {
     // mismo). Con eq, la fila vieja no se veía en el merge y el upsert (cuya
     // UNIQUE es case-sensitive) INSERTABA un duplicado del mismo mes que el
     // cliente luego sumaba dos veces.
+    //
+    // Y por AÑO (B1): sin `mes_year`, guardar ENERO 2027 leía la fila de ENERO
+    // 2026 como "existente", la fusionaba (heredando sus columnas Fleet y
+    // meta_tk_cars) y el upsert la PISABA. Desde la migración 2026-09-23 la
+    // UNIQUE es (clid, city, mes, mes_year) y mes_year es NOT NULL.
     const { data: existing, error: selErr } = await _conReintento(() => sb.from("metas")
-      .select("*").in("clid", clids).ilike("mes", mesName));
+      .select("*").in("clid", clids).ilike("mes", mesName).eq("mes_year", mesYear));
     if (selErr) throw selErr;
     const exMap = new Map((existing || []).map(x => [claveFila(x.clid, normCity(x.city)), x]));
 
@@ -2072,7 +2077,7 @@ export async function calcSaveMetas() {
       return o;
     });
     const { error } = await _conReintento(() =>
-      sb.from("metas").upsert(payload, { onConflict: "clid,city,mes" }));
+      sb.from("metas").upsert(payload, { onConflict: "clid,city,mes,mes_year" }));
     if (error) throw error;
     const refrescoOk = await loadFromSupabase();
     // Forzar la re-lectura de lo guardado: si no, `saved` queda con el estado

@@ -1154,8 +1154,16 @@ export function buildSlide2Raw(partner, dates, pct, idx) {
 // El avance es SIEMPRE del mes seleccionado (no del rango del sidebar).
 // Meses META disponibles (nombres, más reciente primero).
 export function p2MetaMeses() {
-  return [...new Set((STATE.metasData || []).map(m => m.mes))].filter(Boolean)
-    .sort((a, b) => _metasMesOrden(b) - _metasMesOrden(a));
+  // Orden por año*100+mes (B1): cada nombre se ordena por su AÑO más reciente;
+  // con 2000+mes, en enero el fallback era DICIEMBRE en vez de ENERO.
+  const maxAnio = new Map();
+  (STATE.metasData || []).forEach(m => {
+    if (!m.mes) return;
+    const y = m.mYear != null ? +m.mYear : null;
+    if (!maxAnio.has(m.mes) || (y != null && y > (maxAnio.get(m.mes) ?? -1))) maxAnio.set(m.mes, y);
+  });
+  return [...maxAnio.keys()]
+    .sort((a, b) => _metasMesOrden(b, maxAnio.get(b)) - _metasMesOrden(a, maxAnio.get(a)));
 }
 // Mes META de "Avance vs Meta". Prioridad:
 //   1) selección manual (PRESENT2_STATE.avanceMesSel), si tiene metas.
@@ -1230,9 +1238,24 @@ export function p2DatesMetaEnRango(mesName, dates) {
   return fechasEnRango(p2MonthDates(mesName), dates);
 }
 
-export function p2MetaFor(partner, scopeCity, mes) {
+// AÑO de la meta que corresponde a `mes` en el deck (B1): el del mes de reporte
+// de las fechas que el slide está mostrando (p2MonthDates, anclado al "Hasta").
+// Sin fechas de ese mes, el año más reciente con metas de ese nombre. Antes se
+// comparaba solo el nombre: con ENERO 2026 y ENERO 2027 cargados, el deck
+// SUMABA las dos metas.
+export function p2MetaAnio(mes) {
+  const ds = p2MonthDates(mes);
+  if (ds.length) return p2ReportYM(ds[ds.length - 1]).y;
+  const anios = (STATE.metasData || [])
+    .filter(m => m.mes === mes && m.mYear != null).map(m => +m.mYear);
+  return anios.length ? Math.max(...anios) : null;
+}
+export function p2MetaFor(partner, scopeCity, mes, anio = undefined) {
+  const y = anio === undefined ? p2MetaAnio(mes) : anio;
   return (STATE.metasData || []).reduce((o, m) => {
-    if (m.partner === partner && m.mes === mes && (!scopeCity || m.city === scopeCity)) {
+    // Fila legacy sin año: no se puede descartar (mismo criterio que _metasMatchMes).
+    const anioOk = y == null || m.mYear == null || +m.mYear === y;
+    if (m.partner === partner && m.mes === mes && anioOk && (!scopeCity || m.city === scopeCity)) {
       // Agregador + TukTuk son aditivos (se suman entre ciudades).
       o.mA += m.mA || 0; o.mNR += m.mNR || 0; o.mH += m.mH || 0;
       o.mtkAD += m.mtkAD || 0; o.mtkNR += m.mtkNR || 0; o.mtkCars += m.mtkCars || 0; o.mtkSH += m.mtkSH || 0;
@@ -2458,9 +2481,13 @@ export function _p2FcDropLast(inp) { const o = {}; for (const k in inp) o[k] = A
 export function p2ForecastTargetAD(partner) {
   const rows = (STATE.metasData || []).filter(m => m.partner === partner && m.mA);
   if (!rows.length) return null;
+  // Mes más reciente por año*100+mes (B1) y suma SOLO de ese (mes, año): con
+  // 2000+mes, en enero ganaba DICIEMBRE, y el filtro por nombre sumaba ENERO
+  // de dos años distintos.
   let best = null;
-  rows.forEach(m => { const o = _metasMesOrden(m.mes); if (!best || o > best.o) best = { o, mes: m.mes }; });
-  const sum = rows.filter(m => m.mes === best.mes).reduce((s, m) => s + (m.mA || 0), 0);
+  rows.forEach(m => { const o = _metasMesOrden(m.mes, m.mYear); if (!best || o > best.o) best = { o, mes: m.mes, anio: m.mYear ?? null }; });
+  const sum = rows.filter(m => m.mes === best.mes && (best.anio == null || m.mYear == null || m.mYear === best.anio))
+    .reduce((s, m) => s + (m.mA || 0), 0);
   return sum || null;
 }
 // Cómputo compartido por build y chartFn (mismo patrón que p2Metrics en matriz/charts).

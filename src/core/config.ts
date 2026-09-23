@@ -134,6 +134,10 @@ export const STATE = {
   myKam:            null as string | null,
   rendLine:         "comb",
   metasLine:        "comb",
+  // Mes de Metas elegido a mano en el selector: NOMBRE + AÑO (B1). null = el
+  // default (último mes con datos, ver metas._metasMesElegido).
+  metasMesSel:      null as string | null,
+  metasMesSelYear:  null as number | null,
   declineThreshold: 3,
   declineMetric:    "activeDrivers",
   proyectosData:    [],
