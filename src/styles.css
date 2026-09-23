@@ -471,14 +471,7 @@
 .agy-style-521 { color:#1e40af }
 .agy-style-522 { background:#f0fdf4;font-weight:700 }
 .agy-style-523 { color:#166534 }
-.agy-style-524 { display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px }
-.agy-style-525 { font-size:.72rem;color:#aaa;margin-left:5px }
-.agy-style-526 { font-weight:700;font-size:.78rem;color:#555;margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px }
 .agy-style-527 { display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px }
-.agy-style-528 { text-align:center;font-size:.85rem }
-.agy-style-529 { display:grid;grid-template-columns:repeat(2,1fr);gap:14px }
-.agy-style-530 { border-top:3px solid #64748b }
-.agy-style-531 { padding:12px;color:#aaa;font-size:.8rem }
 .agy-style-532 { display:flex;align-items:center;gap:10px;margin:18px 0 8px;padding:0 4px }
 .agy-style-533 { font-size:1.1rem }
 .agy-style-534 { flex:1 }
