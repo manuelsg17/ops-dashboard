@@ -91,17 +91,17 @@ export function bdg(c, p, cls = "mcard-badge") {
                   : STATE.curMode === "diario"  ? t("rend.cmp.diaAnterior")
                   : t("rend.cmp.semAnterior");
   if (p === null || p === undefined)
-    return `<span class="${cls} b-neu" title="Sin dato previo (N/A)">N/A</span>`;
+    return `<span class="${cls} b-neu" title="${escapeHTML(t("bdg.sinPrevio"))}">N/A</span>`;
   // Actual sin dato (una tasa que el período no trae): sin esto daba "-100%".
   if (c === null || c === undefined)
-    return `<span class="${cls} b-neu" title="Sin dato (N/A)">N/A</span>`;
+    return `<span class="${cls} b-neu" title="${escapeHTML(t("bdg.sinDato"))}">N/A</span>`;
   if (p === 0)
-    return c > 0 ? `<span class="${cls} b-pos" title="Primer periodo con dato (no hay ${compLabel})">NEW</span>`
-                 : `<span class="${cls} b-neu" title="Sin movimiento">--</span>`;
+    return c > 0 ? `<span class="${cls} b-pos" title="${escapeHTML(t("bdg.primero", { c: compLabel }))}">NEW</span>`
+                 : `<span class="${cls} b-neu" title="${escapeHTML(t("bdg.sinMov"))}">--</span>`;
   const v = ((c - p) / p) * 100;
   const s = v >= 0 ? "+" : "";
   const a = v >= 0 ? "↑" : "↓";
-  const tooltip = escapeHTML(`Actual: ${fmt(c)} vs ${compLabel}: ${fmt(p)} → ${s}${v.toFixed(1)}%`);
+  const tooltip = escapeHTML(t("bdg.tip", { a: fmt(c), c: compLabel, p: fmt(p), v: `${s}${v.toFixed(1)}` }));
   return `<span class="${cls} ${v >= 0 ? "b-pos" : "b-neg"}" title="${tooltip}">${a}${s}${v.toFixed(1)}%</span>`;
 }
 

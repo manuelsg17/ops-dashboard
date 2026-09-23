@@ -701,11 +701,8 @@ export function renderCalculator() {
   if (!hasMonthFormat) {
     el.innerHTML = `
       <div class="empty">
-        <p>La calculadora requiere datos en formato <strong>mensual</strong> (YYYY-MM).</p>
-        <p class="agy-style-101">
-          El dataset actual está en escala <strong>${STATE.curMode}</strong>.
-          Cambia a <strong>Mensual</strong> en el sidebar, o sube datos mensuales desde Configuración.
-        </p>
+        <p>${t("calc.requiereMensual")}</p>
+        <p class="agy-style-101">${t("calc.requiereMensualSub", { e: escapeHTML(t(`mode.${STATE.curMode}`)) })}</p>
       </div>`;
     return;
   }
@@ -958,7 +955,7 @@ export function _calcSec2_promedio3m(agg, months) {
             <tr>
               <th>Partner</th><th>Ciudad</th>
               <th class="tn">Trips</th><th class="tn">SH</th>
-              <th class="tn">AD (máx)</th><th class="tn">New Partner</th>
+              <th class="tn">${t("calc.col.adMax")}</th><th class="tn">New Partner</th>
               <th class="tn">New Yango</th><th class="tn">Reactivados</th>
             </tr>
           </thead>
@@ -1082,7 +1079,7 @@ export function _calcSec4_distribucion(agg, distTotals, monthLabel) {
     sumAD += ad; sumSH += sh; sumNR += nrg;
     if (b.noAct) nManual++;
     const badge  = b.fleet ? ` <span class="agy-style-130">FLEET</span>` : "";
-    const manual = b.noAct ? ` <span title="Sin actividad Taxi el último mes — fija la meta a mano" class="agy-style-131">FIJAR MANUAL</span>` : "";
+    const manual = b.noAct ? ` <span title="${escapeHTML(t("calc.fijarManualTip"))}" class="agy-style-131">${t("calc.fijarManual")}</span>` : "";
     // "YA TIENE META": este partner-ciudad ya tiene metas cargadas en BD para el
     // mes objetivo. Antes no había forma de saberlo sin ir a la pestaña Metas.
     const guardada = _calcFilaGuardada(e.partner, e.city)
@@ -1249,7 +1246,7 @@ export function _calcSecActions() {
   // TODOS los KAMs de un mes ya existe en Metas y ahí está con su propio aviso.
   const delBtn = !STATE.isAdmin ? "" : (kamAll
     ? `<button disabled title="${escapeHTML(t("calc.borrarKamNeedKam"))}" class="agy-style-144">${escapeHTML(t("calc.btnBorrarKam"))}</button>`
-    : `<button class="agy-style-148" data-act="calcDeleteMetasKam">${escapeHTML(t("calc.btnBorrarKamDe", { k: CALC_STATE.kam }))}</button>`);
+    : `<button class="agy-style-148" data-act="calcDeleteMetasKam">${escapeHTML(t("calc.btnBorrarKamDe", { k: kamLabel(CALC_STATE.kam) }))}</button>`);
 
   return `
     ${_secH("✅", "#10b981", t("calc.actualizarCompartir"), t("calc.actualizarCompartirSub"))}

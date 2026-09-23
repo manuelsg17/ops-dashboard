@@ -38,8 +38,8 @@ export function renderRawData() {
   if (!src || !src.length) {
     content.innerHTML = `
       <div class="empty">
-        <p>Sin datos cargados.</p>
-        <p class="empty-sub">Sube un archivo de rendimiento para ver la data raw.</p>
+        <p>${t("raw.vacio")}</p>
+        <p class="empty-sub">${t("raw.vacioSub")}</p>
       </div>`;
     return;
   }
@@ -1044,7 +1044,7 @@ export function _renderReconView() {
           <td></td><td class="agy-style-521">TOTAL (todo)</td>${numCells(totFull)}<td></td>
         </tr>
         <tr class="agy-style-522">
-          <td></td><td class="agy-style-523" title="Excluye TukTuk y sub-flotas excluidas">TOTAL en dashboard (Taxi)</td>${numCells(totTaxi)}<td></td>
+          <td></td><td class="agy-style-523" title="${escapeHTML(t("raw.totalTaxiTip"))}">${t("raw.totalTaxi")}</td>${numCells(totTaxi)}<td></td>
         </tr>
         </tbody>
       </table>

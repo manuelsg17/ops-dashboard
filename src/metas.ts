@@ -197,12 +197,12 @@ export function metasLineToggleHTML() {
     const on  = line === d.k;
     const dis = diario && d.k !== "agg";
     return `<button class="mode-btn${on ? " active" : ""}" ${dis ? "disabled" : ""}
-      title="${dis ? "Sin datos diarios por sub-flota — usa escala semanal o mensual" : escapeHTML(d.tip)}"
+      title="${escapeHTML(dis ? t("rend.diarioSinSubflotaTip") : d.tip)}"
       ${dis ? "" : `data-act="setMetasLine" data-line="${escapeHTML(d.k)}"`}
       style="${dis ? "opacity:.4;cursor:not-allowed" : ""}">${d.emoji} ${d.label}</button>`;
   }).join("");
   const note = diario
-    ? `<span class="agy-style-213">Fleet/TukTuk/Combinado requieren escala semanal o mensual</span>`
+    ? `<span class="agy-style-213">${t("rend.diarioSinSubflota")}</span>`
     : "";
   return `<div class="mode-toggle-row agy-style-214">${btns}${note}</div>`;
 }
@@ -367,7 +367,7 @@ export function _metaLineRow(label, actual, meta, fmtFn, metaOnlyNote, numKey) {
   if (meta == null) {  // solo actual (sin meta cargada)
     return `<div class="agy-style-215">
       <div class="agy-style-216"><span>${label}</span>
-        <span class="agy-style-217">${_hn(numKey, "real", fmtFn(actual))} · <em class="agy-style-22">sin meta</em></span></div></div>`;
+        <span class="agy-style-217">${_hn(numKey, "real", fmtFn(actual))} · <em class="agy-style-22">${t("metas.sinMetaSello")}</em></span></div></div>`;
   }
   if (actual == null) {  // solo meta (ej. Utilización, sin actual medible)
     return `<div class="agy-style-215">
@@ -555,7 +555,7 @@ export function _metasSinPeriodosHTML(mesName) {
 function _metasAlcance() {
   const f = getCurrentFilters();
   return partesAlcance({
-    city: f.city, kam: f.kam,
+    city: f.city, kam: kamLabel(f.kam),   // SIN_KAM → etiqueta traducida ("all" pasa igual)
     nSel: (f.selected || []).length,
     nTotal: document.querySelectorAll("#pList input").length
   }, t, cityLabel);
@@ -625,7 +625,7 @@ function _renderMetasLineView(cfg) {
   if (cfg.cobertura && cfg.cobertura.enRango === 0) {
     return html + `<div class="section"><div class="agy-style-224">${_metasSinPeriodosHTML(mesName)}</div></div>`;
   }
-  html += secH(icon, color, t("metas.secMes", { t: title, m: mesLabel(mesName) }), sub, _metasTagAlcance());
+  html += secH(icon, color, t("metas.secMes", { t: title, m: escapeHTML(mesLabel(mesName)) }), sub, _metasTagAlcance());
 
   if (!metaRows.length) {
     html += `<div class="section"><div class="agy-style-224">${emptyHint}</div></div>`;
@@ -1177,11 +1177,10 @@ export function _renderMetasImpl() {
   const noMetaCount = combos.filter(c => c.noMeta).length;
   const noMetaBanner = noMetaCount > 0
     ? `<div class="agy-style-238">
-         ⚠️ <strong>${noMetaCount}</strong> partner${noMetaCount>1?"s":""} con performance pero <strong>sin meta asignada</strong> en ${escapeHTML(mesName)}.
-         Su FACT suma al total pero el % de cumplimiento puede verse alto.
+         ${t(noMetaCount > 1 ? "metas.sinMetaBannerN" : "metas.sinMetaBanner1", { n: noMetaCount, m: escapeHTML(mesLabel(mesName)) })}
        </div>`
     : "";
-  html += secH("🎯","#8b5cf6",t("metas.secMes",{ t: t("metas.cumplimiento"), m: mesLabel(mesName) }),t("metas.sub.progMes"),_metasTagAlcance());
+  html += secH("🎯","#8b5cf6",t("metas.secMes",{ t: t("metas.cumplimiento"), m: escapeHTML(mesLabel(mesName)) }),t("metas.sub.progMes"),_metasTagAlcance());
   html += `<div class="section">${noMetaBanner}<div class="metric-row">
     ${metaResCard(t("metric.ad.label"), t("rend.per.ultimaSemana"),  tAD, tMA,  tPAD, "#8b5cf6", undefined, "metas.agg.pais.ad")}
     ${metaResCard(t("metric.nr.label"), t("metas.acumMesSub"),  tNR, tMNR, tPNR, "#f97316", undefined, "metas.agg.pais.nr")}
@@ -1292,8 +1291,8 @@ export function _renderMetasImpl() {
     const alertHtml = noGoalPartners.length ? `
       <details class="agy-style-240">
         <summary class="agy-style-241">
-          ⚠️ ${noGoalPartners.length} sin meta asignada
-          <span class="agy-style-242">click para ver</span>
+          ${t("metas.sinMetaAsignadaN", { n: noGoalPartners.length })}
+          <span class="agy-style-242">${t("metas.clickVer")}</span>
         </summary>
         <div class="agy-style-243">
           ${noGoalPartners.map(escapeHTML).join(", ")}

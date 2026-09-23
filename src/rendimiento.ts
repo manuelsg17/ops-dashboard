@@ -201,7 +201,7 @@ function _rendPintarCargandoEscala() {
 export function _rendAlcance() {
   const f = getCurrentFilters();
   return partesAlcance({
-    city: f.city, kam: f.kam,
+    city: f.city, kam: kamLabel(f.kam),   // SIN_KAM → etiqueta traducida ("all" pasa igual)
     nSel: (f.selected || []).length,
     nTotal: document.querySelectorAll("#pList input").length
   }, t, cityLabel);
@@ -252,11 +252,10 @@ export function _renderRendImpl() {
   if (!filtered.length) {
     empty.style.display   = "none";
     content.style.display = "";
-    const lname = line === "fleet" ? "Fleet" : line === "comb" ? "Combinado (Taxi+TukTuk)" : "TukTuk";
+    const lname = line === "fleet" ? "Fleet" : line === "comb" ? t("rend.lineaCombTxt") : "TukTuk";
     content.innerHTML = rendLineToggleHTML() +
       `<div class="section"><div class="agy-style-266">
-        No hay datos de <strong>${lname}</strong> para el filtro actual.<br>
-        Cambia a <strong>📊 Agregador</strong> o ajusta ciudad / fechas / partners.
+        ${t("rend.sinDatosLinea", { l: lname })}
       </div></div>`;
     return;
   }
@@ -719,10 +718,10 @@ export function renderTable() {
     const pd      = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${STATE.partnerColors[r.partner]||"#ccc"};margin-right:5px"></span>`;
     const kd      = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${KAM_COLORS[r.kam]||"#ccc"};margin-right:4px"></span>`;
     const alertBd = r.declineAlert
-      ? `<span class="decline-badge" title="Declive ${STATE.declineThreshold} períodos consecutivos (${STATE.declineMetric === 'activeDrivers' ? 'Activos' : STATE.declineMetric === 'supplyHours' ? 'Horas' : 'N+R'})">⚠</span>`
+      ? `<span class="decline-badge" title="${escapeHTML(t("rend.declive", { n: STATE.declineThreshold, m: STATE.declineMetric === "activeDrivers" ? t("rend.lbl.activos") : STATE.declineMetric === "supplyHours" ? t("rend.declive.horas") : "N+R" }))}">⚠</span>`
       : "";
     const nsCell  = r.ns > 0
-      ? `<span class="leads-badge" title="Recibe leads de Yango">★ ${fmt(r.ns)}</span>`
+      ? `<span class="leads-badge" title="${escapeHTML(t("rend.recibeLeads"))}">★ ${fmt(r.ns)}</span>`
       : `<span class="agy-style-90">${fmt(r.ns)}</span>`;
     h += `<tr data-partner="${escapeHTML(r.partner)}"${r.ns > 0 ? ' class="leads-row"' : ""}>
       <td>${pd}${alertBd}${escapeHTML(r.partner)}</td><td>${kd}${escapeHTML(r.kam)}</td>
@@ -1174,7 +1173,7 @@ export function _rendFleetPartnerTable(lastRows, prevRows) {
   const num = v => v == null ? "—" : fmt(v);
   const pct = v => v == null ? "—" : fmt(v) + "%";
   let h = `<table class="dtbl"><thead><tr>
-    <th>Partner</th><th>KAM</th><th>Owned Cars</th><th>SH/Auto</th><th>Aceptación</th><th>Branded</th><th>% Brandeado</th><th>GMV/Auto</th><th>Comisión/Auto</th></tr></thead><tbody>`;
+    <th>Partner</th><th>KAM</th><th>Owned Cars</th><th>SH/Auto</th><th>${t("portal.aceptacion")}</th><th>Branded</th><th>${t("rend.fleet.pctBrandeado")}</th><th>GMV/Auto</th><th>${t("rend.fleet.comisionAuto")}</th></tr></thead><tbody>`;
   rows.forEach(r => {
     const kc = KAM_COLORS[r.kam] || "#ccc";
     h += `<tr>
