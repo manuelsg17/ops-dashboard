@@ -948,7 +948,7 @@ export function _calcSec2_promedio3m(agg, months) {
 
   return `
     <details class="section agy-style-29">
-      <summary class="agy-style-118">📊 Promedio 3 meses · referencia (no reparte) · ${items.length} partner-ciudad · KAM: ${CALC_STATE.kam === "all" ? "Todos" : CALC_STATE.kam}</summary>
+      <summary class="agy-style-118">📊 Promedio 3 meses · referencia (no reparte) · ${items.length} partner-ciudad · KAM: ${CALC_STATE.kam === "all" ? "Todos" : escapeHTML(CALC_STATE.kam)}</summary>
       <div class="tbl-wrap agy-style-119">
         <table class="dtbl">
           <thead>
@@ -2136,17 +2136,16 @@ export async function calcDeleteMetasKam() {
   const { name: mesName, year: mesYear } = _calcNextMonthName(m.lastMonth || "");
   if (!mesName) return;
 
-  // CLIDs que HOY pertenecen a este KAM (fuente de verdad: KAM_MAP/partners).
-  const clids = Object.keys(STATE.KAM_MAP || {})
-    .filter(c => (STATE.KAM_MAP[c] || "").trim() === CALC_STATE.kam);
-  if (!clids.length) { alert(t("calc.borrarKamSinClids", { k: CALC_STATE.kam })); return; }
-
-  // `x.kam` (no KAM_MAP[x.clid]): STATE.metasData NO expone `clid` — el loader
-  // lo usa para resolver partner/kam pero no lo copia al objeto. `x.kam` ya
-  // viene resuelto contra KAM_MAP ahí mismo, así que es la misma verdad.
+  // FILAS afectadas = las metas de ese (mes, año) cuyo KAM, con la MISMA
+  // definición que usa la Calculadora para armar la cartera (_calcKamDe:
+  // partners → flotas → kam de la fila), es el KAM elegido. B7: antes se
+  // CONTABAN por `x.kam` pero se BORRABAN por los CLIDs de KAM_MAP, así que un
+  // partner cuyo KAM venía de `flotas` (o de la propia fila) figuraba en el
+  // "N eliminadas" y seguía en la base. Ahora se borra exactamente lo contado,
+  // por id, y se informa lo que la base dice que borró.
   const afectadas = (STATE.metasData || []).filter(x =>
     x.mes === mesName && (mesYear == null || x.mYear == null || x.mYear === mesYear) &&
-    (x.kam || "").trim() === CALC_STATE.kam);
+    _calcKamDe(x) === CALC_STATE.kam);
 
   if (!afectadas.length) { alert(t("calc.borrarKamSinMetas", { k: CALC_STATE.kam, m: mesName })); return; }
 
@@ -2160,17 +2159,30 @@ export async function calcDeleteMetasKam() {
 
   showLoad(true, t("calc.borrandoMetas"));
   try {
-    // ilike: casing mixto de `mes` en uploads viejos (mismo motivo que el select
-    // del guardado y que deleteMetasMes en metas.ts).
-    let q = sb.from("metas").delete().in("clid", clids).ilike("mes", mesName);
-    if (mesYear != null) q = q.eq("mes_year", mesYear);
-    const { error } = await _conReintento(() => q);
+    // 1) Ubicar en la base las MISMAS filas que se contaron (clid + ciudad
+    //    normalizada, mes sin importar el casing, el año elegido o NULL legacy).
+    const clids = [...new Set(afectadas.map(x => x.clid).filter(Boolean))];
+    const claves = new Set(afectadas.map(x => claveFila(x.clid, x.city)));
+    let sel = sb.from("metas").select("id, clid, city, mes_year").in("clid", clids).ilike("mes", mesName);
+    if (mesYear != null) sel = sel.or(`mes_year.eq.${mesYear},mes_year.is.null`);
+    const { data: enBase, error: selErr } = await _conReintento(() => sel);
+    if (selErr) throw selErr;
+    const ids = (enBase || []).filter(r => claves.has(claveFila(r.clid, normCity(r.city)))).map(r => r.id);
+    if (!ids.length) throw new Error("las filas a eliminar ya no están en la base (¿otra sesión las borró?). Recarga la página.");
+    // 2) Borrar por id y pedir de vuelta lo borrado: RLS bloquea un DELETE sin
+    //    error (0 filas), así que el conteo real sale de la respuesta.
+    const { data: borradas, error } = await _conReintento(() =>
+      sb.from("metas").delete().in("id", ids).select("id"));
     if (error) throw error;
+    const nBorradas = (borradas || []).length;
+    if (!nBorradas) throw new Error("42501: la base no eliminó ninguna fila (permisos).");
     const refrescoOk = await loadFromSupabase();
     CALC_STATE.savedKey = "";   // re-leer lo guardado (ahora vacío para este KAM)
-    showBanner(refrescoOk, refrescoOk
-      ? `Metas de ${CALC_STATE.kam} eliminadas para ${mesName} ${mesYear} (${afectadas.length} filas)`
-      : `Metas ELIMINADAS de la base de datos (${afectadas.length} filas · ${mesName} ${mesYear}), pero no se pudo refrescar la pantalla. Recarga la página.`);
+    const parcial = nBorradas !== afectadas.length
+      ? ` — ATENCIÓN: se esperaban ${afectadas.length}; revisa en Metas qué quedó.` : "";
+    showBanner(refrescoOk && !parcial, refrescoOk
+      ? `Metas de ${CALC_STATE.kam} eliminadas para ${mesName} ${mesYear} (${nBorradas} filas)${parcial}`
+      : `Metas ELIMINADAS de la base de datos (${nBorradas} filas · ${mesName} ${mesYear}), pero no se pudo refrescar la pantalla. Recarga la página.${parcial}`);
     renderCalculator();
     if (STATE.curTab === "metas" && typeof renderMetas === "function") renderMetas();
   } catch (err) {
