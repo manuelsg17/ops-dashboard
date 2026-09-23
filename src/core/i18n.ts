@@ -45,9 +45,6 @@ export const I18N: Record<string, Record<string, string>> = {
   "nav.analisis":    { es: "Análisis",         en: "Analysis",      ru: "Аналитика" },
   "nav.rendimiento": { es: "Rendimiento",      en: "Performance",   ru: "Показатели" },
   "nav.metas":       { es: "Metas",            en: "Goals",         ru: "Цели" },
-  "nav.calculadora": { es: "Calculadora",      en: "Calculator",    ru: "Калькулятор" },
-  "nav.vistaPartner":{ es: "Vista Partner",    en: "Partner View",  ru: "Обзор партнёра" },
-  "nav.seguimiento": { es: "Seguimiento",      en: "Tracking",      ru: "Отслеживание" },
   "nav.dataRaw":     { es: "Data Raw",         en: "Raw Data",      ru: "Сырые данные" },
   // "2.0" era para distinguirla de una "Presentación" anterior que ya no
   // existe; hoy es la unica, asi que el numero solo confundia. La CLAVE sigue
@@ -110,7 +107,6 @@ export const I18N: Record<string, Record<string, string>> = {
   "metric.sh.short":  { es: "Hs. Conexión",         en: "Supply Hrs",          ru: "Часы" },
   "metric.tr.label":  { es: "Viajes",               en: "Trips",               ru: "Поездки" },
   "metric.tr.short":  { es: "Viajes",               en: "Trips",               ru: "Поездки" },
-  "metric.nr.abbr":   { es: "N+R",                  en: "N+R",                 ru: "N+R" },
   "rend.col.partner": { es: "Partner",              en: "Partner",             ru: "Партнёр" },
   "rend.col.comision":{ es: "Comisión",             en: "Commission",          ru: "Комиссия" },
   "rend.col.leads":   { es: "Leads Yango",          en: "Yango Leads",         ru: "Лиды Yango" },
@@ -140,7 +136,6 @@ export const I18N: Record<string, Record<string, string>> = {
   "rend.per.ultimaSemana":   { es: "última semana",   en: "last week",     ru: "последняя неделя" },
   "rend.per.ultimoDia":      { es: "último día",      en: "last day",      ru: "последний день" },
   "rend.per.ultimoMes":      { es: "último mes",      en: "last month",    ru: "последний месяц" },
-  "rend.per.ultimoPeriodo":  { es: "último período",  en: "last period",   ru: "последний период" },
   "rend.per.periodoAnterior":{ es: "el período anterior", en: "the previous period", ru: "предыдущий период" },
 
   "rend.peru.titulo":  { es: "Perú - Vista General", en: "Peru - Overview", ru: "Перу — общий обзор" },
@@ -238,7 +233,6 @@ export const I18N: Record<string, Record<string, string>> = {
                              ru: "Автопарк по партнёрам · по числу собственных авто" },
   "rend.fleet.ownedDonut": { es: "Owned Cars por Partner", en: "Owned Cars by Partner", ru: "Собственные авто по партнёрам" },
   "rend.fleet.brandDonut": { es: "Brandeados vs No Brandeados", en: "Branded vs Non-Branded", ru: "Брендированные и небрендированные" },
-  "rend.fleet.noBrand":    { es: "No brandeados", en: "Non-branded", ru: "Небрендированные" },
 
 
   // ── Metas (fase 2) ─────────────────────────────────────────────────────
@@ -314,7 +308,6 @@ export const I18N: Record<string, Record<string, string>> = {
   "metas.sinPlan":        { es: "Sin Plan",            en: "No Plan",             ru: "Нет плана" },
   "metas.sinKam":         { es: "Sin KAM",             en: "No KAM",              ru: "Без KAM" },
   "metas.todas":          { es: "Todas",               en: "All",                 ru: "Все" },
-  "metas.acumMes":        { es: "acumulado mes",       en: "month to date",       ru: "накоплено за месяц" },
   "metas.autosPropios":   { es: "Autos propios (último período): {n} · brandeados {b}",
                             en: "Owned cars (last period): {n} · branded {b}",
                             ru: "Собственные авто (посл. период): {n} · брендированных {b}" },
@@ -512,7 +505,6 @@ export const I18N: Record<string, Record<string, string>> = {
   "calc.borrarKamSoloAdmin": { es: "Solo un administrador puede eliminar metas.",
                                en: "Only an administrator can delete goals.",
                                ru: "Удалять цели может только администратор." },
-  "calc.borrarKamSinClids":  { es: "No hay partners asignados a {k}.", en: "No partners assigned to {k}.", ru: "Нет партнёров, назначенных {k}." },
   "calc.borrarKamSinMetas":  { es: "{k} no tiene metas cargadas para {m}.", en: "{k} has no goals saved for {m}.", ru: "У {k} нет сохранённых целей на {m}." },
   "calc.borrandoMetas":      { es: "Eliminando metas…", en: "Deleting goals…", ru: "Удаление целей…" },
   "calc.errorBorrarMetas":   { es: "Error al eliminar metas: ", en: "Error deleting goals: ", ru: "Ошибка удаления целей: " },
@@ -722,21 +714,11 @@ export const I18N: Record<string, Record<string, string>> = {
   "cfg.mesVacio":       { es: "2026-04 o vacío", en: "2026-04 or empty", ru: "2026-04 или пусто" },
   "cfg.btnEliminar":    { es: "🗑️ Eliminar", en: "🗑️ Delete", ru: "🗑️ Удалить" },
 
-  "cfg.fleetExtTitulo": { es: "🔄 Fleet Externo — Sincronización", en: "🔄 External Fleet — Sync", ru: "🔄 Внешний автопарк — синхронизация" },
-  "cfg.fleetExtSub":    { es: "Copia semanal (lunes) de las tablas de flota externa hacia <code>fleetext_*</code> en este proyecto. Corre en GitHub Actions, no en el navegador — este botón solo la adelanta.",
-                          en: "Weekly (Monday) copy of the external fleet tables into <code>fleetext_*</code> on this project. Runs on GitHub Actions, not in the browser — this button only triggers it early.",
-                          ru: "Еженедельная (по понедельникам) копия таблиц внешнего автопарка в <code>fleetext_*</code> этого проекта. Выполняется в GitHub Actions, не в браузере — эта кнопка только запускает раньше срока." },
-  "cfg.sincronizarAhora": { es: "🔄 Sincronizar ahora", en: "🔄 Sync now", ru: "🔄 Синхронизировать сейчас" },
-  "cfg.disparando":       { es: "Disparando...", en: "Triggering...", ru: "Запуск…" },
-  "cfg.syncDisparada":    { es: "Sincronización disparada ✓", en: "Sync triggered ✓", ru: "Синхронизация запущена ✓" },
-  "cfg.errorSync":        { es: "Error al disparar la sincronización: ", en: "Error triggering sync: ", ru: "Ошибка запуска синхронизации: " },
 
   "cfg.clidsAsignados":  { es: "CLIDs asignados", en: "assigned CLIDs", ru: "назначено CLID" },
   "cfg.partnersClids":   { es: "👥 Partners & CLIDs", en: "👥 Partners & CLIDs", ru: "👥 Партнёры и CLID" },
   "cfg.buscarCPK":       { es: "Buscar CLID, partner o KAM...", en: "Search CLID, partner or KAM...", ru: "Поиск CLID, партнёра или KAM…" },
-  "cfg.col.fleet":       { es: "Fleet", en: "Fleet", ru: "Fleet" },
   "cfg.col.acciones":    { es: "Acciones", en: "Actions", ru: "Действия" },
-  "cfg.resultados":      { es: "{n} resultado{s}", en: "{n} result{s}", ru: "{n} результат(ов)" },
   "cfg.editar":          { es: "Editar", en: "Edit", ru: "Изменить" },
   "cfg.eliminarBtn":     { es: "Eliminar", en: "Delete", ru: "Удалить" },
   "cfg.guardar":         { es: "Guardar", en: "Save", ru: "Сохранить" },
@@ -958,7 +940,6 @@ export const I18N: Record<string, Record<string, string>> = {
   "mon.sinDatos":     { es: "Sin datos", en: "No data", ru: "Нет данных" },
 
   // ── Estados comunes ────────────────────────────────────────────────────
-  "estado.cargando": { es: "Cargando…", en: "Loading…", ru: "Загрузка…" },
   "estado.datosCargados": { es: "Datos cargados", en: "Data loaded", ru: "Данные загружены" },
   "estado.sinDatos": { es: "Sin datos", en: "No data",  ru: "Нет данных" },
   "estado.bdActualizada": { es: "BD actualizada {t}", en: "DB updated {t}", ru: "БД обновлена {t}" },
@@ -1903,6 +1884,14 @@ export const I18N: Record<string, Record<string, string>> = {
   "cfg.vacioSub": { es: "Hoja DATOS con columnas: CLID | KAM | PARTNER",
                    en: "DATOS sheet with columns: CLID | KAM | PARTNER",
                    ru: "Лист DATOS со столбцами: CLID | KAM | PARTNER" },
+
+  // ── Configuración: conteo de resultados (Ola 3) ───────────────────────────
+  "cfg.resultados1": { es: "{n} resultado",
+                      en: "{n} result",
+                      ru: "{n} результат" },
+  "cfg.resultadosN": { es: "{n} resultados",
+                      en: "{n} results",
+                      ru: "Результатов: {n}" },
 };
 
 let _lang = "es";

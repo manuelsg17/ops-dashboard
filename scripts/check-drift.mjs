@@ -18,6 +18,8 @@ const RAIZ = new URL("..", import.meta.url).pathname;
 const leer = p => readFileSync(join(RAIZ, p), "utf8");
 const problemas = [];
 const fallo = (chequeo, msg) => problemas.push({ chequeo, msg });
+// Avisos: se imprimen pero NO hacen fallar (p.ej. claves de i18n sin uso).
+const avisos = [];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. data-act* del HTML  vs  registerActions()
@@ -113,15 +115,7 @@ function chequearColumnas() {
 // desapercibida.
 // ─────────────────────────────────────────────────────────────────────────────
 function chequearI18n() {
-  const src = leer("src/core/i18n.ts");
-  const dict = recortarBloque(src, src.indexOf("{", src.indexOf("export const I18N")));
-  const declaradas = new Map();
-  for (const entrada of entradasDeObjeto(dict)) {
-    const m = /^"([^"]+)"\s*:\s*(\{[\s\S]*)$/.exec(entrada.trim());
-    if (!m) continue;
-    const idiomas = new Set([...m[2].matchAll(/\b(es|en|ru)\s*:/g)].map(x => x[1]));
-    declaradas.set(m[1], idiomas);
-  }
+  const declaradas = leerDiccionario("src/core/i18n.ts", "export const I18N");
   if (!declaradas.size) { fallo("i18n", "no pude leer I18N — el chequeo quedo ciego."); return; }
 
   const usadas = new Map();
@@ -129,21 +123,213 @@ function chequearI18n() {
     // Sin comentarios: este mismo archivo documenta el uso con
     // data-i18n="clave" como EJEMPLO, y eso se reportaba como clave inexistente.
     const txt = sinComentarios(leer(f));
-    for (const m of txt.matchAll(/data-i18n(?:-title|-ph)?="([a-zA-Z0-9_.]+)"/g))
+    for (const m of txt.matchAll(/data-i18n(?:-title|-ph|-html)?="([a-zA-Z0-9_.]+)"/g))
       if (!usadas.has(m[1])) usadas.set(m[1], f);
-    // t("clave") — solo literales; los dinamicos no se pueden verificar estatico.
-    for (const m of txt.matchAll(/[^a-zA-Z0-9_]t\(\s*"([a-zA-Z0-9_]+\.[a-zA-Z0-9_.]+)"/g))
-      if (!usadas.has(m[1])) usadas.set(m[1], f);
+    // t(...) — todo literal "a.b" dentro del PRIMER argumento, no solo el caso
+    // t("clave"): `t(uno ? "x.uno" : "x.varios", …)` también tiene que existir.
+    // Los dinámicos (t(`seg.view.${k}`)) no se pueden verificar estático.
+    for (const arg of primerosArgumentos(txt, /(?<![\w.$])t\(/g))
+      for (const m of arg.matchAll(/"([a-zA-Z0-9_]+\.[a-zA-Z0-9_.]+)"/g))
+        if (!usadas.has(m[1])) usadas.set(m[1], f);
   }
 
   for (const [k, f] of usadas)
     if (!declaradas.has(k))
       fallo("i18n", `la clave "${k}" (${f}) NO esta en core/i18n.ts — se veria cruda en pantalla.`);
 
-  for (const [k, idiomas] of declaradas) {
-    const faltan = ["es", "en", "ru"].filter(l => !idiomas.has(l));
-    if (faltan.length) fallo("i18n", `la clave "${k}" no tiene: ${faltan.join(", ")}`);
+  chequearTrios("i18n", declaradas);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3b. Tríos de idioma: los 3 idiomas + los MISMOS {placeholders} en los tres
+//
+// Una traducción que se come un `{s}` no da error: t() deja el texto sin el
+// dato y la pantalla dice "Resultados:" en ruso donde en español dice
+// "Resultados: 12" (pasó con cfg.resultados). Aplica a los TRES diccionarios:
+// I18N (interfaz), EXPORT_STR (lo que se entrega al partner) y CALC_EXPORT_STR
+// (la tarjeta de la Calculadora).
+// ─────────────────────────────────────────────────────────────────────────────
+function chequearTrios(nombre, dic) {
+  for (const [k, tr] of dic) {
+    const faltan = ["es", "en", "ru"].filter(l => tr[l] == null);
+    if (faltan.length) { fallo(nombre, `la clave "${k}" no tiene: ${faltan.join(", ")}`); continue; }
+    const ph = l => [...new Set([...tr[l].matchAll(/\{([a-zA-Z0-9_]+)\}/g)].map(x => x[1]))].sort().join(",");
+    const base = ph("es");
+    for (const l of ["en", "ru"]) {
+      if (ph(l) !== base)
+        fallo(nombre, `la clave "${k}" tiene placeholders distintos: es {${base}} vs ${l} {${ph(l)}} — el dato desaparece en ${l}.`);
+    }
   }
+}
+
+function chequearDiccionariosExport() {
+  const exp = leerDiccionario("src/core/i18nExport.ts", "export const EXPORT_STR");
+  if (!exp.size) { fallo("i18n-export", "no pude leer EXPORT_STR — el chequeo quedo ciego."); return; }
+  chequearTrios("i18n-export", exp);
+  const calc = leerDiccionario("src/calculator.ts", "export const CALC_EXPORT_STR");
+  if (!calc.size) { fallo("i18n-export", "no pude leer CALC_EXPORT_STR — el chequeo quedo ciego."); return; }
+  chequearTrios("i18n-export", calc);
+  // Las claves pedidas por nombre tienen que existir: xl("clave") / _calcLab("clave").
+  const compartidas = new Set(["city", "ad", "sh", "nr", "cars", "shcar", "accept", "util"]);
+  for (const f of listarSrc()) {
+    const txt = sinComentarios(leer(f));
+    for (const m of txt.matchAll(/(?<![\w.$])xl\(\s*"([^"]+)"/g))
+      if (!exp.has(m[1])) fallo("i18n-export", `xl("${m[1]}") (${f}) no está en EXPORT_STR.`);
+    for (const m of txt.matchAll(/(?<![\w.$])_calcLab\(\s*"([^"]+)"/g))
+      if (!calc.has(m[1]) && !compartidas.has(m[1])) fallo("i18n-export", `_calcLab("${m[1]}") (${f}) no está en CALC_EXPORT_STR.`);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3c. Frases del deck sin ruso
+//
+// P2T(es, en, ru) cae a inglés si falta el ruso: un deck en ruso con una frase
+// en inglés en medio. Mismo contrato para el T(…) de la lectura ejecutiva.
+// ─────────────────────────────────────────────────────────────────────────────
+function chequearFrasesExport() {
+  const casos = [
+    ...listarSrc().filter(f => !f.endsWith("partnerView.ts")).map(f => [f, /(?<![\w.$])P2T\(/g]),
+    ["src/domain/lectura.ts", /(?<![\w.$])T\(/g]
+  ];
+  for (const [f, re] of casos) {
+    const txt = sinComentarios(leer(f));
+    for (const m of txt.matchAll(re)) {
+      if (/function\s+$/.test(txt.slice(Math.max(0, m.index - 12), m.index))) continue;   // la definición
+      const args = argumentos(txt, txt.indexOf("(", m.index));
+      if (args.length && args.length < 3) {
+        const linea = txt.slice(0, m.index).split("\n").length;
+        fallo("i18n-export", `${f}:${linea} ${m[0].slice(0, -1)} con ${args.length} argumento(s): falta el ruso, y el deck ruso mostraría inglés.`);
+      }
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3d. Ternarios BINARIOS de idioma
+//
+// `lang === "es" ? a : b` o `es ? a : b` tienen dos ramas para TRES idiomas: en
+// ruso cae a la rama "no español" (inglés) en silencio. Es el mismo bug de
+// forma que el de las escalas: apareció en el deck (4 avisos), en el Gantt que
+// entra al PDF y en los nombres de los métodos de pronóstico. Lo correcto es
+// pick()/makeT() de core/i18nExport o t() de core/i18n.
+//
+// Vista Partner (partnerView.ts) queda afuera: se retira (decisión 2 del plan
+// sep-2026) y no se invierte en migrarla. Escape puntual: `// i18n-binario-ok`.
+// ─────────────────────────────────────────────────────────────────────────────
+function chequearTernariosIdioma() {
+  const R_IGUAL = /\b\w*(?:[lL]ang|idioma|LANG)\w*\s*[!=]==?\s*"(?:es|en|ru)"\s*\?/;
+  // `es ? …` / `isEN ? …` como bandera de idioma. NO cuenta `a === en ? …`:
+  // ahí `en` es un valor (p.ej. el nombre del mes en inglés), no una bandera.
+  const R_FLAG  = /(?<![\w.$"'`])(?<![=!]=\s*)(?<![=!]==\s*)(?:es|en|isEN|isEn|isEs|esES)\s*\?(?![?.:])/;
+  const R_DEF   = /\b(?:const|let|var)\s+(?:es|en|isEN|isEn|isEs)\s*=\s*[^;\n]*[lL]ang\w*\s*[!=]==?\s*"(?:es|en)"/;
+  for (const f of listarSrc()) {
+    if (f.endsWith("partnerView.ts")) continue;
+    const lineas = sinComentarios(leer(f)).split("\n");
+    lineas.forEach((ln, i) => {
+      if (/i18n-binario-ok/.test(leer(f).split("\n")[i] || "")) return;
+      // Sin el TEXTO de los strings (una frase en español puede decir "es ?"),
+      // pero conservando los códigos de idioma, que es lo que se busca.
+      const codigo = ln
+        .replace(/"(?!(?:es|en|ru)")(?:[^"\\]|\\.)*"/g, '""')
+        .replace(/'(?:[^'\\]|\\.)*'/g, "''")
+        .replace(/`[^`]*`/g, "``");
+      if (R_IGUAL.test(codigo) || R_FLAG.test(codigo) || R_DEF.test(codigo))
+        fallo("idioma-binario",
+          `${f}:${i + 1} decide el idioma con un booleano/ternario de dos ramas: en ruso cae a la otra rama.\n` +
+          `      Usar pick()/makeT() (core/i18nExport) o t() (core/i18n).\n      → ${ln.trim().slice(0, 120)}`);
+    });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3e. Claves muertas (AVISO, no falla)
+//
+// Una clave declarada que nadie usa suele ser peor que ruido: es la señal de
+// que el texto quedó HARDCODEADO al lado (login.loading vs "Ingresando..." en
+// auth.ts). Se cuenta como uso cualquier literal idéntico a la clave (cubre
+// `t(cond ? "a.x" : "a.y")` y claves guardadas en variables) y los prefijos de
+// las claves dinámicas (`t(\`seg.view.${k}\`)`).
+// ─────────────────────────────────────────────────────────────────────────────
+function avisarClavesMuertas() {
+  const i18n = leerDiccionario("src/core/i18n.ts", "export const I18N");
+  const exp  = leerDiccionario("src/core/i18nExport.ts", "export const EXPORT_STR");
+  const literales = new Set(), prefijos = new Set();
+  for (const f of ["index.html", ...listarSrc()]) {
+    let txt = sinComentarios(leer(f));
+    if (f.endsWith("core/i18n.ts"))       txt = txt.replace(recortarBloque(txt, txt.indexOf("{", txt.indexOf("export const I18N"))), "");
+    if (f.endsWith("core/i18nExport.ts")) txt = txt.replace(recortarBloque(txt, txt.indexOf("= {", txt.indexOf("export const EXPORT_STR")) + 2), "");
+    // Cualquier literal con forma de clave (las de EXPORT_STR pueden no tener punto: "peru").
+    for (const m of txt.matchAll(/["'=]([a-zA-Z0-9_.]+)["']/g)) literales.add(m[1]);
+    // Prefijos de claves armadas en el momento: t(`seg.view.${k}`), t("mode." + x).
+    for (const m of txt.matchAll(/`([a-zA-Z0-9_]+\.[a-zA-Z0-9_.]*)\$\{/g)) prefijos.add(m[1]);
+    for (const m of txt.matchAll(/"([a-zA-Z0-9_]+\.[a-zA-Z0-9_.]*)"\s*\+/g)) prefijos.add(m[1]);
+  }
+  const muerta = k => !literales.has(k) && ![...prefijos].some(p => k.startsWith(p));
+  const m1 = [...i18n.keys()].filter(muerta), m2 = [...exp.keys()].filter(muerta);
+  if (m1.length || m2.length) {
+    avisos.push(`[i18n] ${m1.length + m2.length} clave(s) declaradas sin ningún uso` +
+      ` (¿el texto quedó hardcodeado al lado?): ${[...m1, ...m2].join(", ")}`);
+  }
+}
+
+/** Lee un diccionario `{clave: {es, en, ru}}` → Map(clave → {es?, en?, ru?}). */
+function leerDiccionario(archivo, ancla) {
+  const src = leer(archivo);
+  const i = src.indexOf(ancla);
+  if (i < 0) return new Map();
+  const dict = recortarBloque(src, src.indexOf("{", src.indexOf("=", i)));
+  const out = new Map();
+  for (const entrada of entradasDeObjeto(dict)) {
+    const m = /^(?:"([^"]+)"|([A-Za-z_$][\w$]*))\s*:\s*(\{[\s\S]*)$/.exec(entrada.trim());
+    if (!m) continue;
+    const tr = {};
+    for (const v of m[3].matchAll(/\b(es|en|ru)\s*:\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g))
+      tr[v[1]] = v[2].slice(1, -1);
+    out.set(m[1] || m[2], tr);
+  }
+  return out;
+}
+
+/** Argumentos de primer nivel de la llamada cuyo "(" está en `ini`. */
+function argumentos(txt, ini) {
+  // Pila de contextos: "code" (con su propia profundidad de paréntesis) y "`"
+  // (texto de un template). Un `${` dentro del template abre otro "code" que se
+  // cierra con su `}` — sin la pila, una coma dentro de `${a, b}` partía el
+  // argumento, y un `)` dentro del texto del template cerraba la llamada.
+  const pila = [{ t: "code", d: 0 }];
+  let desde = ini + 1;
+  const out = [];
+  for (let i = ini; i < txt.length; i++) {
+    const c = txt[i], top = pila[pila.length - 1];
+    if (top.t === "`") {
+      if (c === "\\") { i++; continue; }
+      if (c === "$" && txt[i + 1] === "{") { pila.push({ t: "code", d: 0, tpl: true }); i++; continue; }
+      if (c === "`") pila.pop();
+      continue;
+    }
+    if (c === '"' || c === "'") {                     // string simple: saltarla entera
+      for (i++; i < txt.length && txt[i] !== c; i++) if (txt[i] === "\\") i++;
+      continue;
+    }
+    if (c === "`") { pila.push({ t: "`" }); continue; }
+    if ("([{".includes(c)) { top.d++; continue; }
+    if (")]}".includes(c)) {
+      if (c === "}" && top.tpl && top.d === 0) { pila.pop(); continue; }   // fin de ${…}
+      top.d--;
+      if (pila.length === 1 && top.d === 0) { const a = txt.slice(desde, i).trim(); if (a) out.push(a); return out; }
+      continue;
+    }
+    if (c === "," && pila.length === 1 && top.d === 1) { out.push(txt.slice(desde, i).trim()); desde = i + 1; }
+  }
+  return out;
+}
+function primerosArgumentos(txt, re) {
+  const out = [];
+  for (const m of txt.matchAll(re)) {
+    const a = argumentos(txt, txt.indexOf("(", m.index));
+    if (a.length) out.push(a[0]);
+  }
+  return out;
 }
 
 /** Quita comentarios //, /* *\/ y <!-- --> para no escanear texto de ejemplo. */
@@ -275,11 +461,16 @@ function chequearEscalaBinaria() {
 chequearAcciones();
 chequearColumnas();
 chequearI18n();
+chequearDiccionariosExport();
+chequearFrasesExport();
+chequearTernariosIdioma();
+avisarClavesMuertas();
 chequearEscalaBinaria();
 
+for (const a of avisos) console.warn(`⚠ ${a}\n`);
 if (problemas.length) {
   console.error(`\n✗ ${problemas.length} problema(s) de deriva:\n`);
   for (const p of problemas) console.error(`  [${p.chequeo}] ${p.msg}\n`);
   process.exit(1);
 }
-console.log("✓ deriva: acciones, columnas, i18n y escalas consistentes");
+console.log("✓ deriva: acciones, columnas, i18n (claves, tríos, placeholders, idioma de exportación) y escalas consistentes");

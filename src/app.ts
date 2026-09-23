@@ -1161,7 +1161,7 @@ export function renderConfigResults() {
   if (CONFIG_STATE.page >= totalPages) CONFIG_STATE.page = 0;
   const pageRows  = allRows.slice(CONFIG_STATE.page * CONFIG_STATE.PAGE_SIZE, (CONFIG_STATE.page + 1) * CONFIG_STATE.PAGE_SIZE);
   const cnt = document.getElementById("configCount");
-  if (cnt) cnt.textContent = t("cfg.resultados", { n: allRows.length, s: allRows.length!==1?"s":"" });
+  if (cnt) cnt.textContent = t(allRows.length === 1 ? "cfg.resultados1" : "cfg.resultadosN", { n: allRows.length });
 
   let html = `
     <div class="tbl-wrap">
