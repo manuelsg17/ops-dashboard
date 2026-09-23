@@ -1,0 +1,215 @@
+/* ═════════════════════════════════════════════════════════════════════════
+   tokens.css — Sistema de diseño, capa 1: TOKENS (Ola 4, sep-2026)
+
+   Tres niveles, y cada uno solo habla con el de abajo:
+
+     1. PRIMITIVOS  (--neutral-*, --brand-*, --green-*, …)
+        Valores crudos. Ningún componente ni vista los usa directo.
+     2. SEMÁNTICOS  (--color-surface, --color-text, --color-ok-fg, …)
+        Qué ES el color, no cómo se ve. Es lo único que consumen
+        components.css, ui.ts y chartTheme.ts.
+     3. COMPONENTES (components.css) — usan solo semánticos.
+
+   MODO OSCURO (planificado para después de la Ola 6): será UN bloque
+   `[data-theme="dark"] { … }` que re-apunta SOLO los semánticos (sección 2).
+   Si para el modo oscuro hace falta tocar un componente, es que ese
+   componente usó un primitivo o un hex: arreglarlo ahí, no en el tema.
+
+   NADA de este archivo cambia pantallas existentes: son custom properties
+   nuevas (sin colisión: el resto del CSS solo usa --sl-* y --au-role) y
+   no hay reglas de elemento.
+
+   CONTRASTES (WCAG 2.x, medidos con /tmp/ola4-contrast.mjs sobre #ffffff):
+     texto            #111827  17.74   · muted #4b5563 7.56 · subtle #6b7280 4.83
+     marca / on-brand #E1251B   4.69   (blanco sobre marca, y marca como texto)
+     ok   fg #15803d 5.02 · warn fg #b45309 5.02 · bad fg #b42318 6.57
+     info fg #0369a1 5.93 · over fg #6d28d9 7.10
+     (sobre su propio -bg-soft: 4.79 / 4.84 / 6.01 / 5.57 / 6.48 → AA)
+     -solid (barras, puntos; objeto gráfico, pide 3:1):
+       ok #16a34a 3.30 · warn #d97706 3.19 · bad #dc2626 4.83
+       info #0284c7 4.10 · over #7c3aed 5.70
+     --neutral-400 #9ca3af = 2.54: SOLO bordes fuertes/placeholder/disabled,
+     NUNCA texto que haya que leer (es el problema de los #aaa/#ccc de hoy).
+     --color-text-subtle (#6b7280) solo sobre surface/surface-muted: sobre
+     --neutral-100 baja a 4.39 (no AA).
+   ═════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── 1. PRIMITIVOS ─────────────────────────────────────────────────────── */
+
+  /* Neutros: UNA sola familia (gris frío), en vez de los ~31 grises casi
+     iguales + gray/slate mezclados que hay hoy. */
+  --neutral-0:   #ffffff;
+  --neutral-50:  #f9fafb;
+  --neutral-100: #f3f4f6;
+  --neutral-200: #e5e7eb;
+  --neutral-300: #d1d5db;
+  --neutral-400: #9ca3af;
+  --neutral-450: #8b929c;   /* borde de control, 3.14:1 */
+  --neutral-500: #6b7280;
+  --neutral-600: #4b5563;
+  --neutral-700: #374151;
+  --neutral-800: #1f2937;
+  --neutral-900: #111827;
+
+  /* Marca Yango. Valor canónico #E1251B (no #FF0000):
+     - #FF0000 da 4.00:1 con blanco → un botón primario con texto blanco NO
+       pasa AA (4.5:1) en texto normal. #E1251B da 4.69:1 y sigue leyéndose
+       como el rojo Yango.
+     - Al ser un valor propio, deja de chocar con el #FF0000 que hoy
+       significa también "malo", Lima, un KAM y la métrica AD.
+     Uso: marca (logo, indicador de navegación activa) y LA acción primaria
+     de cada pantalla. Nunca para estados (eso es --color-bad-*) ni series. */
+  --brand-50:  #fef3f2;
+  --brand-100: #fde4e2;
+  --brand-500: #E1251B;
+  --brand-600: #C01D17;   /* hover/pressed, 6.12:1 */
+
+  /* Estados (familias Tailwind 50/200/600/700). */
+  --green-50:  #f0fdf4; --green-200:  #bbf7d0; --green-600:  #16a34a; --green-700:  #15803d;
+  --amber-50:  #fffbeb; --amber-200:  #fde68a; --amber-600:  #d97706; --amber-700:  #b45309;
+  --red-50:    #fef2f2; --red-200:    #fecaca; --red-600:    #dc2626; --red-700:    #b42318;
+  --sky-50:    #f0f9ff; --sky-200:    #bae6fd; --sky-600:    #0284c7; --sky-700:    #0369a1;
+  --violet-50: #f5f3ff; --violet-200: #ddd6fe; --violet-600: #7c3aed; --violet-700: #6d28d9;
+
+  /* ── 2. SEMÁNTICOS (lo que el modo oscuro va a re-apuntar) ─────────────── */
+
+  /* Superficies */
+  --color-bg:              var(--neutral-100);  /* fondo de la app            */
+  --color-surface:         var(--neutral-0);    /* tarjetas, tablas, diálogos */
+  --color-surface-muted:   var(--neutral-50);   /* encabezados de tabla, hover */
+  --color-surface-sunken:  var(--neutral-100);  /* pistas de barra, inputs off */
+  --color-overlay:         rgba(17, 24, 39, .45); /* velo detrás del diálogo  */
+
+  /* Texto */
+  --color-text:            var(--neutral-900);
+  --color-text-muted:      var(--neutral-600);  /* etiquetas, secundarios     */
+  --color-text-subtle:     var(--neutral-500);  /* captions (solo sobre surface) */
+  --color-text-disabled:   var(--neutral-400);
+  --color-text-inverse:    var(--neutral-0);
+
+  /* Bordes */
+  --color-border:          var(--neutral-200);
+  --color-border-strong:   var(--neutral-300);
+  /* Borde de controles (input/select): WCAG 1.4.11 pide 3:1 para el límite
+     de un control → #8b929c = 3.14:1 (--neutral-400 daría 2.54, no alcanza). */
+  --color-border-input:    var(--neutral-450);
+
+  /* Marca / acción primaria */
+  --color-brand:           var(--brand-500);
+  --color-brand-hover:     var(--brand-600);
+  --color-brand-soft:      var(--brand-50);
+  --color-on-brand:        var(--neutral-0);
+
+  /* Roles de estado: fg (texto AA), bg-soft (fondo), border, solid (barras) */
+  --color-ok-fg:      var(--green-700);  --color-ok-bg:      var(--green-50);
+  --color-ok-border:  var(--green-200);  --color-ok-solid:   var(--green-600);
+
+  --color-warn-fg:    var(--amber-700);  --color-warn-bg:    var(--amber-50);
+  --color-warn-border:var(--amber-200);  --color-warn-solid: var(--amber-600);
+
+  --color-bad-fg:     var(--red-700);    --color-bad-bg:     var(--red-50);
+  --color-bad-border: var(--red-200);    --color-bad-solid:  var(--red-600);
+
+  --color-info-fg:    var(--sky-700);    --color-info-bg:    var(--sky-50);
+  --color-info-border:var(--sky-200);    --color-info-solid: var(--sky-600);
+
+  /* "over" = muy por encima de la meta (>150%): mismo corte y mismo morado
+     que pColor()/pEstado() hoy ("meta desalineada"). */
+  --color-over-fg:    var(--violet-700); --color-over-bg:    var(--violet-50);
+  --color-over-border:var(--violet-200); --color-over-solid: var(--violet-600);
+
+  /* Paleta CATEGÓRICA (ciudades, KAMs, series). NO incluye el rojo de marca
+     ni rojos de estado. Orden FIJO — el orden es el mecanismo de seguridad
+     para daltonismo, no es estético: validado con validate_palette.js
+     (skill dataviz) sobre #ffffff → CVD ΔE adyacente peor 9.1 (≥8),
+     visión normal peor 19.6 (≥15), croma ≥0.10. Los 3 primeros pasan
+     también "todos contra todos" (ΔE 24.0): las 3 ciudades van ahí.
+     cat-3/4/5 quedan <3:1 sobre blanco → siempre con leyenda o rótulo.
+     Una 10.ª serie no inventa color: se pliega en "Otros". */
+  --cat-1: #2a78d6;  /* azul     */
+  --cat-2: #eb6834;  /* naranja  */
+  --cat-3: #1baf7a;  /* aqua     */
+  --cat-4: #eda100;  /* amarillo */
+  --cat-5: #e87ba4;  /* magenta  */
+  --cat-6: #008300;  /* verde    */
+  --cat-7: #4a3aa7;  /* violeta  */
+  --cat-8: #1596a6;  /* cian     */
+  --cat-9: #a0621a;  /* ocre     */
+  --cat-other: var(--neutral-400);
+
+  /* Gráficos */
+  --chart-grid:  var(--neutral-200);
+  --chart-axis:  var(--neutral-300);
+  --chart-label: var(--neutral-500);
+
+  /* Foco (anillo visible por teclado) */
+  --focus-ring-color: var(--sky-600);
+  --focus-ring: 0 0 0 2px var(--color-surface), 0 0 0 4px var(--focus-ring-color);
+
+  /* ── 3. ESCALAS (no cambian con el tema) ──────────────────────────────── */
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+  /* Tipografía: 7 tamaños. Nada por debajo de 11px. */
+  --text-xs:   11px;  /* captions, pies, badges           */
+  --text-sm:   12px;  /* etiquetas, celdas densas         */
+  --text-md:   13px;  /* cuerpo de UI, tablas             */
+  --text-base: 14px;  /* cuerpo, inputs, botones md       */
+  --text-lg:   16px;  /* título de tarjeta / sección      */
+  --text-xl:   20px;  /* título de página                 */
+  --text-2xl:  28px;  /* valor de KPI                     */
+
+  --weight-regular:  400;
+  --weight-semibold: 600;
+  --weight-bold:     700;
+  --weight-kpi:      800;  /* SOLO el valor de la tarjeta KPI */
+
+  --leading-tight: 1.2;
+  --leading-normal: 1.45;
+
+  /* Espaciado: escala de 4px */
+  --space-0:  0;
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* Radios: 3 */
+  --radius-sm: 4px;    /* badges, chips pequeños, inputs      */
+  --radius-md: 8px;    /* botones, tarjetas, tablas           */
+  --radius-lg: 12px;   /* diálogos, paneles grandes           */
+  --radius-pill: 999px;
+
+  /* Sombras: 3 */
+  --shadow-sm: 0 1px 2px rgba(17, 24, 39, .06);
+  --shadow-md: 0 2px 8px rgba(17, 24, 39, .08), 0 1px 2px rgba(17, 24, 39, .04);
+  --shadow-lg: 0 12px 32px rgba(17, 24, 39, .18);
+
+  /* Layout */
+  --layout-sidebar-w:   240px;
+  --layout-content-max: 1600px;
+  --layout-header-h:    56px;
+
+  --z-dialog: 100000;   /* por encima de #loginScreen (99999) y la banda local */
+
+  --duration-fast: 120ms;
+}
+
+/* ── MODO OSCURO (placeholder, sin valores todavía) ──────────────────────────
+   Se completa al final del plan (después de la Ola 6). Solo re-apunta la
+   sección 2 (semánticos) — nunca primitivos ni componentes. La paleta
+   categórica oscura tiene que VALIDARSE contra la superficie oscura
+   (validate_palette.js --mode dark), no invertirse a ojo.
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --color-bg: …;  --color-surface: …;  --color-text: …;  …
+  --cat-1: …;  …
+}
+   ───────────────────────────────────────────────────────────────────────── */

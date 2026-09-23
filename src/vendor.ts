@@ -11,6 +11,11 @@
 // UMD del CDN, para que el código de la app (aún en scope global clásico durante
 // la transición A1→A2) las siga encontrando sin cambios:
 //   supabase.createClient · XLSX · ApexCharts · Chart · html2canvas · jspdf.jsPDF
+// Sistema de diseño (Ola 4): tokens + componentes `ui-*`. Van ANTES del CSS
+// histórico y no definen reglas de elemento (salvo :where(:focus-visible)), así
+// que ninguna pantalla existente cambia hasta que se migre a propósito.
+import "./styles/tokens.css";
+import "./styles/components.css";
 import "./styles.css";
 import { createClient } from "@supabase/supabase-js";
 
