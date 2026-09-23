@@ -13,6 +13,42 @@ import {
 import { reportYM, diasMesReporte } from "./shared/mesReporte.js";
 import { SIN_KAM } from "./core/config.js";
 import { parseLocalDate } from "./core/dates";
+import { esMesEnCurso } from "./domain/mesEnCurso";
+import { ordenarKams } from "./domain/desgloseKam";
+import { escalaLista, reintentarCuandoEscalaLista } from "./shared/escalaLista";
+import { partesAlcance } from "./shared/alcance";
+
+// ── KAM EFECTIVO DE UNA FILA DE META (B9, sep-2026) ──────────────────────────
+// El loader arma `m.kam = KAM_MAP[clid] || m.kam || ""`: cuando el partner tiene
+// el KAM VACÍO en `partners`, cae al kam guardado en la propia fila de meta (el
+// KAM viejo) o a "". Resultado: con el filtro "No KAM" esas metas no aparecían
+// (su kam era "Carla" o ""), y sin filtro se agrupaban bajo el KAM viejo
+// mientras Rendimiento y el sidebar las ponían en "No KAM" — el mismo partner en
+// dos grupos según la pantalla. Misma precedencia que el resto de la app
+// (_lineKamOf / _buildPartnerKAM): partners → flotas/filas → la propia meta.
+export function _metasKamDe(m) {
+  const k = (m && typeof getKAMForPartner === "function" && getKAMForPartner(m.partner)) || "";
+  return k || ((m && m.kam) || "").trim() || SIN_KAM;
+}
+
+// ── PROYECCIÓN SOLO PARA EL MES EN CURSO (decisión 4 de Manuel, 23-sep-2026) ──
+// "en meses pasados ya en el filtro mensual no hace sentido seguirla mostrando,
+// porque no logrará más avances en ese mes porque ya cerró". La regla vive en
+// domain/mesEnCurso.ts (la misma que usan el portal y el deck); acá solo se
+// decide UNA vez por render y la leen los cuatro helpers que dibujan barras.
+let _metasProyOn = true;
+function _metasCalcProyOn(mesName, mesYearSel, mesDates) {
+  const ord = _metasMesOrden(mesName);
+  if (!ord) return false;
+  let mes, anio = mesYearSel;
+  if (ord >= 100000) { mes = ord % 100; anio = Math.floor(ord / 100); }
+  else mes = ord - 2000;
+  // Sin año en las metas: el año de los períodos del mes que se están mirando.
+  if (anio == null && mesDates && mesDates.length) {
+    anio = reportYM(mesDates[mesDates.length - 1], STATE.curMode, parseLocalDate).y;
+  }
+  return esMesEnCurso(mes, anio);
+}
 // metas.js — Pestaña Metas
 
 // Ordena meses por valor temporal. Acepta nombres ("MAYO","Mayo","may"),
@@ -191,9 +227,11 @@ export function _metasLineDataset(line) {
 // que uno con 300).
 export function _metasFleetActuals(fechas, selSet, cityFilter) {
   const by = new Map();
+  let _snap = "";   // último período con dato (B10): "autos propios hoy"
   const _sidebar = new Set(STATE.sidebarPartners || STATE.allPartners);
   _metasLineDataset("fleet").forEach(r => {
     if (!fechas.has(r.date)) return;
+    if (r.date > _snap) _snap = r.date;
     if (cityFilter !== "all" && r.city !== cityFilter) return;
     if (selSet.size && !_lineSelHas(selSet, _sidebar, r.partner)) return;
     const k = `${r.partner}|||${r.city}`;
@@ -216,7 +254,7 @@ export function _metasFleetActuals(fechas, selSet, cityFilter) {
     // Peso de la aceptación al re-ponderar por ciudad/KAM: los viajes de las
     // filas que SÍ traían la tasa, no todos (`trips`).
     e.accTrips  = e._acc.den;
-    e.ownedNow  = snapshotValue(seriesByDate(e._owned));
+    e.ownedNow  = _snap ? (e._owned[_snap] || 0) : snapshotValue(seriesByDate(e._owned));
     delete e._owned; delete e._acc;
   });
   return by;
@@ -227,9 +265,11 @@ export function _metasFleetActuals(fechas, selSet, cityFilter) {
 // de flujo el ritmo lineal). Ver src/domain/metrics.ts.
 export function _metasTkActuals(fechas, selSet, cityFilter) {
   const by = new Map();
+  let _snap = "";   // último período con dato de la línea en el mes (B10)
   const _sidebar = new Set(STATE.sidebarPartners || STATE.allPartners);
   _metasLineDataset("tk").forEach(r => {
     if (!fechas.has(r.date)) return;
+    if (r.date > _snap) _snap = r.date;
     if (cityFilter !== "all" && r.city !== cityFilter) return;
     if (selSet.size && !_lineSelHas(selSet, _sidebar, r.partner)) return;
     const k = `${r.partner}|||${r.city}`;
@@ -244,7 +284,7 @@ export function _metasTkActuals(fechas, selSet, cityFilter) {
     e.sh += r.supplyHours || 0;   // acumulado del rango, igual que N+R (no es snapshot)
   });
   const _ult = [...fechas].sort().at(-1);
-  by.forEach(e => _finishSeries(e, _ult));
+  by.forEach(e => _finishSeries(e, _ult, _snap));
   return by;
 }
 // Actuales COMBINADOS (Taxi+TukTuk) por (partner|||city): AD = snapshot del ÚLTIMO
@@ -253,9 +293,11 @@ export function _metasTkActuals(fechas, selSet, cityFilter) {
 // fecha se suman antes de tomar el snapshot.
 export function _metasCombActuals(fechas, selSet, cityFilter) {
   const by = new Map();
+  let _snap = "";   // último período con dato de la línea en el mes (B10)
   const _sidebar = new Set(STATE.sidebarPartners || STATE.allPartners);
   _metasLineDataset("comb").forEach(r => {
     if (!fechas.has(r.date)) return;
+    if (r.date > _snap) _snap = r.date;
     if (cityFilter !== "all" && r.city !== cityFilter) return;
     if (selSet.size && !_lineSelHas(selSet, _sidebar, r.partner)) return;
     const k = `${r.partner}|||${r.city}`;
@@ -269,18 +311,23 @@ export function _metasCombActuals(fechas, selSet, cityFilter) {
     e.sh += r.supplyHours || 0;
   });
   const _ult = [...fechas].sort().at(-1);
-  by.forEach(e => _finishSeries(e, _ult));
+  by.forEach(e => _finishSeries(e, _ult, _snap));
   return by;
 }
 
 // Cierra una entrada de actuals: convierte los mapas fecha→valor en series
 // ordenadas, saca los snapshots y calcula las proyecciones. Compartido por
 // TukTuk y Combinado para que las dos líneas no puedan divergir.
-function _finishSeries(e, lastDate) {
+// `snapDate` (B10, sep-2026): el SNAPSHOT (AD, brandeados) se toma en el último
+// período del RANGO con dato en la línea, no en el último período de CADA
+// partner. Antes, un partner que dejó de operar a mitad de mes seguía aportando
+// su último AD (p.ej. el de 3 semanas atrás) al total y a su ciudad — un nivel
+// que ya no existe, y que no cuadraba con Rendimiento (que mira la última fecha).
+function _finishSeries(e, lastDate, snapDate) {
   const { daysElapsed, daysRemaining } = _metasProjDays(lastDate);
   const adS = seriesByDate(e._ad);
-  e.ad     = snapshotValue(adS);
-  e.cars   = e._cars ? snapshotValue(seriesByDate(e._cars)) : 0;
+  e.ad     = snapDate ? (e._ad[snapDate] || 0) : snapshotValue(adS);
+  e.cars   = e._cars ? (snapDate ? (e._cars[snapDate] || 0) : snapshotValue(seriesByDate(e._cars))) : 0;
   e.projAd = projADbyDate(e._ad);
   e.projNr = projectFlow(e.nr, daysElapsed, daysRemaining);
   e.projSh = projectFlow(e.sh, daysElapsed, daysRemaining);
@@ -497,6 +544,28 @@ export function _metasSinPeriodosHTML(mesName) {
 // Vive acá porque la usan TANTO el agregador como las vistas de línea — antes
 // solo la pintaba el agregador, así que cambiar a Fleet/TukTuk/Combinado hacía
 // desaparecer el selector de mes y el botón de PDF sin ninguna razón.
+// I13: los filtros del sidebar se restauran de la sesión anterior sin ningún
+// indicador. Se declaran arriba de todo y el tag de la sección deja de decir
+// "Peru" cuando lo que se muestra es un subconjunto.
+function _metasAlcance() {
+  const f = getCurrentFilters();
+  return partesAlcance({
+    city: f.city, kam: f.kam,
+    nSel: (f.selected || []).length,
+    nTotal: document.querySelectorAll("#pList input").length
+  }, t, cityLabel);
+}
+function _metasTagAlcance() {
+  const a = _metasAlcance();
+  return a.length ? escapeHTML(a.join(" · ")) : "Peru";
+}
+function _metasAlcanceHTML() {
+  const a = _metasAlcance();
+  if (!a.length) return "";
+  return `<div class="metas-escala-aviso"><span class="mea-ico">🔎</span>
+    <div><strong>${escapeHTML(t("metas.alcance", { a: a.join(" · ") }))}</strong></div></div>`;
+}
+
 function _metasControlsHTML(mesName, mesesDisponibles) {
   // Selector de mes (solo si hay 2+ meses cargados)
   const mesSelectorHTML = mesesDisponibles.length > 1
@@ -541,12 +610,13 @@ function _renderMetasLineView(cfg) {
 
   let html = metasLineToggleHTML();
   html += _metasControlsHTML(mesName, cfg.mesesDisponibles || []);
+  html += _metasAlcanceHTML();
   html += _metasEscalaAviso();
   html += _metasCoberturaAviso(cfg.cobertura, mesName);
   if (cfg.cobertura && cfg.cobertura.enRango === 0) {
     return html + `<div class="section"><div class="agy-style-224">${_metasSinPeriodosHTML(mesName)}</div></div>`;
   }
-  html += secH(icon, color, t("metas.secMes", { t: title, m: mesLabel(mesName) }), sub, "Peru");
+  html += secH(icon, color, t("metas.secMes", { t: title, m: mesLabel(mesName) }), sub, _metasTagAlcance());
 
   if (!metaRows.length) {
     html += `<div class="section"><div class="agy-style-224">${emptyHint}</div></div>`;
@@ -631,7 +701,7 @@ function _renderMetasLineView(cfg) {
   // ── 3. Por KAM ────────────────────────────────────────────────────────────
   const byKam = new Map();
   units.forEach(u => {
-    const k = (u.m.kam || "").trim() || SIN_KAM;
+    const k = _metasKamDe(u.m);
     if (!byKam.has(k)) byKam.set(k, []);
     byKam.get(k).push(u);
   });
@@ -667,7 +737,8 @@ function _renderMetasLineView(cfg) {
     const m      = u.m;
     const a      = u.a;
     const col    = STATE.partnerColors[m.partner] || color;
-    const kcolor = KAM_COLORS[m.kam] || "#888";
+    const _kam   = _metasKamDe(m);
+    const kcolor = KAM_COLORS[_kam] || "#888";
     let rows = "";
     kpis.forEach(k => {
       const mv = k.meta(m);
@@ -689,7 +760,7 @@ function _renderMetasLineView(cfg) {
         </div>
         <div class="pcard-sub">
           <span style="width:7px;height:7px;border-radius:50%;background:${kcolor};display:inline-block;margin-right:3px"></span>
-          ${escapeHTML(m.kam)} &nbsp;·&nbsp; ${escapeHTML(m.city)}
+          ${escapeHTML(_kam)} &nbsp;·&nbsp; ${escapeHTML(m.city)}
         </div>
         ${rows}
         ${cfg.partnerFoot && !m._sinMeta ? cfg.partnerFoot(m, a) : ""}
@@ -705,7 +776,7 @@ function _metasLineRows(mesName, hasLineMeta, selSet, cityFilter, kamFilter) {
   return STATE.metasData.filter(m =>
     _metasMatchMes(m, mesName, mesYearSel) &&
     hasLineMeta(m) &&
-    (kamFilter === "all" || m.kam === kamFilter) &&
+    (kamFilter === "all" || _metasKamDe(m) === kamFilter) &&
     (!selSet.size || _lineSelHas(selSet, new Set(STATE.sidebarPartners || STATE.allPartners), m.partner)) &&
     (cityFilter === "all" || m.city === cityFilter)
   ).sort((a, b) => a.partner.localeCompare(b.partner));
@@ -819,6 +890,18 @@ export let _renderMetasBusy = false;
 export function renderMetas() {
   if (_renderMetasBusy) return;
   if (!STATE.metasData.length) return;
+  // B12: ver renderRend — no pintar el FACT de otra escala bajo el rótulo de esta.
+  if (!escalaLista(STATE)) {
+    const c = document.getElementById("metasContent");
+    const e = document.getElementById("metasEmpty");
+    if (c) {
+      if (e) e.style.display = "none";
+      c.style.display = "";
+      c.innerHTML = `<div class="section"><div class="agy-style-224">${escapeHTML(t("carga.escala", { e: t("mode." + (STATE.curMode || "semanal")) }))}</div></div>`;
+    }
+    reintentarCuandoEscalaLista("metas", STATE, renderMetas, () => STATE.curTab === "metas");
+    return;
+  }
   _renderMetasBusy = true;
   try {
     _renderMetasImpl();
@@ -859,6 +942,8 @@ export function _renderMetasImpl() {
   const fechas     = new Set(mesDates);
   const cobertura  = { enRango: mesDates.length,
                        total: _metasFechasMesCompleto(mesName, mesYearSel, to).length };
+  // Decisión 4: la proyección al cierre solo se dibuja para el mes en curso.
+  _metasProyOn = _metasCalcProyOn(mesName, mesYearSel, mesDates);
 
   // Fase 3: líneas Fleet / TukTuk. Vista dedicada (meta vs actual de la línea) que
   // reemplaza el cuerpo de Metas. El agregador sigue con el flujo de abajo intacto.
@@ -875,7 +960,7 @@ export function _renderMetasImpl() {
 
   const metas = STATE.metasData.filter(m => {
     if (!_metasMatchMes(m, mesName, mesYearSel))    return false;
-    if (kamFilter !== "all" && m.kam !== kamFilter) return false;
+    if (kamFilter !== "all" && _metasKamDe(m) !== kamFilter) return false;
     // Mismo recorte de ciudad que el FACT: sin esto, con Ciudad=Arequipa los
     // totales de plan (Perú y por KAM) sumaban las metas de TODAS las ciudades
     // contra un FACT solo-Arequipa → % de cumplimiento hundido artificialmente.
@@ -971,7 +1056,13 @@ export function _renderMetasImpl() {
       ad:     adMax,
       nr:     nrSum,
       sh:     shSum,
-      lastAD: sorted[sorted.length - 1]?.ad || 0,
+      // B10 (sep-2026): el snapshot es el del ÚLTIMO PERÍODO DEL RANGO (maxDate),
+      // no el último período con dato de ESTE partner. Con el segundo, un
+      // partner que dejó de operar a mitad de mes seguía sumando su último AD
+      // al país pero no a su ciudad (que ya miraba la última fecha): en semanal
+      // AGOSTO, PUENTE PIEDRA (último dato el 10-ago) inflaba Perú en 166 y
+      // Perú ≠ Σ ciudades.
+      lastAD: bd[maxDate]?.ad || 0,
       nrV,
       shV,
       adV,      // serie por periodo: alimenta projectSnapshot (proyeccion plana)
@@ -984,7 +1075,7 @@ export function _renderMetasImpl() {
   if (cityFilter === "all") {
     const pm = {};
     metas.forEach(m => {
-      if (!pm[m.partner]) pm[m.partner] = { partner: m.partner, kam: m.kam, mA: 0, mNR: 0, mH: 0 };
+      if (!pm[m.partner]) pm[m.partner] = { partner: m.partner, kam: _metasKamDe(m), mA: 0, mNR: 0, mH: 0 };
       pm[m.partner].mA  += m.mA;
       pm[m.partner].mNR += m.mNR;
       pm[m.partner].mH  += m.mH;
@@ -1002,7 +1093,7 @@ export function _renderMetasImpl() {
   } else {
     metas.filter(m => m.city === cityFilter).forEach(m => {
       const r = getRPC(m.partner, m.city);
-      combos.push({ partner: m.partner, kam: m.kam, city: m.city,
+      combos.push({ partner: m.partner, kam: _metasKamDe(m), city: m.city,
         mA: m.mA, mNR: m.mNR, mH: m.mH,
         ad: r.lastAD, nr: r.nr, sh: r.sh,
         projAD: projADbyDate(r.adByDate),
@@ -1066,6 +1157,7 @@ export function _renderMetasImpl() {
 
   let html = metasLineToggleHTML();
   html += _metasControlsHTML(mesName, mesesDisponibles);
+  html += _metasAlcanceHTML();
   html += _metasEscalaAviso();
   html += _metasCoberturaAviso(cobertura, mesName);
   if (cobertura.enRango === 0) {
@@ -1084,7 +1176,7 @@ export function _renderMetasImpl() {
          Su FACT suma al total pero el % de cumplimiento puede verse alto.
        </div>`
     : "";
-  html += secH("🎯","#8b5cf6",t("metas.secMes",{ t: t("metas.cumplimiento"), m: mesLabel(mesName) }),t("metas.sub.progMes"),"Peru");
+  html += secH("🎯","#8b5cf6",t("metas.secMes",{ t: t("metas.cumplimiento"), m: mesLabel(mesName) }),t("metas.sub.progMes"),_metasTagAlcance());
   html += `<div class="section">${noMetaBanner}<div class="metric-row">
     ${metaResCard(t("metric.ad.label"), t("rend.per.ultimaSemana"),  tAD, tMA,  tPAD, "#8b5cf6", undefined, "metas.agg.pais.ad")}
     ${metaResCard(t("metric.nr.label"), t("metas.acumMesSub"),  tNR, tMNR, tPNR, "#f97316", undefined, "metas.agg.pais.nr")}
@@ -1098,7 +1190,7 @@ export function _renderMetasImpl() {
     // Use all metas for this city (ignore cityFilter here to always show all cities)
     const cm = STATE.metasData.filter(m => {
       if (!_metasMatchMes(m, mesName, mesYearSel))    return false;
-      if (kamFilter !== "all" && m.kam !== kamFilter) return false;
+      if (kamFilter !== "all" && _metasKamDe(m) !== kamFilter) return false;
       if (sel.length && !selSet.has(m.partner))     return false;
       return m.city === city;
     });
@@ -1133,7 +1225,9 @@ export function _renderMetasImpl() {
     // PROYECCIÓN es máx del rango × 1.4 (restaurada 29-ago-2026, ver
     // domain/metrics.ts) — potencial del mes, siempre visible sobre el FACT.
     // N+R/SH son flujos: se acumulan y se proyectan por ritmo lineal.
-    const lastAD = sorted.length ? sorted[sorted.length - 1].ad : 0;
+    // Misma fecha de snapshot que el país y los partners (B10): el último
+    // período del rango, no el último de la ciudad.
+    const lastAD = byDate[maxDate]?.ad || 0;
     const crAD = lastAD;
     const crNR = sorted.reduce((s, v) => s + v.nr, 0);
     const crSH = sorted.reduce((s, v) => s + v.sh, 0);
@@ -1165,13 +1259,14 @@ export function _renderMetasImpl() {
   // suman al FACT del KAM pero no al plan.
   html += secH("👤","#f59e0b",t("metas.secKam",{ t: t("metas.titulo") }),t("metas.sub.progResp"),"");
   html += `<div class="section"><div class="agy-style-239">`;
-  const allKAMs = [...new Set([
-    ...combos.map(c => c.kam),
-    ...Object.values(STATE.KAM_MAP).filter(k => kamFilter === "all" || k === kamFilter)
-  ])].sort();
+  // Los grupos salen de las cuentas mostradas (con y sin meta), con "No KAM"
+  // al final. Antes se mezclaban los valores crudos de KAM_MAP, que traen ""
+  // y nunca "No KAM" (B9).
+  const allKAMs = ordenarKams(combos.map(c => c.kam), SIN_KAM)
+    .filter(k => kamFilter === "all" || k === kamFilter);
   allKAMs.forEach(kam => {
     const kc   = combos.filter(c => c.kam === kam);
-    const km   = metas.filter(m => m.kam === kam);
+    const km   = metas.filter(m => _metasKamDe(m) === kam);
     if (!kc.length) return;
 
     // Partners sin meta de este KAM: ya estan dentro de kc con noMeta=true
@@ -1281,6 +1376,7 @@ export function _renderMetasImpl() {
 // numKey (opcional): clave de la huella de números (shared/huella.ts).
 export function metaResCard(label, sub, real, meta, proj, color, fmtFn, numKey) {
   const F   = fmtFn || fmt;
+  if (!_metasProyOn) proj = null;   // mes cerrado: sin proyección (decisión 4)
   // KPI solo-meta (ej. Utilización de Fleet: hay objetivo pero el dato real no
   // llega en el export). Mostrarlo con el camino normal daría "0.0% de plan",
   // que se lee como "no estamos llegando" cuando en realidad no se está
@@ -1339,7 +1435,7 @@ export function metaResCard(label, sub, real, meta, proj, color, fmtFn, numKey) 
         ${overBadge}
         <span class="agy-style-251">${escapeHTML(t("metas.dePlan", { n: F(meta) }))}</span>${numKey ? `<span${dn(numKey, "meta")} hidden>${F(meta)}</span>` : ""}
       </div>
-      <div class="agy-style-252">${barProj(pV, proj == null ? pV : ppV)}</div>
+      <div class="agy-style-252">${barProj(pV, proj == null ? null : ppV)}</div>
       ${proj == null ? "" : `<div style="font-size:.72rem;color:${pColor(pp)};margin-top:4px" title="${projTip}">
         ${escapeHTML(t("metas.proyeccion"))}: <strong${numKey ? dn(numKey, "proj") : ""}>${F(proj)}</strong> (${pp.toFixed(1)}%)
       </div>`}
@@ -1348,6 +1444,7 @@ export function metaResCard(label, sub, real, meta, proj, color, fmtFn, numKey) 
 
 export function miniBar(label, real, meta, proj, fmtFn, numKey) {
   const F   = fmtFn || fmt;
+  if (!_metasProyOn) proj = null;   // mes cerrado: sin proyección (decisión 4)
   if (real != null && !(meta > 0)) {   // sin meta — ver la nota en metaResCard
     return `<div class="agy-style-253">
       <div class="agy-style-254">
@@ -1383,7 +1480,7 @@ export function miniBar(label, real, meta, proj, fmtFn, numKey) {
           ${overBadge}
         </span>
       </div>
-      ${barProj(pV, proj == null ? pV : ppV)}
+      ${barProj(pV, proj == null ? null : ppV)}
       <div class="agy-style-256">
         ${escapeHTML(t("metas.fact"))}: ${_hn(numKey, "real", F(real))} / ${escapeHTML(t("metas.plan"))}: ${_hn(numKey, "meta", F(meta))}${proj == null ? "" : ` /
         ${escapeHTML(t("metas.proy"))} <span style="color:${pColor(pp)};font-weight:700"${numKey ? dn(numKey, "proj") : ""}>${F(proj)}</span>`}
@@ -1393,6 +1490,7 @@ export function miniBar(label, real, meta, proj, fmtFn, numKey) {
 
 export function miniBarFull(label, real, meta, proj, fmtFn, numKey) {
   const F   = fmtFn || fmt;
+  if (!_metasProyOn) proj = null;   // mes cerrado: sin proyección (decisión 4)
   const p   = meta > 0 ? (real / meta) * 100 : 0;
   const pp  = meta > 0 ? (proj / meta) * 100 : 0;
   const pV  = Math.min(p,  100);
@@ -1413,10 +1511,10 @@ export function miniBarFull(label, real, meta, proj, fmtFn, numKey) {
       <div class="agy-style-223">
         ${escapeHTML(t("metas.fact"))}: <strong${numKey ? dn(numKey, "real") : ""}>${F(real)}</strong> / ${escapeHTML(t("metas.plan"))}: <strong${numKey ? dn(numKey, "meta") : ""}>${F(meta)}</strong>
       </div>
-      ${barProj(pV, ppV)}
-      <div style="font-size:.67rem;color:${pColor(pp)};margin-top:2px">
+      ${barProj(pV, proj == null ? null : ppV)}
+      ${proj == null ? "" : `<div style="font-size:.67rem;color:${pColor(pp)};margin-top:2px">
         ${escapeHTML(t("metas.proyeccion"))}: <strong${numKey ? dn(numKey, "proj") : ""}>${F(proj)}</strong> (${pp.toFixed(1)}%)
-      </div>
+      </div>`}
     </div>`;
 }
 
