@@ -23,10 +23,11 @@
 
 import { registerActions } from "./shared/actions.js";
 import { t } from "./core/i18n";
-import { STATE } from "./core/config.js";
+import { STATE, SIN_KAM } from "./core/config.js";
 import { escapeHTML } from "./core/security";
 import { btn, badge, alertBox, emptyState, icon, segmented } from "./shared/ui";
 import { confirmDialog } from "./shared/confirmDialog";
+import { kamsCanonicos } from "./domain/partnersMaestro";
 
 export const ADMIN_USERS_STATE = {
   users: [],        // [{id,email,role,lastSignInAt}]
@@ -371,14 +372,42 @@ function _auRepintarLista() {
 }
 
 // KAM vinculado (app_metadata.kam): la Calculadora lo usa para preseleccionar
-// la cartera. La Edge Function `admin-users` todavía NO lo devuelve en "list"
-// ni tiene una acción para fijarlo, así que acá es de SOLO LECTURA: se muestra
-// si viene (u.kam, para cuando la función lo exponga) o, para la propia cuenta,
-// el que trae la sesión (STATE.myKam). Asignarlo sigue siendo por SQL.
+// la cartera. Con la Edge Function nueva ("list" devuelve la clave `kam` en
+// cada usuario y existe la acción `setKam`) se elige acá con un selector. Si la
+// función desplegada es la VIEJA (sin la clave `kam`), el bloque queda de SOLO
+// LECTURA como antes: ofrecer un selector que termina en "Acción desconocida"
+// sería peor. En ese modo se muestra el de la propia sesión (STATE.myKam).
 function _kamVinculado(u) {
   if (u.kam) return u.kam;
   if (u.id === STATE.userId && STATE.myKam) return STATE.myKam;
   return null;
+}
+function _kamEditable(u) { return Object.prototype.hasOwnProperty.call(u, "kam"); }
+
+// Lista canónica de KAMs: la MISMA que usa Configuración → Partners
+// (partners ∪ flotas, sin vacíos, ordenada). "No KAM" es un bucket de UI, nunca
+// una persona: no se ofrece.
+function _auKamsLista() {
+  return kamsCanonicos(Object.values(STATE.KAM_MAP || {}),
+                       Object.values(STATE.flotasMap || {}).map(f => f && f.kam))
+    .filter(k => k !== SIN_KAM);
+}
+
+export async function auSetKam(userId, kam) {
+  const u = ADMIN_USERS_STATE.users.find(x => x.id === userId);
+  const nuevo = (kam || "").trim();
+  if (!u || (u.kam || "") === nuevo) return;
+  showLoad(true, t("au7.kamGuardando"));
+  try {
+    await _fn("setKam", { userId, kam: nuevo || null });
+    await auLoadUsers();
+    showBanner(true, nuevo
+      ? t("au7.kamOk", { e: u.email || "", k: nuevo })
+      : t("au7.kamQuitadoOk", { e: u.email || "" }));
+  } catch (e) {
+    showBanner(false, t("au7.kamError") + (e.message || e));
+    renderAdminUsers();   // revertir el selector a su valor real
+  } finally { showLoad(false); }
 }
 
 function _auListHTML(permsByUser, clidsByUser) {
@@ -427,11 +456,30 @@ function _auListHTML(permsByUser, clidsByUser) {
       </div>` : "";
 
     const kamV = _kamVinculado(u);
-    const kamBlock = (u.role === "kam" || esAdmin) ? `
+    let kamBlock = "";
+    if (!esPartner && _kamEditable(u)) {
+      // Selector: "(ninguno)" + la lista canónica. Un valor guardado que ya no
+      // está en la lista (KAM renombrado o dado de baja) se conserva como opción
+      // marcada, para que se vea y no se pierda en silencio al re-guardar.
+      const lista = _auKamsLista();
+      const actual = u.kam || "";
+      const fuera = actual && !lista.includes(actual);
+      const opts = [`<option value=""${actual ? "" : " selected"}>${_e(t("au7.kamNinguno"))}</option>`]
+        .concat(fuera ? [`<option value="${_e(actual)}" selected>${_e(t("au7.kamFueraLista", { k: actual }))}</option>`] : [])
+        .concat(lista.map(k => `<option value="${_e(k)}"${k === actual ? " selected" : ""}>${_e(k)}</option>`));
+      kamBlock = `
+      <div class="au6-field">
+        <label class="au6-field__label" for="auKam_${uid}">${_e(t("au6.kamVinculado"))}</label>
+        <select class="ui-select ui-select--sm" id="auKam_${uid}" data-act-change="auSetKam" data-uid="${uid}">${opts.join("")}</select>
+        <span class="ui-field__hint">${_e(t("au7.kamReloginHint"))}</span>
+      </div>`;
+    } else if (u.role === "kam" || esAdmin) {
+      kamBlock = `
       <div class="au6-field">
         <div class="au6-field__label">${_e(t("au6.kamVinculado"))} <span class="au6-muted">${_e(t("au6.soloLectura"))}</span></div>
         <div>${kamV ? badge(kamV, "neutral", { icon: "user" }) : `<span class="au6-muted" title="${_e(t("au6.kamNoDisponibleTip"))}">${_e(t("au6.kamNoDisponible"))}</span>`}</div>
-      </div>` : "";
+      </div>`;
+    }
 
     // Confirmación EN LÍNEA: un borrado irreversible merece ver a quién se está
     // borrando mientras se confirma.
@@ -505,6 +553,7 @@ registerActions({
   auDelete:      d => auDeleteUser(d.uid),
   auInvite: () => auInvite(),
   auSetRole:      (d, el) => auSetRole(d.uid, el.value),
+  auSetKam:       (d, el) => auSetKam(d.uid, el.value),
   auTogglePerm:   (d, el) => auTogglePerm(d.uid, d.perm, el.checked),
   auAddClid:      d => auAddClid(d.uid),
   auRemoveClid:   d => auRemoveClid(d.mid),

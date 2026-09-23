@@ -1053,7 +1053,7 @@ export const I18N: Record<string, Record<string, string>> = {
   "au6.cerrarSesionesTitulo": { es: "¿Cerrar sus sesiones?", en: "Sign out their sessions?", ru: "Завершить его сеансы?" },
   "au6.cerrarSesionesOk": { es: "Cerrar sesiones", en: "Sign out sessions", ru: "Завершить сеансы" },
   "au6.comoVincularKam": { es: "Cómo vincular un KAM a una cuenta", en: "How to link a KAM to an account", ru: "Как связать KAM с учётной записью" },
-  "au6.comoVincularKamTxt": { es: "La Calculadora preselecciona la cartera del KAM vinculado (app_metadata.kam). Hoy se asigna por SQL en Supabase; el valor tiene que ser idéntico al de Partners (distingue mayúsculas) y la persona debe volver a iniciar sesión.", en: "The Calculator preselects the linked KAM's portfolio (app_metadata.kam). Today it is set via SQL in Supabase; the value must match Partners exactly (case-sensitive) and the person must sign in again.", ru: "Калькулятор предвыбирает портфель связанного KAM (app_metadata.kam). Сейчас он задаётся через SQL в Supabase; значение должно точно совпадать с «Партнёрами» (с учётом регистра), и человеку нужно войти заново." },
+  "au6.comoVincularKamTxt": { es: "La Calculadora preselecciona la cartera del KAM vinculado (app_metadata.kam). Elígelo en la tarjeta de la cuenta (selector «KAM vinculado»). Si ese selector no aparece, la función admin-users desplegada es la anterior: usa este SQL; el valor tiene que ser idéntico al de Partners (distingue mayúsculas). En los dos casos la persona debe volver a iniciar sesión.", en: "The Calculator preselects the linked KAM's portfolio (app_metadata.kam). Pick it on the account card (the “Linked KAM” selector). If that selector does not appear, the deployed admin-users function is the previous one: use this SQL; the value must match Partners exactly (case-sensitive). Either way the person must sign in again.", ru: "Калькулятор предвыбирает портфель связанного KAM (app_metadata.kam). Выбери его в карточке учётной записи (список «Связанный KAM»). Если списка нет, развёрнута прежняя версия функции admin-users: используй этот SQL; значение должно точно совпадать с «Партнёрами» (с учётом регистра). В обоих случаях человеку нужно войти заново." },
 
   "mon6.vacioTitulo": { es: "Monitoreo de uso", en: "Usage monitoring", ru: "Мониторинг использования" },
   "mon6.cargar": { es: "Cargar monitoreo", en: "Load monitoring", ru: "Загрузить мониторинг" },
@@ -2376,6 +2376,15 @@ export const I18N: Record<string, Record<string, string>> = {
   "p2.err.pdf":        { es: "Error al generar el PDF", en: "Error generating the PDF", ru: "Ошибка при создании PDF" },
   "p2.vacio.sinDatos":    { es: "Carga datos de Rendimiento para usar Presentación.", en: "Load Performance data to use Presentation.", ru: "Загрузите данные «Показатели», чтобы использовать презентацию." },
   "p2.vacio.sinPartners": { es: "No hay partners cargados.", en: "No partners loaded.", ru: "Партнёры не загружены." },
+
+  // ── Configuración → Usuarios: KAM vinculado editable (Ola 7, decisiones) ──
+  "au7.kamNinguno":      { es: "(ninguno)", en: "(none)", ru: "(нет)" },
+  "au7.kamFueraLista":   { es: "{k} (no está en Partners)", en: "{k} (not in Partners)", ru: "{k} (нет в «Партнёрах»)" },
+  "au7.kamReloginHint":  { es: "La persona debe volver a iniciar sesión para que se aplique.", en: "The person must sign in again for it to apply.", ru: "Чтобы изменение вступило в силу, человеку нужно войти заново." },
+  "au7.kamGuardando":    { es: "Guardando KAM vinculado…", en: "Saving linked KAM…", ru: "Сохранение связанного KAM…" },
+  "au7.kamOk":           { es: "{e} quedó vinculado a {k}. La persona debe volver a iniciar sesión para que se aplique.", en: "{e} is now linked to {k}. The person must sign in again for it to apply.", ru: "{e} теперь связан с {k}. Чтобы изменение вступило в силу, человеку нужно войти заново." },
+  "au7.kamQuitadoOk":    { es: "{e} ya no tiene KAM vinculado. La persona debe volver a iniciar sesión para que se aplique.", en: "{e} no longer has a linked KAM. The person must sign in again for it to apply.", ru: "У {e} больше нет связанного KAM. Чтобы изменение вступило в силу, человеку нужно войти заново." },
+  "au7.kamError":        { es: "No se pudo guardar el KAM vinculado: ", en: "Could not save the linked KAM: ", ru: "Не удалось сохранить связанного KAM: " },
 };
 
 let _lang = "es";

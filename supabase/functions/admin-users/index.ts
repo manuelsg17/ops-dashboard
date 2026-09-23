@@ -85,6 +85,10 @@ Deno.serve(async (req: Request) => {
         id:    u.id,
         email: u.email,
         role:  (u.app_metadata as Record<string, unknown> | null)?.role ?? "viewer",
+        // KAM vinculado (app_metadata.kam). Siempre presente (null si no hay):
+        // el cliente usa la PRESENCIA de la clave para saber que esta versión
+        // de la función ya soporta `setKam`.
+        kam:   ((u.app_metadata as Record<string, unknown> | null)?.kam as string | undefined) ?? null,
         lastSignInAt: u.last_sign_in_at,
         createdAt:    u.created_at
       }));
@@ -128,6 +132,25 @@ Deno.serve(async (req: Request) => {
       });
       if (error) throw error;
       return json(req, { ok: true, userId, role });
+    }
+
+    // ── FIJAR / QUITAR el KAM vinculado (app_metadata.kam) ──────────────────
+    // La Calculadora lo usa para preseleccionar la cartera (STATE.myKam). Mismo
+    // camino que setRole: updateUserById hace MERGE de app_metadata (no pisa
+    // `role`). kam = null o "" lo QUITA (GoTrue borra la clave con null). Como
+    // el rol, se hornea en el JWT: aplica cuando la persona vuelve a entrar.
+    if (action === "setKam") {
+      const userId = String(body.userId || "");
+      if (!userId) return json(req, { error: "Falta userId." }, 400);
+      const raw = body.kam;
+      if (raw != null && typeof raw !== "string") return json(req, { error: "KAM inválido." }, 400);
+      const kam = raw == null ? "" : raw.trim();
+      if (kam.length > 60) return json(req, { error: "KAM inválido: máximo 60 caracteres." }, 400);
+      const { error } = await admin.auth.admin.updateUserById(userId, {
+        app_metadata: { kam: kam || null }
+      });
+      if (error) throw error;
+      return json(req, { ok: true, userId, kam: kam || null });
     }
 
     // ── ELIMINAR usuario (irreversible) ─────────────────────────────────────
