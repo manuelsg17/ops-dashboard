@@ -30,6 +30,8 @@ export interface ConfirmDialogOptions {
   danger?: boolean;
   /** Hay que teclear este texto EXACTO para habilitar Confirmar (p.ej. "JULIO"). */
   requireText?: string;
+  /** Con requireText: aceptar sin distinguir mayúsculas ("ana" vale por "Ana"). El texto se muestra igual, exacto. */
+  requireTextIgnoreCase?: boolean;
 }
 
 export interface AlertDialogOptions {
@@ -126,8 +128,9 @@ export function confirmDialog(o: ConfirmDialogOptions): Promise<boolean> {
       lbl.append(txt, input);
       content.appendChild(lbl);
       ok.disabled = true;
-      const need = o.requireText;
-      input.addEventListener("input", () => { ok.disabled = (input as HTMLInputElement).value.trim() !== need; });
+      const norm = (v: string): string => (o.requireTextIgnoreCase ? v.trim().toLocaleLowerCase() : v.trim());
+      const need = o.requireTextIgnoreCase ? norm(o.requireText) : o.requireText;
+      input.addEventListener("input", () => { ok.disabled = norm((input as HTMLInputElement).value) !== need; });
     }
 
     let done = false;

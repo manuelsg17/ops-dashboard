@@ -2288,10 +2288,15 @@ export async function calcDeleteMetasKam() {
   if (!afectadas.length) { await _calcAviso(t("calc.dlg.nadaBorrarTitulo"), t("calc.borrarKamSinMetas", { k: CALC_STATE.kam, m: mesName })); return; }
 
   const mesTxt = `${mesLabel(mesName)} ${mesYear ?? ""}`.trim();
+  // Hay que TECLEAR el nombre del KAM (tal cual se ve en el selector; da igual
+  // mayúsculas/minúsculas): lo irreversible no se acepta por reflejo. Decisión
+  // de Manuel (24-sep-2026). Cancelar o un nombre que no coincide = no pasa nada.
+  const kamTxt = kamLabel(CALC_STATE.kam);
   if (!(await confirmDialog({
-    title: t("calc.dlg.borrarTitulo", { kam: kamLabel(CALC_STATE.kam), mes: mesTxt }),
-    body: t("calc.conf.borrarKam", { kam: CALC_STATE.kam, mes: mesTxt, n: afectadas.length, m: mesLabel(mesName) }),
-    confirmLabel: t("calc.dlg.borrarOk", { n: afectadas.length }), danger: true
+    title: t("calc.dlg.borrarTitulo", { kam: kamTxt, mes: mesTxt }),
+    body: t("calc.conf.borrarKam", { kam: kamTxt, mes: mesTxt, n: afectadas.length, m: mesLabel(mesName) }),
+    confirmLabel: t("calc.dlg.borrarOk", { n: afectadas.length }), danger: true,
+    requireText: kamTxt, requireTextIgnoreCase: true
   }))) return;
 
   showLoad(true, t("calc.borrandoMetas"));

@@ -82,6 +82,20 @@ describe("confirmDialog", () => {
     expect(await p).toBe(true);
   });
 
+  it("requireTextIgnoreCase: 'ana' vale por 'Ana', se muestra el nombre exacto; otro texto no", async () => {
+    const p = confirmDialog({ title: "Eliminar metas de Ana", danger: true, requireText: "Ana", requireTextIgnoreCase: true });
+    const input = document.querySelector(".ui-dialog input") as HTMLInputElement;
+    const ok = btns()[1];
+    expect(dlg().querySelector("code")?.textContent).toBe("Ana");
+    const typ = (v: string) => { input.value = v; input.dispatchEvent(new Event("input", { bubbles: true })); };
+    typ("An");      expect(ok.disabled).toBe(true);
+    typ("Bruno");   expect(ok.disabled).toBe(true);
+    typ("  aNA ");  expect(ok.disabled).toBe(false);
+    typ("ana x");   expect(ok.disabled).toBe(true);
+    btns()[0].click();
+    expect(await p).toBe(false);
+  });
+
   it("title/body se insertan como TEXTO, no como HTML", async () => {
     const p = confirmDialog({ title: `<img src=x onerror=alert(1)>`, body: `<b>hola</b>` });
     expect(dlg().querySelector("img")).toBeNull();
