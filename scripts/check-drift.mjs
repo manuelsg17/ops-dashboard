@@ -229,8 +229,10 @@ function chequearTernariosIdioma() {
       if (/i18n-binario-ok/.test(leer(f).split("\n")[i] || "")) return;
       // Sin el TEXTO de los strings (una frase en español puede decir "es ?"),
       // pero conservando los códigos de idioma, que es lo que se busca.
+      // (Con un callback y no con un lookahead: el lookahead volvía a arrancar
+      // en la comilla de CIERRE de "es" y se comía el `?` que se busca.)
       const codigo = ln
-        .replace(/"(?!(?:es|en|ru)")(?:[^"\\]|\\.)*"/g, '""')
+        .replace(/"(?:[^"\\]|\\.)*"/g, s => /^"(?:es|en|ru)"$/.test(s) ? s : '""')
         .replace(/'(?:[^'\\]|\\.)*'/g, "''")
         .replace(/`[^`]*`/g, "``");
       if (R_IGUAL.test(codigo) || R_FLAG.test(codigo) || R_DEF.test(codigo))

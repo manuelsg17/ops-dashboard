@@ -2,7 +2,7 @@
 import { ensureHtml2Canvas } from "./shared/lazyLibs.js";
 import { t, mesLabel, kamLabel } from "./core/i18n";
 import { MES_NOMBRES, mesNombre } from "./core/meses";
-import { EXPORT_STR, pick, fmtL, fmtSmartL, localeDe, ciudadL } from "./core/i18nExport";
+import { EXPORT_STR, pick, fmtL, fmtSmartL, localeDe, ciudadL, exportLang } from "./core/i18nExport";
 import { validarMetas, mensajeMetasInvalidas } from "./domain/metasGuard";
 import { repartirPorLinea, pesoNaturalTk, splitPorFraccion } from "./domain/repartoLinea.js";
 import { hayProgresoSinGuardar, draftAplica, debePreseleccionarKam } from "./domain/calcDraft.js";
@@ -1369,7 +1369,7 @@ export function _calcLab(key, lang) {
 }
 // Idioma de los NÚMEROS de la tarjeta: la bilingüe ES/EN usa el formato de
 // siempre (es-PE); en/ru, el suyo ("2 415" y "12,5" en ruso).
-export function _calcNumLang(lang) { return lang === "en" || lang === "ru" ? lang : "es"; }
+export function _calcNumLang(lang) { return exportLang(lang); }
 
 // Celda de tabla: meta (número grande) + resultado del último mes y % de crecimiento
 // pedido (verde si sube, rojo si baja, gris si es mantener). actual = valor real del
