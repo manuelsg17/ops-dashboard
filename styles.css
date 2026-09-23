@@ -10,11 +10,35 @@ body {
   min-height: 100vh;
 }
 
+/* ── ARRANQUE (Ola 2, V1) ─────────────────────────────────────────────────── */
+/* Visible por defecto; auth.ts la quita al decidir entre la app y el login. */
+#bootSplash {
+  position: fixed; inset: 0;
+  background: #F2F2F2;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+  z-index: 99998;
+}
+#bootSplash .boot-logo {
+  width: 52px; height: 52px; background: #FF0000; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+}
+#bootSplash .boot-logo svg { width: 28px; height: 28px; }
+#bootSplash .boot-bar { width: 120px; height: 3px; border-radius: 3px; background: #e5e5e5; overflow: hidden; }
+#bootSplash .boot-bar span {
+  display: block; width: 40%; height: 100%; background: #bbb; border-radius: 3px;
+  animation: bootBar 1.1s ease-in-out infinite;
+}
+@keyframes bootBar { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
+@media (prefers-reduced-motion: reduce) { #bootSplash .boot-bar span { animation: none; } }
+
 /* ── LOGIN ────────────────────────────────────────────────────────────────── */
+/* OCULTO por defecto (Ola 2, V1): lo muestra showLoginScreen() (auth.ts) solo
+   cuando de verdad no hay sesión. Antes era lo visible por defecto y parpadeaba
+   en cada apertura con sesión guardada. */
 #loginScreen {
   position: fixed; inset: 0;
   background: #F2F2F2;
-  display: flex; align-items: center; justify-content: center;
+  display: none; align-items: center; justify-content: center;
   z-index: 99999;
 }
 .login-box {

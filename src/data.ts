@@ -13,7 +13,9 @@
 // Import explícito (no global bare): el caché se consulta al ARRANQUE, antes de
 // que muchas cosas estén listas, y no vale la pena que dependa del espejado a
 // window de vendor.js.
-import { snapshotLoad, snapshotSave, snapshotClear } from "./data/cache.js";
+import { snapshotLoad, snapshotSave, snapshotTouch, snapshotClear } from "./data/cache.js";
+import { perfMark, perfMeasure, perfNote } from "./shared/perf";
+import { huellaDatos } from "./shared/huellaDatos";
 import { t } from "./core/i18n";
 // Formulas de proyeccion: una sola definicion para todo el dashboard.
 import { projectFlow, projectSnapshot, dropDuplicatePeriods } from "./domain/metrics.js";
@@ -465,7 +467,14 @@ async function _authToken() {
   _authTokenInFlight = (async () => {
     try {
       const { data: { session } } = await sb.auth.getSession();
-      _authTokenCache = (session && session.access_token) || SUPABASE_ANON_KEY;
+      // Sin sesión válida (p.ej. el refresh del token falló: revocado o vencido)
+      // NO se pide nada con la anon key: antes caía a ella y la carga seguía
+      // como si nada. Con el arranque provisional (Ola 2, V1, ver auth.ts) esto
+      // es lo que garantiza que ningún dato salga de la red sin un token vigente.
+      if (!session || !session.access_token) {
+        throw Object.assign(new Error(t("estado.sesionNoValida")), { sinSesion: true });
+      }
+      _authTokenCache = session.access_token;
       _authTokenAt = Date.now();
       return _authTokenCache;
     } finally {
@@ -528,7 +537,7 @@ async function _pgFetchCritico(table, query) {
 async function _pgFetchConReintento(table, query) {
   try { return await _pgFetchCritico(table, query); }
   catch (e) {
-    console.error(`Error al recargar ${table}:`, e);
+    if (!(e && e.sinSesion)) console.error(`Error al recargar ${table}:`, e);
     return _FETCH_FAILED;
   }
 }
@@ -546,6 +555,45 @@ async function _pgFetchConReintento(table, query) {
 // la ventana semanal, ver _fetchRendSemanal). Va con `append`, no `set`: sobre
 // la misma columna que `gte` son dos parámetros repetidos, que PostgREST combina
 // con AND (`fecha=gte.X&fecha=lt.Y`); `set` pisaría el primero.
+// ── PÁGINAS ESPECULATIVAS (Ola 2, V5) ──────────────────────────────────────
+// Antes, las páginas 1..N-1 esperaban al HEAD de conteo: un round-trip entero en
+// serie para toda tabla de más de 1000 filas (diario siempre; semanal en
+// producción, ~1.1k-1.4k filas en la ventana). Ahora se disparan JUNTO con la
+// página 0 y el HEAD, estimando cuántas hay con el último conteo conocido de
+// esa misma consulta. El HEAD sigue mandando: si se estimó de menos, se piden
+// las que faltan; si se estimó de más, la página sobrante vuelve vacía (416 de
+// PostgREST) y se descarta. Sin conteo previo (primera vez) = como antes.
+// Solo son conteos de filas (nada de negocio); igual se borran en el logout.
+export const PG_EST_LS_KEY = "yangoPgCount";
+const _PG_EST_MAX_PAGINAS = 20;   // tope: una estimación rara no dispara una tormenta de requests
+function _pgEstClave(table, cols, gte, lt) {
+  return `${table}|${cols.length}|${(gte && gte.col) || ""}|${lt && lt.value ? 1 : 0}`;
+}
+function _pgEstLeer(k) {
+  try { return +(JSON.parse(localStorage.getItem(PG_EST_LS_KEY) || "{}")[k]) || 0; } catch (_) { return 0; }
+}
+function _pgEstGuardar(k, n) {
+  try {
+    const m = JSON.parse(localStorage.getItem(PG_EST_LS_KEY) || "{}");
+    if (m[k] === n) return;
+    m[k] = n;
+    localStorage.setItem(PG_EST_LS_KEY, JSON.stringify(m));
+  } catch (_) { /* storage bloqueado: solo se pierde la estimación */ }
+}
+// Nunca rechaza: [] si la página no existe (416), null si falló por otra causa
+// (el llamador la vuelve a pedir por el camino normal, que sí lanza).
+async function _pgPaginaEspeculativa(table, query, desde, hasta) {
+  try {
+    const token = await _authToken();
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}${query}`, {
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, Range: `${desde}-${hasta}` }
+    });
+    if (res.status === 416) return [];
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (_) { return null; }
+}
+
 export async function fetchAllPages(table, orderCol, opts = {}) {
   const gte = opts.gte;
   const lt  = opts.lt;
@@ -556,6 +604,7 @@ export async function fetchAllPages(table, orderCol, opts = {}) {
   const query = `?${params.toString()}`;
 
   const PAGE = 1000;
+  const estClave = _pgEstClave(table, cols, gte, lt);
 
   // 1. Página 0 se DISPARA (no se espera todavía) + HEAD de conteo se espera
   // SOLO A ÉL. Bug encontrado en producción dos veces seguidas: la primera vez
@@ -570,6 +619,15 @@ export async function fetchAllPages(table, orderCol, opts = {}) {
   // con las demás.
   const token = await _authToken();
   const firstPagePromise = _pgFetch(table, query, { Range: `0-${PAGE - 1}` });   // dispara YA, no se espera aún
+  // Si la página 0 rechaza mientras se espera al HEAD, el rechazo queda
+  // observado acá; el Promise.all de _fetchAllPagesWithCount lo vuelve a recibir.
+  firstPagePromise.catch(() => {});
+  // V5: páginas 1..k-1 especulativas, en el mismo instante que la 0 y el HEAD.
+  const especulativas = new Map();
+  const estPaginas = Math.min(_PG_EST_MAX_PAGINAS, Math.ceil(_pgEstLeer(estClave) / PAGE));
+  for (let i = 1; i < estPaginas; i++) {
+    especulativas.set(i, _pgPaginaEspeculativa(table, query, i * PAGE, (i + 1) * PAGE - 1));
+  }
   const countRes = await fetch(`${SUPABASE_URL}/rest/v1/${table}${query}`, {
     method: "HEAD",
     headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, Prefer: "count=exact" }
@@ -587,25 +645,34 @@ export async function fetchAllPages(table, orderCol, opts = {}) {
       headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, Prefer: "count=exact" }
     });
     if (!retryRes.ok) throw new Error(`Error ${retryRes.status} al contar filas de ${table}`);
-    return _fetchAllPagesWithCount(table, query, PAGE, retryRes, firstPagePromise);
+    return _fetchAllPagesWithCount(table, query, PAGE, retryRes, firstPagePromise, especulativas, estClave);
   }
-  return _fetchAllPagesWithCount(table, query, PAGE, countRes, firstPagePromise);
+  return _fetchAllPagesWithCount(table, query, PAGE, countRes, firstPagePromise, especulativas, estClave);
 }
 
-async function _fetchAllPagesWithCount(table, query, PAGE, countRes, firstPagePromise) {
+async function _fetchAllPagesWithCount(table, query, PAGE, countRes, firstPagePromise, especulativas = new Map(), estClave = null) {
   const range = countRes.headers.get("content-range") || "";
   const count = +(range.split("/")[1] || 0);
+  if (estClave) _pgEstGuardar(estClave, count);
   if (!count) return [];
 
   const pages = Math.ceil(count / PAGE);
   if (pages <= 1) return await firstPagePromise;
 
-  // Páginas 1..N-1 disparadas AHORA (apenas se supo `count` por el HEAD, sin
-  // esperar a la página 0) + la página 0 ya en vuelo, todas juntas en un solo
-  // Promise.all → paralelismo real entre las N páginas.
-  const restReqs = Array.from({ length: pages - 1 }, (_, i) =>
-    _pgFetch(table, query, { Range: `${(i + 1) * PAGE}-${(i + 2) * PAGE - 1}` })
-  );
+  // Páginas 1..N-1: las que ya salieron especulativas se reutilizan (si alguna
+  // falló, se vuelve a pedir por el camino normal, que sí lanza); las que no
+  // se estimaron se disparan AHORA, apenas se supo `count`. La página 0 ya
+  // estaba en vuelo: todas juntas en un solo Promise.all.
+  const restReqs = Array.from({ length: pages - 1 }, (_, k) => {
+    const i = k + 1;
+    const normal = () => _pgFetch(table, query, { Range: `${i * PAGE}-${(i + 1) * PAGE - 1}` });
+    const esp = especulativas.get(i);
+    // Filas esperadas en esta página según el HEAD. Si la especulativa trajo
+    // otra cantidad (la tabla cambió entre medio, o falló), se descarta y se
+    // pide de nuevo: nunca se acepta una página incompleta en silencio.
+    const esperadas = Math.min(PAGE, count - i * PAGE);
+    return esp ? esp.then(r => (r == null || r.length !== esperadas ? normal() : r)) : normal();
+  });
   const [firstPage, ...rest] = await Promise.all([firstPagePromise, ...restReqs]);
   const rows = firstPage.slice();
   for (const data of rest) if (data) rows.push(...data);
@@ -794,19 +861,65 @@ function _setRefreshing(on, snapAt) {
 // Antigüedad del snapshot pintado, para que el indicador la muestre.
 let _snapAt = 0;
 
-async function _hydrateFromCache() {
-  let snap = null;
-  try { snap = await snapshotLoad(); } catch (e) { snap = null; }
+// Huellas (shared/huellaDatos.ts) de lo que quedó pintado desde el caché: núcleo
+// (partners/rendimiento semanal/fleetrooms/flotas/ventana), diferidas
+// (metas/proyectos/seguimiento) y la escala alternativa. Si la red trae lo mismo,
+// no se re-aplica ni se re-renderiza (Ola 2, V4). null = nada comparable.
+let _snapFp = { core: null, def: null, alt: null };
+
+// Escala guardada por el usuario (la que restoreFilters le pondría), si no es la
+// semanal. Ola 2, V3: se pide desde el arranque en vez de pintar semanal de más.
+function _escalaGuardada() {
+  try {
+    const m = JSON.parse(localStorage.getItem("yangoFilters") || "{}").mode;
+    return m === "mensual" || m === "diario" ? m : null;
+  } catch (_) { return null; }
+}
+function _marcarBotonesEscala(mode) {
+  document.querySelectorAll('.mode-btn[data-act="switchMode"]').forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.mode === mode);
+  });
+}
+function _datasetDeEscala(esc) {
+  return esc === "mensual" ? STATE.rawDataMensual : esc === "diario" ? STATE.rawDataDiario : STATE._semanalData;
+}
+const _FLAG_ESCALA = { mensual: "_mensualLoaded", diario: "_diarioLoaded" };
+
+// `alt` = escala guardada (mensual/diario) o null. `epoca` = la de la sesión que
+// pidió la carga: si cambió mientras se leía IndexedDB (logout, o la sesión
+// provisional no se pudo validar — ver auth.ts), no se pinta nada.
+async function _hydrateFromCache(alt, epoca) {
+  let snap = null, snapAlt = null;
+  try {
+    [snap, snapAlt] = await Promise.all([snapshotLoad(), alt ? snapshotLoad(alt) : null]);
+  } catch (e) { snap = null; }
+  if ((STATE._authEpoch || 0) !== epoca) return false;
   if (!snap || !snap.rend || !snap.rend.length) return false;
   try {
     if (!STATE._allPeriods) STATE._allPeriods = {};
     if (snap.periodos && snap.periodos.length) STATE._allPeriods.semanal = snap.periodos;
     STATE._loadedFrom = snap.winStart;
     _applyCoreData(snap.partners, snap.rend, snap.frooms, snap.flotas, { resetLine: true });
+    // V3: la escala guardada también desde el caché, con los mapas del núcleo
+    // recién aplicado. Sin su snapshot, la vista queda en "Cargando…" (guard de
+    // escala, shared/escalaLista.ts) hasta que llegue de la red — nunca muestra
+    // números semanales bajo el rótulo de la otra escala.
+    const altRows = alt && snapAlt && Array.isArray(snapAlt.rows) && snapAlt.rows.length ? snapAlt.rows : null;
+    if (altRows) {
+      _applyEscalaRows(alt, altRows);
+      if (STATE.curMode === alt) STATE.rawData = _datasetDeEscala(alt);
+    }
     _indexCoreData();
     _renderActiveTabAfterLoad();
+    if (altRows && typeof renderFrescura === "function") renderFrescura();
+    perfMark("paint:cache");
     _applyMetasProyectosSeguimiento(snap.metas, snap.proyectos, snap.seguimiento);
-    _snapAt = snap.at || 0;
+    _snapAt = altRows ? Math.min(snap.at || 0, snapAlt.at || 0) : (snap.at || 0);
+    _snapFp = {
+      core: (snap.fp && snap.fp.core) || null,
+      def:  (snap.fp && snap.fp.def)  || null,
+      alt:  altRows ? (snapAlt.fp || null) : null
+    };
     return true;
   } catch (e) {
     // Snapshot incompatible con el pipeline actual (ej. se agregó una columna
@@ -814,6 +927,7 @@ async function _hydrateFromCache() {
     // a medio pintar con datos que no se pudieron procesar.
     if (typeof DEBUG !== "undefined" && DEBUG) console.warn("Caché descartado:", e);
     snapshotClear();
+    _snapFp = { core: null, def: null, alt: null };
     return false;
   }
 }
@@ -879,6 +993,12 @@ async function _fetchRendSemanal(pPeriodos, from) {
 // ninguna explicación — que es exactamente el bug que reportó Manuel.
 export async function loadFromSupabase(opts = {}) {
   let refrescoCompleto = true;
+  // Época de la sesión (auth.ts la incrementa al limpiar el estado): si cambia
+  // mientras esta carga está en vuelo — logout, o una sesión provisional que el
+  // refresh del token no pudo validar (Ola 2, V1) — no se aplica, no se pinta y
+  // no se guarda nada de lo que llegue.
+  const epoca = STATE._authEpoch || 0;
+  const vigente = () => (STATE._authEpoch || 0) === epoca;
   // El caché solo aplica al arranque limpio. Un re-load tras un upload o un
   // ensanche de ventana (opts.from) DEBE ir a la red sí o sí — mostrarle a
   // alguien el snapshot viejo justo después de subir un Excel sería el peor
@@ -887,12 +1007,20 @@ export async function loadFromSupabase(opts = {}) {
   // OJO con el check: STATE.rawDataFull arranca como [] (truthy), así que hay
   // que mirar .length — un `!STATE.rawDataFull` a secas nunca sería true y el
   // caché quedaría muerto en silencio.
-  if (opts.useCache !== false && !opts.from && !(STATE.rawDataFull || []).length) {
-    _paintedFromCache = await _hydrateFromCache();
-  }
+  const arranque = opts.useCache !== false && !opts.from && !(STATE.rawDataFull || []).length;
 
-  if (_paintedFromCache) _setRefreshing(true, _snapAt);
-  else showLoad(true, "Cargando datos desde Supabase...");
+  // V3 (Ola 2): escala guardada. Se fija ANTES de pintar nada: así el pipeline
+  // arma directamente esa escala, restoreFilters no dispara un switchMode (que
+  // recién la pedía cuando terminaba el núcleo: un round-trip más en serie) y no
+  // se renderiza la semanal de más.
+  const alt = arranque ? _escalaGuardada() : null;
+  if (alt) { STATE.curMode = alt; _marcarBotonesEscala(alt); }
+  let resolverAlt = null;
+  if (alt) {
+    // Durante el arranque, quien pida esta escala (precarga en idle, switchMode,
+    // invalidarDerivados) espera a esta revalidación en vez de descargarla de nuevo.
+    _scaleInflight[alt] = new Promise(r => { resolverAlt = r; });
+  }
 
   try {
     // ── Ventana de carga (Fase A3) ─────────────────────────────────────────
@@ -904,6 +1032,12 @@ export async function loadFromSupabase(opts = {}) {
     // usuario elige un "Desde" fuera de lo cargado).
     if (!STATE._allPeriods) STATE._allPeriods = {};
 
+    // V2 (Ola 2): TODA la red sale ANTES de hidratar el caché. Antes se esperaba
+    // a leer IndexedDB + aplicar + renderizar el snapshot y recién ahí se
+    // disparaban los requests: ese tiempo de CPU se sumaba en serie al primer
+    // round-trip. Ahora corren en paralelo (los requests igual esperan al token
+    // vigente, ver _authToken).
+    //
     // partners / fleetrooms / flotas NO dependen de la ventana de fechas, así que
     // se disparan JUNTO con la RPC de períodos en vez de esperarla. Antes el
     // `await fetchAllPeriods` las bloqueaba: ~116ms de RPC + el round-trip a
@@ -936,7 +1070,7 @@ export async function loadFromSupabase(opts = {}) {
     // (devuelve [] ante error), así que esta promesa no puede quedar como
     // rechazo sin handler.
     const pPeriodos = fetchAllPeriods("semanal").then(p => {
-      if (p.length) STATE._allPeriods.semanal = p;
+      if (p.length && vigente()) STATE._allPeriods.semanal = p;
       return p;
     });
 
@@ -954,8 +1088,6 @@ export async function loadFromSupabase(opts = {}) {
     // ventana por defecto a 6 semanas. Ahora cada login SIEMPRE arranca con el
     // default; ensanchar el rango es una acción explícita de la sesión actual,
     // no algo que se herede silenciosamente de la anterior.
-    // Ya no hay ningún `await` entre crear estas promesas y juntarlas en
-    // `critical`: si una rechaza temprano, ya tiene quien la observe.
     const pRend = _fetchRendSemanal(pPeriodos, opts.from);
 
     // 1. Partners + Rendimiento semanal (ventaneado) + fleetrooms + flotas EN
@@ -978,27 +1110,92 @@ export async function loadFromSupabase(opts = {}) {
       pFlotas
     ]);
     // OJO: `deferred` solo junta las respuestas crudas, NO las procesa acá — el
-    // procesamiento (más abajo, `deferred.then(...)`) necesita CLID_MAP/
-    // flotasMap ya construidos, y ese `.then` se registra DESPUÉS de que este
-    // bloque los arma. Si se procesara acá arriba, al registrarse ANTES de
-    // `await critical` correría en cuanto resuelva esta Promise.all sin
-    // importar si `critical` ya terminó — condición de carrera real si
-    // metas/proyectos/seguimiento resuelven más rápido que partners/rendimiento.
+    // procesamiento (más abajo) necesita CLID_MAP/flotasMap ya construidos. Si
+    // se procesara al resolver, correría sin importar si `critical` ya terminó
+    // — condición de carrera real si metas/proyectos/seguimiento resuelven más
+    // rápido que partners/rendimiento. `_pgFetchConReintento` nunca rechaza.
     const deferred = Promise.all([
       _pgFetchConReintento("metas", "?select=*"),
       _pgFetchConReintento("proyectos", "?select=*&order=semana.desc"),
       _pgFetchConReintento("seguimiento", "?select=*&order=partner.asc,sort_order.asc,start_date.asc")
     ]);
+    // V3: la escala guardada, en paralelo con todo lo anterior.
+    const pAlt = alt ? _fetchEscalaRaw(alt) : null;
+    // Entre crear estas promesas y esperarlas hay un `await` (la hidratación
+    // del caché): si una rechaza en ese hueco, sin esto quedaría como rechazo
+    // sin handler. El `await` de más abajo recibe el error igual.
+    critical.catch(() => {});
+    if (pAlt) pAlt.catch(() => {});
+
+    if (arranque) {
+      _paintedFromCache = await _hydrateFromCache(alt, epoca);
+      if (!vigente()) return false;
+    }
+    if (_paintedFromCache) _setRefreshing(true, _snapAt);
+    else showLoad(true, "Cargando datos desde Supabase...");
+
     const [partners, rendSem, frooms, flotas] = await critical;
+    if (!vigente()) return false;
     const { rows: rend, periodos: periodosSem, loadedFrom: winStart } = rendSem;
     STATE._loadedFrom = winStart;   // desde dónde hay datos en memoria DE VERDAD
-    _applyCoreData(partners, rend, frooms, flotas, { resetLine: !_paintedFromCache });
-    _indexCoreData();
+    perfMark("net:critical");
 
-    const warnSuffix = STATE.parseWarnings.size
-      ? ` · ⚠ ${STATE.parseWarnings.size} campo(s) inválido(s)` : "";
-    showBanner(true, t("estado.datosCargados") + " · " + new Date().toLocaleTimeString("es-PE") + warnSuffix);
-    _renderActiveTabAfterLoad();
+    // V4: ¿la red trajo exactamente lo que ya está pintado desde el caché?
+    // (huella de las filas completas de las 4 tablas + la ventana: incluye el
+    // tagging, que cambia números sin cambiar ninguna fila de rendimiento.)
+    const fpCore = perfMeasure("huella", () => huellaDatos([partners, rend, frooms, flotas, periodosSem, winStart]));
+    const coreIgual = _paintedFromCache && !!_snapFp.core && _snapFp.core === fpCore;
+    perfNote("huella", { cache: _snapFp.core, red: fpCore, alt: alt || null });
+
+    // V3: la escala guardada se aplica junto con el núcleo (usa sus mapas).
+    let altRows = null, altError = null;
+    if (pAlt) {
+      try { altRows = await pAlt; } catch (e) { altError = e; }
+      if (!vigente()) return false;
+    }
+    const fpAlt = altRows ? huellaDatos([altRows]) : null;
+    const altIgual = coreIgual && !!altRows && !!_snapFp.alt && _snapFp.alt === fpAlt;
+
+    const bannerOk = () => {
+      const warnSuffix = STATE.parseWarnings.size
+        ? ` · ⚠ ${STATE.parseWarnings.size} campo(s) inválido(s)` : "";
+      showBanner(true, t("estado.datosCargados") + " · " + new Date().toLocaleTimeString("es-PE") + warnSuffix);
+    };
+    if (coreIgual && (!alt || altIgual)) {
+      // Nada cambió: lo que está en pantalla ES lo que hay en la base. Se evita
+      // el segundo render completo (y el parpadeo de las gráficas).
+      perfMark("render2:skipped");
+      bannerOk();
+    } else {
+      perfMeasure("render2", () => {
+        if (!coreIgual) _applyCoreData(partners, rend, frooms, flotas, { resetLine: !_paintedFromCache });
+        if (altRows && !altIgual) _applyEscalaRows(alt, altRows);
+        // Solo si el usuario sigue en esa escala: pudo cambiarla (switchMode)
+        // mientras la red estaba en vuelo, y ahí manda su elección.
+        if (alt && STATE.curMode === alt) {
+          if (altRows) STATE.rawData = _datasetDeEscala(alt);
+          else if (!STATE[_FLAG_ESCALA[alt]]) {
+            // La escala guardada no llegó y tampoco hay caché de ella: se muestra
+            // la semanal (con el error a la vista, abajo) en vez de dejar la
+            // pantalla en "Cargando…" para siempre.
+            STATE.curMode = "semanal";
+            _marcarBotonesEscala("semanal");
+            STATE.rawData = STATE._semanalData;
+          }
+        }
+        _indexCoreData();
+        bannerOk();
+        _renderActiveTabAfterLoad();
+      });
+      if (alt && typeof renderFrescura === "function") renderFrescura();
+    }
+    perfMark("net:applied");
+    if (altError) {
+      // Sin la escala fresca: la próxima llamada (precarga/switchMode) reintenta.
+      STATE[_FLAG_ESCALA[alt]] = false;
+      refrescoCompleto = false;
+      showBanner(false, `Error al cargar ${alt}: ` + altError.message);
+    }
 
     // metas/proyectos/seguimiento: se pidieron en paralelo desde el arranque de
     // la función (`deferred`, ver comentario junto a `critical`) sin bloquear el
@@ -1009,7 +1206,13 @@ export async function loadFromSupabase(opts = {}) {
     // igual que antes — el ÚNICO cambio real es que Rendimiento ya no espera a
     // estas 3 tablas para poder pintarse.
     const [metas, proyectos, seguimiento] = await deferred;
-    refrescoCompleto = _applyMetasProyectosSeguimiento(metas, proyectos, seguimiento);
+    if (!vigente()) return false;
+    const falloDiferidas = [metas, proyectos, seguimiento].includes(_FETCH_FAILED);
+    const fpDef = falloDiferidas ? null : huellaDatos([metas, proyectos, seguimiento]);
+    // Si el núcleo cambió hay que re-procesarlas igual: se mapean con CLID_MAP/
+    // KAM_MAP, que salen de `partners`.
+    const defIgual = coreIgual && !!fpDef && _snapFp.def === fpDef;
+    if (!defIgual && !_applyMetasProyectosSeguimiento(metas, proyectos, seguimiento)) refrescoCompleto = false;
 
     // Guardar el snapshot para el próximo arranque (ver _hydrateFromCache).
     // Fire-and-forget a propósito: si IndexedDB falla o está lleno, la app
@@ -1019,20 +1222,34 @@ export async function loadFromSupabase(opts = {}) {
     // también el PRÓXIMO arranque instantáneo (_hydrateFromCache pinta desde
     // acá, no desde la red) — mejor perder el arranque rápido de una vez que
     // encadenar el bug a la siguiente sesión.
-    if (refrescoCompleto) {
-      snapshotSave({
+    // V4: si nada cambió no se reescriben los MB del snapshot, solo se renueva
+    // su fecha de verificación.
+    if (!falloDiferidas) {
+      if (coreIgual && defIgual) snapshotTouch();
+      else snapshotSave({
         periodos: periodosSem, winStart,
-        partners, rend, frooms, flotas, metas, proyectos, seguimiento
+        partners, rend, frooms, flotas, metas, proyectos, seguimiento,
+        fp: { core: fpCore, def: fpDef }
       });
+    }
+    if (alt && altRows) {
+      if (altIgual) snapshotTouch(alt);
+      else snapshotSave({ rows: altRows, fp: fpAlt }, alt);
     }
 
   } catch (err) {
+    if (!vigente()) return false;
     refrescoCompleto = false;
+    // Sin sesión válida la pantalla la decide auth.ts (login): un banner de
+    // error acá solo parpadearía encima, justo antes de que se oculte la app.
+    if (err && err.sinSesion) return false;
     showBanner(false, "Error al cargar: " + err.message);
     console.error(err);
+  } finally {
+    if (alt) { _scaleInflight[alt] = null; resolverAlt(); }
+    showLoad(false);
+    _setRefreshing(false);
   }
-  showLoad(false);
-  _setRefreshing(false);
   return refrescoCompleto;
 }
 
@@ -1375,6 +1592,8 @@ async function _fetchFullRendColumns(mode, rows, getSelf) {
     // lanzaría un fetch duplicado en paralelo. Inofensivo en los datos (merge
     // keyed e idempotente) pero red duplicada.
     if (_colsFull[mode] === getSelf()) _colsFull[mode] = null;
+    // Sin sesión válida la pantalla pasa al login (auth.ts): nada que avisar acá.
+    if (err && err.sinSesion) return;
     console.error("ensureFullRendColumns falló:", err);
     showBanner(false, "Faltan métricas de detalle (aceptación, funnel, ratios de flota): no se pudieron cargar y aparecen en 0. Recarga la página antes de exportar un PDF o un deck.");
   }
@@ -1394,6 +1613,31 @@ export function needsWiderRange(from) {
             && STATE._loadedFrom && from < STATE._loadedFrom);
 }
 
+// ── ESCALAS ALTERNATIVAS: fetch crudo + caché (Ola 2, V3) ───────────────────
+// El fetch y la aplicación están separados para que el arranque pueda pedir la
+// escala guardada (mensual/diaria) EN PARALELO con el núcleo y aplicarla recién
+// cuando los mapas del núcleo están listos, y para pintarla desde el caché con
+// el mismo pipeline.
+const _ESCALAS_ALT = {
+  mensual: { tabla: "rendimiento_mensual", col: "mes",  cols: () => REND_COLS_MENSUAL, desde: () => _monthsAgoYYYYMM(LOAD_WINDOW.mensual) },
+  diario:  { tabla: "rendimiento_diario",  col: "date", cols: () => REND_COLS_DIARIO,  desde: () => _daysAgoISO(LOAD_WINDOW.diario) }
+};
+function _fetchEscalaRaw(esc) {
+  const c = _ESCALAS_ALT[esc];
+  return fetchAllPages(c.tabla, c.col, { columns: c.cols(), gte: { col: c.col, value: c.desde() } });
+}
+function _applyEscalaRows(esc, rows) {
+  if (esc === "mensual") _applyMensualRows(rows);
+  else _applyDiarioRows(rows);
+}
+// Se guardan las filas CRUDAS: al pintarlas desde el caché pasan por el mismo
+// _applyEscalaRows con los mapas del núcleo vigente (nombre/KAM/tagging), así
+// que no quedan atadas a los mapas con los que se descargaron.
+function _guardarEscalaCache(esc, rows) {
+  if (!STATE.userId) return;
+  snapshotSave({ rows, fp: huellaDatos([rows]) }, esc);
+}
+
 // ── LAZY LOAD MENSUAL / DIARIO ────────────────────────────────────────────────
 // LAS PROMESAS EN VUELO NO SON UN LUJO: la precarga en idle (app.ts) puede estar
 // a mitad del fetch cuando el usuario cambia de escala. Sin esto, el flag
@@ -1406,16 +1650,16 @@ export function needsWiderRange(from) {
 const _scaleInflight = { mensual: null, diario: null };
 
 export function loadMensualIfNeeded(silent) {
-  if (STATE._mensualLoaded) return Promise.resolve();
   if (_scaleInflight.mensual) return _scaleInflight.mensual;
+  if (STATE._mensualLoaded) return Promise.resolve();
   const p = _loadMensual(silent).finally(() => { _scaleInflight.mensual = null; });
   _scaleInflight.mensual = p;
   return p;
 }
 
 export function loadDiarioIfNeeded(silent) {
-  if (STATE._diarioLoaded) return Promise.resolve();
   if (_scaleInflight.diario) return _scaleInflight.diario;
+  if (STATE._diarioLoaded) return Promise.resolve();
   const p = _loadDiario(silent).finally(() => { _scaleInflight.diario = null; });
   _scaleInflight.diario = p;
   return p;
@@ -1423,11 +1667,32 @@ export function loadDiarioIfNeeded(silent) {
 
 async function _loadMensual(silent) {
   if (!silent) showLoad(true, "Cargando datos mensuales...");
+  const epoca = STATE._authEpoch || 0;
   try {
-    const rendM = await fetchAllPages("rendimiento_mensual", "mes", {
-      columns: REND_COLS_MENSUAL,
-      gte: { col: "mes", value: _monthsAgoYYYYMM(LOAD_WINDOW.mensual) }
-    });
+    const rendM = await _fetchEscalaRaw("mensual");
+    // La sesión cambió mientras llegaba (logout / sesión inválida, ver auth.ts):
+    // estas filas son de otra sesión, no se aplican ni se guardan.
+    if ((STATE._authEpoch || 0) !== epoca) return;
+    _applyMensualRows(rendM);
+    perfMark("net:mensual");
+    _guardarEscalaCache("mensual", rendM);
+  } catch(err) {
+    // Con la sesión ya descartada (época cambiada) el error es esperable y no
+    // hay nada que avisar: la pantalla ya es la de login.
+    if ((STATE._authEpoch || 0) === epoca) showBanner(false, "Error al cargar mensual: " + err.message);
+  } finally {
+    if (!silent) showLoad(false);
+  }
+}
+
+// Filas crudas de rendimiento_mensual → STATE (mapeo + override de flotas +
+// slices). Mismo pipeline para la red y para el caché (V3): dos caminos
+// paralelos serían dos oportunidades de divergir. Requiere los mapas del núcleo
+// (CLID_MAP/KAM_MAP/FLEETROOM_*/flotasMap) ya armados.
+function _applyMensualRows(rendM) {
+    // Filas nuevas → el merge de columnas diferidas de esta escala hay que
+    // rehacerlo (si no, quedarían en null y se pintarían como 0).
+    _colsFull.mensual = null;
     STATE.rawDataMensual = rendM.map(r => ({
       clid:          (r.clid || "").trim(),
       partner:       STATE.CLID_MAP[(r.clid || "").trim()] || r.partner,
@@ -1481,19 +1746,26 @@ async function _loadMensual(silent) {
     // Slice Fleet mensual (Fase 2): espejo del semanal (Fleet ⊂ Agregador).
     STATE.rawDataMensualFleet = STATE.rawDataMensual.filter(r => rowIsFleet(r));
     STATE._mensualLoaded = true;
-  } catch(err) {
-    showBanner(false, "Error al cargar mensual: " + err.message);
-  }
-  if (!silent) showLoad(false);
 }
 
 async function _loadDiario(silent) {
   if (!silent) showLoad(true, "Cargando datos diarios...");
+  const epoca = STATE._authEpoch || 0;
   try {
-    const rendD = await fetchAllPages("rendimiento_diario", "date", {
-      columns: REND_COLS_DIARIO,
-      gte: { col: "date", value: _daysAgoISO(LOAD_WINDOW.diario) }
-    });
+    const rendD = await _fetchEscalaRaw("diario");
+    if ((STATE._authEpoch || 0) !== epoca) return;   // ver _loadMensual
+    _applyDiarioRows(rendD);
+    _guardarEscalaCache("diario", rendD);
+  } catch (err) {
+    if ((STATE._authEpoch || 0) === epoca) showBanner(false, "Error al cargar diario: " + err.message);
+  } finally {
+    if (!silent) showLoad(false);
+  }
+}
+
+// Espejo de _applyMensualRows para la escala diaria.
+function _applyDiarioRows(rendD) {
+    _colsFull.diario = null;
     STATE.rawDataDiario = rendD.map(r => ({
       clid:          (r.clid || "").trim(),
       partner:       STATE.CLID_MAP[(r.clid || "").trim()] || r.partner || r.clid,
@@ -1547,10 +1819,6 @@ async function _loadDiario(silent) {
     // Fleet ⊂ Agregador: se filtra del agregador YA deduplicado, sin re-fetch.
     STATE.rawDataDiarioFleet = STATE.rawDataDiario.filter(r => rowIsFleet(r));
     STATE._diarioLoaded = true;
-  } catch (err) {
-    showBanner(false, "Error al cargar diario: " + err.message);
-  }
-  if (!silent) showLoad(false);
 }
 
 // ── LAZY LOAD CONVERSION (funnel por CLID, nivel pais) ────────────────────────

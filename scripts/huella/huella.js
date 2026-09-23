@@ -47,11 +47,43 @@
   }, window.__huellaOpts || {});
 
   const W = window;
-  const S = W.STATE;
-  if (!S) { console.error("[huella] No hay STATE: ¿la app está cargada?"); return; }
-  if (!S.rawData || !S.rawData.length) { console.error("[huella] STATE.rawData vacío: ¿hay sesión y datos cargados?"); return; }
-
   const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  // ── Esperar a que la carga inicial TERMINE antes de empezar ──────────────
+  // Pegado justo después de un reload, el snippet arrancaba con la app a mitad
+  // de camino (pintado desde el caché, red en vuelo, restoreFilters cambiando de
+  // escala) y el primer switchMode chocaba con uno en curso → "timeout esperando:
+  // escala semanal". Se espera: STATE con datos, sin spinner, sin el indicador
+  // "↻ Actualizando…", sin cambio de pestaña en curso y con el dataset de la
+  // escala activa ya asignado. Timeout generoso: una carga en frío con latencia
+  // real tarda varios segundos.
+  function escalaListaAhora(S) {
+    if (!S || !S.rawData || !S.rawData.length) return false;
+    if (S.curMode === "mensual") return S.rawData === S.rawDataMensual;
+    if (S.curMode === "diario")  return S.rawData === S.rawDataDiario;
+    return !S._semanalData || S.rawData === S._semanalData;
+  }
+  function appQuieta() {
+    const S = W.STATE;
+    const ref = document.getElementById("dataRefreshing");
+    return !!S && escalaListaAhora(S) && !document.getElementById("loadingEl") &&
+      !(ref && ref.style.display !== "none") && !S._switchingTab;
+  }
+  {
+    const t0 = Date.now(), MAX = 120000;
+    let quietas = 0;
+    // Dos sondeos quietos seguidos: entre el pintado del caché y la llegada de la
+    // red hay un instante en que todo parece terminado.
+    while (quietas < 3) {
+      if (Date.now() - t0 > MAX) {
+        console.error("[huella] la app no terminó de cargar en 120 s: ¿hay sesión y datos?");
+        return;
+      }
+      quietas = appQuieta() ? quietas + 1 : 0;
+      await sleep(250);
+    }
+  }
+  const S = W.STATE;
   async function waitFor(pred, what, timeout = OPTS.timeoutMs) {
     const t0 = Date.now();
     for (;;) {
@@ -88,6 +120,10 @@
   }
 
   const $ = id => document.getElementById(id);
+  // Los filtros guardados (localStorage "yangoFilters") se reescriben en cada
+  // applyFilters() del recorrido; al volver a la escala original, restoreFilters
+  // los relee. Se guarda el texto EXACTO para devolverlo tal cual al final.
+  const lsFiltrosInicial = (() => { try { return localStorage.getItem("yangoFilters"); } catch (e) { return null; } })();
   const estadoInicial = {
     tab: S.curTab, mode: S.curMode, rendLine: S.rendLine, metasLine: S.metasLine,
     metasMesSel: S.metasMesSel,
@@ -123,13 +159,18 @@
     await waitFor(() => S.curTab === tab && !S._switchingTab &&
       $("tab-" + tab) && $("tab-" + tab).classList.contains("active"), "tab " + tab);
   }
-  async function irAEscala(mode) {
-    if (S.curMode === mode) return;
-    // switchMode es async y resuelve al terminar su render. (No se mira
-    // window._inSwitchMode: es un `let` exportado y Object.assign(window, app)
-    // copió su valor inicial — en window nunca cambia.)
-    await W.switchMode(mode);
-    await waitFor(() => S.curMode === mode && !document.getElementById("loadingEl"), "escala " + mode);
+  async function irAEscala(mode, timeout) {
+    // switchMode es async y resuelve al terminar su render — SALVO que ya haya
+    // otro en curso: ahí vuelve en el acto sin hacer nada (guard _inSwitchMode,
+    // que no se puede leer desde acá: es un `let` exportado y
+    // Object.assign(window, app) copió su valor inicial). Por eso se reintenta
+    // hasta que la escala pedida quede activa Y con su dataset asignado.
+    const t0 = Date.now(), max = timeout || OPTS.timeoutMs;
+    while (!(S.curMode === mode && escalaListaAhora(S) && !document.getElementById("loadingEl"))) {
+      if (Date.now() - t0 > max) throw new Error("[huella] timeout esperando: escala " + mode);
+      if (S.curMode !== mode) await W.switchMode(mode);
+      await sleep(120);
+    }
   }
   // Fechas cargadas de verdad (no el catálogo de la RPC): elegir un "Desde"
   // anterior dispararía needsWiderRange → recarga completa.
@@ -264,8 +305,25 @@
     out.meta.error = String(e && e.message || e);
   } finally {
     // ── Restaurar lo que se tocó ───────────────────────────────────────────
-    try {
-      if (estadoInicial.mode && S.curMode !== estadoInicial.mode) await W.switchMode(estadoInicial.mode);
+    // Orden: (1) devolver los filtros guardados ANTES de cambiar de escala,
+    // porque switchMode → popSidebarUI → restoreFilters los relee; (2) escala
+    // (esperando a que quede de verdad, ver irAEscala); (3) líneas y mes;
+    // (4) pestaña; (5) los valores exactos del sidebar; (6) un applyFilters,
+    // que vuelve a guardar los filtros — y (7) se re-escribe el texto original
+    // de localStorage para que quede byte a byte como estaba.
+    const restaurarLS = () => {
+      try {
+        if (lsFiltrosInicial == null) localStorage.removeItem("yangoFilters");
+        else localStorage.setItem("yangoFilters", lsFiltrosInicial);
+      } catch (e) { /* storage bloqueado: nada que restaurar */ }
+    };
+    const problemas = [];
+    const paso = async (nombre, fn) => {
+      try { await fn(); } catch (e) { problemas.push(nombre + ": " + (e && e.message || e)); }
+    };
+    restaurarLS();
+    await paso("escala", () => estadoInicial.mode ? irAEscala(estadoInicial.mode, 60000) : null);
+    await paso("líneas", async () => {
       if (!esPartner) {
         if (estadoInicial.rendLine) S.rendLine = estadoInicial.rendLine;
         if (estadoInicial.metasLine) S.metasLine = estadoInicial.metasLine;
@@ -273,22 +331,44 @@
       } else if (W.PORTAL_STATE && estadoInicial.portalLine) {
         W.PORTAL_STATE.line = estadoInicial.portalLine;
       }
+    });
+    await paso("pestaña", async () => {
       if (estadoInicial.tab && S.curTab !== estadoInicial.tab) {
         W.switchTab(estadoInicial.tab);
-        await waitFor(() => S.curTab === estadoInicial.tab && !S._switchingTab, "tab inicial", 8000).catch(() => {});
+        await waitFor(() => S.curTab === estadoInicial.tab && !S._switchingTab, "tab inicial", 15000);
       }
-      if ($("dateFrom") && estadoInicial.dateFrom) $("dateFrom").value = estadoInicial.dateFrom;
-      if ($("dateTo") && estadoInicial.dateTo) $("dateTo").value = estadoInicial.dateTo;
-      if ($("cityFilter") && estadoInicial.city) $("cityFilter").value = estadoInicial.city;
-      if ($("kamFilter") && estadoInicial.kam) $("kamFilter").value = estadoInicial.kam;
-      if ($("partnerSearch") && estadoInicial.search != null) $("partnerSearch").value = estadoInicial.search;
+    });
+    await paso("filtros", async () => {
+      const fijar = (id, v) => { const el = $(id); if (el && v != null) el.value = v; };
+      fijar("dateFrom", estadoInicial.dateFrom);
+      fijar("dateTo", estadoInicial.dateTo);
+      fijar("cityFilter", estadoInicial.city);
+      fijar("kamFilter", estadoInicial.kam);
+      if ($("partnerSearch") && estadoInicial.search != null) {
+        $("partnerSearch").value = estadoInicial.search;
+        if (typeof W.filterPList === "function") W.filterPList();
+      }
       if (estadoInicial.selected) {
         const sel = new Set(estadoInicial.selected);
         document.querySelectorAll("#pList input").forEach(c => { c.checked = sel.has(c.value); });
       }
       if (typeof W.applyFilters === "function") W.applyFilters();
-    } catch (e) {
-      console.warn("[huella] no se pudo restaurar todo el estado:", e);
+      await sleep(400);
+      await waitFor(() => !document.getElementById("loadingEl") && !S._switchingTab, "render final", 15000);
+    });
+    restaurarLS();
+    // Verificación: lo que quedó tiene que ser lo que había.
+    const fin = {
+      tab: S.curTab, mode: S.curMode,
+      dateFrom: $("dateFrom") && $("dateFrom").value, dateTo: $("dateTo") && $("dateTo").value,
+      city: $("cityFilter") && $("cityFilter").value, kam: $("kamFilter") && $("kamFilter").value
+    };
+    for (const k of Object.keys(fin)) {
+      if (estadoInicial[k] != null && fin[k] !== estadoInicial[k]) problemas.push(`${k}: quedó ${fin[k]}, era ${estadoInicial[k]}`);
+    }
+    if (problemas.length) {
+      out.meta.restauracion = problemas;
+      console.warn("[huella] la restauración no quedó exacta:", problemas);
     }
     if (rafParchado) W.requestAnimationFrame = rafOriginal;
   }

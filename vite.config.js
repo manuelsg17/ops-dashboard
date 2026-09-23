@@ -43,6 +43,13 @@ export default defineConfig(() => ({
           if (id.includes("@supabase")) return "vendor-supabase";
           if (id.includes("apexcharts")) return "vendor-apexcharts";
           if (id.includes("chart.js") || id.includes("chartjs-plugin-datalabels")) return "vendor-chartjs";
+          // Dependencias TRANSITIVAS, cada una con el único consumidor que la usa
+          // (Ola 2, V7). Antes caían en el "vendor" genérico (190 kB / 68 kB gzip):
+          // Chart.js importa @kurkle/color, así que abrir Presentación arrastraba
+          // también canvg, core-js, dompurify y fflate, que solo usa la exportación
+          // a PDF (jspdf/html2canvas). Medido con --sourcemap sobre el build.
+          if (id.includes("@kurkle/color")) return "vendor-chartjs";
+          if (/node_modules\/(canvg|dompurify|core-js|fflate|svg-pathdata|stackblur-canvas|rgbcolor|raf|performance-now|@babel\/runtime)\//.test(id)) return "vendor-pdf";
           if (id.includes("jspdf") || id.includes("html2canvas")) return "vendor-pdf";
           return "vendor";
         }

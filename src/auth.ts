@@ -10,12 +10,13 @@
 // `Object.assign(window, config, ...)` de vendor.js TODAVÍA no se ejecutó.
 // Depender de `supabase`/`SUPABASE_URL` como globales bare acá rompía el login
 // (createClient is not a function). Import directo = no depende del orden.
-import { createClient, navigatorLock } from "@supabase/supabase-js";
+import { createClient, navigatorLock, isAuthRetryableFetchError } from "@supabase/supabase-js";
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./core/config.js";
 import { registerActions } from "./shared/actions.js";
 import { snapshotClear } from "./data/cache.js";
 import { logAccess, resetAccessLogSession } from "./shared/accessLog.js";
 import { resetearEstadoDeSesion } from "./shared/sesion";
+import { perfMark } from "./shared/perf";
 
 // ── LOCK DE AUTH CON ESCAPE ──────────────────────────────────────────────────
 // supabase-js serializa las operaciones de auth con un Web Lock COMPARTIDO entre
@@ -99,7 +100,11 @@ export async function _loadPerms() {
     // y ambos pasando por sb.* competirían por el lock de sesión de supabase-js
     // (ver comentario largo en data.js junto a _pgFetch).
     const { data: { session } } = await sb.auth.getSession();
-    const token = (session && session.access_token) || SUPABASE_ANON_KEY;
+    // Sin sesión válida no se pregunta nada (antes caía a la anon key). Con el
+    // arranque provisional (V1) esto corre antes de que el refresh confirme: si
+    // el refresh falla, no sale ningún pedido.
+    if (!session || !session.access_token) return;
+    const token = session.access_token;
     const res = await fetch(`${SUPABASE_URL}/rest/v1/user_permissions?select=permission`, {
       headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` }
     });
@@ -184,7 +189,105 @@ export function _applyRoleGate() {
   }
 }
 
+// ── ARRANQUE SIN ESPERAR AL REFRESH DEL TOKEN (Ola 2, V1) ───────────────────
+// Un KAM abre el dashboard una vez al día: el access token (1 h) SIEMPRE venció,
+// así que getSession() hace un round-trip de refresh (~300 ms Lima→us-east)
+// antes de devolver nada. Antes se esperaba eso para mostrar CUALQUIER cosa, y
+// mientras tanto se veía la pantalla de login (visible por defecto): parpadeo
+// de login + un round-trip en serie delante del caché.
+//
+// Ahora, si hay una sesión persistida por supabase-js en localStorage, la app
+// arranca en modo PROVISIONAL con ese usuario: pinta el snapshot de IndexedDB
+// de ESE user_id (data/cache.ts) mientras el refresh corre en paralelo. Reglas
+// de seguridad, en orden:
+//   1. Ningún dato sale de la RED sin token vigente: todo pedido pasa por
+//      _authToken (data.ts) → getSession(), que espera al refresh; si no hay
+//      sesión válida, lanza (ya no cae a la anon key).
+//   2. Lo único que se pinta antes de confirmar es el caché local de ese mismo
+//      usuario (clave por user_id + chequeo del dueño en snapshotLoad).
+//   3. El rol para el gating sale de la sesión guardada hasta que el refresh la
+//      confirma; si el rol/KAM confirmados difieren, se re-aplica el gate y se
+//      re-renderiza la pestaña activa. (Tocar localStorage solo cambia UI: los
+//      datos los decide RLS con el JWT real.)
+//   4. Si el refresh FALLA de forma definitiva (refresh token revocado o
+//      vencido: supabase-js ya borró la sesión), se borra el caché de datos, se
+//      limpia el estado y se muestra el login. Si falla de forma reintentable
+//      (sin red / 5xx): supabase-js reintenta el refresh con backoff hasta ~30 s
+//      y durante ese lapso sigue a la vista SOLO el caché local (ningún pedido
+//      de datos sale: esperan al token); si vuelve la red, se confirma y sigue;
+//      si se agotan los reintentos, se oculta lo pintado y se muestra el login
+//      SIN borrar el caché ni los borradores (la sesión no está invalidada,
+//      solo no se pudo confirmar — mismo final que antes de V1).
+//      Verificado con un refresh token revocado de verdad (logout scope=local)
+//      y con el endpoint de token cortado (sin red) — ver el reporte de la Ola 2.
+function _sesionGuardada() {
+  try {
+    const raw = localStorage.getItem(sb.auth.storageKey);
+    const s = raw ? JSON.parse(raw) : null;
+    if (!s || !s.refresh_token || !s.user || !s.user.id) return null;
+    return s;
+  } catch (_) { return null; }
+}
+
+function _quitarSplash() {
+  const el = document.getElementById("bootSplash");
+  if (el) el.remove();
+}
+
+function _mismoPerfil(a, b) {
+  const ma = (a && a.app_metadata) || {}, mb = (b && b.app_metadata) || {};
+  return (ma.role || "viewer") === (mb.role || "viewer") && (ma.kam || null) === (mb.kam || null)
+    && (a && a.email) === (b && b.email);
+}
+
+// El refresh confirmó la sesión provisional.
+function _confirmarSesion(provisional, user) {
+  if (!user || user.id !== provisional.id) {
+    // Otra cuenta (p.ej. se logueó otra persona en otra pestaña entre medio):
+    // nada de lo pintado le corresponde. Se descarta todo y se arranca de cero.
+    _clearStateAndLocalStorage();
+    _appInitialized = false;
+    if (user) showApp(user); else showLoginScreen();
+    return;
+  }
+  STATE._sesionProvisional = false;
+  // La telemetría de la pestaña inicial espera a la sesión confirmada (ver showApp).
+  logAccess("tab", STATE.curTab || "rend");
+  if (_mismoPerfil(provisional, user)) return;
+  // Rol / KAM / email distintos a los guardados: re-gate + re-render.
+  showApp(user);   // actualiza badge/email y _setRoleFromUser (no re-inicializa)
+  if (typeof window._renderActiveTabAfterLoad === "function" && STATE.rawData && STATE.rawData.length) {
+    window._renderActiveTabAfterLoad();
+  }
+}
+
+// El refresh NO pudo confirmar la sesión provisional.
+function _descartarSesionProvisional(error) {
+  // Definitivo = el servidor RECHAZÓ el refresh (4xx: token revocado/vencido;
+  // supabase-js ya borró la sesión guardada). Reintentable = no hubo respuesta
+  // útil (sin red, 5xx, lock): la sesión sigue guardada y no está invalidada.
+  const rechazada = !!(error && error.__isAuthError && !isAuthRetryableFetchError(error));
+  const reintentable = !rechazada && !!_sesionGuardada();
+  if (reintentable) {
+    _limpiarEstadoEnMemoria();
+  } else {
+    // Definitivo: por las dudas se borra también la sesión guardada (supabase-js
+    // ya lo hizo si el servidor la rechazó) para no volver a entrar provisional.
+    try { localStorage.removeItem(sb.auth.storageKey); } catch (_) {}
+    _clearStateAndLocalStorage();
+  }
+  STATE._sesionProvisional = false;
+  _appInitialized = false;
+  showLoginScreen();
+}
+
 export async function initAuth() {
+  perfMark("auth:init");
+  const guardada = _sesionGuardada();
+  if (guardada) {
+    showApp(guardada.user, { provisional: true });
+    perfMark("auth:session-known");
+  }
   // "No pude leer la sesión" NO es lo mismo que "no hay sesión". getSession()
   // puede fallar o quedarse esperando el Web Lock que supabase-js comparte
   // entre TODAS las pestañas del dominio (el motivo por el que existe
@@ -194,25 +297,36 @@ export async function initAuth() {
   // como "me cerró la sesión sola", justo después de una recarga.
   // Ahora: un fallo se reintenta una vez, y recién ahí se asume que no hay
   // sesión.
-  let session = null;
+  let session = null, error = null;
   for (let intento = 0; intento < 2; intento++) {
     try {
       const res = await sb.auth.getSession();
       session = (res && res.data && res.data.session) || null;
+      error = (res && res.error) || null;
       break;
     } catch (err) {
+      error = err;
       if (DEBUG) console.warn(`getSession() falló (intento ${intento + 1}):`, err);
       if (intento === 0) await new Promise(r => setTimeout(r, 600));
     }
   }
-  if (session) {
+  perfMark("auth:session-confirmed");
+  if (guardada) {
+    if (session) _confirmarSesion(guardada.user, session.user);
+    else _descartarSesionProvisional(error);
+  } else if (session) {
     showApp(session.user);
   } else {
     showLoginScreen();
   }
   sb.auth.onAuthStateChange((event, session) => {
     if (event === "SIGNED_IN")      { showApp(session.user); logAccess("login", null); }
-    if (event === "TOKEN_REFRESHED")  _setRoleFromUser(session && session.user);
+    if (event === "TOKEN_REFRESHED") {
+      // Sesión que no se pudo confirmar al abrir (sin red) y que supabase-js
+      // logró refrescar después: se entra sin volver a pedir la contraseña.
+      if (!_appInitialized && session && session.user) showApp(session.user);
+      else _setRoleFromUser(session && session.user);
+    }
     // I2: una sesión que se cierra SIN pasar por handleLogout (token vencido,
     // logout desde otra pestaña) también tiene que limpiar el estado: si no, el
     // próximo SIGNED_IN (otro usuario) caía en `_appInitialized === true`, no
@@ -275,7 +389,21 @@ export async function handleLogout() {
   await sb.auth.signOut();
 }
 
-export function _clearStateAndLocalStorage() {
+// Vacía los paneles que muestran datos (quedan ocultos tras el login, pero no
+// hace falta que sigan ahí): lo usa el descarte de una sesión provisional.
+const _PANELES_CON_DATOS = ["rendContent", "metasContent", "portalContent", "present2Content",
+  "partnerViewContent", "calculatorContent", "rawdataContent", "configContent", "pList"];
+function _vaciarPaneles() {
+  _PANELES_CON_DATOS.forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = ""; });
+}
+
+// Estado EN MEMORIA de la sesión (datos, mapas, gráficas, módulos). No toca
+// localStorage ni el caché de IndexedDB: eso lo hace _clearStateAndLocalStorage.
+// Sube la "época" de la sesión: toda carga en vuelo (data.ts loadFromSupabase,
+// escalas, precarga) la compara antes de aplicar/pintar/guardar lo que le llegue,
+// así una respuesta de la sesión anterior nunca se aplica sobre la nueva.
+export function _limpiarEstadoEnMemoria() {
+  STATE._authEpoch = (STATE._authEpoch || 0) + 1;
   // Drop de datos del dataset en memoria.
   ["rawData","rawDataMensual","rawDataMensualTuktuk","rawDataDiarioTuktuk","rawDataFleet","rawDataMensualFleet","rawDataDiarioFleet",
    "rawDataFull","rawDataMensualFull",
@@ -311,6 +439,16 @@ export function _clearStateAndLocalStorage() {
     Object.values(STATE.charts).forEach(c => { try { c?.destroy?.(); } catch {} });
     STATE.charts = {};
   }
+  _vaciarPaneles();
+  // I2: estado por usuario que vive en los MÓDULOS (CALC_STATE, conversión,
+  // columnas diferidas, Configuración…): cada módulo registra su reseteo en
+  // shared/sesion.ts. Sin esto, entrar con otro usuario sin recargar heredaba
+  // las metas a medio cargar del anterior.
+  resetearEstadoDeSesion();
+}
+
+export function _clearStateAndLocalStorage() {
+  _limpiarEstadoEnMemoria();
   // Sensibles en localStorage. yangoSidebarCollapsed se queda (UI pref, no sensible).
   try {
     localStorage.removeItem("yangoFilters");
@@ -322,20 +460,18 @@ export function _clearStateAndLocalStorage() {
     // otra persona usa el mismo navegador después, no debería heredar metas de
     // otro KAM a medio cargar.
     localStorage.removeItem("yangoCalcDraft");
+    // Conteos de filas por consulta (páginas especulativas de fetchAllPages).
+    localStorage.removeItem("yangoPgCount");
   } catch {}
   // Caché de datos en IndexedDB (data/cache.js): cerrar sesión tiene que borrar
   // la DATA, no solo el token — si no, quien use después ese navegador podría
   // ver el último snapshot de negocio sin loguearse.
   snapshotClear();
   resetAccessLogSession();
-  // I2: estado por usuario que vive en los MÓDULOS (CALC_STATE, conversión,
-  // columnas diferidas, Configuración…): cada módulo registra su reseteo en
-  // shared/sesion.ts. Sin esto, entrar con otro usuario sin recargar heredaba
-  // las metas a medio cargar del anterior.
-  resetearEstadoDeSesion();
 }
 
 export function showLoginScreen() {
+  _quitarSplash();
   document.getElementById("loginScreen").style.display    = "flex";
   document.getElementById("appContainer").style.display   = "none";
   document.getElementById("loginPassword").value          = "";
@@ -350,7 +486,14 @@ export function showLoginScreen() {
 
 export let _appInitialized = false;
 
-export function showApp(user) {
+// `opts.provisional`: arranque con la sesión guardada, antes de que el refresh
+// del token la confirme (ver initAuth). Hace exactamente lo mismo — el gating
+// sale del usuario guardado hasta que _confirmarSesion lo corrija si cambió.
+export function showApp(user, opts = {}) {
+  _quitarSplash();
+  // true mientras el refresh no confirmó la sesión guardada (lo leen las pruebas
+  // y sirve para diagnosticar; ningún permiso depende de esto — eso es RLS).
+  STATE._sesionProvisional = !!opts.provisional;
   document.getElementById("loginScreen").style.display  = "none";
   document.getElementById("appContainer").style.display = "flex";
   // El badge se trunca por CSS (max-width + ellipsis) para no comerse la barra;
@@ -374,7 +517,9 @@ export function showApp(user) {
   // evento SIGNED_IN de onAuthStateChange. Sin esto, en cambio, alguien que
   // refresca y se queda mirando Rendimiento no generaría ningún evento (a esa
   // pestaña se llega sin pasar por switchTab).
-  logAccess("tab", STATE.curTab || "rend");
+  // Con sesión PROVISIONAL (V1) se registra recién al confirmarla
+  // (_confirmarSesion): si el refresh falla, no sale ningún insert.
+  if (!opts.provisional) logAccess("tab", STATE.curTab || "rend");
 
   _setRoleFromUser(user);
 

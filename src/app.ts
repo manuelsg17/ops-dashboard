@@ -157,18 +157,33 @@ export function initApp() {
   // costo de espera percibido: primero lo que bloquea el render de una pestaña
   // (columnas), después las escalas alternativas. Diario va último: es el dataset
   // más grande y el que menos se abre.
+  // Si la sesión cambió mientras cargaba (logout, o la sesión provisional no se
+  // pudo validar — Ola 2, V1, ver auth.ts), no se precarga nada para ella.
+  const _epoca = STATE._authEpoch || 0;
   const _prefetchData = async () => {
     const idle = window.requestIdleCallback || (cb => setTimeout(cb, 800));
-    const paso = fn => new Promise(res => idle(() => Promise.resolve(fn()).then(res, res)));
+    // Cada paso vuelve a mirar la época: la cadena dura varios segundos y la
+    // sesión puede descartarse en el medio (V1, ver auth.ts).
+    const paso = fn => new Promise(res => idle(() => {
+      if ((STATE._authEpoch || 0) !== _epoca) return res();
+      Promise.resolve(fn()).then(res, res);
+    }));
     // Fallo silencioso a propósito: es una optimización. Si algo no llega, la
     // pestaña lo pide igual por el camino de siempre.
     await paso(() => ensureFullRendColumns());
+    // Con la escala guardada en mensual/diaria (V3), el paso de arriba completa
+    // ESA escala y la semanal quedaba sin sus columnas diferidas: el portal
+    // (que no las pide al cambiar de línea) mostraba la aceptación Fleet en "—"
+    // al pasar a semanal. Ya pasaba antes de V3 (restoreFilters cambiaba de
+    // escala antes de esta precarga); no-op si ya estaban.
+    await paso(() => ensureFullRendColumns("semanal"));
     await paso(() => loadMensualIfNeeded(true));
     await paso(() => ensureFullRendColumns("mensual"));
     await paso(() => loadDiarioIfNeeded(true));
     await paso(() => ensureFullRendColumns("diario"));
   };
   const _prefetch = () => {
+    if ((STATE._authEpoch || 0) !== _epoca) return;
     if (typeof window.prefetchViewModules === "function") {
       window.prefetchViewModules(["present2", "partnerview", "calculator", "rawdata", "seguimiento"]);
     }

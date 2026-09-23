@@ -166,6 +166,10 @@ export const I18N: Record<string, Record<string, string>> = {
                           en: "Peru by partner · and direct comparison across cities",
                           ru: "Перу по партнёрам · и прямое сравнение городов" },
   "rend.tend.peruTotal":{ es: "Perú Total · por partner", en: "Peru Total · by partner", ru: "Перу всего · по партнёрам" },
+  // V6: serie que suma a los partners fuera del top 8 (por AD del último período).
+  "rend.tend.otros":    { es: "Otros ({n})", en: "Others ({n})", ru: "Прочие ({n})" },
+  // V1: un pedido de datos sin sesión válida NO sale con la anon key (data.ts _authToken).
+  "estado.sesionNoValida": { es: "La sesión no es válida. Vuelve a ingresar.", en: "Your session is no longer valid. Please sign in again.", ru: "Сеанс недействителен. Войдите снова." },
 
   "rend.prod.titulo":   { es: "Productividad", en: "Productivity", ru: "Производительность" },
   "rend.prod.sub":      { es: "Rendimiento por conductor y por hora · {d} vs período anterior",

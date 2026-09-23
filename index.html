@@ -60,6 +60,20 @@
   <div id="ftRows"></div>
 </div>
 
+<!-- ── ARRANQUE (Ola 2, V1) ──────────────────────────────────────────────────
+     Pantalla neutra mientras se decide si hay sesión. Antes el login era lo
+     visible por defecto y parpadeaba en CADA apertura con sesión guardada hasta
+     que el refresh del token respondía. auth.ts la quita en showApp /
+     showLoginScreen. Sin texto a propósito (no depende del idioma). -->
+<div id="bootSplash" role="status" aria-busy="true" aria-label="Yango Dashboard">
+  <div class="boot-logo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+    </svg>
+  </div>
+  <div class="boot-bar"><span></span></div>
+</div>
+
 <!-- ── LOGIN ──────────────────────────────────────────────────────────────── -->
 <div id="loginScreen">
   <div class="login-box">
