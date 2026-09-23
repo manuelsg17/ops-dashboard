@@ -22,6 +22,7 @@ import "./styles/tokens.css";
 import "./styles/components.css";
 import "./styles.css";
 import "./styles/views/calculator.css";
+import "./styles/views/metas.css";
 import { createClient } from "@supabase/supabase-js";
 import { t } from "./core/i18n";
 

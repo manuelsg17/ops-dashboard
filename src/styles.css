@@ -3,7 +3,6 @@
 .agy-style-8 { display:flex;gap:8px;align-items:center;flex-wrap:wrap }
 .agy-style-10 { width:auto }
 .agy-style-13 { width:90px }
-.agy-style-22 { font-size:.66rem }
 .agy-style-25 { font-size:.62rem;color:#aaa }
 .agy-style-27 { text-align:center }
 .agy-style-30 { margin-bottom:16px }
@@ -91,45 +90,10 @@
 .agy-style-212 { text-align:center;color:#aaa;padding:10px;font-size:.75rem;font-style:italic }
 .agy-style-213 { font-size:.7rem;color:#b45309;margin-left:10px;align-self:center }
 .agy-style-214 { margin:0 4px 12px }
-.agy-style-215 { margin-bottom:9px }
-.agy-style-216 { display:flex;justify-content:space-between;font-size:.74rem }
-.agy-style-217 { color:#888 }
-.agy-style-218 { color:#0284c7 }
-.agy-style-219 { font-size:.64rem;color:#aaa }
-.agy-style-220 { font-size:.63rem;color:#8b5cf6;font-weight:700;margin-left:3px }
-.agy-style-221 { display:flex;justify-content:space-between;font-size:.74rem;margin-bottom:3px }
-.agy-style-222 { display:flex;align-items:center;gap:4px }
-.agy-style-223 { font-size:.7rem;color:#777;margin-bottom:3px }
 .agy-style-224 { padding:26px 16px;text-align:center;color:#888;font-size:.85rem }
 .agy-style-226 { grid-template-columns:repeat(auto-fit,minmax(150px,1fr)) }
-.agy-style-227 { font-size:.6rem;font-weight:700;background:#faf5ff;color:#7e22ce;border:1px solid #e9d5ff;padding:1px 5px;border-radius:8px;margin-left:5px }
-.agy-style-230 { font-size:.62rem;color:#888;margin-top:2px }
-.agy-style-231 { display:flex;align-items:center;gap:8px;background:#fff8f8;border:1px solid #fecaca;border-radius:8px;padding:6px 12px }
-.agy-style-232 { font-size:.72rem;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:.4px }
-.agy-style-233 { border:1px solid #e5e5e5;border-radius:6px;padding:4px 10px;font-size:.82rem;font-weight:600;background:#fff;cursor:pointer }
-.agy-style-234 { width:auto;padding:7px 14px;font-size:.8rem;background:#FF0000;color:#fff;font-weight:700 }
-.agy-style-235 { display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:12px;flex-wrap:wrap }
-.agy-style-236 { display:flex;gap:8px;align-items:center;margin-left:auto }
-.agy-style-237 { width:auto;padding:7px 16px;font-size:.8rem }
-.agy-style-238 { background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:6px 10px;margin:0 0 8px;font-size:.72rem;color:#9a3412 }
-.agy-style-239 { display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px }
-.agy-style-240 { margin:6px 0 }
-.agy-style-241 { font-size:.68rem;background:#fff7ed;border:1px solid #fed7aa;border-radius:5px;padding:4px 7px;color:#c2410c;cursor:pointer;list-style:none;display:flex;align-items:center;gap:4px;user-select:none }
-.agy-style-242 { margin-left:auto;font-size:.6rem;opacity:.7 }
-.agy-style-243 { font-size:.66rem;background:#fffaf0;border:1px solid #fed7aa;border-top:none;border-radius:0 0 5px 5px;padding:5px 7px;color:#9a3412 }
-.agy-style-244 { font-size:.7rem;font-weight:500;color:#aaa }
-.agy-style-245 { font-size:.6rem;font-weight:600;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;padding:1px 5px;border-radius:8px;margin-left:5px }
-.agy-style-246 { margin:8px 0 4px;font-size:.74rem;color:#555;display:flex;justify-content:space-between }
 .agy-style-247 { margin:4px 0;font-size:.74rem;color:#555;display:flex;justify-content:space-between }
-.agy-style-248 { font-size:.66rem;color:#9a3412;margin-top:6px;font-style:italic }
-.agy-style-249 { font-size:.68rem;font-weight:700;color:#fff;background:#8b5cf6;border-radius:4px;padding:1px 5px;margin-left:4px }
-.agy-style-250 { margin:4px 0 }
 .agy-style-251 { font-size:.72rem;color:#aaa }
-.agy-style-252 { margin:8px 0 4px }
-.agy-style-253 { padding:6px 0;border-bottom:1px solid #f5f5f5 }
-.agy-style-254 { display:flex;justify-content:space-between;font-size:.74rem;margin-bottom:4px }
-.agy-style-255 { color:#777 }
-.agy-style-256 { font-size:.67rem;color:#aaa;margin-top:2px }
 .agy-style-257 { margin-top:4px }
 .agy-style-258 { font-size:.7rem;color:#aaa;margin-left:5px }
 .agy-style-259 { display:flex;justify-content:space-between;font-size:.78rem;margin-bottom:3px }
