@@ -59,6 +59,12 @@ export async function auLoadUsers() {
     ]);
     if (fn.error) throw new Error(await _edgeErrMsg(fn.error, t("au.errListarUsuarios")));
     if (fn.data && fn.data.error) throw new Error(String(fn.data.error));
+    // I8: antes un error de estas dos lecturas quedaba en silencio y el panel
+    // mostraba a todos SIN permisos ni CLIDs — indistinguible de "no tienen", y
+    // tildar un permiso sobre esa vista vacía intentaba insertar uno que ya
+    // existía. Un fallo se muestra como fallo.
+    if (permsRes.error) throw new Error(t("au.errCargarPermisos", { m: permsRes.error.message || String(permsRes.error) }));
+    if (mapRes.error)   throw new Error(t("au.errCargarPermisos", { m: mapRes.error.message || String(mapRes.error) }));
     ADMIN_USERS_STATE.users    = fn.data?.users || [];
     ADMIN_USERS_STATE.perms    = permsRes.data  || [];
     ADMIN_USERS_STATE.mappings = mapRes.data    || [];
@@ -294,23 +300,8 @@ export function renderAdminUsers() {
     return;
   }
 
-  const permsByUser = new Map();
-  S.perms.forEach(p => {
-    if (!permsByUser.has(p.user_id)) permsByUser.set(p.user_id, new Set());
-    permsByUser.get(p.user_id).add(p.permission);
-  });
-  const clidsByUser = new Map();
-  S.mappings.forEach(m => {
-    if (!clidsByUser.has(m.user_id)) clidsByUser.set(m.user_id, []);
-    clidsByUser.get(m.user_id).push(m);
-  });
+  const { permsByUser, clidsByUser } = _auIndices();
 
-  // ── Filtros ─────────────────────────────────────────────────────────────
-  const q = (AU_UI.q || "").toLowerCase().trim();
-  const visibles = S.users.filter(u =>
-    (AU_UI.rol === "todos" || u.role === AU_UI.rol) &&
-    (!q || String(u.email || "").toLowerCase().includes(q))
-  );
   const conteo = r => S.users.filter(u => u.role === r).length;
 
   let html = `
@@ -343,14 +334,49 @@ export function renderAdminUsers() {
       </div>
     </details>`;
 
+  // La lista va en su propio contenedor: el buscador la repinta SOLA (I8) y así
+  // el <input> no se destruye en cada tecla (antes perdía el foco al tipear).
+  html += `<div id="auList">${_auListHTML(permsByUser, clidsByUser)}</div>`;
+  box.innerHTML = html + _auFooterHTML();
+}
+
+function _auIndices() {
+  const S = ADMIN_USERS_STATE;
+  const permsByUser = new Map();
+  S.perms.forEach(p => {
+    if (!permsByUser.has(p.user_id)) permsByUser.set(p.user_id, new Set());
+    permsByUser.get(p.user_id).add(p.permission);
+  });
+  const clidsByUser = new Map();
+  S.mappings.forEach(m => {
+    if (!clidsByUser.has(m.user_id)) clidsByUser.set(m.user_id, []);
+    clidsByUser.get(m.user_id).push(m);
+  });
+  return { permsByUser, clidsByUser };
+}
+
+// Repinta solo la lista (buscador). Si el panel todavía no existe, entero.
+function _auRepintarLista() {
+  const l = document.getElementById("auList");
+  if (!l) { renderAdminUsers(); return; }
+  const { permsByUser, clidsByUser } = _auIndices();
+  l.innerHTML = _auListHTML(permsByUser, clidsByUser);
+}
+
+function _auListHTML(permsByUser, clidsByUser) {
+  const S = ADMIN_USERS_STATE;
+  // ── Filtros ─────────────────────────────────────────────────────────────
+  const q = (AU_UI.q || "").toLowerCase().trim();
+  const visibles = S.users.filter(u =>
+    (AU_UI.rol === "todos" || u.role === AU_UI.rol) &&
+    (!q || String(u.email || "").toLowerCase().includes(q))
+  );
   if (!visibles.length) {
-    html += `<div class="au-empty"><div class="au-empty-txt">${escapeHTML(t("au.ningunoCoincide"))}</div></div>`;
-    box.innerHTML = html + _auFooterHTML();
-    return;
+    return `<div class="au-empty"><div class="au-empty-txt">${escapeHTML(t("au.ningunoCoincide"))}</div></div>`;
   }
 
   // ── Tarjeta por usuario ─────────────────────────────────────────────────
-  html += `<div class="au-grid">`;
+  let html = `<div class="au-grid">`;
   visibles.forEach(u => {
     const uid  = escapeHTML(u.id);
     const misP = permsByUser.get(u.id) || new Set();
@@ -442,8 +468,7 @@ export function renderAdminUsers() {
       </div>`;
   });
   html += `</div>`;
-
-  box.innerHTML = html + _auFooterHTML();
+  return html;
 }
 
 function _auFooterHTML() {
@@ -452,7 +477,7 @@ function _auFooterHTML() {
 
 registerActions({
   auLoad:   () => auLoadUsers(),
-  auSearch:    (d, el) => { AU_UI.q = el.value; renderAdminUsers(); },
+  auSearch:    (d, el) => { AU_UI.q = el.value; _auRepintarLista(); },
   auFilterRol: d => { AU_UI.rol = d.rol; renderAdminUsers(); },
   auSetRoleBtn:  d => auSetRole(d.uid, d.rol),
   auAskDelete:   d => { AU_UI.confirmDelete = d.uid; renderAdminUsers(); },

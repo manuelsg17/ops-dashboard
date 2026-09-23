@@ -155,6 +155,7 @@ export const I18N: Record<string, Record<string, string>> = {
   "alcance.partners":   { es: "{n} de {total} partners", en: "{n} of {total} partners", ru: "{n} из {total} партнёров" },
   "rend.peru.tituloFiltrado": { es: "Vista filtrada — {a}", en: "Filtered view — {a}", ru: "Отфильтрованный обзор — {a}" },
   "metas.alcance":      { es: "Filtro activo: {a}", en: "Active filter: {a}", ru: "Активный фильтр: {a}" },
+  "au.errCargarPermisos": { es: "No se pudieron cargar los permisos o CLIDs asignados: {m}", en: "Could not load permissions or assigned CLIDs: {m}", ru: "Не удалось загрузить права или назначенные CLID: {m}" },
   "rend.pcard.sinDato": { es: "sin dato en este período", en: "no data this period", ru: "нет данных за период" },
   // Guard de escala (B12): mientras llega el dataset de la escala elegida no se
   // pintan los números de la otra escala con este rótulo.
