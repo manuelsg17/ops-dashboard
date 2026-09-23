@@ -52,19 +52,68 @@ export const I18N: Record<string, Record<string, string>> = {
   // el texto, no el identificador.
   "nav.present2":    { es: "Presentación", en: "Presentation", ru: "Презентация" },
   "nav.config":      { es: "Configuración",    en: "Settings",      ru: "Настройки" },
-  // Con emoji: el icono viaja DENTRO de la traduccion para que cada idioma pueda
-  // moverlo o quitarlo si estorba.
-  "nav.calculadoraE":  { es: "🎯 Calculadora",   en: "🎯 Calculator",   ru: "🎯 Калькулятор" },
-  "nav.vistaPartnerE": { es: "📊 Vista Partner", en: "📊 Partner View", ru: "📊 Обзор партнёра" },
-  "nav.seguimientoE":  { es: "📋 Seguimiento",   en: "📋 Tracking",     ru: "📋 Отслеживание" },
+  // Navegación lateral (Ola 5): sin emojis — el icono lo pone shell.ts
+  // (shared/icons.ts), así se ve igual en todos los sistemas operativos.
+  "nav.calculadora":  { es: "Calculadora",   en: "Calculator",   ru: "Калькулятор" },
+  "nav.vistaPartner": { es: "Vista partner", en: "Partner view", ru: "Обзор партнёра" },
+  "nav.seguimiento":  { es: "Seguimiento",   en: "Tracking",     ru: "Отслеживание" },
+  "nav.grupo.planificacion": { es: "Planificación", en: "Planning",     ru: "Планирование" },
+  "nav.grupo.entregables":   { es: "Entregables",   en: "Deliverables", ru: "Материалы" },
+  "nav.grupo.datos":         { es: "Datos",         en: "Data",         ru: "Данные" },
+
+  // ── Estructura (shell, Ola 5) ──────────────────────────────────────────
+  "shell.skip":         { es: "Saltar al contenido", en: "Skip to content", ru: "Перейти к содержимому" },
+  "shell.nav.aria":     { es: "Secciones",       en: "Sections",        ru: "Разделы" },
+  "shell.nav.abrir":    { es: "Abrir menú",      en: "Open menu",       ru: "Открыть меню" },
+  "shell.nav.cerrar":   { es: "Cerrar menú",     en: "Close menu",      ru: "Закрыть меню" },
+  "shell.nav.contraer": { es: "Contraer menú",   en: "Collapse menu",   ru: "Свернуть меню" },
+  "shell.nav.expandir": { es: "Expandir menú",   en: "Expand menu",     ru: "Развернуть меню" },
+  "shell.filtros":         { es: "Filtros",         en: "Filters",      ru: "Фильтры" },
+  "shell.filtros.ocultar": { es: "Ocultar filtros", en: "Hide filters", ru: "Скрыть фильтры" },
+  "shell.filtros.mostrar": { es: "Mostrar filtros", en: "Show filters", ru: "Показать фильтры" },
+  "shell.chips.aria":   { es: "Filtros activos", en: "Active filters",  ru: "Активные фильтры" },
+  "shell.chip.quitar":  { es: "Quitar filtro {f}", en: "Remove filter {f}", ru: "Убрать фильтр {f}" },
+  "shell.restablecer":  { es: "Restablecer",     en: "Reset",           ru: "Сбросить" },
+  "shell.chip.escala":  { es: "Escala",          en: "Scale",           ru: "Масштаб" },
+  "shell.chip.rango":   { es: "Rango",           en: "Range",           ru: "Период" },
+  "shell.chip.linea":   { es: "Línea",           en: "Line",            ru: "Линия" },
+  "shell.sub.rend":     { es: "Conductores activos, N+R, horas y viajes del período",
+                          en: "Active drivers, N+R, hours and trips for the period",
+                          ru: "Активные водители, N+R, часы и поездки за период" },
+  "shell.sub.metas":    { es: "Avance contra las metas mensuales",
+                          en: "Progress against the monthly goals",
+                          ru: "Прогресс относительно месячных целей" },
+  "shell.sub.partnerview": { es: "Detalle de un partner frente a su cohorte",
+                          en: "One partner in detail, compared with its cohort",
+                          ru: "Один партнёр в деталях в сравнении с когортой" },
+  "shell.sub.calculator": { es: "Reparte la meta del KAM entre sus partners",
+                          en: "Split the KAM goal across their partners",
+                          ru: "Распределение цели KAM между партнёрами" },
+  "shell.sub.seguimiento": { es: "Tareas y proyectos por partner",
+                          en: "Tasks and projects by partner",
+                          ru: "Задачи и проекты по партнёрам" },
+  "shell.sub.rawdata":  { es: "Filas cargadas por escala, para consulta",
+                          en: "Loaded rows by scale, for lookup",
+                          ru: "Загруженные строки по масштабу, для просмотра" },
+  "shell.sub.config":   { es: "Partners, usuarios, monitoreo y mantenimiento",
+                          en: "Partners, users, monitoring and maintenance",
+                          ru: "Партнёры, пользователи, мониторинг и обслуживание" },
+  "shell.portal.titulo": { es: "Tu desempeño",  en: "Your performance", ru: "Ваши показатели" },
 
   // ── Barra superior ─────────────────────────────────────────────────────
   // "Actualizar información" ocupaba ~200px de una barra que ya iba justa. El
   // ícono de subida + "Subir datos" dice lo mismo y el menú detalla qué se sube.
   "top.upload":     { es: "Subir datos", en: "Upload data", ru: "Загрузить" },
-  "top.logout":     { es: "Salir →",          en: "Sign out →",   ru: "Выйти →" },
+  "top.logout":     { es: "Salir",            en: "Sign out",     ru: "Выйти" },
   "top.refreshing": { es: "↻ Actualizando…",  en: "↻ Refreshing…", ru: "↻ Обновление…" },
   "top.langTitle":  { es: "Idioma de la interfaz", en: "Interface language", ru: "Язык интерфейса" },
+  "top.up.semanal":    { es: "Rendimiento semanal", en: "Weekly performance",  ru: "Показатели за неделю" },
+  "top.up.mensual":    { es: "Rendimiento mensual", en: "Monthly performance", ru: "Показатели за месяц" },
+  "top.up.diario":     { es: "Rendimiento diario",  en: "Daily performance",   ru: "Показатели за день" },
+  "top.up.metas":      { es: "Metas",               en: "Goals",               ru: "Цели" },
+  "top.up.partners":   { es: "Partners",            en: "Partners",            ru: "Партнёры" },
+  "top.up.flotas":     { es: "Flotas",              en: "Fleets",              ru: "Автопарки" },
+  "top.up.conversion": { es: "Conversión (país)",   en: "Conversion (country)", ru: "Конверсия (страна)" },
 
   // ── Escala y filtros ───────────────────────────────────────────────────
   "mode.diario":  { es: "Diario",  en: "Daily",   ru: "Ежедневно" },
@@ -85,10 +134,10 @@ export const I18N: Record<string, Record<string, string>> = {
   "preset.m6":        { es: "Últ. 6 meses", en: "Last 6 months",ru: "Посл. 6 месяцев" },
 
   "sidebar.escala":     { es: "Escala",         en: "Scale",          ru: "Масштаб" },
-  "sidebar.rango":      { es: "Rango de Fechas", en: "Date Range",     ru: "Период" },
+  "sidebar.rango":      { es: "Rango de fechas", en: "Date range",     ru: "Период" },
   "sidebar.ciudad":     { es: "Ciudad",          en: "City",           ru: "Город" },
   "sidebar.kam":        { es: "KAM",             en: "KAM",            ru: "KAM" },
-  "sidebar.buscar":     { es: "Buscar Partner",  en: "Search Partner", ru: "Поиск партнёра" },
+  "sidebar.buscar":     { es: "Buscar partner",  en: "Search partner", ru: "Поиск партнёра" },
   "sidebar.partners":   { es: "Partners",        en: "Partners",       ru: "Партнёры" },
   "sidebar.filtrar":    { es: "Filtrar...",      en: "Filter...",      ru: "Фильтр…" },
   "sidebar.totalPeru":  { es: "Total Perú",      en: "Peru Total",     ru: "Перу — всего" },
@@ -2062,6 +2111,12 @@ export function aplicarI18nEstatico(root: ParentNode = document): void {
   root.querySelectorAll<HTMLElement>("[data-i18n-ph]").forEach(el => {
     const k = el.getAttribute("data-i18n-ph");
     if (k) el.setAttribute("placeholder", t(k));
+  });
+  // Nombre accesible de controles solo-icono (hamburguesa, velos, cierre del
+  // panel de filtros — Ola 5).
+  root.querySelectorAll<HTMLElement>("[data-i18n-aria]").forEach(el => {
+    const k = el.getAttribute("data-i18n-aria");
+    if (k) el.setAttribute("aria-label", t(k));
   });
 }
 

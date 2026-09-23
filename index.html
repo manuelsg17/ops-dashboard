@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8"/>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23FF0000'/><polyline points='85,50 65,50 55,80 35,20 25,50 15,50' stroke='white' stroke-width='10' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>"/>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23E1251B'/><polyline points='85,50 65,50 55,80 35,20 25,50 15,50' stroke='white' stroke-width='10' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <title>Yango Dashboard</title>
 
@@ -55,6 +55,8 @@
 </head>
 <body>
 
+<a class="shell-skip" href="#mainContent" data-i18n="shell.skip">Saltar al contenido</a>
+
 <div id="floatTip">
   <div class="ft-d" id="ftDate"></div>
   <div id="ftRows"></div>
@@ -67,7 +69,7 @@
      showLoginScreen. Sin texto a propósito (no depende del idioma). -->
 <div id="bootSplash" role="status" aria-busy="true" aria-label="Yango Dashboard">
   <div class="boot-logo">
-    <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+    <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" aria-hidden="true">
       <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
     </svg>
   </div>
@@ -78,16 +80,18 @@
 <div id="loginScreen">
   <div class="login-box">
     <div class="login-logo">
-      <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+      <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" aria-hidden="true">
         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
       </svg>
     </div>
-    <h1 class="login-title">YANGO <span>Dashboard</span></h1>
+    <h1 class="login-title" translate="no">YANGO <span>Dashboard</span></h1>
     <p class="login-sub" data-i18n="login.sub">Partner Performance Analytics</p>
     <form id="loginForm" data-act-submit="handleLoginSubmit">
+      <label class="ui-sr-only" for="loginEmail" data-i18n="login.email">Email</label>
       <input id="loginEmail"    type="email"    class="login-input" placeholder="Email" data-i18n-ph="login.email" autocomplete="username"/>
+      <label class="ui-sr-only" for="loginPassword" data-i18n="login.password">Contraseña</label>
       <input id="loginPassword" type="password" class="login-input" placeholder="Contraseña" data-i18n-ph="login.password" autocomplete="current-password"/>
-      <p id="loginError" class="login-error"></p>
+      <p id="loginError" class="login-error" role="alert"></p>
       <button id="loginBtn" type="submit" class="login-btn" data-i18n="login.submit">Ingresar</button>
     </form>
     <p class="login-footer" data-i18n="login.footer">Acceso restringido · Uso interno Yango Perú</p>
@@ -95,13 +99,24 @@
 </div>
 
 <!-- ── APP ────────────────────────────────────────────────────────────────── -->
+<!-- Estructura (Ola 5, sep-2026): barra superior delgada + navegación lateral
+     agrupada (src/shell.ts la pinta según el rol) + panel de "Filtros" a la
+     derecha de la navegación + contenido con encabezado de página (título,
+     chips del alcance activo, frescura y estado de la carga).
+     Los ids de los filtros (dateFrom, dateTo, cityFilter, kamFilter,
+     partnerSearch, pList, mainSidebar, sidebarToggle…) y sus data-act son los
+     mismos de siempre: data.ts/app.ts los leen por id. -->
 <div id="appContainer">
 
-  <!-- TOPBAR -->
-  <div class="topbar">
-    <div class="topbar-left">
+  <!-- BARRA SUPERIOR -->
+  <header class="topbar">
+    <button type="button" class="shell-icon-btn shell-hamburger" id="navHamburger" data-act="toggleNavDrawer"
+            aria-controls="appNav" aria-expanded="false" data-i18n-aria="shell.nav.abrir" aria-label="Abrir menú">
+      <svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h16"/></svg>
+    </button>
+    <div class="shell-brand">
       <div class="logo">
-        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" aria-hidden="true">
           <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
         </svg>
       </div>
@@ -110,81 +125,54 @@
            traducirla al español, con resultados absurdos en el resto de la UI
            ("Análisis" -> "pruebas de sangre"). Ver también la sincronización de
            <html lang> en setUiLang (app.ts). -->
-      <div translate="no">
+      <div class="shell-brand__text" translate="no">
         <div class="brand">YANGO <span>Dashboard</span></div>
         <div class="brand-sub">Partner Performance Analytics</div>
       </div>
-      <nav class="nav-tabs">
-  <div class="nav-dropdown-wrap" id="navAnalisisWrap">
-    <button class="nav-tab nav-tab-dropdown active" id="navAnalisis" data-act="toggleAnalisisMenu">
-      <span data-i18n="nav.analisis">Análisis</span>
-      <svg class="nav-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-        <polyline points="6 9 12 15 18 9"/>
-      </svg>
-    </button>
-    <div class="nav-dropdown-menu" id="analisisMenu">
-      <!-- Orden: análisis de uso frecuente primero; herramientas al final tras el divisor. -->
-      <button class="nav-dd-item active" data-tab="rend" data-act="switchTabFromMenu" data-i18n="nav.rendimiento">Rendimiento</button>
-      <button class="nav-dd-item"        data-tab="metas" data-act="switchTabFromMenu" data-i18n="nav.metas">Metas</button>
-      <button class="nav-dd-item"        data-tab="calculator" data-act="switchTabFromMenu" data-i18n="nav.calculadoraE">🎯 Calculadora</button>
-      <button class="nav-dd-item"        data-tab="partnerview" data-act="switchTabFromMenu" data-i18n="nav.vistaPartnerE">📊 Vista Partner</button>
-      <div class="agy-style-601"></div>
-      <button class="nav-dd-item"        data-tab="seguimiento" data-act="switchTabFromMenu" data-i18n="nav.seguimientoE">📋 Seguimiento</button>
-      <button class="nav-dd-item"        data-tab="rawdata" data-act="switchTabFromMenu" data-i18n="nav.dataRaw">Data Raw</button>
-      <!-- Fleet Externo fuera del menú hasta tener datos reales (scaffold pausado; tab-panel y script se conservan). -->
     </div>
-  </div>
-  <button class="nav-tab" data-tab="present2" data-act="switchTab" data-i18n="nav.present2">Presentación</button>
-  <button class="nav-tab" data-tab="config"   data-act="switchTab" data-i18n="nav.config">Configuración</button>
-</nav>
-    </div>
+    <!-- Solo rol partner: el nombre de SU cuenta (lo pinta shell.ts). -->
+    <div class="shell-partner-name" id="shellPartnerName"></div>
+
     <div class="topbar-right">
-      <!-- Dropdown "Actualizar información" -->
+      <!-- Atajo de cargas de Excel. En la Ola 6 las cargas se mudan a
+           Configuración → Cargas; el menú sigue funcionando igual (los <label>
+           apuntan a los mismos <input type=file>). -->
       <div class="upload-dropdown" id="uploadDropdown">
-        <button class="up-btn upload-main-btn" data-act="toggleUploadMenu" title="Subir datos" data-i18n-title="top.upload">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-            <polyline points="17 8 12 3 7 8"/>
-            <line x1="12" y1="3" x2="12" y2="15"/>
-          </svg>
-          <!-- Sin texto por pedido de Manuel: la carga manual quedó en desuso
-               desde que la ingesta de taxiparks es automática, así que el
-               botón no justifica ocupar ancho. El nombre sigue en el title
-               (accesible y visible al pasar el mouse) y el menú lista qué se
-               puede subir. -->
-          <span class="sr-only" data-i18n="top.upload">Subir datos</span>
-          <svg class="upload-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
+        <button type="button" class="shell-icon-btn upload-main-btn" data-act="toggleUploadMenu"
+                aria-haspopup="true" aria-expanded="false" aria-controls="uploadMenu"
+                title="Subir datos" data-i18n-title="top.upload">
+          <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m17 8-5-5-5 5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></svg>
+          <span class="ui-sr-only" data-i18n="top.upload">Subir datos</span>
         </button>
         <div class="upload-menu" id="uploadMenu">
+          <div class="upload-menu-title" data-i18n="top.upload">Subir datos</div>
           <label class="upload-menu-item" for="fileRend">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-            Rendimiento Semanal
+            <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></svg>
+            <span data-i18n="top.up.semanal">Rendimiento semanal</span>
           </label>
           <label class="upload-menu-item" for="fileRendMensual">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            Rendimiento Mensual
+            <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg>
+            <span data-i18n="top.up.mensual">Rendimiento mensual</span>
           </label>
           <label class="upload-menu-item" for="fileRendDiario">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            Rendimiento Diario
+            <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            <span data-i18n="top.up.diario">Rendimiento diario</span>
           </label>
           <label class="upload-menu-item" for="fileMetas">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
-            Metas
+            <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+            <span data-i18n="top.up.metas">Metas</span>
           </label>
           <label class="upload-menu-item" for="fileData">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-            Partners
+            <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span data-i18n="top.up.partners">Partners</span>
           </label>
           <label class="upload-menu-item" for="fileFlotas">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="13" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
-            Flotas
+            <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>
+            <span data-i18n="top.up.flotas">Flotas</span>
           </label>
           <label class="upload-menu-item" for="fileConversion">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
-            Conversión (país)
+            <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 7h6v6"/><path d="m22 7-8.5 8.5-5-5L2 17"/></svg>
+            <span data-i18n="top.up.conversion">Conversión (país)</span>
           </label>
         </div>
       </div>
@@ -198,91 +186,127 @@
       <input type="file" id="fileFlotas"      accept=".xlsx,.xls"/>
       <input type="file" id="fileConversion"  accept=".xlsx,.xls"/>
 
-      <!-- Indicador de refresco en segundo plano: la vista arranca con el
-           snapshot local (data/cache.js) y esto avisa, sin bloquear nada, que
-           todavía está llegando la data fresca. Inline a propósito — data.js
-           lo muestra/oculta con .style.display (ver la nota de CLAUDE.md sobre
-           no convertir a clase CSS elementos toggleados desde JS). -->
-      <span id="dataRefreshing" class="data-refreshing" style="display:none" title="Mostrando los últimos datos guardados mientras se descargan los actuales" data-i18n-title="top.refreshingTip">↻ Actualizando…</span>
-      <!-- (#dbLastUpdate se movió al sidebar, junto a "Datos cargados".) -->
       <span id="langSwitch"></span>
-      <!-- El email es el disparador del menú de sesión: "Salir" era un botón
-           suelto que ocupaba ancho permanente para una acción que se usa una
-           vez por día. Mismo patrón que el desplegable de "Análisis". -->
+      <!-- El email es el disparador del menú de sesión ("Salir" adentro). -->
       <div class="user-menu-wrap" id="userMenuWrap">
-        <button id="userBadge" class="user-badge" data-act="toggleUserMenu"></button>
+        <button type="button" id="userBadge" class="user-badge" data-act="toggleUserMenu"
+                aria-haspopup="true" aria-expanded="false" aria-controls="userMenu"></button>
         <div class="user-menu" id="userMenu">
-          <button class="user-menu-item" data-act="handleLogout" data-i18n="top.logout">Salir →</button>
+          <button type="button" class="user-menu-item" data-act="handleLogout">
+            <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></svg>
+            <span data-i18n="top.logout">Salir</span>
+          </button>
         </div>
       </div>
     </div>
-  </div>
+  </header>
 
   <!-- LAYOUT -->
   <div class="layout">
 
-    <!-- SIDEBAR -->
+    <!-- NAVEGACIÓN LATERAL — la pinta shell.ts (grupos, iconos, rol). En
+         pantallas < 1024 px es un cajón que abre la hamburguesa. -->
+    <div class="shell-nav" id="appNav"></div>
+    <button type="button" class="shell-nav-veil" id="navVeil" data-act="toggleNavDrawer" tabindex="-1"
+            data-i18n-aria="shell.nav.cerrar" aria-label="Cerrar menú"></button>
+
+    <!-- PANEL DE FILTROS (antes "sidebar"). Mismos ids y acciones. -->
     <div class="sidebar-wrap">
-    <div class="sidebar" id="mainSidebar">
-      <div id="dsBanner" style="display:none"></div>
-      <!-- Última carga en la BD. Vive ACÁ y no en la topbar (donde estaba) por
-           pedido de Manuel: es información del mismo tipo que "Datos cargados"
-           —el estado de los datos— y en la barra superior se comía el ancho
-           que necesitan la nav y el botón de subir. -->
-      <div id="dbLastUpdate" class="db-last-update" style="display:none"></div>
-
-      <div class="sb-label" data-i18n="sidebar.escala">Escala</div>
-      <div class="mode-toggle-row">
-        <button class="mode-btn" data-mode="diario" data-act="switchMode" data-i18n="mode.diario">Diario</button>
-        <button class="mode-btn active" data-mode="semanal" data-act="switchMode" data-i18n="mode.semanal">Semanal</button>
-        <button class="mode-btn" data-mode="mensual" data-act="switchMode" data-i18n="mode.mensual">Mensual</button>
+    <aside class="sidebar" id="mainSidebar" data-i18n-aria="shell.filtros" aria-label="Filtros">
+      <div class="fp-head">
+        <div class="fp-title">
+          <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 20a1 1 0 0 0 .553.895l2 1A1 1 0 0 0 14 21v-7a2 2 0 0 1 .517-1.341L21.74 4.67A1 1 0 0 0 21 3H3a1 1 0 0 0-.742 1.67l7.225 7.989A2 2 0 0 1 10 14z"/></svg>
+          <span data-i18n="shell.filtros">Filtros</span>
+        </div>
+        <button type="button" class="shell-icon-btn shell-icon-btn--sm fp-close" data-act="toggleSidebar"
+                aria-controls="mainSidebar" aria-expanded="true"
+                data-i18n-title="shell.filtros.ocultar" title="Ocultar filtros"
+                data-i18n-aria="shell.filtros.ocultar" aria-label="Ocultar filtros">
+          <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/></svg>
+        </button>
       </div>
 
-      <div class="sb-label" data-i18n="sidebar.rango">Rango de Fechas</div>
-      <div class="date-grid">
-        <div><label data-i18n="filtro.desde">Desde</label><select class="sb-sel" id="dateFrom"></select></div>
-        <div><label data-i18n="filtro.hasta">Hasta</label><select class="sb-sel"  id="dateTo"></select></div>
-      </div>
-      <div id="datePresets" class="agy-style-603">
-        <button class="preset-btn" data-act="setDatePreset" data-preset="week" data-i18n="preset.week">Esta semana</button>
-        <button class="preset-btn" data-act="setDatePreset" data-preset="fortnight" data-i18n="preset.fortnight">Quincena</button>
-        <button class="preset-btn" data-act="setDatePreset" data-preset="month" data-i18n="preset.month">Este mes</button>
+      <div class="fp-group">
+        <div class="sb-label" data-i18n="sidebar.escala">Escala</div>
+        <div class="mode-toggle-row" role="group" data-i18n-aria="sidebar.escala" aria-label="Escala">
+          <button type="button" class="mode-btn" data-mode="diario" data-act="switchMode" data-i18n="mode.diario">Diario</button>
+          <button type="button" class="mode-btn active" data-mode="semanal" data-act="switchMode" data-i18n="mode.semanal">Semanal</button>
+          <button type="button" class="mode-btn" data-mode="mensual" data-act="switchMode" data-i18n="mode.mensual">Mensual</button>
+        </div>
       </div>
 
-      <div class="sb-label" data-i18n="sidebar.ciudad">Ciudad</div>
-      <select class="sb-sel" id="cityFilter">
-        <option value="all" data-i18n="sidebar.totalPeru">Total Perú</option>
-        <option value="LIMA">Lima</option>
-        <option value="TRUJILLO">Trujillo</option>
-        <option value="AREQUIPA">Arequipa</option>
-      </select>
-
-      <div class="sb-label" data-i18n="sidebar.kam">KAM</div>
-      <select class="sb-sel" id="kamFilter" data-act-change="onKAMChange">
-        <option value="all">Todos</option>
-      </select>
-
-      <div class="sb-label" data-i18n="sidebar.buscar">Buscar Partner</div>
-      <input class="sb-inp" id="partnerSearch" type="text" placeholder="Filtrar..." data-i18n-ph="sidebar.filtrar"/>
-
-      <div class="sb-label" data-i18n="sidebar.partners">Partners</div>
-      <div class="sb-row">
-        <button data-act="selectAll" data-i18n="sidebar.todos">Todos</button>
-        <button data-act="deselectAll" data-i18n="sidebar.ninguno">Ninguno</button>
+      <div class="fp-group">
+        <div class="sb-label" data-i18n="sidebar.rango">Rango de fechas</div>
+        <div class="date-grid">
+          <div><label for="dateFrom" data-i18n="filtro.desde">Desde</label><select class="sb-sel" id="dateFrom"></select></div>
+          <div><label for="dateTo" data-i18n="filtro.hasta">Hasta</label><select class="sb-sel"  id="dateTo"></select></div>
+        </div>
+        <div id="datePresets" class="fp-presets">
+          <button class="preset-btn" data-act="setDatePreset" data-preset="week" data-i18n="preset.week">Esta semana</button>
+          <button class="preset-btn" data-act="setDatePreset" data-preset="fortnight" data-i18n="preset.fortnight">Quincena</button>
+          <button class="preset-btn" data-act="setDatePreset" data-preset="month" data-i18n="preset.month">Este mes</button>
+        </div>
       </div>
-      <div class="plist" id="pList"></div>
-    </div>
-    <!-- Velo del sidebar flotante (solo visible en tablet, ver styles.css).
-         Tocar fuera del panel lo cierra, que es lo que espera cualquiera que
-         use una tablet; en desktop está oculto por CSS y no estorba. -->
-    <button class="sb-veil" id="sbVeil" data-act="toggleSidebar" aria-label="Cerrar filtros"></button>
-    <button class="sidebar-toggle" id="sidebarToggle" data-act="toggleSidebar" title="Ocultar/mostrar filtros">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+
+      <!-- fp-interno: no aplica al portal del partner (ver shell.css / role-partner). -->
+      <div class="fp-group fp-interno">
+        <label class="sb-label" for="cityFilter" data-i18n="sidebar.ciudad">Ciudad</label>
+        <select class="sb-sel" id="cityFilter">
+          <option value="all" data-i18n="sidebar.totalPeru">Total Perú</option>
+          <option value="LIMA">Lima</option>
+          <option value="TRUJILLO">Trujillo</option>
+          <option value="AREQUIPA">Arequipa</option>
+        </select>
+      </div>
+
+      <div class="fp-group fp-interno">
+        <label class="sb-label" for="kamFilter" data-i18n="sidebar.kam">KAM</label>
+        <select class="sb-sel" id="kamFilter" data-act-change="onKAMChange">
+          <option value="all">Todos</option>
+        </select>
+      </div>
+
+      <div class="fp-group fp-interno">
+        <label class="sb-label" for="partnerSearch" data-i18n="sidebar.buscar">Buscar partner</label>
+        <input class="sb-inp" id="partnerSearch" type="text" placeholder="Filtrar..." data-i18n-ph="sidebar.filtrar"/>
+      </div>
+
+      <div class="fp-group fp-interno">
+        <div class="sb-label" data-i18n="sidebar.partners">Partners</div>
+        <div class="sb-row">
+          <button type="button" data-act="selectAll" data-i18n="sidebar.todos">Todos</button>
+          <button type="button" data-act="deselectAll" data-i18n="sidebar.ninguno">Ninguno</button>
+        </div>
+        <div class="plist" id="pList"></div>
+      </div>
+    </aside>
+    <!-- Velo del panel flotante (solo en tablet): tocar fuera lo cierra. -->
+    <button type="button" class="sb-veil" id="sbVeil" data-act="toggleSidebar" tabindex="-1"
+            data-i18n-aria="shell.filtros.ocultar" aria-label="Ocultar filtros"></button>
+    <!-- Botón flotante de filtros (solo tablet, siempre al alcance del pulgar).
+         En escritorio se abre/cierra desde el encabezado de la página. -->
+    <button type="button" class="sidebar-toggle" id="sidebarToggle" data-act="toggleSidebar"
+            aria-controls="mainSidebar" aria-expanded="true"
+            data-i18n-title="shell.filtros" title="Filtros" data-i18n-aria="shell.filtros" aria-label="Filtros">
+      <svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 20a1 1 0 0 0 .553.895l2 1A1 1 0 0 0 14 21v-7a2 2 0 0 1 .517-1.341L21.74 4.67A1 1 0 0 0 21 3H3a1 1 0 0 0-.742 1.67l7.225 7.989A2 2 0 0 1 10 14z"/></svg>
     </button>
     </div><!-- end .sidebar-wrap -->
 
-    <!-- MAIN PANELS -->
-    <div class="main">
+    <!-- CONTENIDO -->
+    <main class="main" id="mainContent" tabindex="-1">
+      <div class="shell-content">
+        <!-- Encabezado de página (shell.ts → ui.pageHeader): título, acciones,
+             chips del alcance activo, frescura. #dataRefreshing y #dsBanner son
+             nodos PERSISTENTES (data.ts / showBanner los muestran por id con
+             .style.display, ver la nota de CLAUDE.md sobre no convertirlos a
+             clase): shell.ts los reubica dentro del encabezado en cada pintado. -->
+        <div id="pageHeader"></div>
+        <div class="shell-persist" id="shellPersist">
+          <!-- Refresco en segundo plano (data/cache.ts). Inline a propósito. -->
+          <span id="dataRefreshing" class="data-refreshing" style="display:none" title="Mostrando los últimos datos guardados mientras se descargan los actuales" data-i18n-title="top.refreshingTip">↻ Actualizando…</span>
+          <div id="dsBanner" style="display:none" role="status"></div>
+        </div>
+
       <!-- Rendimiento -->
       <div class="tab-panel active" id="tab-rend">
         <div class="empty" id="rendEmpty">
@@ -321,8 +345,6 @@
         <div id="calculatorContent"></div>
       </div>
 
-      <!-- Rend + Metas (Vista Unificada) -->
-
       <!-- Data Raw -->
       <div class="tab-panel" id="tab-rawdata">
         <div id="rawdataContent"></div>
@@ -352,8 +374,10 @@
           </div>
         </div>
       </div>
-    </div>
-<!-- Presentación 2.0 -->
+      </div><!-- end .shell-content -->
+    </main>
+<!-- Presentación 2.0: pantalla completa (body.present-mode esconde barra,
+     navegación, filtros y .main). Se vuelve con su propio botón "Volver". -->
     <div class="tab-panel" id="tab-present2">
       <div id="present2Content"></div>
     </div>

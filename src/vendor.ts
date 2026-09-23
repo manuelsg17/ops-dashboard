@@ -162,6 +162,7 @@ import * as charts       from "./charts.js";
 import * as rendimiento  from "./rendimiento.js";
 import * as metas        from "./metas.js";
 import * as app          from "./app.js";
+import * as shell        from "./shell";
 // rawdata/seguimiento NO se importan acá — cada una es
 // SU PROPIA pestaña (Data Raw / Seguimiento),
 // nunca usada por rendimiento/metas/app (las únicas eager, junto con el login).
@@ -173,7 +174,7 @@ import * as app          from "./app.js";
 // Espejar el núcleo esencial
 Object.assign(window,
   config, security, format, dates, data, auth, charts,
-  rendimiento, metas, app
+  rendimiento, metas, app, shell
 );
 
 // ── Banda de entorno LOCAL ──────────────────────────────────────────────────
@@ -189,6 +190,9 @@ if (config.IS_LOCAL_SUPABASE) {
     "padding:6px 10px;text-align:center;letter-spacing:.3px";
   document.body.appendChild(b);
   document.body.style.paddingTop = "24px";
+  // La barra superior, la navegación y el panel de filtros son sticky: se
+  // corren hacia abajo lo mismo que la banda para no quedar tapados (Ola 5).
+  document.documentElement.style.setProperty("--shell-offset", "24px");
 }
 
 // ── Kit del sistema de diseño (SOLO dev): http://localhost:8765/?ui=kit ─────

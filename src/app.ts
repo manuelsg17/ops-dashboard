@@ -68,19 +68,14 @@ function _instalarListenersUnaVez() {
   // eso el guard explícito: si el click fue sobre un botón que abre un menú, no
   // cerramos nada — de lo contrario el menú se abriría y cerraría en el mismo
   // click y no se abriría nunca.
-  const _MENU_TOGGLES = '[data-act="toggleUploadMenu"],[data-act="toggleAnalisisMenu"],[data-act="toggleUserMenu"]';
+  const _MENU_TOGGLES = '[data-act="toggleUploadMenu"],[data-act="toggleUserMenu"]';
   document.addEventListener("click", e => {
     if (e.target.closest(_MENU_TOGGLES)) return;
     const m = document.getElementById("uploadMenu");
     if (m) m.classList.remove("open");
-    const a = document.getElementById("analisisMenu");
-    if (a) {
-      a.classList.remove("open");
-      const w = document.getElementById("navAnalisisWrap");
-      if (w) w.classList.remove("menu-open");
-    }
     const u = document.getElementById("userMenu");
     if (u) u.classList.remove("open");
+    syncMenusAria();
   });
 
   // Cerrar dropdown al seleccionar un archivo
@@ -90,6 +85,7 @@ function _instalarListenersUnaVez() {
     el.addEventListener("change", () => {
       const m = document.getElementById("uploadMenu");
       if (m) m.classList.remove("open");
+      syncMenusAria();
     });
   });
 
@@ -203,31 +199,21 @@ export function toggleUserMenu(e) {
   e.stopPropagation();
   const m = document.getElementById("userMenu");
   if (m) m.classList.toggle("open");
+  document.getElementById("uploadMenu")?.classList.remove("open");
+  syncMenusAria();
 }
 
 export function toggleUploadMenu(e) {
   e.stopPropagation();
   document.getElementById("uploadMenu").classList.toggle("open");
+  document.getElementById("userMenu")?.classList.remove("open");
+  syncMenusAria();
 }
 
-// ── NAV ANÁLISIS DROPDOWN ─────────────────────────────────────────────────────
-export function toggleAnalisisMenu(e) {
-  e.stopPropagation();
-  const menu = document.getElementById("analisisMenu");
-  const wrap = document.getElementById("navAnalisisWrap");
-  menu.classList.toggle("open");
-  wrap.classList.toggle("menu-open", menu.classList.contains("open"));
-}
+// (Ola 5: el desplegable "Análisis" y la barra de pestañas de arriba se
+// retiraron; la navegación es lateral y la pinta shell.ts.)
 
-export function switchTabFromMenu(tab) {
-  document.getElementById("analisisMenu").classList.remove("open");
-  document.getElementById("navAnalisisWrap").classList.remove("menu-open");
-  switchTab(tab);
-}
-
-// ── SIDEBAR TOGGLE ────────────────────────────────────────────────────────────
-export const _SVG_COLLAPSE = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>`;
-export const _SVG_EXPAND   = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>`;
+// ── PANEL DE FILTROS (antes "sidebar") ────────────────────────────────────────
 
 // La preferencia de sidebar se guarda POR TIPO DE PANTALLA. En escritorio el
 // sidebar es un panel fijo al costado y tenerlo abierto es lo natural; en
@@ -243,10 +229,15 @@ export function _sidebarPrefKey() {
 
 export function toggleSidebar() {
   const sb  = document.getElementById("mainSidebar");
-  const btn = document.getElementById("sidebarToggle");
   const collapsed = sb.classList.toggle("collapsed");
-  btn.innerHTML = collapsed ? _SVG_EXPAND : _SVG_COLLAPSE;
   lsSet(_sidebarPrefKey(), collapsed ? "1" : "0");
+  syncFiltrosAria();
+  // Al abrir el panel flotante (tablet) el foco va a su primer control; al
+  // cerrarlo, vuelve al botón de "Filtros" del encabezado.
+  if (_esLayoutTablet()) {
+    if (!collapsed) sb.querySelector(".fp-close")?.focus();
+    else document.querySelector(".shell-filtros-btn")?.focus();
+  }
   // Reajustar gráficas ApexCharts al cambiar ancho (timer cancelable desde switchTab)
   clearTimeout(_sidebarResizeTimer);
   _sidebarResizeTimer = setTimeout(() => window.dispatchEvent(new Event("resize")), 220);
@@ -329,9 +320,8 @@ export function restoreSidebarState() {
   const _pref = lsGet(_sidebarPrefKey());
   if (!(_pref === "1" || (_pref === null && _esLayoutTablet()))) return;
   const sb  = document.getElementById("mainSidebar");
-  const btn = document.getElementById("sidebarToggle");
   if (sb)  sb.classList.add("collapsed");
-  if (btn) btn.innerHTML = _SVG_EXPAND;
+  syncFiltrosAria();
 }
 
 // ── MODE SWITCH (Semanal / Mensual) ───────────────────────────────────────────
@@ -345,6 +335,7 @@ export async function switchMode(mode) {
   document.querySelectorAll(".mode-btn").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.mode === mode);
   });
+  schedulePageHeader();   // chip de escala al instante
 
   // Mostrar feedback inmediato y ceder al browser para que pinte el toggle
   // ANTES de empezar el trabajo pesado (destroy charts, updateIndexes, render)
@@ -410,6 +401,7 @@ export async function switchMode(mode) {
 
   showLoad(false);
   _inSwitchMode = false;
+  schedulePageHeader();
 }
 
 // Pestañas cuyo contenido depende de la ESCALA y viven en un chunk lazy: su HTML
@@ -486,19 +478,12 @@ export function switchTab(tab) {
       selected:      getSel()
     };
 
-    // Tabs bajo el dropdown "Análisis" (Fase 7: sincronizado con el nav visible —
-    // incluye partnerview/calculator, excluye ops/proyectos ocultos).
-    const ANALISIS_TABS = ["rend", "partnerview", "calculator", "metas", "seguimiento", "rawdata"];
-    const navAnalisis = document.getElementById("navAnalisis");
-    if (navAnalisis) navAnalisis.classList.toggle("active", ANALISIS_TABS.includes(tab));
-    document.querySelectorAll(".nav-tab[data-tab]").forEach(btn => {
-      btn.classList.toggle("active", btn.dataset.tab === tab);
-    });
-    document.querySelectorAll(".nav-dd-item").forEach(btn => {
-      btn.classList.toggle("active", btn.dataset.tab === tab);
-    });
+    // Navegación lateral (Ola 5): sección activa + cierre del cajón en móvil.
+    syncNavActive(tab);
+    closeNavDrawer();
     document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
     document.getElementById(`tab-${tab}`).classList.add("active");
+    renderPageHeader();
 
     // Placeholder de carga en tabs que dependen de un chunk lazy (loadViewModule):
     // sin esto, la primera vez que se visita una de estas pestañas en la sesión
@@ -600,6 +585,17 @@ export function switchTab(tab) {
   }
 }
 // ── SIDEBAR: DATES ────────────────────────────────────────────────────────────
+// Rango por defecto de la escala activa: el que pone popDates. Lo usa también
+// el encabezado (shell.ts) para saber si el rango es un recorte y para
+// "Restablecer" / quitar el chip de rango.
+export function rangoPorDefecto() {
+  const all = STATE.allDates || [];
+  if (!all.length) return { from: "", to: "" };
+  const from = (STATE.curMode === "semanal" && STATE._loadedFrom && all.includes(STATE._loadedFrom))
+    ? STATE._loadedFrom : all[0];
+  return { from, to: all[all.length - 1] };
+}
+
 export function popDates() {
   const opts = STATE.allDates.map(d => `<option value="${d}">${d2s(d)}</option>`).join("");
   ["dateFrom", "dateTo"].forEach(id => {
@@ -615,11 +611,10 @@ export function popDates() {
     // valor, guardado por saveFilters(), disparaba needsWiderRange()==true en
     // la primera interacción con cualquier filtro (bug real, ver comentario en
     // data.js junto a computeWindowStart).
-    const defaultFrom = (STATE.curMode === "semanal" && STATE._loadedFrom && opts.includes(`"${STATE._loadedFrom}"`))
-      ? STATE._loadedFrom
-      : STATE.allDates[0];
-    document.getElementById("dateFrom").value = defaultFrom;
-    document.getElementById("dateTo").value   = STATE.allDates[STATE.allDates.length - 1];
+    // (La regla vive en rangoPorDefecto(): el encabezado la necesita igual.)
+    const def = rangoPorDefecto();
+    document.getElementById("dateFrom").value = def.from;
+    document.getElementById("dateTo").value   = def.to;
   }
 }
 
@@ -812,6 +807,11 @@ export function popSidebarUI() {
   popPartners(_sidebarList());
   restoreFilters();
   restoreSidebarState();   // aparte: restoreFilters corta antes si no hay filtros guardados
+  // Frescura del encabezado: depende de los períodos de la escala (allDates),
+  // que recién están acá. Antes solo se evaluaba al volver get_last_ingest_at
+  // (que puede llegar antes que los datos) y al cambiar de escala.
+  if (typeof renderFrescura === "function") renderFrescura();
+  schedulePageHeader();
 }
 
 export function filterPList() {
@@ -859,6 +859,7 @@ export function onKAMChange() {
   // El debounce de applyFilters dispara renders con 250ms de retraso. Forzamos
   // un re-render inmediato del tab activo para que el cambio se vea al instante.
   saveFilters();
+  schedulePageHeader();
   // Si la invocacion viene desde restoreFilters() dentro de switchMode/loadFromSupabase,
   // suprimimos el render porque el caller orquestara el render final una sola vez.
   // Evita double-render (ej. switchMode: updateIndexes→popSidebarUI→restoreFilters→onKAMChange
@@ -882,6 +883,7 @@ export function applyFilters() {
     [elFrom.value, elTo.value] = [elTo.value, elFrom.value];
   }
   saveFilters();
+  schedulePageHeader();
 
   // Partner externo: su unica vista es el portal (Track C2).
   if (STATE.userRole === "partner") {
@@ -1547,6 +1549,8 @@ alCerrarSesion(() => {
 import { t, setLang, getLang, aplicarI18nEstatico, selectorIdiomaHTML, kamLabel } from "./core/i18n";
 import { SIN_KAM } from "./core/config.js";
 import { logAccess } from "./shared/accessLog.js";
+import { instalarShell, renderShellNav, renderPageHeader, schedulePageHeader, syncNavActive,
+         closeNavDrawer, syncFiltrosAria, syncMenusAria } from "./shell";
 
 // ── i18n de la interfaz ──────────────────────────────────────────────────────
 // Se aplica al arrancar (el login tambien esta traducido, no solo la app ya
@@ -1595,6 +1599,9 @@ export function setUiLang(code) {
   if (STATE.curTab === "metas" && STATE.metasData?.length && typeof renderMetas === "function") renderMetas();
   if (STATE.curTab === "seguimiento" && typeof renderSeguimiento === "function") renderSeguimiento();
   if (STATE.curTab === "config" && typeof renderConfig === "function") renderConfig();
+  // Estructura (Ola 5): navegación y encabezado se generan desde JS.
+  renderShellNav();
+  renderPageHeader();
 }
 
 registerActions({
@@ -1611,10 +1618,8 @@ registerActions({
   cfgSubirLogo:    (d, el) => cfgSubirLogo(d.clid, el),
   cfgBorrarLogo:   d => cfgBorrarLogo(d.clid),
   switchTab:       d => switchTab(d.tab),
-  switchTabFromMenu: d => switchTabFromMenu(d.tab),
   toggleUploadMenu:  (d, el, e) => toggleUploadMenu(e),
   toggleUserMenu:    (d, el, e) => toggleUserMenu(e),
-  toggleAnalisisMenu:(d, el, e) => toggleAnalisisMenu(e),
   // Botón del estado de error de un chunk que no cargó (ver switchTab). Limpia
   // el guard para que el recovery de vendor.js pueda volver a intentar.
   reloadApp: () => { try { sessionStorage.removeItem("_chunkReloadOnce"); } catch (e) {} location.reload(); },
@@ -1641,3 +1646,5 @@ registerActions({
 // Arranca el idioma apenas carga el modulo: la pantalla de LOGIN tambien se
 // traduce, no solo la app ya autenticada.
 _initUiLang();
+// Navegación lateral + listeners de la estructura (Ola 5). Una sola vez.
+instalarShell();
