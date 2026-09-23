@@ -49,36 +49,34 @@ function _metasCalcProyOn(mesName, mesYearSel, mesDates) {
   }
   return esMesEnCurso(mes, anio);
 }
+import { ordenMes, opcionesMesMeta, mesPorDefecto, claveMes, parseClaveMes } from "./domain/mesesMeta";
 // metas.js — Pestaña Metas
 
-// Ordena meses por valor temporal. Acepta nombres ("MAYO","Mayo","may"),
-// numeros ("5","05"), o fechas ("2026-05","2026-05-11").
-export const _METAS_MES_ORDER = {
-  enero:1, ene:1, jan:1, january:1,
-  febrero:2, feb:2, february:2,
-  marzo:3, mar:3, march:3,
-  abril:4, abr:4, apr:4, april:4,
-  mayo:5, may:5,
-  junio:6, jun:6, june:6,
-  julio:7, jul:7, july:7,
-  agosto:8, ago:8, aug:8, august:8,
-  septiembre:9, setiembre:9, sep:9, sept:9, september:9,
-  octubre:10, oct:10, october:10,
-  noviembre:11, nov:11, november:11,
-  diciembre:12, dic:12, dec:12, december:12
-};
-export function _metasMesOrden(mes) {
-  if (!mes) return 0;
-  const m = String(mes).trim().toLowerCase();
-  // Formato "YYYY-MM" o "YYYY-MM-DD"
-  const ymMatch = m.match(/^(\d{4})-(\d{1,2})/);
-  if (ymMatch) return parseInt(ymMatch[1]) * 100 + parseInt(ymMatch[2]);
-  // Nombre de mes
-  if (_METAS_MES_ORDER[m]) return 2000 + _METAS_MES_ORDER[m]; // sin año, asumir actual
-  // Numero simple "5" o "05"
-  const n = parseInt(m);
-  if (!isNaN(n) && n >= 1 && n <= 12) return 2000 + n;
-  return 0;
+// B1 (sep-2026): la regla vive en domain/mesesMeta.ordenMes — año*100 + mes.
+// Con `anio` (metas.mes_year) el orden es real: ENERO 2027 > DICIEMBRE 2026.
+// Sin año (llamadores que solo tienen el nombre) devuelve el 2000+mes de
+// siempre, que es lo que distingue "nombre" (2001..2012) de "YYYY-MM" (≥100000)
+// en _metasFechasDelMes y en el deck.
+export function _metasMesOrden(mes, anio = null) {
+  return ordenMes(mes, anio);
+}
+
+// Mes (y AÑO) que muestra la pestaña: la selección manual si sigue existiendo;
+// si no, el ÚLTIMO MES CON DATOS (domain/mesesMeta.mesPorDefecto), no la meta
+// más nueva. Antes: orden 2000+mes → en enero abría DICIEMBRE, y con metas
+// cargadas por adelantado abría un mes sin ningún dato (pantalla vacía).
+export function _metasMesElegido() {
+  const ops = opcionesMesMeta(STATE.metasData || []);
+  if (!ops.length) return null;
+  if (STATE.metasMesSel) {
+    const selY = STATE.metasMesSelYear ?? null;
+    const hit = ops.find(o => o.mes === STATE.metasMesSel && (selY == null || o.anio === selY));
+    if (hit) return hit;
+  }
+  let ultimo = "";
+  for (const d of STATE.allDates || []) if (d > ultimo) ultimo = d;
+  const ym = ultimo ? reportYM(ultimo, STATE.curMode, parseLocalDate) : null;
+  return mesPorDefecto(ops, ym);
 }
 
 // BUG REAL (encontrado en auditoria ago 2026): metas.mes es NOMBRE sin año
@@ -94,6 +92,10 @@ export function _metasMesOrden(mes) {
 // forma de saber a cual pertenece, y no vale la pena bloquear data vieja por
 // esto.
 export function _metasMesActualYear(mesName) {
+  // El año ELEGIDO (selector o default por datos) manda: con ENERO 2026 y ENERO
+  // 2027 cargados, el máximo a secas hacía imposible ver el 2026.
+  const el = _metasMesElegido();
+  if (el && el.mes === mesName && el.anio != null) return el.anio;
   const anios = STATE.metasData
     .filter(m => m.mes === mesName && m.mYear != null)
     .map(m => m.mYear);
@@ -149,14 +151,17 @@ export function _metasFechasMesCompleto(mesName, mesYearSel, to) {
 
 // Handler del selector de mes. Cambia el mes activo y re-renderiza.
 // Valida contra los meses realmente disponibles en STATE.metasData.
-export function setMetasMes(mes) {
-  const disp = [...new Set(STATE.metasData.map(m => (m.mes || "").trim()))]
-    .filter(Boolean);
-  if (!disp.includes(mes)) {
-    if (DEBUG) console.warn("setMetasMes: mes no disponible", mes, "disp:", disp);
+export function setMetasMes(clave) {
+  // El valor del <select> es "MES|AÑO" (claveMes): el mismo nombre de mes puede
+  // existir en dos años.
+  const { mes, anio } = parseClaveMes(clave);
+  const disp = opcionesMesMeta(STATE.metasData || []);
+  if (!disp.some(o => o.mes === mes && o.anio === anio)) {
+    if (DEBUG) console.warn("setMetasMes: mes no disponible", clave, "disp:", disp.map(o => o.clave));
     return;
   }
   STATE.metasMesSel = mes;
+  STATE.metasMesSelYear = anio;
   if (STATE.curTab === "metas") renderMetas();
 }
 
@@ -566,13 +571,17 @@ function _metasAlcanceHTML() {
     <div><strong>${escapeHTML(t("metas.alcance", { a: a.join(" · ") }))}</strong></div></div>`;
 }
 
-function _metasControlsHTML(mesName, mesesDisponibles) {
-  // Selector de mes (solo si hay 2+ meses cargados)
-  const mesSelectorHTML = mesesDisponibles.length > 1
+function _metasControlsHTML(mesName, _mesesDisponibles) {  // las opciones salen de opcionesMesMeta (con año)
+  // Selector de mes (solo si hay 2+ meses cargados). Una opción por (mes, AÑO):
+  // ENERO 2026 y ENERO 2027 son opciones distintas (B1).
+  const _ops = opcionesMesMeta(STATE.metasData || []);
+  const _sel = _metasMesElegido();
+  const _selClave = _sel && _sel.mes === mesName ? _sel.clave : claveMes(mesName, _metasMesActualYear(mesName));
+  const mesSelectorHTML = _ops.length > 1
     ? `<div class="agy-style-231">
          <label class="agy-style-232">${escapeHTML(t("metas.mesLabel"))}</label>
          <select data-act-change="setMetasMes" class="agy-style-233">
-           ${mesesDisponibles.map(m => `<option value="${escapeHTML(m)}" ${m === mesName ? "selected" : ""}>${escapeHTML(mesLabel(m))}</option>`).join("")}
+           ${_ops.map(o => `<option value="${escapeHTML(o.clave)}" ${o.clave === _selClave ? "selected" : ""}>${escapeHTML(mesLabel(o.mes) + (o.anio != null ? " " + o.anio : ""))}</option>`).join("")}
          </select>
        </div>`
     : "";
@@ -924,13 +933,12 @@ export function _renderMetasImpl() {
   // Detectar el mes MAS RECIENTE de metasData y limitar el render a ese mes.
   // Antes: mostraba metasData[0].mes (primer registro = mes mas antiguo) y
   // sumaba metas de TODOS los meses, inflando %% de cumplimiento.
-  const mesesDisponibles = [...new Set(STATE.metasData.map(m => m.mes))]
-    .filter(Boolean)
-    .sort((a, b) => _metasMesOrden(b) - _metasMesOrden(a));
-  // Permitir override manual via STATE.metasMesSel (selector futuro)
-  const mesName = STATE.metasMesSel && mesesDisponibles.includes(STATE.metasMesSel)
-    ? STATE.metasMesSel
-    : (mesesDisponibles[0] || "");
+  // Mes elegido = selección manual o, por defecto, el último mes CON DATOS
+  // (_metasMesElegido). Orden por año*100+mes (B1): en enero, ENERO 2027 va
+  // antes que DICIEMBRE 2026.
+  const _mesElegido = _metasMesElegido();
+  const mesesDisponibles = [...new Set(opcionesMesMeta(STATE.metasData || []).map(o => o.mes))];
+  const mesName = _mesElegido ? _mesElegido.mes : "";
   // Año del mes seleccionado (el más reciente si hay más de uno) — ver
   // _metasMatchMes. Sin esto, AGOSTO-2025 y AGOSTO-2026 se sumaban juntos.
   const mesYearSel = _metasMesActualYear(mesName);
@@ -1572,13 +1580,9 @@ export async function downloadMetasPDF() {
       pageNum++;
     }
     // Usar el mismo mes que muestra renderMetas (mas reciente o seleccion manual)
-    const mesesDisp = [...new Set(STATE.metasData.map(m => m.mes))]
-      .filter(Boolean)
-      .sort((a, b) => _metasMesOrden(b) - _metasMesOrden(a));
-    const mes = (STATE.metasMesSel && mesesDisp.includes(STATE.metasMesSel))
-      ? STATE.metasMesSel
-      : (mesesDisp[0] || "metas");
-    stampPDF(pdf, `Metas — ${mes}`);
+    const _el = _metasMesElegido();
+    const mes = _el ? `${_el.mes}${_el.anio != null ? "_" + _el.anio : ""}` : "metas";
+    stampPDF(pdf, `Metas — ${mes.replace("_", " ")}`);
     pdf.save(`Metas_${mes}.pdf`);
   } catch(err) {
     alert(t("metas.err.pdf") + err.message);
@@ -1626,6 +1630,7 @@ export async function deleteMetasMes(mes, year) {
     // renderMetas (vía loadFromSupabase) caiga al mes más reciente que quede.
     if (STATE.metasMesSel && STATE.metasMesSel.toUpperCase() === mesU.toUpperCase()) {
       STATE.metasMesSel = null;
+      STATE.metasMesSelYear = null;
     }
 
     showBanner(true, `Metas de ${mesU} eliminadas. Vuelve a subir el Excel para recargarlas.`);

@@ -78,20 +78,6 @@ export const METRICS = {
   }
 };
 
-// ── FLEET EXTERNO (Supabase de un colega, solo-lectura) ──────────────────────
-// Config desde la UI (tab Fleet Externo), guardada en localStorage — la
-// credencial del colega NO se commitea. Solo anon key pública (RLS del colega).
-export const FLEET_EXT = (function () {
-  const def = { enabled: false, url: "", anonKey: "", table: "" };
-  try {
-    const s = JSON.parse(localStorage.getItem("yangoFleetExtConfig") || "null");
-    if (s && s.url && s.anonKey) {
-      return { enabled: true, url: s.url.trim(), anonKey: s.anonKey.trim(), table: (s.table || "").trim() };
-    }
-  } catch (_) {}
-  return def;
-})();
-
 // Estado global de la aplicación.
 export const STATE = {
   rawData:             [],
@@ -134,14 +120,14 @@ export const STATE = {
   myKam:            null as string | null,
   rendLine:         "comb",
   metasLine:        "comb",
+  // Mes de Metas elegido a mano en el selector: NOMBRE + AÑO (B1). null = el
+  // default (último mes con datos, ver metas._metasMesElegido).
+  metasMesSel:      null as string | null,
+  metasMesSelYear:  null as number | null,
   declineThreshold: 3,
   declineMetric:    "activeDrivers",
   proyectosData:    [],
   seguimientoData:  [],
-  fleetExterno:     [],
-  fleetExternoCols: [],
-  fleetExternoError: null,
-  fleetExternoLoaded: false,
   perms:            new Set(),   // grants granulares por usuario (Fase B2)
   parseWarnings:    new Set(),
   _mensualLoaded:   false,

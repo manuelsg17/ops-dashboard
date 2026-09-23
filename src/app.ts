@@ -42,24 +42,17 @@ function _sidebarList() {
     : (STATE.allPartners || []);
 }
 
-// ── APP INIT ──────────────────────────────────────────────────────────────────
-export function initApp() {
-  // Arrancar la descarga de ApexCharts YA, en paralelo con el fetch de datos:
-  // no bloquea nada (buildLineChart/buildDonutChart se re-encolan solos si aún
-  // no llegó) pero para cuando el render llega a las gráficas, casi siempre ya
-  // está lista. initApp corre post-login, así que la pantalla de login sigue
-  // sin pagar los 133 kB.
-  if (typeof ensureApex === "function") ensureApex().catch(() => {});
-
-  // Restaurar configuración de alerta de declive
-  try {
-    const d = JSON.parse(lsGet("yangoDecline") || "{}");
-    if (d.metric)    STATE.declineMetric    = d.metric;
-    if (d.threshold) STATE.declineThreshold = d.threshold;
-  } catch(e) {}
-
-  initFileHandlers();
-
+// ── LISTENERS DE LA APP (una sola vez por carga de página) ─────────────────────
+// I2: initApp vuelve a correr en cada login SIN recarga (handleLogout pone
+// _appInitialized=false para que se vuelvan a pedir los datos del usuario
+// nuevo). Estos listeners, en cambio, se colgaban de nodos que NO se recrean
+// (document, #partnerSearch, los <input type=file>, #pList…), así que salir y
+// entrar los duplicaba: cada filtro renderizaba dos veces, cada menú se cerraba
+// dos veces. Ninguno depende del usuario, así que se instalan UNA vez.
+let _listenersListos = false;
+function _instalarListenersUnaVez() {
+  if (_listenersListos) return;
+  _listenersListos = true;
   // Debounce en búsqueda de partners (timer a nivel modulo para cancelar al cambiar tab)
   document.getElementById("partnerSearch").addEventListener("input", () => {
     clearTimeout(_pSearchTimer);
@@ -119,6 +112,27 @@ export function initApp() {
       if (e.target.matches('input[type="checkbox"]')) _debouncedApply();
     });
   }
+
+}
+
+// ── APP INIT ──────────────────────────────────────────────────────────────────
+export function initApp() {
+  // Arrancar la descarga de ApexCharts YA, en paralelo con el fetch de datos:
+  // no bloquea nada (buildLineChart/buildDonutChart se re-encolan solos si aún
+  // no llegó) pero para cuando el render llega a las gráficas, casi siempre ya
+  // está lista. initApp corre post-login, así que la pantalla de login sigue
+  // sin pagar los 133 kB.
+  if (typeof ensureApex === "function") ensureApex().catch(() => {});
+
+  // Restaurar configuración de alerta de declive
+  try {
+    const d = JSON.parse(lsGet("yangoDecline") || "{}");
+    if (d.metric)    STATE.declineMetric    = d.metric;
+    if (d.threshold) STATE.declineThreshold = d.threshold;
+  } catch(e) {}
+
+  initFileHandlers();
+  _instalarListenersUnaVez();
 
   // Precarga en tiempo ocioso de las pantallas más usadas, DESPUÉS de que la
   // carga inicial terminó: bajar sus chunks mientras el navegador está libre es
@@ -445,7 +459,7 @@ export function switchTab(tab) {
     document.body.classList.toggle("present-mode", tab === "present2");
     // Ocultar el sidebar de filtros en tabs donde no aplica (Fase 7): la data de
     // Configuración/Calculadora/Data Raw no depende de Escala/Fechas/Ciudad/KAM.
-    const NO_SIDEBAR_TABS = new Set(["config", "calculator", "rawdata", "seguimiento", "fleetext"]);
+    const NO_SIDEBAR_TABS = new Set(["config", "calculator", "rawdata", "seguimiento"]);
     document.body.classList.toggle("no-sidebar", NO_SIDEBAR_TABS.has(tab));
     // Guardar filtros actuales antes de cambiar
     STATE.savedFilters = {
@@ -459,7 +473,7 @@ export function switchTab(tab) {
 
     // Tabs bajo el dropdown "Análisis" (Fase 7: sincronizado con el nav visible —
     // incluye partnerview/calculator, excluye ops/proyectos ocultos).
-    const ANALISIS_TABS = ["rend", "partnerview", "calculator", "metas", "seguimiento", "fleetext", "rawdata"];
+    const ANALISIS_TABS = ["rend", "partnerview", "calculator", "metas", "seguimiento", "rawdata"];
     const navAnalisis = document.getElementById("navAnalisis");
     if (navAnalisis) navAnalisis.classList.toggle("active", ANALISIS_TABS.includes(tab));
     document.querySelectorAll(".nav-tab[data-tab]").forEach(btn => {
@@ -561,7 +575,6 @@ export function switchTab(tab) {
       if (tab === "metas"       && STATE.metasData.length && STATE.rawData.length) renderMetas();
       if (tab === "rawdata")                                                        renderRawData();
       if (tab === "seguimiento")                                                    renderSeguimiento();
-      if (tab === "fleetext")                                                       renderFleetExterno();
       if (tab === "config")                                                         renderConfig();
       if (tab === "present2"    && STATE.rawData.length && typeof renderPresent2 === "function")    renderPresent2();
       if (tab === "partnerview" && STATE.rawData.length && typeof renderPartnerView === "function")  renderPartnerView();
@@ -896,11 +909,6 @@ export function updateDeclineSettings() {
   if (STATE.rawData.length) renderRend(); // recalcula badges
 }
 
-// ── MODE TOGGLE HTML (compartido por Rendimiento y Metas) ─────────────────────
-export function modeToggleHTML() {
-  return ""; // El selector de escala vive en el sidebar — ver .mode-toggle-row
-}
-
 // Barra de sub-secciones de Configuración (mismo patrón visual que
 // .mode-toggle-row/.mode-btn del selector de línea de Rendimiento/Metas).
 // "usuarios" y "mantenimiento" solo se ofrecen a admin — un viewer/kam no tiene
@@ -994,7 +1002,7 @@ function _renderConfigMantenimiento() {
       <div class="agy-style-32">
         <div>
           <label class="agy-style-33">${escapeHTML(t("cfg.metrica"))}</label>
-          <select class="sb-sel" id="declineMetricSel" data-act-change="updateDeclineSettings" class="agy-style-34">
+          <select class="sb-sel agy-style-34" id="declineMetricSel" data-act-change="updateDeclineSettings">
             <option value="activeDrivers"${STATE.declineMetric==="activeDrivers"?" selected":""}>${escapeHTML(t("metric.ad.label"))}</option>
             <option value="supplyHours"${STATE.declineMetric==="supplyHours"?" selected":""}>${escapeHTML(t("metric.sh.label"))}</option>
             <option value="nr"${STATE.declineMetric==="nr"?" selected":""}>${escapeHTML(t("metric.nr.label"))}</option>
@@ -1002,7 +1010,7 @@ function _renderConfigMantenimiento() {
         </div>
         <div>
           <label class="agy-style-33">${escapeHTML(t("cfg.semanasConsec"))}</label>
-          <select class="sb-sel" id="declineThresholdSel" data-act-change="updateDeclineSettings" class="agy-style-10">
+          <select class="sb-sel agy-style-10" id="declineThresholdSel" data-act-change="updateDeclineSettings">
             ${[2,3,4,5].map(n => `<option value="${n}"${STATE.declineThreshold===n?" selected":""}>${escapeHTML(t("cfg.nSemanas", { n }))}</option>`).join("")}
           </select>
         </div>
@@ -1021,7 +1029,7 @@ function _renderConfigMantenimiento() {
       <div class="agy-style-8">
         <div class="agy-style-41">
           <label class="agy-style-42">${escapeHTML(t("cfg.tabla"))}</label>
-          <select class="crud-input" id="delTableSel" class="agy-style-43">
+          <select class="crud-input agy-style-43" id="delTableSel">
             <option value="rendimiento">${escapeHTML(t("mode.semanal"))}</option>
             <option value="rendimiento_mensual">${escapeHTML(t("mode.mensual"))}</option>
             <option value="rendimiento_diario">${escapeHTML(t("mode.diario"))}</option>
@@ -1030,62 +1038,35 @@ function _renderConfigMantenimiento() {
         </div>
         <div class="agy-style-41">
           <label class="agy-style-42">${escapeHTML(t("cfg.mesOpcional"))}</label>
-          <input class="crud-input" id="delMonthInput" placeholder="${escapeHTML(t("cfg.mesVacio"))}"
-            class="agy-style-44" maxlength="7"/>
+          <input class="crud-input agy-style-44" id="delMonthInput" placeholder="${escapeHTML(t("cfg.mesVacio"))}" maxlength="7"/>
         </div>
-        <button class="crud-btn crud-btn-del" data-act="deleteDashboardData"
-          class="agy-style-45">
+        <button class="crud-btn crud-btn-del agy-style-45" data-act="deleteDashboardData">
           ${escapeHTML(t("cfg.btnEliminar"))}
         </button>
       </div>
     </div>`;
 
-  // Fleet Externo: la sincronización real corre en GitHub Actions
-  // (.github/workflows/fleet-sync.yml, cron semanal) — este botón solo la
-  // dispara ANTES de tiempo vía la Edge Function trigger-fleet-sync. Ni el
-  // Action ni esta función tocan la base del colega desde el navegador: la
-  // credencial de solo-lectura vive como Secret de GitHub, nunca acá.
-  html += `
-    <div class="section agy-style-37">
-      <div class="agy-style-38">${escapeHTML(t("cfg.fleetExtTitulo"))}</div>
-      <div class="agy-style-39">${t("cfg.fleetExtSub")}</div>
-      <div class="agy-style-8">
-        <button class="crud-btn" id="fleetSyncBtn" data-act="triggerFleetSync">
-          ${escapeHTML(t("cfg.sincronizarAhora"))}
-        </button>
-        <span id="fleetSyncMsg" class="agy-style-54"></span>
-      </div>
-    </div>`;
   return html;
 }
 
-// ── Fleet Externo: disparo manual del sync (Edge Function trigger-fleet-sync) ─
-export async function triggerFleetSync() {
-  const btn = document.getElementById("fleetSyncBtn");
-  const msg = document.getElementById("fleetSyncMsg");
-  if (btn) { btn.disabled = true; btn.textContent = t("cfg.disparando"); }
-  if (msg) { msg.textContent = ""; }
-  try {
-    const { data, error } = await sb.functions.invoke("trigger-fleet-sync", { method: "POST" });
-    if (error) throw error;
-    if (data?.error) throw new Error(data.error);
-    showBanner(true, data?.message || t("cfg.syncDisparada"));
-  } catch (e) {
-    showBanner(false, t("cfg.errorSync") + e.message);
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = t("cfg.sincronizarAhora"); }
-  }
-}
-
 // ── Sub-sección: Partners (CLID/nombre/KAM) — la vista por defecto ───────────
+// I9: KAM_MAP trae "" para los partners sin KAM → una tarjeta SIN NOMBRE y una
+// opción en blanco en el filtro. Se agrupan bajo SIN_KAM (mismo bucket que el
+// sidebar), que nunca se escribe en la base.
+const _cfgKamDe = clid => (STATE.KAM_MAP[clid] || "").trim() || SIN_KAM;
+const _cfgKams = () => [...new Set(Object.keys(STATE.KAM_MAP).map(_cfgKamDe))]
+  .sort((a, b) => (a === SIN_KAM) - (b === SIN_KAM) || a.localeCompare(b));
+// KAMs reales, para los <select> de edición: SIN_KAM es un bucket de UI, no una persona.
+const _cfgKamsReales = () => _cfgKams().filter(k => k !== SIN_KAM);
+
 function _renderConfigPartners() {
-  const kams = [...new Set(Object.values(STATE.KAM_MAP))].sort();
+  const kams = _cfgKams();
   let html = "";
 
   // Stats per KAM
   html += `<div class="section"><div class="agy-style-68">`;
   kams.forEach(kam => {
-    const count = Object.values(STATE.KAM_MAP).filter(k => k === kam).length;
+    const count = Object.keys(STATE.KAM_MAP).filter(c => _cfgKamDe(c) === kam).length;
     const color = KAM_COLORS[kam] || "#888";
     html += `
       <div class="mcard" style="border-left:3px solid ${color}">
@@ -1107,9 +1088,9 @@ function _renderConfigPartners() {
   html += `
     <div class="agy-style-69">${escapeHTML(t("cfg.partnersClids"))}</div>
     <div class="agy-style-70">
-      <input class="crud-input" id="configSearch" placeholder="${escapeHTML(t("cfg.buscarCPK"))}" value="${CONFIG_STATE.search.replace(/"/g,'&quot;')}"
-        data-act-input="cfgSearch" class="agy-style-71"/>
-      <select class="crud-input" id="configKamFilter" data-act-change="cfgKamFilter" class="agy-style-10">
+      <input class="crud-input agy-style-71" id="configSearch" placeholder="${escapeHTML(t("cfg.buscarCPK"))}" value="${CONFIG_STATE.search.replace(/"/g,'&quot;')}"
+        data-act-input="cfgSearch"/>
+      <select class="crud-input agy-style-10" id="configKamFilter" data-act-change="cfgKamFilter">
         <option value="all"${cfgKamF==="all"?" selected":""}>${escapeHTML(t("calc.todosKam"))}</option>
         ${kamFilterOpts}
       </select>
@@ -1126,7 +1107,9 @@ function _renderConfigPartners() {
 // texto ("Sin archivo seleccionado") no se puede traducir ni acortar.
 export function _cfgLogoCelda(clid, partner) {
   const url = (STATE.partnerLogos || {})[partner];
-  const puede = STATE.isAdmin || (STATE.perms || []).includes("write:config");
+  const puede = STATE.isAdmin || !!(STATE.perms && STATE.perms.has && STATE.perms.has("write:config"));
+  // STATE.perms es un Set: el `.includes` de antes tiraba TypeError para
+  // cualquier no-admin y rompía la tabla entera de Configuración → Partners.
   const img = url
     ? `<img src="${escapeHTML(url)}" alt="" class="cfg-logo-mini">`
     : `<span class="agy-style-77">—</span>`;
@@ -1160,18 +1143,21 @@ export async function cfgBorrarLogo(clid) {
 export function renderConfigResults() {
   const box = document.getElementById("configResults");
   if (!box) return;
-  const kams = [...new Set(Object.values(STATE.KAM_MAP))].sort();
+  const kams = _cfgKamsReales();
   const cfgSearch = CONFIG_STATE.search.toLowerCase();
   const cfgKamF   = CONFIG_STATE.kamFilter;
   const allRows = Object.entries(STATE.CLID_MAP)
     .sort((a, b) => a[1].localeCompare(b[1]))
     .filter(([clid, partner]) => {
       const kam = STATE.KAM_MAP[clid] || "";
-      if (cfgKamF !== "all" && kam !== cfgKamF) return false;
+      if (cfgKamF !== "all" && _cfgKamDe(clid) !== cfgKamF) return false;
       if (cfgSearch && !clid.toLowerCase().includes(cfgSearch) && !partner.toLowerCase().includes(cfgSearch) && !kam.toLowerCase().includes(cfgSearch)) return false;
       return true;
     });
   const totalPages = Math.max(1, Math.ceil(allRows.length / CONFIG_STATE.PAGE_SIZE));
+  // I3: mostrar solo lo que RLS va a aceptar (domain/permisosUI.ts).
+  const _puedeEscribir = _puedeUI("partners.escribir");
+  const _puedeBorrar   = _puedeUI("partners.borrar");
   if (CONFIG_STATE.page >= totalPages) CONFIG_STATE.page = 0;
   const pageRows  = allRows.slice(CONFIG_STATE.page * CONFIG_STATE.PAGE_SIZE, (CONFIG_STATE.page + 1) * CONFIG_STATE.PAGE_SIZE);
   const cnt = document.getElementById("configCount");
@@ -1198,7 +1184,7 @@ export function renderConfigResults() {
       // Escapar valores para evitar XSS (CLID con apostrofes/HTML)
       const clidH    = escapeHTML(clid);
       const partnerH = escapeHTML(partner);
-      const kamH     = escapeHTML(kam);
+      const kamH     = kam ? escapeHTML(kam) : `<span class="agy-style-77">${escapeHTML(SIN_KAM)}</span>`;
       // Para uso dentro de comillas simples de onclick, escapar apostrofes
       const isFleet  = !!(STATE.CLID_IS_FLEET  || {})[clid];
       const isTuktuk = !!(STATE.CLID_IS_TUKTUK || {})[clid];
@@ -1217,24 +1203,25 @@ export function renderConfigResults() {
           <td class="agy-style-27">${isTuktuk ? `<span class="agy-style-78">🛺 TukTuk</span>` : `<span class="agy-style-77">—</span>`}</td>
           <td class="agy-style-27">${_cfgLogoCelda(clid, partner)}</td>
           <td class="agy-style-27">
-            <button class="crud-btn crud-btn-edit" data-act="kamMakeEditable" data-clid="${clidH}">${escapeHTML(t("cfg.editar"))}</button>
-            <button class="crud-btn crud-btn-del"  data-act="kamCrudDelete" data-clid="${clidH}">${escapeHTML(t("cfg.eliminarBtn"))}</button>
+            ${_puedeEscribir ? `<button class="crud-btn crud-btn-edit" data-act="kamMakeEditable" data-clid="${clidH}">${escapeHTML(t("cfg.editar"))}</button>` : ""}
+            ${_puedeBorrar ? `<button class="crud-btn crud-btn-del"  data-act="kamCrudDelete" data-clid="${clidH}">${escapeHTML(t("cfg.eliminarBtn"))}</button>` : ""}
+            ${!_puedeEscribir && !_puedeBorrar ? `<span class="agy-style-77">—</span>` : ""}
           </td>
         </tr>`;
     });
 
-  // Fila para agregar nuevo
+  // Fila para agregar nuevo (solo si RLS lo va a aceptar)
   const kamOpts = kams.map(k => `<option value="${escapeHTML(k)}">${escapeHTML(k)}</option>`).join("");
-  html += `
+  if (_puedeEscribir) html += `
         <tr id="newClidRow" class="agy-style-79">
           <td><input class="crud-input" id="newClid"    placeholder="CLID"/></td>
           <td><input class="crud-input" id="newPartner" placeholder="${escapeHTML(t("cfg.nombrePartner"))}"/></td>
           <td>
-            <select class="crud-input" id="newKam" data-act-change="kamNewKamChange" class="agy-style-80">
+            <select class="crud-input agy-style-80" id="newKam" data-act-change="kamNewKamChange">
               ${kamOpts}
               <option value="__new__">${escapeHTML(t("cfg.addKam"))}</option>
             </select>
-            <input class="crud-input" id="newKamCustom" placeholder="${escapeHTML(t("cfg.nuevoKam"))}" class="agy-style-81"/>
+            <input class="crud-input agy-style-81" id="newKamCustom" placeholder="${escapeHTML(t("cfg.nuevoKam"))}"/>
           </td>
           <td class="agy-style-27"><input type="checkbox" id="newFleet" title="Fleet"/></td>
           <td class="agy-style-27"><input type="checkbox" id="newTuktuk" title="TukTuk"/></td>
@@ -1242,16 +1229,17 @@ export function renderConfigResults() {
           <td class="agy-style-27">
             <button class="crud-btn crud-btn-add" data-act="kamCrudAdd">${escapeHTML(t("cfg.agregar"))}</button>
           </td>
-        </tr>
+        </tr>`;
+  html += `
       </tbody></table>
     </div>
     ${totalPages > 1 ? `
     <div class="agy-style-82">
-      <button class="crud-btn" data-act="cfgPagePrev"
-        ${CONFIG_STATE.page===0?"disabled":""} class="agy-style-83">${escapeHTML(t("raw.anterior"))}</button>
+      <button class="crud-btn agy-style-83" data-act="cfgPagePrev"
+        ${CONFIG_STATE.page===0?"disabled":""}>${escapeHTML(t("raw.anterior"))}</button>
       <span>${t("raw.pagina", { a: `<strong>${CONFIG_STATE.page+1}</strong>`, b: `<strong>${totalPages}</strong>` })}</span>
-      <button class="crud-btn" data-act="cfgPageNext" data-total="${totalPages}"
-        ${CONFIG_STATE.page===totalPages-1?"disabled":""} class="agy-style-83">${escapeHTML(t("raw.siguiente"))}</button>
+      <button class="crud-btn agy-style-83" data-act="cfgPageNext" data-total="${totalPages}"
+        ${CONFIG_STATE.page===totalPages-1?"disabled":""}>${escapeHTML(t("raw.siguiente"))}</button>
     </div>` : ""}`;
   box.innerHTML = html;
 }
@@ -1262,10 +1250,13 @@ export function kamMakeEditable(clid) {
   if (!row) return;
   const partner = STATE.CLID_MAP[clid] || "";
   const kam     = STATE.KAM_MAP[clid]  || "";
-  const kams    = [...new Set(Object.values(STATE.KAM_MAP))].sort();
+  const kams    = _cfgKamsReales();
   // Include current KAM even if not in list (safety)
   if (kam && !kams.includes(kam)) kams.push(kam);
-  const editKamOpts = kams.map(k => `<option value="${escapeHTML(k)}"${k===kam?" selected":""}>${escapeHTML(k)}</option>`).join("");
+  // Sin KAM: opción vacía seleccionada. Antes quedaba seleccionado el PRIMER KAM
+  // de la lista sin que nadie lo eligiera, y "Guardar" se lo asignaba.
+  const editKamOpts = (kam ? "" : `<option value="" selected>— ${escapeHTML(SIN_KAM)} —</option>`) +
+    kams.map(k => `<option value="${escapeHTML(k)}"${k===kam?" selected":""}>${escapeHTML(k)}</option>`).join("");
   const clidH    = escapeHTML(clid);
   const partnerH = escapeHTML(partner);
   const isFleet  = !!(STATE.CLID_IS_FLEET  || {})[clid];
@@ -1274,14 +1265,15 @@ export function kamMakeEditable(clid) {
     <td class="agy-style-75">${clidH}</td>
     <td><input class="crud-input" id="edit_partner_${clidH}" value="${partnerH}"/></td>
     <td>
-      <select class="crud-input" id="edit_kam_${clidH}" data-act-change="kamEditKamChange" data-clid="${clidH}" class="agy-style-80">
+      <select class="crud-input agy-style-80" id="edit_kam_${clidH}" data-act-change="kamEditKamChange" data-clid="${clidH}">
         ${editKamOpts}
         <option value="__new__">${escapeHTML(t("cfg.addKam"))}</option>
       </select>
-      <input class="crud-input" id="edit_kam_custom_${clidH}" placeholder="${escapeHTML(t("cfg.nuevoKam"))}" class="agy-style-81"/>
+      <input class="crud-input agy-style-81" id="edit_kam_custom_${clidH}" placeholder="${escapeHTML(t("cfg.nuevoKam"))}"/>
     </td>
     <td class="agy-style-27"><input type="checkbox" id="edit_fleet_${clidH}" ${isFleet ? "checked" : ""} title="Fleet"/></td>
     <td class="agy-style-27"><input type="checkbox" id="edit_tuktuk_${clidH}" ${isTuktuk ? "checked" : ""} title="TukTuk"/></td>
+    <td class="agy-style-27"></td>
     <td class="agy-style-27">
       <button class="crud-btn crud-btn-save"   data-act="kamCrudEdit" data-clid="${clidH}">${escapeHTML(t("cfg.guardar"))}</button>
       <button class="crud-btn crud-btn-cancel" data-act="renderConfig">${escapeHTML(t("cfg.cancelar"))}</button>
@@ -1310,14 +1302,17 @@ export async function kamCrudEdit(clid) {
   if (!partner || !kam) { showBanner(false, t("cfg.completaNombreKam")); return; }
   const isFleet  = document.getElementById(`edit_fleet_${clid}`)?.checked || false;
   const isTuktuk = document.getElementById(`edit_tuktuk_${clid}`)?.checked || false;
+  if (!_puedeUI("partners.escribir")) { showBanner(false, MSG_SIN_FILAS); return; }
   showLoad(true, t("cfg.guardando"));
-  const { error } = await sb.from("partners")
-    .upsert([{ clid, partner, kam, activo: true, is_fleet: isFleet, is_tuktuk: isTuktuk }], { onConflict: "clid" });
+  // .select(): sin él no hay forma de distinguir "guardado" de "RLS no tocó
+  // nada" (I3) — un UPDATE bloqueado no da error, afecta 0 filas.
+  const { data, error } = await sb.from("partners")
+    .upsert([{ clid, partner, kam, activo: true, is_fleet: isFleet, is_tuktuk: isTuktuk }], { onConflict: "clid" })
+    .select("clid");
   showLoad(false);
   if (error) { showBanner(false, t("cfg.errorGuardar") + error.message); return; }
-  await loadFromSupabase();
-  renderConfig();
-  showBanner(true, t("cfg.guardadoOk"));
+  if (!data || !data.length) { showBanner(false, MSG_SIN_FILAS); return; }
+  await _refrescarYAvisar(t("cfg.guardadoOk"), "Partner guardado");
 }
 
 export async function kamCrudAdd() {
@@ -1335,41 +1330,61 @@ export async function kamCrudAdd() {
   }
   const isFleet  = document.getElementById("newFleet")?.checked || false;
   const isTuktuk = document.getElementById("newTuktuk")?.checked || false;
+  if (!_puedeUI("partners.escribir")) { showBanner(false, MSG_SIN_FILAS); return; }
   showLoad(true, t("cfg.guardando"));
-  const { error } = await sb.from("partners")
-    .upsert([{ clid, partner, kam, activo: true, is_fleet: isFleet, is_tuktuk: isTuktuk }], { onConflict: "clid" });
+  const { data, error } = await sb.from("partners")
+    .upsert([{ clid, partner, kam, activo: true, is_fleet: isFleet, is_tuktuk: isTuktuk }], { onConflict: "clid" })
+    .select("clid");
   showLoad(false);
   if (error) { showBanner(false, t("cfg.errorAgregar") + error.message); return; }
-  await loadFromSupabase();
-  renderConfig();
-  showBanner(true, t("cfg.clidAgregado"));
+  if (!data || !data.length) { showBanner(false, MSG_SIN_FILAS); return; }
+  await _refrescarYAvisar(t("cfg.clidAgregado"), "CLID agregado");
 }
 
 export async function kamCrudDelete(clid) {
   const partner = STATE.CLID_MAP[clid] || clid;
+  if (!_puedeUI("partners.borrar")) { showBanner(false, MSG_SIN_FILAS); return; }
   if (!confirm(t("cfg.confirmEliminarClid", { p: partner, c: clid }))) return;
   showLoad(true, t("cfg.eliminando"));
-  const { error } = await sb.from("partners").delete().eq("clid", clid);
+  // I3: el DELETE bloqueado por RLS (partners_admin_delete = solo admin) NO da
+  // error — devuelve 0 filas. Antes eso se pintaba como "eliminado ✓".
+  const { data, error } = await sb.from("partners").delete().eq("clid", clid).select("clid");
   showLoad(false);
   if (error) { showBanner(false, t("cfg.errorEliminar") + error.message); return; }
-  await loadFromSupabase();
-  renderConfig();
-  showBanner(true, t("cfg.eliminadoOk", { p: partner }));
+  if (!data || !data.length) { showBanner(false, MSG_SIN_FILAS); return; }
+  await _refrescarYAvisar(t("cfg.eliminadoOk", { p: partner }), `Partner "${partner}" eliminado`);
+}
+
+// I4: después de ESCRIBIR, el verde solo si la pantalla quedó refrescada
+// (mismo patrón que calcSaveMetas). Si el guardado salió bien pero el refresco
+// no, decirlo tal cual: con un verde encima de una pantalla vieja lo razonable
+// es concluir "no se guardó" y volver a guardar.
+// refrescarTrasEscritura además invalida mensual/diario/conversión (B8).
+async function _refrescarYAvisar(msgOk, queSeHizo) {
+  const ok = await refrescarTrasEscritura();
+  if (STATE.curTab === "config") renderConfig();
+  showBanner(ok, ok ? msgOk
+    : `${queSeHizo} en la base de datos, pero no se pudo refrescar la pantalla. Recarga la página — no vuelvas a guardar.`);
+}
+
+// Espejo de RLS para decidir qué controles mostrar (domain/permisosUI.ts).
+function _puedeUI(accion) {
+  return puedeUI(accion, { rol: STATE.userRole, perms: STATE.perms });
 }
 
 // ── UI HELPERS ────────────────────────────────────────────────────────────────
+// I6: el mensaje va por textContent, NUNCA como HTML. Muchos banners llevan
+// nombres que vienen de la base o del Excel (partner, KAM, mensajes de error de
+// PostgREST que citan valores); con innerHTML un nombre con "<img onerror>"
+// era una inyección. Ningún llamador pasa HTML a propósito (verificado con
+// grep, 23-sep-2026) — si alguno lo necesitara, que arme su propio nodo.
 export function showBanner(ok, msg) {
   const el = document.getElementById("dsBanner");
+  if (!el) return;
   el.style.display = "flex";
-  if (ok) {
-    el.className = "ds-banner";
-    el.innerHTML = `<span class="ds-dot"></span>
-                    <span class="agy-style-84">${msg}</span>`;
-  } else {
-    el.className = "ds-banner err";
-    el.innerHTML = `<span class="ds-dot err"></span>
-                    <span class="agy-style-85">${msg}</span>`;
-  }
+  el.className = ok ? "ds-banner" : "ds-banner err";
+  el.innerHTML = `<span class="ds-dot${ok ? "" : " err"}"></span><span class="${ok ? "agy-style-84" : "agy-style-85"}"></span>`;
+  el.lastElementChild.textContent = msg == null ? "" : String(msg);
 }
 
 export function showLoad(show, msg = "Procesando...") {
@@ -1383,7 +1398,8 @@ export function showLoad(show, msg = "Procesando...") {
     }
     el.innerHTML = `
       <div class="spinner"></div>
-      <div class="agy-style-86">${msg}</div>`;
+      <div class="agy-style-86"></div>`;
+    el.lastElementChild.textContent = msg == null ? "" : String(msg);
   } else {
     el?.remove();
   }
@@ -1417,46 +1433,78 @@ export async function deleteDashboardData() {
     return;
   }
 
-  const scope = mes ? t("cfg.delMes", { m: mes }) : t("cfg.delTodaTabla");
-  if (!confirm(t("cfg.confirmarBorrado", { s: scope, t: labels[table] }))) return;
+  // B3: el filtro se arma UNA vez y se usa para el conteo previo Y para el
+  // borrado — así lo que se confirma es exactamente lo que se borra.
+  // metas: el input es "YYYY-MM" pero metas.mes es el NOMBRE ("JUNIO") y el año
+  // va en mes_year. Antes filtraba mes="2026-06": no borraba nada y avisaba OK.
+  let filtroMetas = null;
+  if (table === "metas" && mes) {
+    filtroMetas = filtroMetasDeMes(mes);
+    if (!filtroMetas) { alert(t("cfg.formatoMesInvalido")); return; }
+  }
+  const aplicarFiltro = (q) => {
+    if (!mes) {
+      // Supabase requiere un WHERE para DELETE. Usar filtro tautologico.
+      return q.neq("clid", "__NEVER_MATCH__");
+    }
+    const [y, m] = mes.split("-").map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    const monthEnd = `${mes}-${String(lastDay).padStart(2, "0")}`;
+    const monthStart = `${mes}-01`;
+    if (table === "rendimiento")         return q.gte("fecha", monthStart).lte("fecha", monthEnd);
+    if (table === "rendimiento_diario")  return q.gte("date", monthStart).lte("date", monthEnd);
+    if (table === "rendimiento_mensual") return q.eq("mes", mes);
+    if (table === "metas")               return q.or(filtroMetas.orPostgrest).eq("mes_year", filtroMetas.anio);
+    return q;
+  };
+
+  const etiquetaMes = table === "metas" && filtroMetas
+    ? `${filtroMetas.nombres[0]} ${filtroMetas.anio}` : mes;
+  const scope = mes ? t("cfg.delMes", { m: etiquetaMes }) : t("cfg.delTodaTabla");
+
+  // Conteo PREVIO: la confirmación dice cuántas filas se van a borrar. Un 0 acá
+  // corta antes de preguntar — es justo el caso que antes "borraba" sin borrar.
+  showLoad(true, t("cfg.eliminandoTabla", { t: labels[table] }));
+  let previstas = null;
+  try {
+    const { count, error: cErr } = await aplicarFiltro(
+      sb.from(table).select("clid", { count: "exact", head: true }));
+    if (cErr) throw cErr;
+    previstas = count ?? 0;
+  } catch (err) {
+    showLoad(false);
+    showBanner(false, t("cfg.errorEliminar") + (err.message || err));
+    return;
+  }
+  showLoad(false);
+  if (previstas === 0) {
+    showBanner(false, `No hay filas de ${labels[table]} para ${mes ? etiquetaMes : "borrar"}: no se eliminó nada.`);
+    return;
+  }
+  if (!confirm(t("cfg.confirmarBorrado", { s: scope, t: labels[table] }) +
+    `\n\nSe van a eliminar ${previstas.toLocaleString("es-PE")} fila(s).`)) return;
 
   showLoad(true, t("cfg.eliminandoTabla", { t: labels[table] }));
 
   try {
-    let query = sb.from(table).delete();
-
-    if (mes) {
-      const [y, m] = mes.split("-").map(Number);
-      const lastDay = new Date(y, m, 0).getDate();
-      const monthEnd = `${mes}-${String(lastDay).padStart(2, "0")}`;
-      const monthStart = `${mes}-01`;
-
-      if (table === "rendimiento") {
-        query = query.gte("fecha", monthStart).lte("fecha", monthEnd);
-      } else if (table === "rendimiento_diario") {
-        query = query.gte("date", monthStart).lte("date", monthEnd);
-      } else if (table === "rendimiento_mensual") {
-        query = query.eq("mes", mes);
-      } else if (table === "metas") {
-        query = query.eq("mes", mes);
-      }
-    } else {
-      // Supabase requiere un WHERE para DELETE. Usar filtro tautologico.
-      query = query.neq("clid", "__NEVER_MATCH__");
-    }
-
-    const { error } = await query;
+    // count:"exact" en el DELETE: PostgREST devuelve cuántas filas borró DE
+    // VERDAD. Con RLS, un DELETE sin permiso no da error: borra 0 (I3).
+    const { count: borradas, error } = await aplicarFiltro(sb.from(table).delete({ count: "exact" }));
     if (error) throw error;
+    const n = borradas ?? 0;
+    if (n === 0) { showBanner(false, MSG_SIN_FILAS); return; }
 
-    showBanner(true, t("cfg.eliminadoTabla", { t: labels[table], m: mes ? `(${mes})` : t("cfg.todo") }));
-
-    // Resetear flags de lazy-load para forzar recarga del dataset modificado
-    if (table === "rendimiento_mensual") STATE._mensualLoaded = false;
-    if (table === "rendimiento_diario")  STATE._diarioLoaded  = false;
-
-    // Recargar desde Supabase para reflejar el estado actual
     monthInp.value = "";
-    await loadFromSupabase();
+    if (table === "metas") { STATE.metasMesSel = null; STATE.metasMesSelYear = null; }
+
+    // I7: además del semanal, invalidar y rehacer mensual/diario (la escala
+    // activa se vuelve a armar en el acto — antes quedaba mostrando lo borrado).
+    const ok = await refrescarTrasEscritura();
+    const msg = t("cfg.eliminadoTabla", { t: labels[table], m: mes ? `(${etiquetaMes})` : t("cfg.todo") }) +
+      ` · ${n.toLocaleString("es-PE")} fila(s)` +
+      (n !== previstas ? ` (se esperaban ${previstas.toLocaleString("es-PE")})` : "");
+    showBanner(ok, ok ? msg : `${msg}. No se pudo refrescar la pantalla: recarga la página.`);
+    if (STATE.curTab === "config") renderConfig();
   } catch (err) {
     showBanner(false, t("cfg.errorEliminar") + err.message);
     console.error(err);
@@ -1470,7 +1518,17 @@ import { registerActions } from "./shared/actions.js";
 // Import explicito (no global): app.ts se evalua antes de que vendor.ts espeje
 // los globales, y estas se llaman desde handlers que corren despues — pero el
 // import deja la dependencia a la vista, que es el punto.
-import { guardarLogoPartner, borrarLogoPartner, ensurePartnerLogos } from "./data.js";
+import { guardarLogoPartner, borrarLogoPartner, ensurePartnerLogos, refrescarTrasEscritura } from "./data.js";
+import { puede as puedeUI, MSG_SIN_FILAS } from "./domain/permisosUI";
+import { filtroMetasDeMes } from "./domain/borrarDatos";
+import { alCerrarSesion } from "./shared/sesion";
+
+// I2: la sub-sección, la búsqueda y la página de Configuración son del usuario
+// que se fue — el siguiente arranca en "Partners", sin filtro.
+alCerrarSesion(() => {
+  CONFIG_STATE.page = 0; CONFIG_STATE.search = ""; CONFIG_STATE.kamFilter = "all";
+  CONFIG_STATE.section = "partners";
+});
 import { t, setLang, getLang, aplicarI18nEstatico, selectorIdiomaHTML } from "./core/i18n";
 import { SIN_KAM } from "./core/config.js";
 import { logAccess } from "./shared/accessLog.js";
@@ -1549,7 +1607,6 @@ registerActions({
   // configuración
   updateDeclineSettings,
   deleteDashboardData,
-  triggerFleetSync,
   cfgSetSection: d => { CONFIG_STATE.section = d.section; renderConfig(); },
   cfgSearch:    (d, el) => { CONFIG_STATE.search = el.value; CONFIG_STATE.page = 0; renderConfigResults(); },
   cfgKamFilter: (d, el) => { CONFIG_STATE.kamFilter = el.value; CONFIG_STATE.page = 0; renderConfigResults(); },

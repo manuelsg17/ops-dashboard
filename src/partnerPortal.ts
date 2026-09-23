@@ -163,8 +163,12 @@ function _kpiCard(label, sub, valor, actual, previo, color, fmtFn = fmt, numKey 
 function _portalMetas(line, rows) {
   const metas = STATE.metasData || [];
   if (!metas.length) return "";
+  // B1: ordenar por año*100+mes con el año más reciente de cada nombre de mes
+  // (sin año, ENERO quedaba detrás de DICIEMBRE del año anterior).
+  const maxAnio = new Map();
+  metas.forEach(m => { if (m.mes && m.mYear != null && !(maxAnio.get(m.mes) >= m.mYear)) maxAnio.set(m.mes, m.mYear); });
   const meses = [...new Set(metas.map(m => m.mes))].filter(Boolean)
-    .sort((a, b) => _metasMesOrden(b) - _metasMesOrden(a));
+    .sort((a, b) => _metasMesOrden(b, maxAnio.get(b) ?? null) - _metasMesOrden(a, maxAnio.get(a) ?? null));
   if (!meses.length) return "";
   // BUG REAL (auditoría ago 2026): antes se tomaba SIEMPRE el mes con meta más
   // reciente cargada (meses[0]), ignorando qué rango está viendo el partner —
