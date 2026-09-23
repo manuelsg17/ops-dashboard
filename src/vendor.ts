@@ -186,6 +186,14 @@ if (config.IS_LOCAL_SUPABASE) {
   document.body.style.paddingTop = "24px";
 }
 
+// ── Kit del sistema de diseño (SOLO dev): http://localhost:8765/?ui=kit ─────
+// `import.meta.env.DEV` es `false` literal en el build → Rollup elimina la rama
+// entera y el chunk de src/dev/uiKit.ts no se genera. Se monta como capa por
+// encima del login, así que no hace falta sesión.
+if (import.meta.env.DEV && new URLSearchParams(location.search).get("ui") === "kit") {
+  import("./dev/uiKit").then(m => m.mountUiKit()).catch(err => console.error("[uiKit]", err));
+}
+
 // Loader asíncrono para módulos de pantalla pesados (Lazy Loading)
 //
 // viewName = el NOMBRE DE TAB REAL que usa el resto de la app (STATE.curTab),
