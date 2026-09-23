@@ -15,6 +15,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./core/config.js";
 import { registerActions } from "./shared/actions.js";
 import { snapshotClear } from "./data/cache.js";
 import { logAccess, resetAccessLogSession } from "./shared/accessLog.js";
+import { resetearEstadoDeSesion } from "./shared/sesion";
 
 // ── LOCK DE AUTH CON ESCAPE ──────────────────────────────────────────────────
 // supabase-js serializa las operaciones de auth con un Web Lock COMPARTIDO entre
@@ -139,6 +140,24 @@ export function _applyRoleGate() {
   // tablas que no le corresponden (seguimiento, proyectos, audit_log) no
   // tienen política para su rol, así que le vuelven vacías.
   document.querySelectorAll(".nav-tabs").forEach(n => { n.style.display = esPartner ? "none" : ""; });
+  if (!esPartner) {
+    // I2: si en esta misma página antes entró un PARTNER (logout → login de un
+    // interno sin recargar), deshacer lo que su rama escondió/forzó: sin esto el
+    // interno quedaba sin lista de partners ni selector de KAM, parado en el
+    // portal.
+    ["pList", "kamFilter", "partnerSearch"].forEach(id => {
+      const el = document.getElementById(id);
+      const wrap = el?.previousElementSibling;
+      if (el && el.style.display === "none") el.style.display = "";
+      if (wrap && wrap.classList.contains("sb-label") && wrap.style.display === "none") wrap.style.display = "";
+    });
+    document.querySelectorAll(".sb-row").forEach(r => { if (r.style.display === "none") r.style.display = ""; });
+    if (STATE.curTab === "portal") {
+      STATE.curTab = "rend";
+      document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+      document.getElementById("tab-rend")?.classList.add("active");
+    }
+  }
   if (esPartner) {
     // Sin lista de partners (solo se ve a sí mismo) ni selector de KAM.
     ["pList", "kamFilter", "partnerSearch"].forEach(id => {
@@ -194,7 +213,15 @@ export async function initAuth() {
   sb.auth.onAuthStateChange((event, session) => {
     if (event === "SIGNED_IN")      { showApp(session.user); logAccess("login", null); }
     if (event === "TOKEN_REFRESHED")  _setRoleFromUser(session && session.user);
-    if (event === "SIGNED_OUT")       showLoginScreen();
+    // I2: una sesión que se cierra SIN pasar por handleLogout (token vencido,
+    // logout desde otra pestaña) también tiene que limpiar el estado: si no, el
+    // próximo SIGNED_IN (otro usuario) caía en `_appInitialized === true`, no
+    // recargaba nada y veía los datos del anterior.
+    if (event === "SIGNED_OUT") {
+      _clearStateAndLocalStorage();
+      _appInitialized = false;
+      showLoginScreen();
+    }
   });
 }
 
@@ -253,11 +280,8 @@ export function _clearStateAndLocalStorage() {
   ["rawData","rawDataMensual","rawDataMensualTuktuk","rawDataDiarioTuktuk","rawDataFleet","rawDataMensualFleet","rawDataDiarioFleet",
    "rawDataFull","rawDataMensualFull",
    "rawDataDiario","rawDataDiarioFull","rawDataTuktuk","metasData","proyectosData","seguimientoData",
-   "fleetExterno","fleetExternoCols",
-   "allDates","allPartners","curSummaries"
+   "allDates","allPartners","sidebarPartners","curSummaries"
   ].forEach(k => { if (Array.isArray(STATE[k])) STATE[k].length = 0; });
-  STATE.fleetExternoLoaded = false;
-  STATE.fleetExternoError  = null;
   STATE.rendLine  = "comb";
   STATE.metasLine = "comb";
   STATE._tuktukMensualByCityDate = null;
@@ -291,6 +315,8 @@ export function _clearStateAndLocalStorage() {
   try {
     localStorage.removeItem("yangoFilters");
     localStorage.removeItem("yangoDecline");
+    // Config del scaffold retirado "Fleet Externo" (guardaba la anon key de un
+    // proyecto de terceros): se sigue borrando para limpiar navegadores viejos.
     localStorage.removeItem("yangoFleetExtConfig");
     // Borrador de la Calculadora (meta global + % TukTuk sin guardar aún): si
     // otra persona usa el mismo navegador después, no debería heredar metas de
@@ -302,6 +328,11 @@ export function _clearStateAndLocalStorage() {
   // ver el último snapshot de negocio sin loguearse.
   snapshotClear();
   resetAccessLogSession();
+  // I2: estado por usuario que vive en los MÓDULOS (CALC_STATE, conversión,
+  // columnas diferidas, Configuración…): cada módulo registra su reseteo en
+  // shared/sesion.ts. Sin esto, entrar con otro usuario sin recargar heredaba
+  // las metas a medio cargar del anterior.
+  resetearEstadoDeSesion();
 }
 
 export function showLoginScreen() {
