@@ -128,6 +128,12 @@
 .ui-delta--bad  { color: var(--color-bad-fg);  background: var(--color-bad-bg); }
 .ui-delta--flat { color: var(--color-text-muted); background: var(--color-surface-sunken); }
 .ui-delta--na   { color: var(--color-text-subtle); background: transparent; padding-left: 0; }
+/* html2canvas 1.4 no dibuja el texto de un inline-flex dentro de una celda de
+   tabla: en los PDF salían píldoras vacías (visto en el portal, Ola 6). Como
+   bloque flex de ancho ajustado se ve igual en pantalla y sí se exporta. En
+   celdas numéricas se alinea a la derecha como el resto de la columna. */
+td > .ui-delta { display: flex; width: fit-content; }
+td.ui-num > .ui-delta { margin-left: auto; }
 
 /* Barra de avance contra la meta */
 .ui-progress {
