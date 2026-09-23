@@ -189,3 +189,16 @@ Navegación lateral por grupos y rol, encabezado de página con chips de alcance
 - **El Supabase local es uno solo y compartido** entre worktrees: nadie re-siembra ni trunca mientras otro prueba; toda mutación de prueba se revierte (re-sembrar al terminar o `BEGIN…ROLLBACK`).
 - Puerto propio por worktree (el 8765 es el de la sesión coordinadora).
 - Con worktrees vivos en `.claude/worktrees/`, Vitest corre también sus tests (la Ola 0 lo excluye).
+
+## 8. Bitácora de ejecución
+
+| Ola | Estado | Verificación |
+|---|---|---|
+| 0 — base de verificación | Integrada (`53a5ece`) | Seed al 14-sep-2026 (58 partners, 6 KAMs, metas dic-2025→sep-2026, 25 tareas, embudo, portal mapeado). Huella base: 25 escenarios, 0 claves duplicadas |
+| 4 — sistema de diseño (base) | Integrada (`974ed6f`) | Kit en `?ui=kit` revisado en pantalla. **Huella idéntica (0 diferencias)**: las pantallas actuales no cambiaron |
+| 1b — bugs de vistas | Integrada (`8d53b3b`) | Huella: 262 diferencias, todas esperadas (fila "No KAM" nueva en Rendimiento; en Metas VIA RAPIDA y RUTA DEL SILLAR pasan de Carla/Beto a "No KAM": −604/−51/+655, totales país iguales; ahora Metas y Rendimiento coinciden por KAM). Desborde de gráficos resuelto (medido); título "Vista filtrada — Lima" |
+| 1a + 1c — bugs de datos/Config + migración `metas` por año (solo local) | Integrada (`37f1908`) | Huella: mismas 262 diferencias, ninguna nueva. Metas en mes cerrado (agosto) sin proyección; selector con año y orden correcto; Config con tarjeta "No KAM". Migración **no aplicada en producción** |
+| 2 — velocidad | En curso | — |
+| 3 — diccionarios | En curso | — |
+
+Pendiente conocido del entorno local (no es del producto): la RPC `get_last_ingest_at` existe solo en producción y nunca se versionó, así que en local responde 404 (el código lo tolera).
