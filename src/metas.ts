@@ -40,6 +40,8 @@ export function _metasKamDe(m) {
 // porque no logrará más avances en ese mes porque ya cerró". La regla vive en
 // domain/mesEnCurso.ts (la misma que usan el portal y el deck); acá solo se
 // decide UNA vez por render y la leen los cuatro helpers que dibujan barras.
+// Vale SOLO durante un render de esta pestaña: fuera de ella (Rendimiento) se
+// usa metasResumenPais, que decide la proyección en cada llamada.
 let _metasProyOn = true;
 function _metasCalcProyOn(mesName, mesYearSel, mesDates) {
   const ord = _metasMesOrden(mesName);
@@ -943,6 +945,37 @@ if (typeof document !== "undefined") {
   });
 }
 
+// Universo de unidades de una línea (Fleet / TukTuk / Combinado) — la misma
+// para la pestaña y para el resumen país (metasResumenPais).
+function _metasLineUnits(metaRows, act) {
+  // Universo de unidades a mostrar: toda fila de meta de esta línea, más su
+  // actual si existe. Se indexa por (partner, ciudad) — la misma granularidad
+  // en la que se cargan las metas.
+  const units = metaRows.map(m => ({ m, a: act.get(`${m.partner}|||${m.city}`) || null }));
+
+  // …Y TAMBIÉN las cuentas que tienen ACTIVIDAD pero NINGUNA meta cargada este
+  // mes. Antes quedaban fuera por completo, y por eso el "actual" de Metas no
+  // cuadraba con el de Rendimiento (reportado por Manuel, sep-2026: 27.200 acá
+  // vs 27.324 allá, −124 conductores; N+R 5.608 vs 5.632). Rendimiento parte de
+  // la actividad real, Metas partía del plan: dos universos distintos mostrando
+  // cifras que se leen como si fueran la misma.
+  //
+  // `m` sintético (sin ninguna m* de meta) en vez de `m: null`: así las cuatro
+  // secciones de abajo —que agrupan por m.city / m.kam y pintan m.partner— siguen
+  // funcionando sin tocarlas, y `_metasAggKpi` ya descarta las metas con su
+  // `mv != null` (un campo ausente da undefined, que no pasa ese filtro).
+  // Resultado: SUMAN al actual, NO suman a la meta.
+  const conMeta = new Set(metaRows.map(m => `${m.partner}|||${m.city}`));
+  act.forEach((a, key) => {
+    if (conMeta.has(key)) return;
+    const sep     = key.lastIndexOf("|||");
+    const partner = key.slice(0, sep);
+    const city    = key.slice(sep + 3);
+    units.push({ m: { partner, city, kam: getKAMForPartner(partner) || SIN_KAM, _sinMeta: true }, a });
+  });
+  return units;
+}
+
 // Renderer común de una línea. `cfg`:
 //   line/title/info       → id de la línea (huella), título, descripción (tooltip)
 //   metaRows              → filas de STATE.metasData del mes/filtros, ya acotadas
@@ -970,31 +1003,7 @@ function _renderMetasLineView(cfg) {
     });
   }
 
-  // Universo de unidades a mostrar: toda fila de meta de esta línea, más su
-  // actual si existe. Se indexa por (partner, ciudad) — la misma granularidad
-  // en la que se cargan las metas.
-  const units = metaRows.map(m => ({ m, a: act.get(`${m.partner}|||${m.city}`) || null }));
-
-  // …Y TAMBIÉN las cuentas que tienen ACTIVIDAD pero NINGUNA meta cargada este
-  // mes. Antes quedaban fuera por completo, y por eso el "actual" de Metas no
-  // cuadraba con el de Rendimiento (reportado por Manuel, sep-2026: 27.200 acá
-  // vs 27.324 allá, −124 conductores; N+R 5.608 vs 5.632). Rendimiento parte de
-  // la actividad real, Metas partía del plan: dos universos distintos mostrando
-  // cifras que se leen como si fueran la misma.
-  //
-  // `m` sintético (sin ninguna m* de meta) en vez de `m: null`: así las cuatro
-  // secciones de abajo —que agrupan por m.city / m.kam y pintan m.partner— siguen
-  // funcionando sin tocarlas, y `_metasAggKpi` ya descarta las metas con su
-  // `mv != null` (un campo ausente da undefined, que no pasa ese filtro).
-  // Resultado: SUMAN al actual, NO suman a la meta.
-  const conMeta = new Set(metaRows.map(m => `${m.partner}|||${m.city}`));
-  act.forEach((a, key) => {
-    if (conMeta.has(key)) return;
-    const sep     = key.lastIndexOf("|||");
-    const partner = key.slice(0, sep);
-    const city    = key.slice(sep + 3);
-    units.push({ m: { partner, city, kam: getKAMForPartner(partner) || SIN_KAM, _sinMeta: true }, a });
-  });
+  const units = _metasLineUnits(metaRows, act);
   const nSinMeta = units.length - metaRows.length;
   alerts += _metasSinMetaAviso(nSinMeta, mesName);
   html += _mtAlerts(alerts);
@@ -1009,8 +1018,11 @@ function _renderMetasLineView(cfg) {
 
   // ── 1. Resumen ────────────────────────────────────────────────────────────
   html += `<section class="mt-sec">${_mtH2(t("mt.resumen", { m: _mtMesTxt(mesName) }), cfg.info)}<div class="ui-kpi-grid mt-kpis">`;
+  // Actual / meta / proyección: los de metasResumenPais (misma función que usa
+  // Rendimiento para su barra de avance), no un cálculo propio.
+  const resumen = _metasResumenDeUnits(kpis, units, _metasProyOn);
   kpis.forEach(k => {
-    const g = _metasAggKpi(k, units);
+    const g = resumen[k.id];
     if (g.meta == null && g.actual == null) return;
     const dlt = prevUnits ? _mtDelta(g.actual, _metasAggKpi(k, prevUnits).actual) : undefined;
     html += metaResCard(k.label, k.sub || "", g.actual, g.meta, g.proj, null, k.fmtFn, _nk("pais", k.id),
@@ -1077,9 +1089,10 @@ function _renderMetasLineView(cfg) {
   return html;
 }
 
-// Filtro común de filas de meta de una línea.
-function _metasLineRows(mesName, hasLineMeta, selSet, cityFilter, kamFilter) {
-  const mesYearSel = _metasMesActualYear(mesName);
+// Filtro común de filas de meta de una línea. `mesYearSel` explícito (y no
+// leído de la selección de la pestaña): así el resumen que usa Rendimiento no
+// depende de qué mes quedó elegido en Metas.
+function _metasLineRows(mesName, mesYearSel, hasLineMeta, selSet, cityFilter, kamFilter) {
   return STATE.metasData.filter(m =>
     _metasMatchMes(m, mesName, mesYearSel) &&
     hasLineMeta(m) &&
@@ -1089,16 +1102,19 @@ function _metasLineRows(mesName, hasLineMeta, selSet, cityFilter, kamFilter) {
   ).sort((a, b) => a.partner.localeCompare(b.partner));
 }
 
-// Vista Metas Fleet. Sus KPIs son TASAS (SH/auto, aceptación), no cantidades:
-// por eso llevan `weight` y NO llevan proyección — proyectar una tasa al cierre
-// del mes por ritmo lineal no significa nada (una tasa no se acumula).
-export function _renderMetasFleet(mesName, fechas, selSet, cityFilter, kamFilter, mesesDisponibles, cobertura) {
-  return _renderMetasLineView({
-    mesName, mesesDisponibles, cobertura, line: "fleet", info: t("metas.fleetSub"),
-    mesDates: [...fechas].sort(),
+// Descriptor completo de una línea (Fleet / TukTuk / Combinado): actuales,
+// filas de meta y KPIs. Lo usan el renderer de la pestaña (_renderMetasLineView)
+// y el resumen país (metasResumenPais) — un único armado para los dos.
+function _metasLineCfg(line, mesName, mesYearSel, fechas, selSet, cityFilter, kamFilter) {
+  const base = { line, mesDates: [...fechas].sort() };
+  // Vista Metas Fleet. Sus KPIs son TASAS (SH/auto, aceptación), no cantidades:
+  // por eso llevan `weight` y NO llevan proyección — proyectar una tasa al cierre
+  // del mes por ritmo lineal no significa nada (una tasa no se acumula).
+  if (line === "fleet") return {
+    ...base, info: t("metas.fleetSub"),
     act: _metasFleetActuals(fechas, selSet, cityFilter),
     actFn: f => _metasFleetActuals(f, selSet, cityFilter),
-    metaRows: _metasLineRows(mesName,
+    metaRows: _metasLineRows(mesName, mesYearSel,
       m => m.mSHcar != null || m.mAcc != null || m.mUtil != null,
       selSet, cityFilter, kamFilter),
     kpis: [
@@ -1117,17 +1133,13 @@ export function _renderMetasFleet(mesName, fechas, selSet, cityFilter, kamFilter
     partnerNote: (m, a) => a ? t("metas.autosPropios", { n: fmt(a.ownedNow || 0), b: fmt(a.branded || 0) }) : "",
     partnerTip:  (m, a) => a ? t("metas.autosPropios", { n: fmt(a.ownedNow || 0), b: fmt(a.branded || 0) }) : "",
     emptyTitle: t("mt.vacio.fleet", { m: mesLabel(mesName) })
-  });
-}
-
-// Vista Metas TukTuk: KPIs aditivos (AD/N+R/Brandeados/Horas).
-export function _renderMetasTk(mesName, fechas, selSet, cityFilter, kamFilter, mesesDisponibles, cobertura) {
-  return _renderMetasLineView({
-    mesName, mesesDisponibles, cobertura, line: "tk", info: t("metas.tkSub"),
-    mesDates: [...fechas].sort(),
+  };
+  // Vista Metas TukTuk: KPIs aditivos (AD/N+R/Brandeados/Horas).
+  if (line === "tk") return {
+    ...base, info: t("metas.tkSub"),
     act: _metasTkActuals(fechas, selSet, cityFilter),
     actFn: f => _metasTkActuals(f, selSet, cityFilter),
-    metaRows: _metasLineRows(mesName,
+    metaRows: _metasLineRows(mesName, mesYearSel,
       m => m.mtkAD != null || m.mtkNR != null || m.mtkCars != null || m.mtkSH != null,
       selSet, cityFilter, kamFilter),
     kpis: [
@@ -1145,14 +1157,11 @@ export function _renderMetasTk(mesName, fechas, selSet, cityFilter, kamFilter, m
         meta: m => m.mtkSH, act: a => a.sh, proj: a => a.projSh, fmtFn: v => fmtSmart(v) }
     ],
     emptyTitle: t("mt.vacio.tk", { m: mesLabel(mesName) })
-  });
-}
-
-// Vista Metas COMBINADO (Taxi+TukTuk): actuales sumados de ambas líneas vs meta
-// combinada (meta agregador + meta TukTuk). Misma fórmula que la slide "Avance
-// Combinado" de Presentación 2.0 — si el partner se enfoca en TukTuk, ese avance
-// también cuenta para su meta.
-export function _renderMetasComb(mesName, fechas, selSet, cityFilter, kamFilter, mesesDisponibles, cobertura) {
+  };
+  // Vista Metas COMBINADO (Taxi+TukTuk): actuales sumados de ambas líneas vs meta
+  // combinada. Misma fórmula que la slide "Avance Combinado" de Presentación 2.0
+  // — si el partner se enfoca en TukTuk, ese avance también cuenta para su meta.
+  //
   // META PARAGUAS: mA/mNR/mH YA cubren Taxi + TukTuk juntos (decisión ago 2026,
   // verificada contra la proporción real de cada línea). Sumarles meta_tk_* era
   // contar el objetivo de TukTuk DOS veces: en agosto-2026 TRANSPOTAXI Lima
@@ -1164,12 +1173,11 @@ export function _renderMetasComb(mesName, fechas, selSet, cityFilter, kamFilter,
   // TukTuk (nuevos + reactivados del mes) y se muestra en la vista TukTuk y en
   // el Resumen del deck. Lo que no se puede es sumarla al paraguas.
   const umbrella = v => (v == null || v === 0) ? null : v;
-  return _renderMetasLineView({
-    mesName, mesesDisponibles, cobertura, line: "comb", info: t("metas.combSub"),
-    mesDates: [...fechas].sort(),
+  return {
+    ...base, line: "comb", info: t("metas.combSub"),
     act: _metasCombActuals(fechas, selSet, cityFilter),
     actFn: f => _metasCombActuals(f, selSet, cityFilter),
-    metaRows: _metasLineRows(mesName,
+    metaRows: _metasLineRows(mesName, mesYearSel,
       m => (m.mA || 0) > 0 || (m.mNR || 0) > 0 || (m.mH || 0) > 0 ||
            m.mtkAD != null || m.mtkNR != null || m.mtkSH != null,
       selSet, cityFilter, kamFilter),
@@ -1186,83 +1194,26 @@ export function _renderMetasComb(mesName, fechas, selSet, cityFilter, kamFilter,
     // jerga en la tarjeta ("criterio TukTuk aparte: 28 N+R").
     partnerTip: m => m.mtkNR != null ? t("mt.pieCombTk", { n: fmt(m.mtkNR) }) : "",
     emptyTitle: t("mt.vacio.comb", { m: mesLabel(mesName) })
-  });
+  };
 }
 
-// Guard de reentrancia: doble-click o filtros solapados no deben lanzar dos
-// renders concurrentes (mismo patron que rendimiento.js).
-export let _renderMetasBusy = false;
-export function renderMetas() {
-  if (_renderMetasBusy) return;
-  if (!STATE.metasData.length) return;
-  // B12: ver renderRend — no pintar el FACT de otra escala bajo el rótulo de esta.
-  if (!escalaLista(STATE)) {
-    const c = document.getElementById("metasContent");
-    const e = document.getElementById("metasEmpty");
-    if (c) {
-      if (e) e.style.display = "none";
-      c.style.display = "";
-      c.innerHTML = alertBox({ tone: "info", text: t("carga.escala", { e: t("mode." + (STATE.curMode || "semanal")) }) });
-    }
-    reintentarCuandoEscalaLista("metas", STATE, renderMetas, () => STATE.curTab === "metas");
-    return;
-  }
-  _renderMetasBusy = true;
-  try {
-    _renderMetasImpl();
-  } finally {
-    _renderMetasBusy = false;
-  }
+export function _renderMetasFleet(mesName, fechas, selSet, cityFilter, kamFilter, mesesDisponibles, cobertura) {
+  return _renderMetasLineView({ mesName, mesesDisponibles, cobertura,
+    ..._metasLineCfg("fleet", mesName, _metasMesActualYear(mesName), fechas, selSet, cityFilter, kamFilter) });
+}
+export function _renderMetasTk(mesName, fechas, selSet, cityFilter, kamFilter, mesesDisponibles, cobertura) {
+  return _renderMetasLineView({ mesName, mesesDisponibles, cobertura,
+    ..._metasLineCfg("tk", mesName, _metasMesActualYear(mesName), fechas, selSet, cityFilter, kamFilter) });
+}
+export function _renderMetasComb(mesName, fechas, selSet, cityFilter, kamFilter, mesesDisponibles, cobertura) {
+  return _renderMetasLineView({ mesName, mesesDisponibles, cobertura,
+    ..._metasLineCfg("comb", mesName, _metasMesActualYear(mesName), fechas, selSet, cityFilter, kamFilter) });
 }
 
-export function _renderMetasImpl() {
-  // Garantiza índices secundarios construidos antes de cualquier lookup
-  ensureIndexes();
-
-  const cityFilter = document.getElementById("cityFilter").value;
-  const kamFilter  = document.getElementById("kamFilter").value;
-  const sel        = getSel();
-  const from       = document.getElementById("dateFrom").value;
-  const to         = document.getElementById("dateTo").value;
-  const selSet     = new Set(sel);
-
-  // Detectar el mes MAS RECIENTE de metasData y limitar el render a ese mes.
-  // Antes: mostraba metasData[0].mes (primer registro = mes mas antiguo) y
-  // sumaba metas de TODOS los meses, inflando %% de cumplimiento.
-  // Mes elegido = selección manual o, por defecto, el último mes CON DATOS
-  // (_metasMesElegido). Orden por año*100+mes (B1): en enero, ENERO 2027 va
-  // antes que DICIEMBRE 2026.
-  const _mesElegido = _metasMesElegido();
-  const mesesDisponibles = [...new Set(opcionesMesMeta(STATE.metasData || []).map(o => o.mes))];
-  const mesName = _mesElegido ? _mesElegido.mes : "";
-  // Año del mes seleccionado (el más reciente si hay más de uno) — ver
-  // _metasMatchMes. Sin esto, AGOSTO-2025 y AGOSTO-2026 se sumaban juntos.
-  const mesYearSel = _metasMesActualYear(mesName);
-
-  // El FACT se acota al MES DE LA META dentro del rango elegido (ver
-  // _metasFechasDelMes): la meta es mensual, así que comparar contra un rango que
-  // abarca otros meses da un % que no significa nada.
-  const mesDates   = _metasFechasDelMes(mesName, mesYearSel, from, to);
-  const fechas     = new Set(mesDates);
-  const cobertura  = { enRango: mesDates.length,
-                       total: _metasFechasMesCompleto(mesName, mesYearSel, to).length };
-  // Decisión 4: la proyección al cierre solo se dibuja para el mes en curso.
-  _metasProyOn = _metasCalcProyOn(mesName, mesYearSel, mesDates);
-
-  // Fase 3: líneas Fleet / TukTuk. Vista dedicada (meta vs actual de la línea) que
-  // reemplaza el cuerpo de Metas. El agregador sigue con el flujo de abajo intacto.
-  if (_metasLine() !== "agg") {
-    document.getElementById("metasEmpty").style.display   = "none";
-    document.getElementById("metasContent").style.display = "";
-    const _line = _metasLine();
-    document.getElementById("metasContent").innerHTML =
-        _line === "fleet" ? _renderMetasFleet(mesName, fechas, selSet, cityFilter, kamFilter, mesesDisponibles, cobertura)
-      : _line === "comb"  ? _renderMetasComb(mesName, fechas, selSet, cityFilter, kamFilter, mesesDisponibles, cobertura)
-      :                     _renderMetasTk(mesName, fechas, selSet, cityFilter, kamFilter, mesesDisponibles, cobertura);
-    return;
-  }
-
-  const metas = STATE.metasData.filter(m => {
+// ── AGREGADOR: metas y FACT por partner (compartido por la pestaña y el resumen) ──
+// Filas de meta del agregador para el mes/filtros.
+function _metasAggMetas(mesName, mesYearSel, sel, selSet, cityFilter, kamFilter) {
+  return STATE.metasData.filter(m => {
     if (!_metasMatchMes(m, mesName, mesYearSel))    return false;
     if (kamFilter !== "all" && _metasKamDe(m) !== kamFilter) return false;
     // Mismo recorte de ciudad que el FACT: sin esto, con Ciudad=Arequipa los
@@ -1272,15 +1223,23 @@ export function _renderMetasImpl() {
     if (sel.length && !selSet.has(m.partner))     return false;
     return true;
   });
-
-  // Build performance data by partner+city+date (full precision).
-  // Acotado al MES DE LA META dentro del rango: ver _metasFechasDelMes.
-  //
-  // Ola 6: el armado de `combos` (FACT por partner con y sin meta) se envolvió en
-  // una función para poder correrlo también sobre los períodos equivalentes del
-  // mes anterior (delta de las tarjetas del resumen). Para el mes de la meta es
-  // EXACTAMENTE el mismo código de antes, con las mismas fechas.
-  function _combosPara(fechasX, desde, hasta, conDiag) {
+}
+// Proyección de AD del NIVEL (no la suma de las de cada partner): se juntan
+// las series por fecha y se toma el máximo del total. Sumar los máximos
+// individuales asume que todos los partners picaron la misma semana y
+// sobre-estima siempre. Ver la nota en _metasAggKpi.
+function _metasProjADde(arr) {
+  const merged = {};
+  arr.forEach(c => {
+    const m = c.adByDate || {};
+    Object.keys(m).forEach(d => { merged[d] = (merged[d] || 0) + m[d]; });
+  });
+  return projADbyDate(merged);
+}
+// FACT por partner (con y sin meta) sobre un juego de fechas: el del mes de la
+// meta y, para el delta de las tarjetas, el de los períodos equivalentes del mes
+// anterior.
+function _metasAggCombos(metas, fechasX, desde, hasta, conDiag, selSet, cityFilter, kamFilter) {
   const perfF  = getFilteredByDateRange(desde, hasta).filter(r => fechasX.has(r.date));
   const cpMap  = {};
   // Diagnostico: trackear breakdown de los 3 componentes de N+R
@@ -1439,32 +1398,185 @@ export function _renderMetasImpl() {
     });
   });
   return { perfF, combos, maxDate, daysElapsed, daysRemaining };
+}
+
+// Totales país del agregador (tarjetas del resumen).
+function _metasAggTotales(metas, combos) {
+  return {
+    tMA:  metas.reduce((s, m) => s + m.mA,  0),
+    tMNR: metas.reduce((s, m) => s + m.mNR, 0),
+    tMH:  metas.reduce((s, m) => s + m.mH,  0),
+    tAD:  combos.reduce((s, c) => s + c.ad,  0),
+    tNR:  combos.reduce((s, c) => s + c.nr,  0),
+    tSH:  combos.reduce((s, c) => s + c.sh,  0),
+    tPAD: _metasProjADde(combos),
+    tPNR: combos.reduce((s, c) => s + c.projNR, 0),
+    tPSH: combos.reduce((s, c) => s + c.projSH, 0)
+  };
+}
+
+// ── RESUMEN PAÍS (única fuente de las tarjetas del resumen) ──────────────────
+// Lo usan las tarjetas "Resumen" de esta pestaña Y la barra de avance contra la
+// meta de Rendimiento (metasResumenPais). Antes Rendimiento pintaba los
+// renderers de Metas fuera de pantalla y leía las cifras del HTML, y la
+// proyección dependía de un estado de módulo que dejaba el último render de
+// Metas: la barra de Rendimiento mostraba (o no) la proyección según qué se
+// hubiera abierto antes en Metas.
+function _metasKpiResumen(actual, meta, proj, proyOn, F) {
+  return {
+    actual, meta,
+    pct: actual != null && meta > 0 ? (actual / meta) * 100 : null,
+    proj: proyOn ? (proj ?? null) : null,
+    F: F || fmt
+  };
+}
+function _metasResumenDeUnits(kpis, units, proyOn) {
+  const out = {};
+  kpis.forEach(k => {
+    const g = _metasAggKpi(k, units);
+    out[k.id] = _metasKpiResumen(g.actual, g.meta, g.proj, proyOn, k.fmtFn);
+  });
+  return out;
+}
+function _metasAggResumen(metas, combos, proyOn) {
+  const T = _metasAggTotales(metas, combos);
+  return {
+    ad: _metasKpiResumen(T.tAD, T.tMA,  T.tPAD, proyOn, fmt),
+    nr: _metasKpiResumen(T.tNR, T.tMNR, T.tPNR, proyOn, fmt),
+    sh: _metasKpiResumen(T.tSH, T.tMH,  T.tPSH, proyOn, fmt)
+  };
+}
+
+/**
+ * Resumen país de una línea para un mes: por KPI `{ actual, meta, pct, proj, F }`
+ * — exactamente las cifras de las tarjetas "Resumen" de la pestaña Metas con
+ * los mismos filtros. Sin estado de módulo: la proyección (solo mes en curso,
+ * domain/mesEnCurso) se decide en cada llamada.
+ *
+ *   line     "comb" | "agg" | "fleet" | "tk"
+ *   mesName  nombre del mes de la meta ("SEPTIEMBRE") o "YYYY-MM"
+ *   anio     año de la meta (metas.mes_year); null = sin año; undefined = el
+ *            que elegiría la pestaña Metas
+ *   fechas   períodos del mes DENTRO del rango (ver _metasFechasDelMes)
+ *   filtros  { city, kam, selected } — los del panel (getCurrentFilters)
+ *
+ * Devuelve null si no hay metas o no hay períodos; `sinMetas: true` (kpis
+ * vacíos) si la línea no tiene ninguna fila de meta ese mes — la pestaña Metas
+ * muestra en ese caso el estado vacío, sin tarjetas.
+ */
+export function metasResumenPais({ line, mesName, anio, fechas, filtros = {} }) {
+  if (!mesName || !(STATE.metasData || []).length) return null;
+  const mesDates = [...(fechas || [])].sort();
+  if (!mesDates.length) return null;
+  const mesYearSel = anio !== undefined ? anio : _metasMesActualYear(mesName);
+  const fset = new Set(mesDates);
+  const cityFilter = filtros.city || "all";
+  const kamFilter  = filtros.kam  || "all";
+  const sel    = filtros.selected || [];
+  const selSet = new Set(sel);
+  const proyOn = _metasCalcProyOn(mesName, mesYearSel, mesDates);
+  const base = { line, mes: mesName, anio: mesYearSel, proyOn, mesLabel: mesLabel(mesName) };
+  if (line === "agg") {
+    const metas = _metasAggMetas(mesName, mesYearSel, sel, selSet, cityFilter, kamFilter);
+    const { combos } = _metasAggCombos(metas, fset, mesDates[0], mesDates[mesDates.length - 1], false, selSet, cityFilter, kamFilter);
+    return { ...base, sinMetas: !metas.length, kpis: _metasAggResumen(metas, combos, proyOn) };
   }
+  const cfg = _metasLineCfg(line, mesName, mesYearSel, fset, selSet, cityFilter, kamFilter);
+  if (!cfg.metaRows.length) return { ...base, sinMetas: true, kpis: {} };
+  return { ...base, sinMetas: false, kpis: _metasResumenDeUnits(cfg.kpis, _metasLineUnits(cfg.metaRows, cfg.act), proyOn) };
+}
+
+// Guard de reentrancia: doble-click o filtros solapados no deben lanzar dos
+// renders concurrentes (mismo patron que rendimiento.js).
+export let _renderMetasBusy = false;
+export function renderMetas() {
+  if (_renderMetasBusy) return;
+  if (!STATE.metasData.length) return;
+  // B12: ver renderRend — no pintar el FACT de otra escala bajo el rótulo de esta.
+  if (!escalaLista(STATE)) {
+    const c = document.getElementById("metasContent");
+    const e = document.getElementById("metasEmpty");
+    if (c) {
+      if (e) e.style.display = "none";
+      c.style.display = "";
+      c.innerHTML = alertBox({ tone: "info", text: t("carga.escala", { e: t("mode." + (STATE.curMode || "semanal")) }) });
+    }
+    reintentarCuandoEscalaLista("metas", STATE, renderMetas, () => STATE.curTab === "metas");
+    return;
+  }
+  _renderMetasBusy = true;
+  try {
+    _renderMetasImpl();
+  } finally {
+    _renderMetasBusy = false;
+  }
+}
+
+export function _renderMetasImpl() {
+  // Garantiza índices secundarios construidos antes de cualquier lookup
+  ensureIndexes();
+
+  const cityFilter = document.getElementById("cityFilter").value;
+  const kamFilter  = document.getElementById("kamFilter").value;
+  const sel        = getSel();
+  const from       = document.getElementById("dateFrom").value;
+  const to         = document.getElementById("dateTo").value;
+  const selSet     = new Set(sel);
+
+  // Detectar el mes MAS RECIENTE de metasData y limitar el render a ese mes.
+  // Antes: mostraba metasData[0].mes (primer registro = mes mas antiguo) y
+  // sumaba metas de TODOS los meses, inflando %% de cumplimiento.
+  // Mes elegido = selección manual o, por defecto, el último mes CON DATOS
+  // (_metasMesElegido). Orden por año*100+mes (B1): en enero, ENERO 2027 va
+  // antes que DICIEMBRE 2026.
+  const _mesElegido = _metasMesElegido();
+  const mesesDisponibles = [...new Set(opcionesMesMeta(STATE.metasData || []).map(o => o.mes))];
+  const mesName = _mesElegido ? _mesElegido.mes : "";
+  // Año del mes seleccionado (el más reciente si hay más de uno) — ver
+  // _metasMatchMes. Sin esto, AGOSTO-2025 y AGOSTO-2026 se sumaban juntos.
+  const mesYearSel = _metasMesActualYear(mesName);
+
+  // El FACT se acota al MES DE LA META dentro del rango elegido (ver
+  // _metasFechasDelMes): la meta es mensual, así que comparar contra un rango que
+  // abarca otros meses da un % que no significa nada.
+  const mesDates   = _metasFechasDelMes(mesName, mesYearSel, from, to);
+  const fechas     = new Set(mesDates);
+  const cobertura  = { enRango: mesDates.length,
+                       total: _metasFechasMesCompleto(mesName, mesYearSel, to).length };
+  // Decisión 4: la proyección al cierre solo se dibuja para el mes en curso.
+  _metasProyOn = _metasCalcProyOn(mesName, mesYearSel, mesDates);
+
+  // Fase 3: líneas Fleet / TukTuk. Vista dedicada (meta vs actual de la línea) que
+  // reemplaza el cuerpo de Metas. El agregador sigue con el flujo de abajo intacto.
+  if (_metasLine() !== "agg") {
+    document.getElementById("metasEmpty").style.display   = "none";
+    document.getElementById("metasContent").style.display = "";
+    const _line = _metasLine();
+    document.getElementById("metasContent").innerHTML =
+        _line === "fleet" ? _renderMetasFleet(mesName, fechas, selSet, cityFilter, kamFilter, mesesDisponibles, cobertura)
+      : _line === "comb"  ? _renderMetasComb(mesName, fechas, selSet, cityFilter, kamFilter, mesesDisponibles, cobertura)
+      :                     _renderMetasTk(mesName, fechas, selSet, cityFilter, kamFilter, mesesDisponibles, cobertura);
+    return;
+  }
+
+  const metas = _metasAggMetas(mesName, mesYearSel, sel, selSet, cityFilter, kamFilter);
+
+  // Build performance data by partner+city+date (full precision).
+  // Acotado al MES DE LA META dentro del rango: ver _metasFechasDelMes.
+  //
+  // Ola 6: el armado de `combos` (FACT por partner con y sin meta) se envolvió en
+  // una función para poder correrlo también sobre los períodos equivalentes del
+  // mes anterior (delta de las tarjetas del resumen). Para el mes de la meta es
+  // EXACTAMENTE el mismo código de antes, con las mismas fechas.
+  const _combosPara = (fechasX, desde, hasta, conDiag) =>
+    _metasAggCombos(metas, fechasX, desde, hasta, conDiag, selSet, cityFilter, kamFilter);
 
   const { perfF, combos, maxDate, daysElapsed, daysRemaining } = _combosPara(fechas, from, to, true);
 
-  // Totals
-  const tMA = metas.reduce((s, m) => s + m.mA,  0);
-  const tMNR= metas.reduce((s, m) => s + m.mNR, 0);
-  const tMH = metas.reduce((s, m) => s + m.mH,  0);
-  const tAD = combos.reduce((s, c) => s + c.ad,  0);
-  const tNR = combos.reduce((s, c) => s + c.nr,  0);
-  const tSH = combos.reduce((s, c) => s + c.sh,  0);
-  // Proyección de AD del NIVEL (no la suma de las de cada partner): se juntan
-  // las series por fecha y se toma el máximo del total. Sumar los máximos
-  // individuales asume que todos los partners picaron la misma semana y
-  // sobre-estima siempre. Ver la nota en _metasAggKpi.
-  const _projADde = (arr) => {
-    const merged = {};
-    arr.forEach(c => {
-      const m = c.adByDate || {};
-      Object.keys(m).forEach(d => { merged[d] = (merged[d] || 0) + m[d]; });
-    });
-    return projADbyDate(merged);
-  };
-  const tPAD= _projADde(combos);
-  const tPNR= combos.reduce((s, c) => s + c.projNR, 0);
-  const tPSH= combos.reduce((s, c) => s + c.projSH, 0);
+  // Totales país: los de metasResumenPais (la misma función que usa
+  // Rendimiento para su barra de avance), no un cálculo propio.
+  const _projADde = _metasProjADde;
+  const resumen = _metasAggResumen(metas, combos, _metasProyOn);
 
   document.getElementById("metasEmpty").style.display   = "none";
   document.getElementById("metasContent").style.display = "";
@@ -1497,9 +1609,9 @@ export function _renderMetasImpl() {
   const _pl = prev ? prev.label : "";
   const mesTxt = mesLabel(mesName);
   html += `<section class="mt-sec">${_mtH2(t("mt.resumen", { m: _mtMesTxt(mesName) }))}<div class="ui-kpi-grid mt-kpis">
-    ${metaResCard(t("metric.ad.label"), t("rend.per.ultimaSemana"),  tAD, tMA,  tPAD, null, undefined, "metas.agg.pais.ad", _dl(tAD, pAD), _pl, mesTxt)}
-    ${metaResCard(t("metric.nr.label"), t("metas.acumMesSub"),  tNR, tMNR, tPNR, null, undefined, "metas.agg.pais.nr", _dl(tNR, pNR), _pl, mesTxt)}
-    ${metaResCard(t("metric.sh.label"), t("metas.acumMesSub"),  tSH, tMH,  tPSH, null, undefined, "metas.agg.pais.sh", _dl(tSH, pSH), _pl, mesTxt)}
+    ${metaResCard(t("metric.ad.label"), t("rend.per.ultimaSemana"),  resumen.ad.actual, resumen.ad.meta, resumen.ad.proj, null, undefined, "metas.agg.pais.ad", _dl(resumen.ad.actual, pAD), _pl, mesTxt)}
+    ${metaResCard(t("metric.nr.label"), t("metas.acumMesSub"),  resumen.nr.actual, resumen.nr.meta, resumen.nr.proj, null, undefined, "metas.agg.pais.nr", _dl(resumen.nr.actual, pNR), _pl, mesTxt)}
+    ${metaResCard(t("metric.sh.label"), t("metas.acumMesSub"),  resumen.sh.actual, resumen.sh.meta, resumen.sh.proj, null, undefined, "metas.agg.pais.sh", _dl(resumen.sh.actual, pSH), _pl, mesTxt)}
   </div></section>`;
 
   // ── 2. Por Ciudad ─────────────────────────────────────────────────────────

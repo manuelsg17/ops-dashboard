@@ -14,11 +14,10 @@ import { progressBar, segmented, btn, badge, alertBox, emptyState } from "./shar
 import { iconSvg } from "./shared/icons";
 import { chartTokens, seriesColor } from "./shared/chartTheme";
 import { rendTopPartners, valorMetricaPartner, indiceBase100 } from "./charts.js";
-import { _renderMetasComb, _renderMetasTk, _renderMetasFleet, _metasFechasDelMes, _metasFechasMesCompleto } from "./metas.js";
+import { metasResumenPais, _metasFechasDelMes, _metasFechasMesCompleto } from "./metas.js";
 import { reportYM } from "./shared/mesReporte.js";
 import { parseLocalDate } from "./core/dates";
 import { opcionesMesMeta, mesNumero } from "./domain/mesesMeta";
-import { esMesEnCurso } from "./domain/mesEnCurso";
 
 // ── LÍNEA DE NEGOCIO (Agregador / Fleet / TukTuk / Combinado) ─────────────────
 // Localizado a Rendimiento: NO muta STATE.rawData (el agregador queda intacto para
@@ -242,57 +241,35 @@ function _rdEmpty(title, text) {
 
 // ── Avance contra la meta del mes (lo que muestra la pestaña Metas) ──────────
 // El % y la meta tienen que ser EXACTAMENTE los de Metas para la misma línea,
-// filtros y mes. Metas no expone su agregado país como función (vive dentro de
-// sus renderers), así que en vez de reescribir el cálculo —dos copias divergen
-// tarde o temprano— se llama al renderer exportado de la línea
-// (_renderMetasComb/_renderMetasTk/_renderMetasFleet) con el mes del último
-// período del rango y se leen sus cifras por la huella (`data-num`
-// metas.<línea>.pais.<kpi>.pct|.meta|.proj), que es un contrato estable.
-// Agregador NO tiene renderer exportable (su cálculo vive dentro de
-// _renderMetasImpl): esa línea muestra valor + delta, sin meta.
-const _RD_METAS_RENDER = { comb: _renderMetasComb, tk: _renderMetasTk, fleet: _renderMetasFleet };
+// filtros y mes: salen de metas.metasResumenPais, la MISMA función con la que
+// Metas arma sus tarjetas del resumen (única fuente). La proyección (solo el mes
+// en curso, domain/mesEnCurso) se decide dentro de cada llamada — no depende de
+// qué se abrió antes en Metas.
+//
+// OJO al leer la tarjeta: el valor grande de N+R/Horas es el ACUMULADO DEL
+// RANGO (puede abarcar varios meses), mientras el avance compara el actual DEL
+// MES de la meta. Por eso el caption dice ese actual explícito ("Septiembre:
+// 6,371 de 8,758 · 72.7%"): sin él, los dos números no cuadran a simple vista.
 export function _rendMetaMes(line, lastDate) {
-  const render = _RD_METAS_RENDER[line];
-  if (!render || !lastDate || !(STATE.metasData || []).length) return null;
+  if (!lastDate || !(STATE.metasData || []).length) return null;
   const ym = reportYM(lastDate, STATE.curMode, parseLocalDate);
   const op = opcionesMesMeta(STATE.metasData).find(o => mesNumero(o.mes) === ym.m && (o.anio == null || o.anio === ym.y));
   if (!op) return null;
   const f = getCurrentFilters();
   const mesDates = _metasFechasDelMes(op.mes, op.anio, f.from, f.to);
-  const cobertura = { enRango: mesDates.length, total: _metasFechasMesCompleto(op.mes, op.anio, f.to).length };
-  if (!cobertura.enRango) return null;
-  let html;
+  const total = _metasFechasMesCompleto(op.mes, op.anio, f.to).length;
+  if (!mesDates.length) return null;
+  let res;
   try {
-    html = render(op.mes, new Set(mesDates), new Set(f.selected), f.city, f.kam, [], cobertura);
+    res = metasResumenPais({ line, mesName: op.mes, anio: op.anio, fechas: mesDates,
+      filtros: { city: f.city, kam: f.kam, selected: f.selected } });
   } catch (e) {
-    console.warn("[rend] no se pudo leer la meta del mes", e);
+    console.warn("[rend] no se pudo calcular la meta del mes", e);
     return null;
   }
-  const tpl = document.createElement("template");
-  tpl.innerHTML = html;
-  const leer = k => {
-    const el = tpl.content.querySelector(`[data-num="${k}"]`);
-    return el ? (el.textContent || "").replace(/\s+/g, " ").trim() : null;
-  };
-  const kpis = {};
-  let alguna = false;
-  ["ad", "nr", "sh", "cars", "shCar", "accept"].forEach(id => {
-    const base = `metas.${line}.pais.${id}`;
-    const pctTxt = leer(base + ".pct");
-    const metaTxt = leer(base + ".meta");
-    if (pctTxt == null && metaTxt == null) return;
-    // La proyección de Metas va como "Proyección: <strong>X</strong> (95.2%)":
-    // el % sale de toFixed(1), así que no depende del idioma.
-    const projEl = tpl.content.querySelector(`[data-num="${base}.proj"]`);
-    const mProj = projEl && projEl.parentElement ? /\((-?[\d.]+)%\)/.exec(projEl.parentElement.textContent || "") : null;
-    kpis[id] = {
-      pctTxt, metaTxt,
-      pct: pctTxt != null ? parseFloat(pctTxt) : null,
-      projPct: mProj ? parseFloat(mProj[1]) : null
-    };
-    if (metaTxt != null) alguna = true;
-  });
-  if (!alguna) return null;
+  if (!res || res.sinMetas) return null;
+  const kpis = res.kpis || {};
+  if (!Object.values(kpis).some(k => k && k.meta != null && k.meta > 0)) return null;
   // Nombre del mes con la mayúscula natural de cada idioma dentro de una frase
   // ("septiembre" / "September" / "сентябрь"); sin Intl, el de mesLabel.
   let mesTxt = mesLabel(op.mes);
@@ -301,40 +278,31 @@ export function _rendMetaMes(line, lastDate) {
       .format(new Date(Date.UTC(2000, ym.m - 1, 15)));
   } catch (e) { /* mesLabel */ }
   return {
-    mes: op.mes,
-    mesTxt,
-    enCurso: esMesEnCurso(ym.m, op.anio ?? ym.y),
-    enRango: cobertura.enRango, total: cobertura.total,
+    mes: op.mes, anio: op.anio,
+    mesTxt,                         // dentro de una frase
+    mesCap: mesLabel(op.mes),       // al comienzo del caption
+    enRango: mesDates.length, total,
     kpis
   };
 }
-// Las metas llegan en el grupo DIFERIDO de loadFromSupabase, a veces DESPUÉS del
-// primer pintado de esta pestaña, y data.ts solo re-pinta Metas/Seguimiento al
-// recibirlas. Sin esto las tarjetas quedaban sin la barra de avance hasta el
-// próximo cambio de filtro. Vigila la REFERENCIA de STATE.metasData (el loader
-// la reemplaza entera) durante unos segundos tras cada render y re-pinta una vez.
-let _rdMetasWatch = null;
-function _rdVigilarMetas() {
-  clearInterval(_rdMetasWatch);
-  const ref = STATE.metasData, token = _renderRendToken;
-  let n = 0;
-  _rdMetasWatch = setInterval(() => {
-    if (++n > 60 || token !== _renderRendToken || STATE.curTab !== "rend") { clearInterval(_rdMetasWatch); return; }
-    if (STATE.metasData !== ref) { clearInterval(_rdMetasWatch); renderRend(); }
-  }, 500);
-}
+// Cómo se lee el actual de cada KPI contra la meta del mes: nivel del último
+// período (snapshots), acumulado del mes (flujos) o tasa del mes (Fleet).
+const _RD_META_TIPO = { ad: "nivel", cars: "nivel", nr: "mes", sh: "mes", shCar: "tasa", accept: "tasa" };
 function _rdGoal(info, id) {
   if (!info) return undefined;
   const k = info.kpis[id];
-  if (!k || k.metaTxt == null) return { pct: null, caption: t("rd.meta.sinMetaDe", { m: info.mesTxt }) };
-  if (k.pct == null || !Number.isFinite(k.pct))
-    return { pct: null, caption: t("rd.meta.soloMeta", { m: info.mesTxt, n: k.metaTxt }) };
-  let caption = t("rd.meta.caption", { p: k.pctTxt, m: info.mesTxt, n: k.metaTxt });
+  if (!k || !(k.meta > 0)) return { pct: null, caption: t("rd.meta.sinMetaDe", { m: info.mesTxt }) };
+  if (k.actual == null || k.pct == null || !Number.isFinite(k.pct))
+    return { pct: null, caption: t("rd.meta.soloMeta", { m: info.mesTxt, n: k.F(k.meta) }) };
+  const tipo = _RD_META_TIPO[id] || "mes";
+  const key = tipo === "nivel" ? "rd.meta.capNivel" : tipo === "tasa" ? "rd.meta.capTasa" : "rd.meta.capMes";
+  let caption = t(key, { m: info.mesCap, a: k.F(k.actual), n: k.F(k.meta), p: k.pct.toFixed(1) + "%" });
   let projPct = null;
-  // Decisión 4 de Manuel (domain/mesEnCurso): la proyección solo para el mes en curso.
-  if (info.enCurso && k.projPct != null && Number.isFinite(k.projPct)) {
-    projPct = k.projPct;
-    caption += " · " + t("rd.meta.proy", { p: k.projPct.toFixed(1) + "%" });
+  // Decisión 4 de Manuel (domain/mesEnCurso): la proyección solo para el mes en
+  // curso — ya viene en null si no corresponde.
+  if (k.proj != null && Number.isFinite(k.proj)) {
+    projPct = (k.proj / k.meta) * 100;
+    caption += " · " + t("rd.meta.proy", { p: projPct.toFixed(1) + "%" });
   }
   return { pct: k.pct, caption, projPct };
 }
@@ -545,7 +513,6 @@ export function _renderRendImpl() {
   // último período contra el anterior (igual que antes). El avance contra la meta
   // es el de la pestaña Metas para el mes del último período (ver _rendMetaMes).
   const metaInfo = _rendMetaMes(line, lastDate);
-  if (line !== "agg") _rdVigilarMetas();
   const acum = t("rend.lbl.acumRango");
   html += _rdSec(t("rd.kpis.titulo"), t("rd.kpis.sub", { p: periodLabel, d: d2s(lastDate) }));
   html += `<div class="rd-kpis">
@@ -1253,7 +1220,6 @@ export function _renderFleetView(lastRows, prevRows, lastDate, _prevDate) {
   let html = `<div class="rd-view">` + rendLineToggleHTML();
   const c = _rendFleetAgg(lastRows), p = _rendFleetAgg(prevRows);
   const metaInfo = _rendMetaMes("fleet", lastDate);
-  _rdVigilarMetas();
 
   // Perú general (10 KPIs de flota: presencia/calidad + revenue/productividad)
   html += _rdSec(t("rd.fleet.kpis"), t("rend.fleet.peruSub", { p: periodLabel }));

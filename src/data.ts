@@ -776,7 +776,7 @@ export function dropLegacyAggregateRows(rows) {
 // críticas de loadFromSupabase, pero sin bloquear su render — ver comentario
 // junto a `critical`/`deferred` ahí). Requiere CLID_MAP/KAM_MAP/flotasMap ya
 // listos (el caller garantiza el orden — ver `deferred.then(...)`).
-function _applyMetasProyectosSeguimiento(metas, proyectos, seguimiento) {
+function _applyMetasProyectosSeguimiento(metas, proyectos, seguimiento, opts = {}) {
   let huboFallo = false;
   if (metas === _FETCH_FAILED) {
     huboFallo = true;   // conserva STATE.metasData tal cual estaba — ver _FETCH_FAILED
@@ -831,6 +831,12 @@ function _applyMetasProyectosSeguimiento(metas, proyectos, seguimiento) {
   if (STATE.userRole !== "partner") {          // el portal no usa nada de esto
     if (STATE.curTab === "metas"       && STATE.rawData.length)                      renderMetas();
     if (STATE.curTab === "seguimiento" && typeof renderSeguimiento === "function")   renderSeguimiento();
+    // Rendimiento también lee las metas (la barra de avance de sus tarjetas, vía
+    // metas.metasResumenPais). Antes la vista se re-pintaba sola con un vigilante
+    // local; la responsabilidad es de quien trae los datos. Solo si las metas
+    // llegaron de verdad (un fallo conserva las anteriores: nada que re-pintar).
+    if (opts.repintarRend !== false && metas !== _FETCH_FAILED &&
+        STATE.curTab === "rend" && STATE.rawData.length && typeof renderRend === "function") renderRend();
   }
   return !huboFallo;                           // ← lo consume loadFromSupabase
 }
@@ -913,10 +919,14 @@ async function _hydrateFromCache(alt, epoca) {
       if (STATE.curMode === alt) STATE.rawData = _datasetDeEscala(alt);
     }
     _indexCoreData();
+    // Metas/proyectos/seguimiento del snapshot ANTES del render: así Rendimiento
+    // se pinta una sola vez, ya con la barra de avance contra la meta (sin
+    // repintarRend: el render de abajo es el que lo pinta). Metas y Seguimiento
+    // se pintan dentro de _applyMetasProyectosSeguimiento, como antes.
+    _applyMetasProyectosSeguimiento(snap.metas, snap.proyectos, snap.seguimiento, { repintarRend: false });
     _renderActiveTabAfterLoad();
     if (altRows && typeof renderFrescura === "function") renderFrescura();
     perfMark("paint:cache");
-    _applyMetasProyectosSeguimiento(snap.metas, snap.proyectos, snap.seguimiento);
     _snapAt = altRows ? Math.min(snap.at || 0, snapAlt.at || 0) : (snap.at || 0);
     _snapFp = {
       core: (snap.fp && snap.fp.core) || null,

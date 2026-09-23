@@ -165,14 +165,6 @@ export const I18N: Record<string, Record<string, string>> = {
   // como se llaman internamente y traducirlos confundiria mas de lo que ayuda.
   "rend.linea.comb":  { es: "Combinado",  en: "Combined",   ru: "Комбинированный" },
   "rend.linea.agg":   { es: "Agregador",  en: "Aggregator", ru: "Агрегатор" },
-  "rend.linea.combTip": { es: "Taxi + TukTuk sumados — avance total del partner",
-                          en: "Taxi + TukTuk combined — the partner's total progress",
-                          ru: "Такси + ТукТук вместе — общий результат партнёра" },
-  "rend.linea.aggTip":  { es: "Taxi — incluye la actividad de las flotas",
-                          en: "Taxi — includes fleet activity",
-                          ru: "Такси — включая активность автопарков" },
-  "rend.linea.fleetTip":{ es: "Solo sub-flotas marcadas Fleet", en: "Only sub-fleets flagged Fleet", ru: "Только подпарки с меткой Fleet" },
-  "rend.linea.tkTip":   { es: "Solo TukTuk", en: "TukTuk only", ru: "Только ТукТук" },
 
   // ── Rendimiento (fase 2) ───────────────────────────────────────────────
   // Períodos: los usa el subtítulo de cada sección para decir de cuándo es el
@@ -183,20 +175,12 @@ export const I18N: Record<string, Record<string, string>> = {
   "rend.per.ultimoMes":      { es: "último mes",      en: "last month",    ru: "последний месяц" },
   "rend.per.periodoAnterior":{ es: "el período anterior", en: "the previous period", ru: "предыдущий период" },
 
-  "rend.peru.titulo":  { es: "Perú - Vista General", en: "Peru - Overview", ru: "Перу — общий обзор" },
-  "rend.peru.sub":     { es: "Activos: snapshot {p}  ·  N+R y Horas: acumulado del rango",
-                         en: "Active: {p} snapshot  ·  N+R and Hours: range total",
-                         ru: "Активные: срез — {p}  ·  N+R и часы: сумма за период" },
-
   "rend.ciudad.titulo": { es: "Por Ciudad", en: "By City", ru: "По городам" },
-  "rend.ciudad.sub":    { es: "Rendimiento y comparativo WoW", en: "Performance and WoW comparison", ru: "Показатели и сравнение с прошлой неделей" },
   "rend.kam.titulo":    { es: "Por KAM", en: "By KAM", ru: "По KAM" },
-  "rend.kam.sub":       { es: "Rendimiento por responsable", en: "Performance by owner", ru: "Показатели по ответственному" },
   // Alcance de los filtros activos (I13, sep-2026): el título ya no dice "Perú"
   // mientras muestra un subconjunto (filtro de ciudad/KAM restaurado de otra sesión).
   "alcance.kam":        { es: "KAM: {k}", en: "KAM: {k}", ru: "KAM: {k}" },
   "alcance.partners":   { es: "{n} de {total} partners", en: "{n} of {total} partners", ru: "{n} из {total} партнёров" },
-  "rend.peru.tituloFiltrado": { es: "Vista filtrada — {a}", en: "Filtered view — {a}", ru: "Отфильтрованный обзор — {a}" },
   "metas.alcance":      { es: "Filtro activo: {a}", en: "Active filter: {a}", ru: "Активный фильтр: {a}" },
   "au.errCargarPermisos": { es: "No se pudieron cargar los permisos o CLIDs asignados: {m}", en: "Could not load permissions or assigned CLIDs: {m}", ru: "Не удалось загрузить права или назначенные CLID: {m}" },
   "rend.pcard.sinDato": { es: "sin dato en este período", en: "no data this period", ru: "нет данных за период" },
@@ -205,12 +189,6 @@ export const I18N: Record<string, Record<string, string>> = {
   "carga.escala":       { es: "Cargando datos ({e})…", en: "Loading data ({e})…", ru: "Загрузка данных ({e})…" },
 
   "rend.tend.titulo":   { es: "Tendencias", en: "Trends", ru: "Тренды" },
-  "rend.tend.sub":      { es: "Perú por partner · y comparativa directa entre ciudades",
-                          en: "Peru by partner · and direct comparison across cities",
-                          ru: "Перу по партнёрам · и прямое сравнение городов" },
-  "rend.tend.peruTotal":{ es: "Perú Total · por partner", en: "Peru Total · by partner", ru: "Перу всего · по партнёрам" },
-  // V6: serie que suma a los partners fuera del top 8 (por AD del último período).
-  "rend.tend.otros":    { es: "Otros ({n})", en: "Others ({n})", ru: "Прочие ({n})" },
   // V1: un pedido de datos sin sesión válida NO sale con la anon key (data.ts _authToken).
   "estado.sesionNoValida": { es: "La sesión no es válida. Vuelve a ingresar.", en: "Your session is no longer valid. Please sign in again.", ru: "Сеанс недействителен. Войдите снова." },
 
@@ -223,12 +201,9 @@ export const I18N: Record<string, Record<string, string>> = {
   "rend.mov.sub":       { es: "Mayores variaciones de Conductores Activos vs {d}",
                           en: "Largest Active Drivers changes vs {d}",
                           ru: "Наибольшие изменения активных водителей · база: {d}" },
-  "rend.mov.suben":     { es: "📈 Los que más subieron", en: "📈 Biggest risers", ru: "📈 Наибольший рост" },
-  "rend.mov.bajan":     { es: "📉 Los que más cayeron", en: "📉 Biggest fallers", ru: "📉 Наибольшее падение" },
   "rend.mov.sinMov":    { es: "Sin movimientos", en: "No changes", ru: "Без изменений" },
 
   "rend.tabla.titulo":  { es: "Tabla de Partners", en: "Partner Table", ru: "Таблица партнёров" },
-  "rend.tabla.sub":     { es: "Click en columna para ordenar", en: "Click a column to sort", ru: "Нажмите на столбец для сортировки" },
   "rend.cards.titulo":  { es: "KPIs por Partner", en: "KPIs by Partner", ru: "KPI по партнёрам" },
   "rend.cards.sub":     { es: "Detalle del último período", en: "Last period detail", ru: "Детали последнего периода" },
 
@@ -256,7 +231,6 @@ export const I18N: Record<string, Record<string, string>> = {
   "rend.ch.nuevosReact": { es: "Nuevos + Reactivados", en: "New + Reactivated", ru: "Новые + реактивированные" },
 
   // Fleet
-  "rend.fleet.peru":       { es: "Fleet · Perú General",  en: "Fleet · Peru Overview", ru: "Fleet · Перу — обзор" },
   "rend.fleet.peruSub":    { es: "Presencia, calidad y revenue/productividad de flota · snapshot {p}",
                              en: "Fleet presence, quality and revenue/productivity · {p} snapshot",
                              ru: "Присутствие, качество и выручка автопарка · срез — {p}" },
@@ -1971,21 +1945,9 @@ export const I18N: Record<string, Record<string, string>> = {
   "mt.irCalculadora": { es: "Ir a la Calculadora", en: "Go to the Calculator", ru: "Открыть калькулятор" },
 
   // ── Rendimiento: textos sueltos (Ola 3) ───────────────────────────────────
-  "rend.diarioSinSubflotaTip": { es: "Sin datos diarios por sub-flota — usa escala semanal o mensual",
-                                en: "No daily sub-fleet data — use the weekly or monthly scale",
-                                ru: "Нет дневных данных по подпаркам — используйте недельный или месячный масштаб" },
-  "rend.diarioSinSubflota": { es: "Fleet/TukTuk/Combinado requieren escala semanal o mensual (el diario no trae sub-flota)",
-                             en: "Fleet/TukTuk/Combined need the weekly or monthly scale (daily data has no sub-fleet)",
-                             ru: "Fleet/ТукТук/Комбинированный требуют недельного или месячного масштаба (в дневных данных нет подпарков)" },
   "rend.comparativaCiudad": { es: "Comparativa por ciudad",
                              en: "Comparison by city",
                              ru: "Сравнение по городам" },
-  "rend.leads1": { es: "{n} partner recibe leads de Yango esta semana",
-                  en: "{n} partner receives Yango leads this week",
-                  ru: "{n} партнёр получает лиды Yango на этой неделе" },
-  "rend.leadsN": { es: "{n} partners reciben leads de Yango esta semana",
-                  en: "{n} partners receive Yango leads this week",
-                  ru: "Партнёров, получающих лиды Yango на этой неделе: {n}" },
   "rend.snapshotUlt": { es: "snapshot último período",
                        en: "last-period snapshot",
                        ru: "снимок последнего периода" },
@@ -2004,9 +1966,6 @@ export const I18N: Record<string, Record<string, string>> = {
   "rend.fleet.soporte": { es: "% Solicitudes de Soporte",
                          en: "% Support Requests",
                          ru: "% обращений в поддержку" },
-  "rend.fleet.sinPartners": { es: "Sin partners Fleet en el filtro actual.",
-                             en: "No Fleet partners in the current filter.",
-                             ru: "В текущем фильтре нет партнёров Fleet." },
   "rend.tk.autos": { es: "TukTuk · Autos",
                     en: "TukTuk · Vehicles",
                     ru: "ТукТук · Транспорт" },
@@ -2034,18 +1993,6 @@ export const I18N: Record<string, Record<string, string>> = {
   "rend.tk.propiosTotal": { es: "propios / total nuevos",
                            en: "own / total new",
                            ru: "собственные / все новые" },
-  "rend.tk.avisoSemanal": { es: "⚠️ La meta de {n} es <strong>mensual</strong>. En escala semanal el último período es una semana, así que no es comparable contra ella y el semáforo por partner queda en gris. Cambia a <strong>Mensual</strong> para evaluar cumplimiento.",
-                           en: "⚠️ The goal of {n} is <strong>monthly</strong>. At the weekly scale the last period is one week, so it is not comparable and the per-partner traffic light stays grey. Switch to <strong>Monthly</strong> to assess attainment.",
-                           ru: "⚠️ Цель {n} — <strong>месячная</strong>. В недельном масштабе последний период — неделя, поэтому сравнение некорректно и индикатор по партнёрам серый. Переключитесь на <strong>месячный</strong> масштаб, чтобы оценить выполнение." },
-  "rend.tk.avisoDiario": { es: "⚠️ La meta de {n} es <strong>mensual</strong>. En escala diaria el último período es un día, así que no es comparable contra ella y el semáforo por partner queda en gris. Cambia a <strong>Mensual</strong> para evaluar cumplimiento.",
-                          en: "⚠️ The goal of {n} is <strong>monthly</strong>. At the daily scale the last period is one day, so it is not comparable and the per-partner traffic light stays grey. Switch to <strong>Monthly</strong> to assess attainment.",
-                          ru: "⚠️ Цель {n} — <strong>месячная</strong>. В дневном масштабе последний период — день, поэтому сравнение некорректно и индикатор по партнёрам серый. Переключитесь на <strong>месячный</strong> масштаб, чтобы оценить выполнение." },
-  "rend.tk.thPropios": { es: "NUEVOS PROPIOS",
-                        en: "OWN NEW",
-                        ru: "СОБСТВЕННЫЕ НОВЫЕ" },
-  "rend.tk.thVsMeta": { es: "vs META {n}",
-                       en: "vs GOAL {n}",
-                       ru: "к ЦЕЛИ {n}" },
 
   // ── Configuración y Data Raw: avisos (Ola 3) ──────────────────────────────
   "comun.hechoSinRefresco": { es: "{q} en la base de datos, pero no se pudo refrescar la pantalla. Recarga la página — no vuelvas a guardar.",
@@ -2184,15 +2131,6 @@ export const I18N: Record<string, Record<string, string>> = {
                       ru: "Результатов: {n}" },
 
   // ── Varios (Ola 3) ────────────────────────────────────────────────────────
-  "rend.sinOverlap.kam": { es: " de <strong>{k}</strong>",
-                          en: " from <strong>{k}</strong>",
-                          ru: " у <strong>{k}</strong>" },
-  "rend.sinOverlap.ciudad": { es: " en <strong>{c}</strong>",
-                             en: " in <strong>{c}</strong>",
-                             ru: " в <strong>{c}</strong>" },
-  "rend.sinOverlap": { es: "No hay partners{kam} con datos{ciudad} en el rango de fechas seleccionado.<br>La data SÍ está cargada — esta combinación de filtros no tiene overlap. Ajusta ciudad, KAM, fechas o partners.",
-                      en: "There are no partners{kam} with data{ciudad} in the selected date range.<br>The data IS loaded — this filter combination has no overlap. Adjust city, KAM, dates or partners.",
-                      ru: "Нет партнёров{kam} с данными{ciudad} в выбранном диапазоне дат.<br>Данные ЗАГРУЖЕНЫ — у этой комбинации фильтров нет пересечений. Измените город, KAM, даты или партнёров." },
   "app.errSeccion": { es: "No se pudo cargar esta sección.",
                      en: "This section could not be loaded.",
                      ru: "Не удалось загрузить этот раздел." },
@@ -2225,9 +2163,6 @@ export const I18N: Record<string, Record<string, string>> = {
   "rend.lineaCombTxt": { es: "Combinado (Taxi+TukTuk)",
                         en: "Combined (Taxi+TukTuk)",
                         ru: "Комбинированный (Такси+ТукТук)" },
-  "rend.sinDatosLinea": { es: "No hay datos de <strong>{l}</strong> para el filtro actual.<br>Cambia a <strong>📊 Agregador</strong> o ajusta ciudad / fechas / partners.",
-                         en: "There is no <strong>{l}</strong> data for the current filter.<br>Switch to <strong>📊 Aggregator</strong> or adjust city / dates / partners.",
-                         ru: "Нет данных <strong>{l}</strong> для текущего фильтра.<br>Переключитесь на <strong>📊 Агрегатор</strong> или измените город / даты / партнёров." },
   "rend.declive": { es: "Declive {n} períodos consecutivos ({m})",
                    en: "Decline over {n} consecutive periods ({m})",
                    ru: "Спад {n} периодов подряд ({m})" },
@@ -2277,14 +2212,18 @@ export const I18N: Record<string, Record<string, string>> = {
   "rd.kpis.sub":          { es: "Conductores activos: {p} ({d}) · N+R, horas y viajes: acumulado del rango",
                             en: "Active drivers: {p} ({d}) · N+R, hours and trips: range total",
                             ru: "Активные водители: {p} ({d}) · N+R, часы и поездки: сумма за период" },
-  "rd.meta.caption":      { es: "{p} de la meta de {m} ({n})", en: "{p} of the {m} goal ({n})", ru: "{p} от цели на {m} ({n})" },
+  // Caption de la barra de avance: el actual DEL MES explícito (el valor grande
+  // de la tarjeta puede ser el acumulado de un rango de varios meses).
+  "rd.meta.capMes":       { es: "{m}: {a} de {n} · {p}", en: "{m}: {a} of {n} · {p}", ru: "{m}: {a} из {n} · {p}" },
+  "rd.meta.capNivel":     { es: "{m}, nivel actual: {a} de {n} · {p}", en: "{m}, current level: {a} of {n} · {p}", ru: "{m}, текущий уровень: {a} из {n} · {p}" },
+  "rd.meta.capTasa":      { es: "{m}: {a} vs. meta {n} · {p}", en: "{m}: {a} vs. goal {n} · {p}", ru: "{m}: {a} при цели {n} · {p}" },
   "rd.meta.proy":         { es: "proyección {p}", en: "projection {p}", ru: "прогноз {p}" },
   "rd.meta.sinMetaDe":    { es: "Sin meta de {m}", en: "No {m} goal", ru: "Нет цели на {m}" },
   "rd.meta.soloMeta":     { es: "Meta de {m}: {n} (sin actual medible)", en: "{m} goal: {n} (no measurable actual)", ru: "Цель на {m}: {n} (без измеримого факта)" },
   "rd.meta.sinMetaMensual": { es: "Sin meta mensual", en: "No monthly goal", ru: "Нет месячной цели" },
-  "rd.meta.nota":         { es: "El avance contra la meta de {m} es el mismo que muestra Metas: {n} de {t} períodos del mes dentro del rango.",
-                            en: "Progress against the {m} goal is the same one shown in Goals: {n} of {t} periods of the month within the range.",
-                            ru: "Выполнение цели на {m} — то же, что во вкладке «Цели»: {n} из {t} периодов месяца в диапазоне." },
+  "rd.meta.nota":         { es: "Avance igual al de Metas: solo cuenta {m} ({n} de {t} períodos en el rango).",
+                            en: "Same progress as in Goals: only {m} counts ({n} of {t} periods in the range).",
+                            ru: "Как во вкладке «Цели»: учитывается только {m} ({n} из {t} периодов в диапазоне)." },
   "rd.meta.notaEscala":   { es: "La meta es mensual: en esta escala el % es orientativo.",
                             en: "The goal is monthly: at this scale the % is indicative.",
                             ru: "Цель месячная: в этом масштабе % ориентировочный." },
