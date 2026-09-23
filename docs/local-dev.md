@@ -225,6 +225,56 @@ en las tres escalas; desglose TukTuk ≤ paraguas; embudo decreciente y canales 
 sin ese archivo, y `dist/` esta en `.gitignore`), pero un `npm run preview` despues
 de un build local va contra local, no contra produccion.
 
+## Huella de numeros
+
+Sirve para **probar que un cambio de UI no movio ninguna cifra** (plan de mejora,
+seccion 5, compuerta 3). Se saca una huella antes y otra despues, y se comparan.
+
+**Como funciona.** Los elementos que muestran una cifra clave llevan
+`data-num="<vista>.<seccion>.<metrica>[.<entidad>][.<campo>]"` (helper `dn()` en
+`src/shared/huella.ts`). La entidad es el nombre del partner/ciudad/KAM (o
+`partner@CIUDAD`), nunca una posicion: reordenar una tabla no cambia la huella.
+Cubre Rendimiento (pais + desglose por KAM, ciudades, KAMs, productividad, tabla
+de partners, vista Fleet y KPIs TukTuk), Metas (tarjetas pais / ciudad / KAM /
+partner de las 4 lineas, con `.real` `.meta` `.pct` `.proj`), el portal del
+partner (KPIs, bloque de metas, detalle por periodo) y la tabla de reparto de la
+Calculadora (inputs de meta — se lee su `value` —, % y totales/cuadre). Donde la
+cifra estaba suelta dentro de un texto se envolvio en un `<span>` sin clase; la
+meta de las tarjetas pais de Metas va dentro de una frase traducida, asi que se
+repite en un `<span hidden>`. Nada de eso cambia lo que se ve.
+
+**Sacar una huella** (app abierta con sesion, cualquier rol):
+
+1. Abrir la consola del navegador y pegar el contenido entero de
+   `scripts/huella/huella.js`. Recorre semanal/mensual/diario × comb/agg/fleet/tk
+   × Rendimiento + Metas (mes de meta mas reciente con periodos, completo) + la
+   Calculadora una vez; con rol `partner`, el portal en cada linea disponible.
+   Tarda del orden de un minuto; al final restaura escala, pestaña y filtros.
+2. Esperar `✓ huella lista`. El JSON queda en `window.__huellaJSON`; en Chrome
+   `copy(window.__huellaJSON)` y pegarlo en un archivo (p.ej. `/tmp/huella-antes.json`).
+3. Para acotar: antes de pegar, `window.__huellaOpts = { escalas: ["semanal"],
+   vistas: ["rend"], lineas: ["comb"] }`.
+
+**Comparar:**
+
+```bash
+node scripts/huella/compare.mjs /tmp/huella-antes.json /tmp/huella-despues.json
+# exit 0 = identicas · 1 = difieren (lista agregadas/quitadas/cambiadas) · 2 = argumentos invalidos
+```
+
+**Reglas para que sea comparable**: misma base (mismo `seed_synthetic.sql`, sin
+ediciones de prueba en el medio — re-sembrar si hizo falta), mismo rol, mismo
+idioma (los numeros se formatean segun el idioma) y el mismo KAM elegido en la
+Calculadora. El rango de fechas NO depende del sidebar: el script lo fija por
+escala (Rendimiento: ultimos 6 / 3 / 14 periodos cargados; Metas: el mes
+completo) y lo deja en `meta.escenarios`; `compare.mjs` avisa si cambio.
+
+**Trampas**: con la pestaña del navegador OCULTA `requestAnimationFrame` no
+dispara y `switchMode`/`switchTab` se cuelgan (ver CLAUDE.md, sep-2026); el script
+lo detecta (`document.hidden`) y lo reemplaza por un `setTimeout` solo mientras
+corre. Una clave repetida en la misma pantalla no se pierde: queda como `clave#2`
+y se lista en `meta.escenarios[...].clavesDuplicadas`.
+
 ## Reset
 
 ```bash
