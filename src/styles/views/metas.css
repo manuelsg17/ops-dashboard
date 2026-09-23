@@ -184,3 +184,10 @@ th[aria-sort="ascending"] .mt-sortbtn, th[aria-sort="descending"] .mt-sortbtn { 
    en otro (el badge del delta dentro de .ui-kpi__delta). */
 .mt-exporting .ui-delta { display: inline-block; }
 .mt-exporting .ui-delta .ui-icon { margin-right: 2px; }
+
+/* Móvil: el selector de línea (4 opciones) no puede ensanchar la página. */
+.mt-lines { max-width: 100%; overflow-x: auto; }
+@media (max-width: 480px) {
+  .mt-lines .ui-segmented__btn { padding: 0 var(--space-2); }
+  .mt-lines .ui-segmented__btn .ui-icon { display: none; }
+}

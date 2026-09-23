@@ -204,3 +204,10 @@
 /* El encabezado de fila (th) sigue las reglas de las celdas del cuerpo. */
 .rd-table tbody tr:last-child th { border-bottom: 0; }
 .rd-table tbody tr:hover th { background: var(--color-surface-muted); }
+
+/* Móvil: el selector de línea (4 opciones) no puede ensanchar la página. */
+.rd-toolbar .ui-segmented { max-width: 100%; overflow-x: auto; }
+@media (max-width: 480px) {
+  .rd-toolbar .ui-segmented .ui-segmented__btn { padding: 0 var(--space-2); }
+  .rd-toolbar .ui-segmented .ui-segmented__btn .ui-icon { display: none; }
+}

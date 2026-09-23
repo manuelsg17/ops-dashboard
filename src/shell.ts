@@ -13,7 +13,7 @@
 // app.ts importa este módulo, y un import en sentido contrario sería circular.
 
 import { STATE } from "./core/config.js";
-import { t, kamLabel } from "./core/i18n";
+import { t, kamLabel, getLang } from "./core/i18n";
 import { cityLabel, d2s } from "./core/format.js";
 import { escapeHTML } from "./core/security.js";
 import { sideNav, pageHeader, rawHtml } from "./shared/ui";
@@ -273,6 +273,38 @@ export function renderPageHeader() {
     const s = host.querySelector(`[data-slot="${slot}"]`);
     if (n && s) s.appendChild(n);
   }
+  // setUiLang repinta el encabezado: el estado de la carga va en el idioma nuevo.
+  refrescarEstadoCarga();
+}
+
+// ── Estado de la carga ("Datos cargados · 4:31 p. m.") ───────────────────────
+// Se guarda la RECETA (hora y cantidad de avisos) además del texto, para poder
+// re-traducirlo al cambiar de idioma: antes quedaba en el idioma en que se cargó.
+// Solo se re-escribe si el aviso visible sigue siendo ESE (un error posterior
+// de showBanner no se pisa).
+const _LOCALE_HORA = { es: "es-PE", en: "en-US", ru: "ru-RU" };
+let _estadoOk = null;   // { at, nWarn, msg }
+function _textoEstadoCarga(at, nWarn) {
+  const warn = nWarn ? ` · ⚠ ${t("datos.camposInvalidos", { n: nWarn })}` : "";
+  return t("estado.datosCargados") + " · " +
+    new Date(at).toLocaleTimeString(_LOCALE_HORA[getLang()] || "es-PE") + warn;
+}
+/** Pinta "Datos cargados · hh:mm" (lo llama data.ts al terminar una carga). */
+export function mostrarEstadoCarga(nWarn = 0) {
+  const at = Date.now();
+  const msg = _textoEstadoCarga(at, nWarn);
+  _estadoOk = { at, nWarn, msg };
+  if (typeof window.showBanner === "function") window.showBanner(true, msg);
+}
+/** Re-traduce el estado de la carga si es lo que se está mostrando. */
+export function refrescarEstadoCarga() {
+  if (!_estadoOk) return;
+  const el = document.getElementById("dsBanner");
+  const span = el && el.lastElementChild;
+  if (!span || el.classList.contains("err") || span.textContent !== _estadoOk.msg) return;
+  const msg = _textoEstadoCarga(_estadoOk.at, _estadoOk.nWarn);
+  span.textContent = msg;
+  _estadoOk.msg = msg;
 }
 
 let _phTimer = null;

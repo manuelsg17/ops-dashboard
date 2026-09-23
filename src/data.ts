@@ -28,6 +28,7 @@ import { ErrorSubida, describirErrorSubida, etiquetaTipoSubida } from "./domain/
 import { filasComoObjetos } from "./workers/excelParse";
 import { alCerrarSesion } from "./shared/sesion";
 import { msgSinFilas } from "./domain/permisosUI";
+import { mostrarEstadoCarga } from "./shell";
 
 
 // ── PARSER DE TAXIPARKS ─────────────────────────────────────────────────────
@@ -1169,11 +1170,9 @@ export async function loadFromSupabase(opts = {}) {
     const fpAlt = altRows ? huellaDatos([altRows]) : null;
     const altIgual = coreIgual && !!altRows && !!_snapFp.alt && _snapFp.alt === fpAlt;
 
-    const bannerOk = () => {
-      const warnSuffix = STATE.parseWarnings.size
-        ? ` · ⚠ ${t("datos.camposInvalidos", { n: STATE.parseWarnings.size })}` : "";
-      showBanner(true, t("estado.datosCargados") + " · " + new Date().toLocaleTimeString("es-PE") + warnSuffix);
-    };
+    // "Datos cargados · hh:mm": lo arma shell.ts, que además lo re-traduce al
+    // cambiar de idioma (antes quedaba en el idioma en que se cargó).
+    const bannerOk = () => mostrarEstadoCarga(STATE.parseWarnings.size);
     if (coreIgual && (!alt || altIgual)) {
       // Nada cambió: lo que está en pantalla ES lo que hay en la base. Se evita
       // el segundo render completo (y el parpadeo de las gráficas).

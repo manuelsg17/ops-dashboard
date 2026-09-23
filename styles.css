@@ -1093,7 +1093,7 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
   padding: 0 var(--space-4);
   background: var(--color-surface); border-bottom: 1px solid var(--color-border);
 }
-.shell-brand { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.shell-brand { display: flex; align-items: center; gap: var(--space-2); flex: 0 0 auto; }
 .logo {
   width: 32px; height: 32px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
@@ -1108,7 +1108,7 @@ tr.leads-row td:nth-last-child(3) { background: #fffbeb; }
 /* Nombre de la cuenta del partner (solo rol partner). */
 .shell-partner-name { display: none; }
 body.role-partner .shell-partner-name:not(:empty) {
-  display: block; min-width: 0;
+  display: block; flex: 0 1 auto; min-width: 0;
   padding-left: var(--space-3); margin-left: var(--space-1);
   border-left: 1px solid var(--color-border);
   font-size: var(--text-md); font-weight: var(--weight-semibold); color: var(--color-text);
@@ -1227,6 +1227,21 @@ body.role-partner .shell-partner-name:not(:empty) {
   body.nav-rail .shell-nav .ui-sidenav__group + .ui-sidenav__group {
     border-top: 1px solid var(--color-border); padding-top: var(--space-3);
   }
+  /* Al EXPANDIR, el ancho se anima de 64 a 232 px pero los textos dejaban de
+     estar ocultos en el acto: durante la animación se veían recortados
+     ("ANÁLI", "Rendimi", "Configu"). Aparecen recién cuando el ancho llegó
+     (renderShellNav recrea los nodos en cada cambio, así que la animación de
+     entrada corre cada vez). Mismo reloj que la transición del ancho: si la
+     animación se detiene, se detienen las dos y nada queda recortado. */
+  body:not(.nav-rail) .shell-nav .ui-sidenav__text,
+  body:not(.nav-rail) .shell-nav .ui-sidenav__label {
+    animation: shellNavTextoEntra .26s linear both;
+  }
+}
+@keyframes shellNavTextoEntra { 0%, 70% { opacity: 0; } 100% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .shell-nav { transition: none; }
+  .shell-nav .ui-sidenav__text, .shell-nav .ui-sidenav__label { animation: none !important; }
 }
 
 /* Panel de filtros */
@@ -1311,7 +1326,9 @@ body.role-partner .shell-partner-name:not(:empty) {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .pi input[type="checkbox"] { accent-color: var(--color-text); width: 14px; height: 14px; flex: 0 0 auto; }
-/* Botón flotante y velo: solo en tablet (abajo). */
+/* Velo: solo en tablet (abajo). El botón flotante de filtros (#sidebarToggle)
+   ya no se muestra en ningún ancho: tapaba contenido (tarjetas, la última fila
+   de las tablas) y el encabezado de la página ya tiene el botón "Filtros". */
 .sidebar-toggle, .sb-veil { display: none; }
 body.no-sidebar .sidebar-wrap { display: none !important; }
 
@@ -1380,7 +1397,7 @@ body.role-partner #uploadDropdown { display: none !important; }
    abierto tapa (con velo), cerrado devuelve todo el ancho al contenido. */
 @media (max-width: 1024px) {
   .brand-sub { display: none; }
-  .main { padding: var(--space-4) var(--space-4) 88px; }
+  .main { padding: var(--space-4) var(--space-4) var(--space-12); }
   .sidebar-wrap { position: static; height: auto; width: 0; }
   .sidebar {
     position: fixed; top: var(--shell-top); right: 0; bottom: 0; z-index: 420;
@@ -1396,17 +1413,6 @@ body.role-partner #uploadDropdown { display: none !important; }
     background: var(--color-overlay); border: 0; padding: 0; cursor: pointer;
   }
   .sidebar.collapsed ~ .sb-veil { display: none; }
-  .sidebar-toggle {
-    display: flex; align-items: center; justify-content: center;
-    position: fixed; right: var(--space-4); bottom: var(--space-4); z-index: 401;
-    width: 52px; height: 52px; padding: 0;
-    color: var(--color-text); background: var(--color-surface);
-    border: 1px solid var(--color-border-strong); border-radius: 50%;
-    box-shadow: var(--shadow-lg); cursor: pointer;
-  }
-  .sidebar-toggle:focus-visible { outline: none; box-shadow: var(--focus-ring), var(--shadow-lg); }
-  /* Con el panel abierto el botón flotante sobra (lo tapa el velo). */
-  .sidebar:not(.collapsed) ~ .sidebar-toggle { display: none; }
 
   /* Rejillas de las vistas: 2 columnas, no 1 (decisión de ago-2026). */
   .metric-row, .city-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
@@ -1438,6 +1444,16 @@ body.role-partner #uploadDropdown { display: none !important; }
 @media (max-width: 600px) {
   .brand { font-size: var(--text-base); }
   .lang-select { max-width: 96px; }
+  /* Portal (390 px): "YANGO Dashboard" + el nombre del partner no entran;
+     queda el logo (la marca) y el nombre de SU cuenta, que es lo que importa. */
+  body.role-partner .shell-brand__text { display: none; }
+  body.role-partner .shell-partner-name:not(:empty) { margin-left: 0; font-size: var(--text-base); }
+}
+@media (max-width: 480px) {
+  /* 390 px: "YANGO Dashboard" + subir + idioma + usuario no entran en la barra
+     (la marca ya no se encoge, para no quedar debajo de lo que viene después):
+     queda "YANGO" junto al logo. */
+  .brand span { display: none; }
 }
 
 /* ── Objetivos táctiles (puntero grueso) ──────────────────────────────────── */

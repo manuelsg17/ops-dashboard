@@ -206,6 +206,11 @@ td.ui-num > .ui-delta { margin-left: auto; }
 
 /* ── Tabla ───────────────────────────────────────────────────────────────── */
 .ui-table-wrap {
+  /* position: relative → los .ui-sr-only (absolutos) de las celdas quedan
+     dentro del scroll de la tabla. Sin esto escapaban y ensanchaban la PÁGINA
+     (scroll horizontal de 13 px en escritorio; en el móvil el navegador
+     alejaba toda la vista para mostrar 949 px en 390). */
+  position: relative;
   overflow: auto; max-width: 100%;
   background: var(--color-surface);
   border: 1px solid var(--color-border); border-radius: var(--radius-md);
