@@ -35,7 +35,9 @@ export function _segStatusColor(k) { return _segStatus(k).color; }
 export function _segStatusLabel(k, en) { const s = _segStatus(k); return en ? s.en : s.es; }
 export function _segProjColor(name) { return (typeof hashColor === "function") ? hashColor("proj:" + (name || "")) : "#64748b"; }
 
-export function _segPartners() { return (STATE.allPartners || []).slice().sort(); }
+// sidebarPartners = Taxi ∪ solo-TukTuk: con allPartners (solo Taxi) un partner
+// solo-TukTuk (caso PIAGGIO) no se podía elegir para cargarle seguimiento.
+export function _segPartners() { return (STATE.sidebarPartners || STATE.allPartners || []).slice().sort(); }
 
 // ── AGREGADOS PARA LAS VISTAS DE TABLERO ─────────────────────────────────────
 
@@ -118,6 +120,20 @@ export function _segLoadDraft(partner) {
       city: r.city || "", clid: r.clid || ""
     }));
   SEG_STATE.deleted = [];
+  SEG_STATE._draftBase = JSON.stringify(SEG_STATE.draft);
+}
+
+// ¿Hay ediciones sin guardar en el draft del partner actual? (I12) Antes, elegir
+// otro partner recargaba el draft y descartaba en silencio lo tecleado.
+export function _segDraftSucio() {
+  if (!SEG_STATE.partner) return false;
+  return (SEG_STATE.deleted || []).length > 0 ||
+    JSON.stringify(SEG_STATE.draft || []) !== (SEG_STATE._draftBase ?? "[]");
+}
+// true = se puede cambiar de partner (no hay cambios, o el usuario acepta perderlos).
+function _segPuedeSalir(nuevo) {
+  if (nuevo === SEG_STATE.partner || !_segDraftSucio()) return true;
+  return confirm(`Tienes cambios sin guardar en el seguimiento de ${SEG_STATE.partner}.\n\nSi cambias de partner se perderán. ¿Continuar?`);
 }
 
 // Orden de proyectos (primera aparición en el draft/rows). "" → grupo "Sin proyecto".
@@ -505,12 +521,15 @@ export function renderSeguimiento() {
     <div class="agy-style-573">
       ${_segControlsHTML()}
       ${partner && kam ? `<div class="seg-kam-badge"><span style="background:${(KAM_COLORS && KAM_COLORS[kam]) || "#888"}">${escapeHTML(kam)}</span></div>` : ""}
-      ${body}
+      <div id="segBody">${body}</div>
     </div>`;
 }
 
 // ── INTERACCIONES ────────────────────────────────────────────────────────────
-export function segOnPartnerChange(p) { SEG_STATE.partner = p; _segLoadDraft(p); renderSeguimiento(); }
+export function segOnPartnerChange(p) {
+  if (!_segPuedeSalir(p)) { renderSeguimiento(); return; }   // revierte el control
+  SEG_STATE.partner = p; _segLoadDraft(p); renderSeguimiento();
+}
 
 export function segSetView(v) { SEG_STATE.view = v; renderSeguimiento(); }
 export function segSetKam(k)  { SEG_STATE.kam  = k; renderSeguimiento(); }
@@ -519,6 +538,7 @@ export function segSetKam(k)  { SEG_STATE.kam  = k; renderSeguimiento(); }
 // que el resumen siguiera mostrando un solo partner y pareciera que el botón
 // no hizo nada).
 export function segClearPartner() {
+  if (!_segPuedeSalir(null)) return;
   SEG_STATE.partner = null; SEG_STATE.search = ""; SEG_STATE.draft = []; SEG_STATE.deleted = [];
   if (SEG_STATE.view === "gantt" || SEG_STATE.view === "editor") SEG_STATE.view = "resumen";
   renderSeguimiento();
@@ -527,6 +547,7 @@ export function segClearPartner() {
 // "Abrir →" del resumen: seleccionar el partner y saltar a su Gantt — el paso
 // natural después de detectar que algo está vencido.
 export function segOpenPartner(p) {
+  if (!_segPuedeSalir(p)) return;
   SEG_STATE.partner = p; SEG_STATE.search = "";
   _segLoadDraft(p);
   SEG_STATE.view = "gantt";
@@ -557,7 +578,18 @@ export function _segPaintPartnerList(q) {
   list.innerHTML = a.slice(0, 60).map(p => opt(p, true)).join("")
                  + b.slice(0, 60).map(p => opt(p, false)).join("");
 }
-export function segFilterPartners(q) { SEG_STATE.search = q; _segPaintPartnerList(q); segShowPartnerList(); }
+// La búsqueda también filtra el Resumen/Kanban global (_segFilteredTasks), pero
+// antes solo se repintaba la lista flotante: el cuerpo seguía mostrando todos
+// hasta el próximo render (I12). Se repinta SOLO el cuerpo, no los controles,
+// para que el <input> conserve el foco mientras se tipea.
+export function segFilterPartners(q) {
+  SEG_STATE.search = q; _segPaintPartnerList(q); segShowPartnerList();
+  if (SEG_STATE.partner) return;   // con partner elegido el cuerpo no depende de la búsqueda
+  const b = document.getElementById("segBody");
+  if (!b) return;
+  if (SEG_STATE.view === "resumen")     b.innerHTML = _segRenderResumen(_segFilteredTasks());
+  else if (SEG_STATE.view === "kanban") b.innerHTML = _segRenderKanban(_segFilteredTasks());
+}
 export function segShowPartnerList() {
   const l = document.getElementById("segPartnerList");
   if (!l) return;
@@ -569,6 +601,11 @@ export function segHidePartnerList() { const l = document.getElementById("segPar
 // al mousedown de la opción a correr. Mismo truco que Presentación 2.0.
 export function segHidePartnerListDelayed() { setTimeout(segHidePartnerList, 150); }
 export function segSelectPartner(p) {
+  if (!_segPuedeSalir(p)) {
+    segHidePartnerList();
+    const i = document.getElementById("segSearch"); if (i) i.value = SEG_STATE.partner || "";
+    return;
+  }
   SEG_STATE.partner = p; SEG_STATE.search = "";
   _segLoadDraft(p);
   segHidePartnerList();
