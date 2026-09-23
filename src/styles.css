@@ -1,33 +1,11 @@
 
 /* --- AUTO-EXTRACTED INLINE STYLES --- */
-.agy-style-1 { padding:12px 0 }
-.agy-style-2 { font-size:.72rem;color:#888;margin-left:8px }
-.agy-style-3 { padding:14px;color:#888;font-size:.8rem }
-.agy-style-4 { padding:12px;background:#fff5f5;border:1px solid #fecaca;border-radius:6px;color:#b91c1c;font-size:.78rem }
-.agy-style-5 { margin-left:10px }
-.agy-style-6 { margin-bottom:14px;background:#f0f9ff;border:1px solid #bae6fd }
-.agy-style-7 { font-size:.78rem;font-weight:700;color:#075985;margin-bottom:8px }
 .agy-style-8 { display:flex;gap:8px;align-items:center;flex-wrap:wrap }
-.agy-style-9 { flex:1;min-width:200px;max-width:300px }
 .agy-style-10 { width:auto }
-.agy-style-11 { font-size:.7rem;color:#0369a1;margin-top:6px }
-.agy-style-12 { width:110px }
 .agy-style-13 { width:90px }
-.agy-style-14 { font-size:.62rem;color:#aaa;margin-right:5px }
-.agy-style-15 { display:inline-flex;align-items:center;gap:3px;margin:0 7px 3px 0;font-size:.68rem;cursor:pointer }
-.agy-style-16 { display:inline-flex;align-items:center;gap:3px;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:10px;padding:1px 4px 1px 8px;font-size:.68rem;margin:0 4px 3px 0 }
-.agy-style-17 { color:#8b5cf6;font-size:.6rem }
-.agy-style-18 { border:none;background:none;color:#7c3aed;cursor:pointer;font-weight:700;padding:0 3px }
-.agy-style-19 { font-size:.66rem;color:#b45309 }
-.agy-style-20 { display:flex;gap:4px;margin-top:4px }
-.agy-style-21 { width:120px;font-size:.68rem }
 .agy-style-22 { font-size:.66rem }
-.agy-style-23 { color:#e5e5e5;font-size:.7rem }
-.agy-style-24 { font-size:.76rem }
 .agy-style-25 { font-size:.62rem;color:#aaa }
-.agy-style-26 { width:100%;font-size:.72rem }
 .agy-style-27 { text-align:center }
-.agy-style-28 { font-size:.7rem;color:#888;margin-top:8px }
 .agy-style-29 { margin-top:8px }
 .agy-style-30 { margin-bottom:16px }
 .agy-style-31 { font-size:.8rem;font-weight:700;color:#555;margin-bottom:10px }
@@ -39,7 +17,6 @@
 .agy-style-37 { margin-bottom:16px;border:1px solid #fecaca;background:#fff8f8;border-radius:8px;padding:14px }
 .agy-style-38 { font-size:.8rem;font-weight:700;color:#b91c1c;margin-bottom:6px }
 .agy-style-39 { font-size:.72rem;color:#888;margin-bottom:12px }
-.agy-style-40 { color:#b91c1c }
 .agy-style-41 { display:flex;flex-direction:column }
 .agy-style-42 { font-size:.68rem;color:#aaa;margin-bottom:3px;font-weight:600 }
 .agy-style-43 { width:auto;min-width:140px }
@@ -47,26 +24,9 @@
 .agy-style-45 { background:#FF0000;color:#fff;font-weight:700;padding:8px 14px;margin-top:18px }
 .agy-style-46 { font-size:.8rem;font-weight:700;color:#555;margin-bottom:4px }
 .agy-style-47 { font-size:.72rem;color:#888;margin-bottom:8px }
-.agy-style-48 { display:inline-flex;align-items:center;gap:4px;background:#fff0f0;border:1px solid #fecaca;border-radius:20px;padding:3px 10px;font-size:.73rem;font-weight:600;color:#b91c1c }
-.agy-style-49 { background:none;border:none;cursor:pointer;color:#FF0000;font-size:.85rem;line-height:1;padding:0 2px;margin-left:2px }
-.agy-style-50 { font-size:.75rem;color:#888;margin-bottom:10px }
 .agy-style-51 { color:#FF0000 }
-.agy-style-52 { color:#b45309 }
-.agy-style-53 { display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px }
 .agy-style-54 { font-size:.75rem;color:#aaa }
-.agy-style-55 { display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px }
 .agy-style-56 { flex:1;min-width:180px;max-width:280px }
-.agy-style-57 { border:1px solid #fecaca;border-radius:6px;background:#fffafa;margin-top:8px }
-.agy-style-58 { cursor:pointer;padding:8px 12px;font-size:.78rem;font-weight:700;color:#b91c1c }
-.agy-style-59 { max-height:280px;overflow-y:auto;border-top:1px solid #fecaca }
-.agy-style-60 { width:100%;border-collapse:collapse;font-size:.75rem }
-.agy-style-61 { background:#fff5f5;position:sticky;top:0 }
-.agy-style-62 { text-align:left;padding:6px 10px;border-bottom:1px solid #fecaca }
-.agy-style-63 { text-align:right;padding:6px 10px;border-bottom:1px solid #fecaca }
-.agy-style-64 { padding:5px 10px;border-bottom:1px solid #fee }
-.agy-style-65 { padding:5px 10px;border-bottom:1px solid #fee;color:#555 }
-.agy-style-66 { background:#fff0f0;padding:1px 5px;border-radius:3px;color:#b91c1c }
-.agy-style-67 { padding:5px 10px;border-bottom:1px solid #fee;text-align:right;color:#888 }
 .agy-style-68 { display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:20px }
 .agy-style-69 { margin-bottom:10px;font-size:.8rem;font-weight:700;color:#555 }
 .agy-style-70 { display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap }
@@ -111,8 +71,6 @@
 .agy-style-109 { cursor:pointer;font-size:.72rem;font-weight:700;color:#92400e }
 .agy-style-110 { display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-top:8px }
 .agy-style-111 { font-size:.68rem;color:#92400e;margin-top:6px;font-style:italic }
-.agy-style-112 { background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:12px }
-.agy-style-113 { font-size:.82rem;font-weight:800;color:#7e22ce;margin-bottom:8px }
 .agy-style-114 { font-size:.66rem;color:#555;font-weight:700;display:block;margin-bottom:3px }
 .agy-style-115 { width:100%;padding:5px 8px;font-size:.78rem }
 .agy-style-116 { font-size:.75rem;font-weight:600 }
@@ -133,19 +91,14 @@
 .agy-style-131 { font-size:.55rem;background:#f59e0b;color:#fff;padding:1px 5px;border-radius:6px;vertical-align:middle }
 .agy-style-132 { background:#fffbeb }
 .agy-style-133 { background:#f1f5f9 }
-.agy-style-134 { font-size:.78rem;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:8px 10px;margin-bottom:8px }
-.agy-style-135 { font-size:.72rem;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:6px 10px;margin-bottom:8px }
 .agy-style-136 { max-height:500px;overflow-y:auto }
 .agy-style-137 { color:#555;font-weight:600 }
 .agy-style-138 { font-size:.7rem;line-height:1.3 }
 .agy-style-139 { width:84px;padding:3px 5px;border:1px solid #e5e5e5;border-radius:4px;font-size:.74rem;text-align:right }
 .agy-style-140 { max-height:420px;overflow-y:auto }
 .agy-style-141 { font-size:.7rem;color:#888;margin-top:6px;font-style:italic }
-.agy-style-142 { font-size:.78rem;color:#6b21a8;background:#faf5ff;border:1px solid #e9d5ff;border-radius:6px;padding:8px 10px;margin-bottom:8px }
-.agy-style-143 { max-height:460px;overflow-y:auto }
 .agy-style-144 { padding:8px 16px;font-size:.8rem;background:#ccc;color:#fff;border:none;border-radius:8px;font-weight:800;cursor:not-allowed }
 .agy-style-145 { padding:8px 16px;font-size:.8rem;background:#10b981;color:#fff;border:none;border-radius:8px;font-weight:800;cursor:pointer }
-.agy-style-146 { font-size:.7rem;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:6px 10px;margin-top:8px }
 .agy-style-147 { display:flex;gap:10px;flex-wrap:wrap;align-items:center }
 .agy-style-148 { padding:7px 14px;font-size:.78rem;background:#FF0000;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer }
 .agy-style-149 { padding:7px 14px;font-size:.78rem;background:#555;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer }
@@ -163,9 +116,6 @@
 .agy-style-161 { text-align:right;padding:7px 12px;vertical-align:top }
 .agy-style-162 { font-size:.72rem;font-weight:800;color:#0284c7;margin:4px 0 6px }
 .agy-style-163 { background:#ecfeff }
-.agy-style-164 { font-size:.72rem;font-weight:800;color:#7e22ce;margin:4px 0 6px }
-.agy-style-165 { width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden }
-.agy-style-166 { background:#faf5ff }
 .agy-style-167 { display:flex;gap:14px;align-items:end;margin-bottom:10px;flex-wrap:wrap }
 .agy-style-168 { position:relative }
 .agy-style-169 { font-size:.68rem;color:#555;font-weight:700;display:block;margin-bottom:3px }
@@ -224,11 +174,8 @@
 .agy-style-222 { display:flex;align-items:center;gap:4px }
 .agy-style-223 { font-size:.7rem;color:#777;margin-bottom:3px }
 .agy-style-224 { padding:26px 16px;text-align:center;color:#888;font-size:.85rem }
-.agy-style-225 { font-size:.6rem;font-weight:700;background:#ecfeff;color:#0284c7;border:1px solid #a5f3fc;padding:1px 5px;border-radius:8px;margin-left:5px }
 .agy-style-226 { grid-template-columns:repeat(auto-fit,minmax(150px,1fr)) }
 .agy-style-227 { font-size:.6rem;font-weight:700;background:#faf5ff;color:#7e22ce;border:1px solid #e9d5ff;padding:1px 5px;border-radius:8px;margin-left:5px }
-.agy-style-228 { font-size:.6rem;font-weight:700;background:#f5f3ff;color:#8b5cf6;border:1px solid #ddd6fe;padding:1px 5px;border-radius:8px;margin-left:5px }
-.agy-style-229 { font-size:.6rem;color:#aaa;margin-left:4px }
 .agy-style-230 { font-size:.62rem;color:#888;margin-top:2px }
 .agy-style-231 { display:flex;align-items:center;gap:8px;background:#fff8f8;border:1px solid #fecaca;border-radius:8px;padding:6px 12px }
 .agy-style-232 { font-size:.72rem;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:.4px }
@@ -399,12 +346,7 @@
 .agy-style-389 { flex:1;min-width:0;background:#ecfeff;border:1px solid #a5f3fc;border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;justify-content:center;gap:2px }
 .agy-style-390 { font-size:.58rem;color:#0284c7;font-weight:700;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
 .agy-style-391 { font-size:.58rem;color:#0284c7 }
-.agy-style-392 { flex:1;min-width:0;background:#fafafa;border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;justify-content:center;gap:2px }
-.agy-style-393 { font-size:.6rem;color:#aaa }
-.agy-style-394 { flex:0 0 62px;display:flex;align-items:center }
-.agy-style-395 { flex:1;min-width:0;display:flex;gap:8px }
 .agy-style-396 { flex:1;display:flex;align-items:center;justify-content:center;color:#aaa;font-size:.9rem }
-.agy-style-397 { display:flex;gap:8px;flex:1;min-height:0;align-items:stretch }
 .agy-style-398 { display:inline-block;white-space:nowrap;background:#fff;border:1px solid #e5e5e5;border-radius:14px;padding:2px 9px;font-size:.72rem;margin:2px 4px 2px 0 }
 .agy-style-399 { color:#333 }
 .agy-style-400 { color:#555 }
@@ -455,10 +397,8 @@
 .agy-style-445 { width:36px;height:36px;border:4px solid #e5e5e5;border-top-color:#FF0000;border-radius:50%;animation:spin .7s linear infinite }
 .agy-style-446 { font-weight:700;color:#333 }
 .agy-style-447 { cursor:pointer;white-space:nowrap }
-.agy-style-448 { display:flex;align-items:center;gap:5px;font-size:.75rem;color:#555;cursor:pointer;white-space:nowrap }
 .agy-style-449 { margin-left:auto;background:#f0fdf4;border-color:#86efac;color:#166534 }
 .agy-style-450 { margin-top:6px;font-size:.73rem;color:#aaa }
-.agy-style-451 { width:36px }
 .agy-style-452 { color:#888;font-size:.72rem }
 .agy-style-453 { font-size:.73rem;color:#555 }
 .agy-style-454 { background:#f9fffe;font-weight:700;border-top:2px solid #e5e7eb }
@@ -581,29 +521,9 @@
 .agy-style-571 { font-size:.7rem;color:#888 }
 .agy-style-572 { font-size:.78rem;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;margin-bottom:12px }
 .agy-style-573 { padding:4px 8px 20px }
-.agy-style-574 { display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin:8px 0 14px }
-.agy-style-575 { width:260px }
 .agy-style-576 { flex:1;min-height:0;overflow:hidden }
-.agy-style-577 { color:#aaa;font-size:.72rem;text-align:center }
-.agy-style-578 { color:#8b5cf6;font-weight:700 }
-.agy-style-579 { text-align:center;font-size:.78rem }
-.agy-style-580 { font-size:.7rem;color:#aaa;font-weight:400 }
-.agy-style-581 { font-size:.78rem }
-.agy-style-582 { font-size:.78rem;text-align:right }
-.agy-style-583 { font-size:.72rem;color:#aaa;text-align:right }
-.agy-style-584 { background:#f5f5f5;font-weight:700;font-size:.78rem }
-.agy-style-585 { text-align:right }
-.agy-style-586 { text-align:right;color:#aaa }
-.agy-style-587 { padding:16px }
-.agy-style-588 { font-size:.85rem;font-weight:700;color:#555;margin-bottom:12px }
-.agy-style-589 { font-size:.72rem;font-weight:400;color:#aaa;margin-left:8px }
-.agy-style-590 { min-width:700px }
-.agy-style-591 { text-align:center;border-bottom:1px solid #e5e5e5 }
 .agy-style-601 { height:1px;background:#e5e5e5;margin:4px 8px }
-.agy-style-602 { display:none }
 .agy-style-603 { display:flex;gap:4px;margin-top:6px;flex-wrap:wrap }
-.agy-style-604 { display:none }
-.agy-style-605 { display:none }
 
 /* ── SELECTOR DE IDIOMA (barra superior) ─────────────────────────────────── */
 .lang-switch { display:inline-flex; gap:2px; margin-right:10px; vertical-align:middle; }
