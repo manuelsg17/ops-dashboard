@@ -1,4 +1,7 @@
 //@ts-nocheck
+import { t, getLang, kamLabel } from "./core/i18n";
+import { xl, pick } from "./core/i18nExport";
+import { mesNombre } from "./core/meses";
 // seguimiento.js — Tracker de seguimiento de reuniones (Fase 3).
 // Jerarquía: PROYECTO → tareas. Cada tarea: Owner · Task · inicio · fin · resultado
 // esperado · status. Tab "Seguimiento" (editor CRUD admin-gated) + Gantt visual
@@ -17,22 +20,27 @@ export const SEG_STATE = {
   view: "resumen", kam: "all", search: ""
 };
 
+// Etiqueta y tooltip de cada vista: t("seg.view.<k>") / t("seg.view.<k>Tip").
 export const SEG_VIEWS = [
-  { k: "resumen", emoji: "📊", label: "Resumen",     tip: "Quién tiene seguimiento, en qué estado y qué está vencido" },
-  { k: "kanban",  emoji: "🗂️", label: "Kanban",      tip: "Tareas por estado — arrastrá el foco a lo que está trabado" },
-  { k: "gantt",   emoji: "📅", label: "Gantt",       tip: "Línea de tiempo por tarea (requiere elegir un partner)" },
-  { k: "editor",  emoji: "✏️", label: "Editar",      tip: "Crear y modificar proyectos y tareas (requiere elegir un partner)" }
+  { k: "resumen", emoji: "📊" },
+  { k: "kanban",  emoji: "🗂️" },
+  { k: "gantt",   emoji: "📅" },
+  { k: "editor",  emoji: "✏️" }
 ];
 
+// `key` es el valor de la BD (seguimiento.status) y no se traduce. El texto de
+// cada estado vive en core/i18nExport (EXPORT_STR "seg.st.<key>") porque el
+// Gantt lo dibuja tanto la pestaña como la hoja del deck.
 export const SEG_STATUS = [
-  { key: "pendiente", es: "Pendiente", en: "Pending",     color: "#9ca3af" },
-  { key: "en_curso",  es: "En curso",  en: "In progress", color: "#3b82f6" },
-  { key: "hecho",     es: "Hecho",     en: "Done",        color: "#10b981" },
-  { key: "bloqueado", es: "Bloqueado", en: "Blocked",     color: "#dc2626" }
+  { key: "pendiente", color: "#9ca3af" },
+  { key: "en_curso",  color: "#3b82f6" },
+  { key: "hecho",     color: "#10b981" },
+  { key: "bloqueado", color: "#dc2626" }
 ];
 export function _segStatus(k) { return SEG_STATUS.find(s => s.key === k) || SEG_STATUS[0]; }
 export function _segStatusColor(k) { return _segStatus(k).color; }
-export function _segStatusLabel(k, en) { const s = _segStatus(k); return en ? s.en : s.es; }
+// `lang`: "es" | "en" | "ru" — el de la interfaz en la pestaña, el del deck en el PDF.
+export function _segStatusLabel(k, lang) { return xl(`seg.st.${_segStatus(k).key}`, lang); }
 export function _segProjColor(name) { return (typeof hashColor === "function") ? hashColor("proj:" + (name || "")) : "#64748b"; }
 
 // sidebarPartners = Taxi ∪ solo-TukTuk: con allPartners (solo Taxi) un partner
@@ -133,7 +141,7 @@ export function _segDraftSucio() {
 // true = se puede cambiar de partner (no hay cambios, o el usuario acepta perderlos).
 function _segPuedeSalir(nuevo) {
   if (nuevo === SEG_STATE.partner || !_segDraftSucio()) return true;
-  return confirm(`Tienes cambios sin guardar en el seguimiento de ${SEG_STATE.partner}.\n\nSi cambias de partner se perderán. ¿Continuar?`);
+  return confirm(t("seg.confirmSalir", { p: SEG_STATE.partner }));
 }
 
 // Orden de proyectos (primera aparición en el draft/rows). "" → grupo "Sin proyecto".
@@ -142,7 +150,7 @@ export function _segProjectOrder(rows) {
   (rows || []).forEach(r => { const p = r.project || ""; if (!seen.has(p)) { seen.add(p); out.push(p); } });
   return out;
 }
-export function _segProjLabel(p, en) { return p || (en ? "No project" : "Sin proyecto"); }
+export function _segProjLabel(p, lang) { return p || xl("seg.sinProyecto", lang); }
 
 // ── Fechas / timeline ─────────────────────────────────────────────────────────
 export function _segParseDate(s) {
@@ -153,18 +161,18 @@ export function _segParseDate(s) {
 }
 export function _segToday() { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
 export function _segFmtD(d) { return d ? `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}` : "—"; }
-export function _segMonths(en) {
-  return en ? ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
-            : ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+// Meses cortos: tabla única de core/meses.ts.
+export function _segMonths(lang) {
+  return Array.from({ length: 12 }, (_, i) => mesNombre(i, lang, { corto: true }));
 }
 // Columnas del Gantt: DÍA si el rango es corto (≤24d), SEMANA si medio (≤168d), MES si largo.
-export function _segTimeline(rows, en) {
+export function _segTimeline(rows, lang) {
   const ds = [];
   rows.forEach(r => { const a = _segParseDate(r.start_date), b = _segParseDate(r.end_date); if (a) ds.push(+a); if (b) ds.push(+b); });
   if (!ds.length) return null;
   const min = new Date(Math.min(...ds)), max = new Date(Math.max(...ds));
   const spanDays = (max - min) / 86400000;
-  const cols = [], MO = _segMonths(en);
+  const cols = [], MO = _segMonths(lang);
   if (spanDays <= 24) {
     const d = new Date(min.getFullYear(), min.getMonth(), min.getDate());
     while (d <= max) { const s = new Date(d), e = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59); cols.push({ s, e, label: _segFmtD(s) }); d.setDate(d.getDate() + 1); }
@@ -189,15 +197,17 @@ export function _segBar(r, tl) {
   return { bs, be };
 }
 
-// ── GANTT reutilizable (tab + PDF). rows = filas del partner; opts.en idioma. ────
+// ── GANTT reutilizable (tab + PDF). rows = filas del partner; opts.lang idioma ────
+// ("es" | "en" | "ru"): el de la interfaz en la pestaña, el del deck en el PDF.
 export function _segBuildGantt(rows, opts) {
   opts = opts || {};
-  const en = !!opts.en;
+  const lang = opts.lang || "es";
+  const X = k => xl(k, lang);
   const tasks = (rows || []).filter(r => (r.task || "").trim());
   if (!tasks.length) {
-    return `<div class="agy-style-537">${en ? "No follow-up tasks yet." : "Aún no hay tareas de seguimiento."}</div>`;
+    return `<div class="agy-style-537">${X("seg.sinTareas")}</div>`;
   }
-  const tl = _segTimeline(tasks, en);
+  const tl = _segTimeline(tasks, lang);
   const nCol = tl ? tl.cols.length : 0;
   const today = _segToday();
   const todayIdx = tl ? tl.cols.findIndex(c => today >= c.s && today <= c.e) : -1;
@@ -222,12 +232,12 @@ export function _segBuildGantt(rows, opts) {
     const projHead = `<tr>
       <td colspan="2" class="agy-style-538">
         <span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${pCol};vertical-align:middle;margin-right:6px"></span>
-        <span class="agy-style-539">${escapeHTML(_segProjLabel(proj, en))}</span>
-        <span class="agy-style-540">${nDone}/${gTasks.length} ${en ? "done" : "hechas"}</span>
+        <span class="agy-style-539">${escapeHTML(_segProjLabel(proj, lang))}</span>
+        <span class="agy-style-540">${nDone}/${gTasks.length} ${X("seg.hechas")}</span>
       </td>${projTimeline}</tr>`;
 
     const taskRows = gTasks.map(r => {
-      const stC = _segStatusColor(r.status), stL = _segStatusLabel(r.status, en);
+      const stC = _segStatusColor(r.status), stL = _segStatusLabel(r.status, lang);
       const a = _segParseDate(r.start_date), b = _segParseDate(r.end_date);
       const bar = _segBar(r, tl);
       const dateTxt = (a || b) ? `📅 ${_segFmtD(a)}${(b && +b !== +(a || b)) ? " → " + _segFmtD(b) : ""}` : "";
@@ -253,14 +263,14 @@ export function _segBuildGantt(rows, opts) {
   // Leyenda (inline-block → segura en el PDF).
   const chip = (color, label) => `<span class="agy-style-546"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${color};vertical-align:middle;margin-right:4px"></span>${escapeHTML(label)}</span>`;
   const legend = `<div class="agy-style-122">
-    ${SEG_STATUS.map(s => chip(s.color, en ? s.en : s.es)).join("")}
-    ${todayIdx >= 0 ? `<span class="agy-style-547"><span class="agy-style-548"></span>${en ? "Today" : "Hoy"}</span>` : ""}
+    ${SEG_STATUS.map(s => chip(s.color, _segStatusLabel(s.key, lang))).join("")}
+    ${todayIdx >= 0 ? `<span class="agy-style-547"><span class="agy-style-548"></span>${X("seg.hoy")}</span>` : ""}
   </div>`;
 
   return `${legend}<div class="agy-style-321">
     <table class="agy-style-373">
       <colgroup><col style="width:${tl ? "minmax(200px,1fr)" : "60%"}"/><col class="agy-style-549"/></colgroup>
-      <thead><tr>${th(en ? "Task" : "Tarea")}${th(en ? "Status" : "Estado")}${headTimeline}</tr></thead>
+      <thead><tr>${th(X("seg.tarea"))}${th(X("seg.estado"))}${headTimeline}</tr></thead>
       <tbody>${body}</tbody>
     </table></div>`;
 }
@@ -268,7 +278,7 @@ export function _segBuildGantt(rows, opts) {
 // Solo el Gantt (repinta #segGantt desde el draft, sin re-render del editor → no pierde foco).
 export function _segRenderGantt() {
   const g = document.getElementById("segGantt");
-  if (g) g.innerHTML = _segBuildGantt(SEG_STATE.draft, { en: false });
+  if (g) g.innerHTML = _segBuildGantt(SEG_STATE.draft, { lang: getLang() });
 }
 
 // ── BARRA DE CONTROL (buscador de partner + KAM + selector de vista) ─────────
@@ -285,9 +295,9 @@ function _segControlsHTML() {
     const needsPartner = v.k === "gantt" || v.k === "editor";
     const dis = needsPartner && !SEG_STATE.partner;
     return `<button class="mode-btn${on ? " active" : ""}" ${dis ? "disabled" : ""}
-      title="${dis ? "Elegí un partner primero" : escapeHTML(v.tip)}"
+      title="${escapeHTML(dis ? t("seg.eligePartner") : t(`seg.view.${v.k}Tip`))}"
       ${dis ? "" : `data-act="segSetView" data-view="${v.k}"`}
-      style="${dis ? "opacity:.4;cursor:not-allowed" : ""}">${v.emoji} ${v.label}</button>`;
+      style="${dis ? "opacity:.4;cursor:not-allowed" : ""}">${v.emoji} ${t(`seg.view.${v.k}`)}</button>`;
   }).join("");
 
   return `
@@ -295,7 +305,7 @@ function _segControlsHTML() {
       <div class="seg-ctl-field seg-ctl-search">
         <label class="agy-style-95">Partner</label>
         <input id="segSearch" type="text" class="sb-inp" autocomplete="off"
-          placeholder="Todos — escribí para buscar…"
+          placeholder="${escapeHTML(t("seg.phBuscar"))}"
           value="${escapeHTML(SEG_STATE.partner || SEG_STATE.search || "")}"
           data-act-input="segFilterPartners" data-act-focus="segShowPartnerList"
           data-act-blur="segHidePartnerListDelayed" data-act-keydown="segSearchKeydown"/>
@@ -304,15 +314,15 @@ function _segControlsHTML() {
       <div class="seg-ctl-field">
         <label class="agy-style-95">KAM</label>
         <select class="sb-sel" data-act-change="segSetKam">
-          <option value="all"${SEG_STATE.kam === "all" ? " selected" : ""}>Todos</option>
-          ${kams.map(k => `<option value="${escapeHTML(k)}"${SEG_STATE.kam === k ? " selected" : ""}>${escapeHTML(k)}</option>`).join("")}
+          <option value="all"${SEG_STATE.kam === "all" ? " selected" : ""}>${t("seg.todos")}</option>
+          ${kams.map(k => `<option value="${escapeHTML(k)}"${SEG_STATE.kam === k ? " selected" : ""}>${escapeHTML(kamLabel(k))}</option>`).join("")}
         </select>
       </div>
       <div class="seg-ctl-field seg-ctl-views">
-        <label class="agy-style-95">Vista</label>
+        <label class="agy-style-95">${t("seg.lblVista")}</label>
         <div class="mode-toggle-row">${viewBtns}</div>
       </div>
-      ${SEG_STATE.partner ? `<button class="mode-btn seg-clear" data-act="segClearPartner" title="Volver a ver todos los partners">✕ ${escapeHTML(SEG_STATE.partner)}</button>` : ""}
+      ${SEG_STATE.partner ? `<button class="mode-btn seg-clear" data-act="segClearPartner" title="${escapeHTML(t("seg.volverTodos"))}">✕ ${escapeHTML(SEG_STATE.partner)}</button>` : ""}
     </div>`;
 }
 
@@ -329,8 +339,8 @@ function _segRenderResumen(tasks) {
 
   if (!rows.length) {
     return `<div class="section"><div class="agy-style-224">
-      No hay tareas de seguimiento cargadas${SEG_STATE.kam !== "all" ? ` para <strong>${escapeHTML(SEG_STATE.kam)}</strong>` : ""}.<br>
-      Elegí un partner arriba y usá <strong>✏️ Editar</strong> para crear el primer proyecto.
+      ${SEG_STATE.kam !== "all" ? t("seg.vacioKam", { kam: escapeHTML(SEG_STATE.kam) }) : t("seg.vacio")}<br>
+      ${t("seg.vacioAccion")}
     </div></div>`;
   }
 
@@ -341,22 +351,22 @@ function _segRenderResumen(tasks) {
     </div>`;
 
   let html = `<div class="section"><div class="metric-row">
-    ${kpi("⚠️ Vencidas", totalOverdue, totalOverdue ? "#dc2626" : "#9ca3af", "Tareas con fecha de fin pasada que no están hechas")}
-    ${kpi("🚫 Bloqueadas", totalBlocked, totalBlocked ? "#f59e0b" : "#9ca3af", "Tareas marcadas como bloqueadas")}
-    ${kpi("📋 Abiertas", totalOpen, "#3b82f6", "Tareas que no están hechas")}
-    ${kpi("✅ Hechas", totalDone, "#10b981", "Tareas completadas")}
+    ${kpi(t("seg.kpi.vencidas"), totalOverdue, totalOverdue ? "#dc2626" : "#9ca3af", t("seg.kpi.vencidasTip"))}
+    ${kpi(t("seg.kpi.bloqueadas"), totalBlocked, totalBlocked ? "#f59e0b" : "#9ca3af", t("seg.kpi.bloqueadasTip"))}
+    ${kpi(t("seg.kpi.abiertas"), totalOpen, "#3b82f6", t("seg.kpi.abiertasTip"))}
+    ${kpi(t("seg.kpi.hechas"), totalDone, "#10b981", t("seg.kpi.hechasTip"))}
   </div></div>`;
 
-  html += _secH("👥", "#0284c7", `Partners con seguimiento (${rows.length})`,
-    sinTareas ? `${sinTareas} partner${sinTareas === 1 ? "" : "es"} del dashboard todavía sin ninguna tarea cargada`
-              : "Todos los partners del dashboard tienen seguimiento");
+  html += _secH("👥", "#0284c7", t("seg.conSeg", { n: rows.length }),
+    sinTareas ? t(sinTareas === 1 ? "seg.sinTareas1" : "seg.sinTareasN", { n: sinTareas })
+              : t("seg.todosConSeg"));
 
   html += `<div class="section"><div class="tbl-wrap"><table class="dtbl seg-summary">
     <thead><tr>
-      <th>Partner</th><th>KAM</th><th>Proyectos</th>
-      <th title="Fecha de fin pasada y sin terminar">⚠️ Vencidas</th>
-      <th>Pendiente</th><th>En curso</th><th>Bloqueado</th><th>Hecho</th>
-      <th>Próxima entrega</th><th></th>
+      <th>Partner</th><th>KAM</th><th>${t("seg.th.proyectos")}</th>
+      <th title="${escapeHTML(t("seg.th.vencidasTip"))}">${t("seg.kpi.vencidas")}</th>
+      ${SEG_STATUS.map(st => `<th>${_segStatusLabel(st.key, getLang())}</th>`).join("")}
+      <th>${t("seg.th.proxima")}</th><th></th>
     </tr></thead><tbody>`;
 
   rows.forEach(r => {
@@ -368,11 +378,11 @@ function _segRenderResumen(tasks) {
       : `<td class="tn agy-style-90">0</td>`;
     html += `<tr class="${r.overdue ? "seg-row-alert" : ""}">
       <td><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${pcol};margin-right:5px"></span>${escapeHTML(r.partner)}
-        <div class="seg-progress" title="${fmt(done)} de ${fmt(r.total)} tareas hechas (${pct.toFixed(0)}%)">
+        <div class="seg-progress" title="${escapeHTML(t("seg.progresoTip", { d: fmt(done), t: fmt(r.total), p: pct.toFixed(0) }))}">
           <div class="seg-progress-fill" style="width:${pct.toFixed(1)}%"></div>
         </div>
       </td>
-      <td><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${kcol};margin-right:4px"></span>${escapeHTML(r.kam || "—")}</td>
+      <td><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${kcol};margin-right:4px"></span>${escapeHTML(r.kam ? kamLabel(r.kam) : "—")}</td>
       <td class="tn">${fmt(r.projects.size)}</td>
       ${cell(r.overdue, "#dc2626")}
       ${cell(r.byStatus.pendiente, "#6b7280")}
@@ -380,7 +390,7 @@ function _segRenderResumen(tasks) {
       ${cell(r.byStatus.bloqueado, "#dc2626")}
       ${cell(done, "#10b981")}
       <td class="tn">${r.nextDue ? _segFmtD(r.nextDue) : "—"}</td>
-      <td><button class="mode-btn seg-open" data-act="segOpenPartner" data-partner="${escapeHTML(r.partner)}" title="Ver el Gantt y las tareas de ${escapeHTML(r.partner)}">Abrir →</button></td>
+      <td><button class="mode-btn seg-open" data-act="segOpenPartner" data-partner="${escapeHTML(r.partner)}" title="${escapeHTML(t("seg.abrirTip", { p: r.partner }))}">${t("seg.abrir")}</button></td>
     </tr>`;
   });
   html += `</tbody></table></div></div>`;
@@ -394,7 +404,7 @@ function _segRenderResumen(tasks) {
 function _segRenderKanban(tasks) {
   const scoped = SEG_STATE.partner ? tasks.filter(t => t.partner === SEG_STATE.partner) : tasks;
   if (!scoped.length) {
-    return `<div class="section"><div class="agy-style-224">Sin tareas para el filtro actual.</div></div>`;
+    return `<div class="section"><div class="agy-style-224">${t("seg.kanbanVacio")}</div></div>`;
   }
   const cols = SEG_STATUS.map(st => {
     const items = scoped.filter(t => (t.status || "pendiente") === st.key)
@@ -414,7 +424,7 @@ function _segRenderKanban(tasks) {
         <div class="seg-card-meta">
           ${t.project ? `<span class="seg-chip" style="background:${_segProjColor(t.project)}22;color:${_segProjColor(t.project)}">${escapeHTML(t.project)}</span>` : ""}
           ${t.owner ? `<span>👤 ${escapeHTML(t.owner)}</span>` : ""}
-          ${end ? `<span${over ? ' class="seg-overdue-txt" title="Vencida"' : ""}>📅 ${_segFmtD(end)}</span>` : ""}
+          ${end ? `<span${over ? ` class="seg-overdue-txt" title="${escapeHTML(t("seg.vencida"))}"` : ""}>📅 ${_segFmtD(end)}</span>` : ""}
         </div>
         ${t.expected_result ? `<div class="seg-card-goal">🎯 ${escapeHTML(t.expected_result)}</div>` : ""}
       </div>`;
@@ -422,7 +432,7 @@ function _segRenderKanban(tasks) {
     return `<div class="seg-col">
       <div class="seg-col-head" style="border-bottom-color:${st.color}">
         <span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${st.color};margin-right:6px"></span>
-        ${st.es}<span class="seg-col-count">${items.length}</span>
+        ${_segStatusLabel(st.key, getLang())}<span class="seg-col-count">${items.length}</span>
       </div>
       <div class="seg-col-body">${cards || `<div class="seg-col-empty">—</div>`}</div>
     </div>`;
@@ -436,7 +446,7 @@ export function renderSeguimiento() {
   if (!host) return;
   const partners = _segPartners();
   if (!partners.length) {
-    host.innerHTML = `<div class="empty"><p>Carga datos de <strong>Rendimiento</strong> para usar Seguimiento.</p></div>`;
+    host.innerHTML = `<div class="empty"><p>${t("seg.cargaRend")}</p></div>`;
     return;
   }
   // OJO: acá antes se auto-seleccionaba partners[0] si no había partner elegido.
@@ -450,19 +460,19 @@ export function renderSeguimiento() {
   const isAdmin = !!STATE.isAdmin;
   const order   = _segProjectOrder(SEG_STATE.draft);
 
-  const statusOpts = st => SEG_STATUS.map(s => `<option value="${s.key}" ${s.key === st ? "selected" : ""}>${s.es}</option>`).join("");
+  const statusOpts = st => SEG_STATUS.map(s => `<option value="${s.key}" ${s.key === st ? "selected" : ""}>${_segStatusLabel(s.key, getLang())}</option>`).join("");
 
   // Editor (admin) agrupado por proyecto.
   const taskRowHtml = i => {
     const r = SEG_STATE.draft[i];
     return `<tr>
-      <td class="agy-style-550"><input class="crud-input agy-style-551" value="${escapeHTML(r.owner)}" data-act-input="segSet" data-i="${i}" data-field="owner" placeholder="Owner"/></td>
-      <td class="agy-style-552"><input class="crud-input agy-style-434" value="${escapeHTML(r.task)}" data-act-input="segSet" data-i="${i}" data-field="task" placeholder="Tarea / next step"/></td>
+      <td class="agy-style-550"><input class="crud-input agy-style-551" value="${escapeHTML(r.owner)}" data-act-input="segSet" data-i="${i}" data-field="owner" placeholder="${escapeHTML(t("seg.th.owner"))}"/></td>
+      <td class="agy-style-552"><input class="crud-input agy-style-434" value="${escapeHTML(r.task)}" data-act-input="segSet" data-i="${i}" data-field="task" placeholder="${escapeHTML(t("seg.ph.tarea"))}"/></td>
       <td class="agy-style-552"><input class="crud-input" type="date" class="agy-style-553" value="${escapeHTML(r.start_date)}" data-act-change="segSet" data-i="${i}" data-field="start_date"/></td>
       <td class="agy-style-552"><input class="crud-input" type="date" class="agy-style-553" value="${escapeHTML(r.end_date)}" data-act-change="segSet" data-i="${i}" data-field="end_date"/></td>
-      <td class="agy-style-552"><input class="crud-input agy-style-554" value="${escapeHTML(r.expected_result)}" data-act-input="segSet" data-i="${i}" data-field="expected_result" placeholder="Resultado esperado"/></td>
+      <td class="agy-style-552"><input class="crud-input agy-style-554" value="${escapeHTML(r.expected_result)}" data-act-input="segSet" data-i="${i}" data-field="expected_result" placeholder="${escapeHTML(t("seg.th.resultado"))}"/></td>
       <td class="agy-style-552"><select class="crud-input agy-style-555" data-act-change="segSet" data-i="${i}" data-field="status">${statusOpts(r.status)}</select></td>
-      <td class="agy-style-552"><button data-act="segDeleteRow" data-i="${i}" title="Eliminar tarea" class="agy-style-556">✕</button></td>
+      <td class="agy-style-552"><button data-act="segDeleteRow" data-i="${i}" title="${escapeHTML(t("seg.eliminarTarea"))}" class="agy-style-556">✕</button></td>
     </tr>`;
   };
   const groupsHtml = order.map((proj, pIdx) => {
@@ -471,9 +481,9 @@ export function renderSeguimiento() {
     const headerCells = `
       <td colspan="7" class="agy-style-557">
         <span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${pCol};vertical-align:middle;margin-right:6px"></span>
-        <input class="crud-input agy-style-558" value="${escapeHTML(proj)}" data-act-change="segRenameProject" data-pidx="${pIdx}" placeholder="Nombre del proyecto (Sin proyecto)"/>
-        <button data-act="segAddTaskTo" data-pidx="${pIdx}" class="agy-style-559">+ tarea</button>
-        <button data-act="segDeleteProject" data-pidx="${pIdx}" title="Eliminar proyecto y sus tareas" class="agy-style-560">🗑 proyecto</button>
+        <input class="crud-input agy-style-558" value="${escapeHTML(proj)}" data-act-change="segRenameProject" data-pidx="${pIdx}" placeholder="${escapeHTML(t("seg.ph.proyecto"))}"/>
+        <button data-act="segAddTaskTo" data-pidx="${pIdx}" class="agy-style-559">${t("seg.masTarea")}</button>
+        <button data-act="segDeleteProject" data-pidx="${pIdx}" title="${escapeHTML(t("seg.eliminarProyectoTip"))}" class="agy-style-560">${t("seg.eliminarProyecto")}</button>
       </td>`;
     return `<tr>${headerCells}</tr>${idxs.map(taskRowHtml).join("")}`;
   }).join("");
@@ -482,20 +492,20 @@ export function renderSeguimiento() {
     <div class="agy-style-561">
       <table class="agy-style-562">
         <thead><tr class="agy-style-563">
-          <th class="agy-style-564">Owner</th><th class="agy-style-565">Tarea</th>
-          <th class="agy-style-565">Inicio</th><th class="agy-style-565">Fin</th>
-          <th class="agy-style-565">Resultado esperado</th><th class="agy-style-565">Estado</th><th></th>
+          <th class="agy-style-564">${t("seg.th.owner")}</th><th class="agy-style-565">${t("seg.th.tarea")}</th>
+          <th class="agy-style-565">${t("seg.th.inicio")}</th><th class="agy-style-565">${t("seg.th.fin")}</th>
+          <th class="agy-style-565">${t("seg.th.resultado")}</th><th class="agy-style-565">${t("seg.th.estado")}</th><th></th>
         </tr></thead>
-        <tbody>${groupsHtml || `<tr><td colspan="7" class="agy-style-566">Sin proyectos ni tareas. Creá el primer proyecto ↓</td></tr>`}</tbody>
+        <tbody>${groupsHtml || `<tr><td colspan="7" class="agy-style-566">${t("seg.sinProyectos")}</td></tr>`}</tbody>
       </table>
     </div>
     <div class="agy-style-567">
-      <button data-act="segAddProject" class="agy-style-568">📁 + Proyecto</button>
-      <button data-act="segAddTaskTo" data-pidx="-1" class="agy-style-569">+ Tarea suelta</button>
-      <button data-act="segSave" class="agy-style-570">💾 Guardar</button>
-      <span class="agy-style-571">Los cambios no se guardan hasta presionar <strong>Guardar</strong>.</span>
+      <button data-act="segAddProject" class="agy-style-568">${t("seg.btnProyecto")}</button>
+      <button data-act="segAddTaskTo" data-pidx="-1" class="agy-style-569">${t("seg.btnTareaSuelta")}</button>
+      <button data-act="segSave" class="agy-style-570">${t("seg.btnGuardar")}</button>
+      <span class="agy-style-571">${t("seg.noGuardado")}</span>
     </div>`
-    : `<div class="agy-style-572">🔒 Solo lectura — editar el seguimiento requiere permisos de administrador.</div>`;
+    : `<div class="agy-style-572">${t("seg.soloLectura")}</div>`;
 
   // Cuerpo según la vista activa. Solo Gantt y Editor usan el `draft` del
   // partner seleccionado; Resumen y Kanban leen directo de STATE.seguimientoData
@@ -506,21 +516,19 @@ export function renderSeguimiento() {
   } else if (SEG_STATE.view === "kanban") {
     body = _segRenderKanban(tasks);
   } else if (SEG_STATE.view === "gantt") {
-    body = _secH("📊", "#10b981", `Gantt · ${partner}`,
-             "Línea de tiempo por tarea (día / semana / mes según el rango)")
-         + `<div class="section"><div id="segGantt">${_segBuildGantt(SEG_STATE.draft, { en: false })}</div></div>`;
+    body = _secH("📊", "#10b981", `Gantt · ${partner}`, t("seg.ganttSub"))
+         + `<div class="section"><div id="segGantt">${_segBuildGantt(SEG_STATE.draft, { lang: getLang() })}</div></div>`;
   } else {
-    body = _secH("📋", "#0284c7", `Seguimiento · ${partner}`,
-             "Proyecto → tareas · Owner · fechas · resultado esperado — se comparte en el PDF del partner")
+    body = _secH("📋", "#0284c7", `${t("seg.titulo")} · ${partner}`, t("seg.editorSub"))
          + editor
-         + _secH("📊", "#10b981", "Gantt", "Se actualiza mientras editás")
-         + `<div class="section"><div id="segGantt">${_segBuildGantt(SEG_STATE.draft, { en: false })}</div></div>`;
+         + _secH("📊", "#10b981", "Gantt", t("seg.ganttVivo"))
+         + `<div class="section"><div id="segGantt">${_segBuildGantt(SEG_STATE.draft, { lang: getLang() })}</div></div>`;
   }
 
   host.innerHTML = `
     <div class="agy-style-573">
       ${_segControlsHTML()}
-      ${partner && kam ? `<div class="seg-kam-badge"><span style="background:${(KAM_COLORS && KAM_COLORS[kam]) || "#888"}">${escapeHTML(kam)}</span></div>` : ""}
+      ${partner && kam ? `<div class="seg-kam-badge"><span style="background:${(KAM_COLORS && KAM_COLORS[kam]) || "#888"}">${escapeHTML(kamLabel(kam))}</span></div>` : ""}
       <div id="segBody">${body}</div>
     </div>`;
 }
@@ -566,13 +574,13 @@ export function _segPaintPartnerList(q) {
   const rest = _segPartners().filter(p => !wt.has(p));
   const match = p => !lower || p.toLowerCase().includes(lower);
   const a = withTasks.filter(match), b = rest.filter(match);
-  if (!a.length && !b.length) { list.innerHTML = `<div class="agy-style-180">Sin coincidencias</div>`; return; }
+  if (!a.length && !b.length) { list.innerHTML = `<div class="agy-style-180">${t("seg.sinCoincidencias")}</div>`; return; }
   const opt = (p, has) => {
     const sel = p === SEG_STATE.partner;
     return `<div class="pv-opt seg-opt${sel ? " seg-opt-sel" : ""}" data-partner="${escapeHTML(p)}" data-act-mousedown="segSelectPartner">
       <span class="seg-opt-dot" style="background:${STATE.partnerColors[p] || "#ccc"}"></span>
       <span class="agy-style-181">${escapeHTML(p)}</span>
-      ${has ? `<span class="seg-opt-tag">con seguimiento</span>` : ""}
+      ${has ? `<span class="seg-opt-tag">${t("seg.conSegTag")}</span>` : ""}
     </div>`;
   };
   list.innerHTML = a.slice(0, 60).map(p => opt(p, true)).join("")
@@ -623,7 +631,7 @@ export function segSearchKeydown(e) {
 }
 export function segSet(i, field, val) { if (SEG_STATE.draft[i]) { SEG_STATE.draft[i][field] = val; _segRenderGantt(); } }
 export function segAddProject() {
-  const name = prompt("Nombre del proyecto:", "");
+  const name = prompt(t("seg.promptProyecto"), "");
   if (name === null) return;
   SEG_STATE.draft.push({ project: (name || "").trim(), owner: "", task: "", start_date: "", end_date: "", expected_result: "", status: "pendiente" });
   renderSeguimiento();
@@ -645,7 +653,7 @@ export function segDeleteProject(pIdx) {
   const order = _segProjectOrder(SEG_STATE.draft);
   const name = order[pIdx]; if (name === undefined) return;
   const gTasks = SEG_STATE.draft.filter(r => (r.project || "") === name);
-  if (!confirm(`Eliminar el proyecto "${_segProjLabel(name, false)}" y sus ${gTasks.length} tarea(s)?`)) return;
+  if (!confirm(t("seg.confirmEliminarProyecto", { p: _segProjLabel(name, getLang()), n: gTasks.length }))) return;
   gTasks.forEach(r => { if (r.id) SEG_STATE.deleted.push(r.id); });
   SEG_STATE.draft = SEG_STATE.draft.filter(r => (r.project || "") !== name);
   renderSeguimiento();
@@ -659,7 +667,7 @@ export function segDeleteRow(i) {
 
 // ── GUARDAR (admin-gated: insert nuevas · upsert existentes · delete removidas) ─
 export async function segSave() {
-  if (!STATE.isAdmin) { alert("Guardar el seguimiento requiere permisos de administrador."); return; }
+  if (!STATE.isAdmin) { alert(t("seg.errAdmin")); return; }
   const partner = SEG_STATE.partner;
   const kam = (typeof getKAMForPartner === "function" && getKAMForPartner(partner)) || "";
   const rows = SEG_STATE.draft.filter(r => (r.task || "").trim());
@@ -675,9 +683,9 @@ export async function segSave() {
   const toInsert = rows.map((r, i) => base(r, i)).filter((_, i) => !rows[i].id);
   const toUpsert = rows.map((r, i) => ({ id: rows[i].id, ...base(r, i) })).filter(x => x.id);
 
-  if (!confirm(`Guardar seguimiento de ${partner}\n\n• ${rows.length} tarea(s)\n• ${SEG_STATE.deleted.length} a eliminar\n\n¿Confirmar?`)) return;
+  if (!confirm(t("seg.confirmGuardar", { p: partner, n: rows.length, d: SEG_STATE.deleted.length }))) return;
 
-  showLoad(true, "Guardando seguimiento...");
+  showLoad(true, t("seg.guardando"));
   try {
     if (SEG_STATE.deleted.length) {
       const { error } = await sb.from("seguimiento").delete().in("id", SEG_STATE.deleted);
@@ -696,14 +704,15 @@ export async function segSave() {
     // Mismo criterio que calcSaveMetas: el guardado ya está confirmado, pero si
     // el refresco falló hay que decirlo — un banner verde sobre una pantalla sin
     // los cambios invita a guardar de nuevo sin necesidad.
+    const uno = rows.length === 1;
     showBanner(refrescoOk, refrescoOk
-      ? `Seguimiento de ${partner} guardado (${rows.length} tarea${rows.length === 1 ? "" : "s"})`
-      : `Seguimiento de ${partner} GUARDADO en la base de datos (${rows.length} tarea${rows.length === 1 ? "" : "s"}), pero no se pudo refrescar la pantalla. Recarga la página.`);
+      ? t(uno ? "seg.guardadoOk1" : "seg.guardadoOkN", { p: partner, n: rows.length })
+      : t(uno ? "seg.guardadoSinRefresco1" : "seg.guardadoSinRefrescoN", { p: partner, n: rows.length }));
     renderSeguimiento();
   } catch (err) {
     const msg = (err && err.message) || String(err);
-    if (/42501|row-level security|permission/i.test(msg)) alert("No tienes permisos para guardar (requiere admin).");
-    else alert("Error al guardar seguimiento: " + msg);
+    if (/42501|row-level security|permission/i.test(msg)) alert(t("seg.errPermiso"));
+    else alert(t("seg.errGuardar") + msg);
   } finally {
     showLoad(false);
   }
@@ -716,8 +725,7 @@ export function p2PartnerHasSeguimiento(partner) {
 export function buildSlide2Seguimiento(partner, idx) {
   // El idioma del deck es de PRESENT2_STATE (el del partner), no el de la app.
   const L = (typeof PRESENT2_STATE !== "undefined" ? PRESENT2_STATE.lang : "es") || "es";
-  const T = (es, en, ru) => L === "en" ? en : L === "ru" ? (ru || en) : es;
-  const en = L !== "es";   // el Gantt interno solo distingue es/no-es
+  const T = (es, en, ru) => pick({ es, en, ru }, L);
   const rows = (STATE.seguimientoData || []).filter(r => r.partner === partner);
   const header = (typeof p2BrandHeader === "function")
     ? p2BrandHeader(partner, T("Seguimiento · Próximos pasos", "Follow-up · Next steps", "Сопровождение · Следующие шаги"),
@@ -728,7 +736,7 @@ export function buildSlide2Seguimiento(partner, idx) {
   const footer = (typeof p2BrandFooter === "function") ? p2BrandFooter(idx) : "";
   return `<div class="agy-style-365">
     ${header}
-    <div class="agy-style-576">${_segBuildGantt(rows, { en })}</div>
+    <div class="agy-style-576">${_segBuildGantt(rows, { lang: L })}</div>
     ${footer}
   </div>`;
 }

@@ -50,7 +50,7 @@ export const METRICS = {
     short:  "Cond. Activos",
     color:  "#FF0000",
     type:   "snapshot",
-    desc:   "Maximo de conductores activos en una semana del rango"
+    desc:   "Máximo de conductores activos en una semana del rango"
   },
   nr: {
     key:    "nr",
@@ -66,7 +66,7 @@ export const METRICS = {
     short:  "Hs. Conexión",
     color:  "#8b5cf6",
     type:   "cumulative",
-    desc:   "Suma de horas de conexion en el rango"
+    desc:   "Suma de horas de conexión en el rango"
   },
   tr: {
     key:    "tr",

@@ -1,3 +1,4 @@
+import { t } from "../core/i18n";
 // ============================================================
 // domain/permisosUI.ts — Qué controles de escritura mostrar (I3)
 // ============================================================
@@ -36,5 +37,6 @@ export function puede(accion: AccionUI, s: SesionUI): boolean {
 
 /** Mensaje cuando la base aceptó la orden pero no tocó ninguna fila: con RLS,
  *  un UPDATE/DELETE sin permiso NO da error, afecta 0 filas. */
-export const MSG_SIN_FILAS =
-  "La base de datos no aplicó el cambio (0 filas afectadas): tu usuario no tiene permiso para esta acción, o el registro ya no existe. No se guardó nada.";
+// Función y no constante: el texto sale del idioma de la interfaz en el momento
+// de mostrarse (una constante quedaría congelada en el idioma del arranque).
+export function msgSinFilas(): string { return t("comun.sinFilasAfectadas"); }

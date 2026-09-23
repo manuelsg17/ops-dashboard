@@ -1,4 +1,5 @@
 //@ts-nocheck
+import { pick } from "./core/i18nExport";
 // forecast.js — Motor de pronóstico multi-mes + palancas de crecimiento.
 //
 // PURO y testeable headless: solo funciones globales que operan sobre arrays de números
@@ -97,14 +98,15 @@ export function _fcHolt(damped) {
 }
 
 export const FC_METHODS = [
-  { key: "naive",  es: "Nivel actual",          en: "Current level",       fit: _fcNaive },
-  { key: "ma3",    es: "Promedio 3 meses",       en: "3-month average",     fit: _fcMA3 },
-  { key: "lin6",   es: "Tendencia 6 meses",      en: "6-month trend",       fit: _fcLinRecent(6) },
-  { key: "holt",   es: "Suavizado (nivel+tendencia)", en: "Smoothing (Holt)", fit: _fcHolt(false) },
-  { key: "damped", es: "Suavizado amortiguado",  en: "Damped smoothing",    fit: _fcHolt(true) },
-  { key: "cagr6",  es: "Crecimiento compuesto 6m", en: "6-month CAGR",      fit: _fcCagrRecent(6) }
+  { key: "naive",  es: "Nivel actual",          en: "Current level",       ru: "Текущий уровень",          fit: _fcNaive },
+  { key: "ma3",    es: "Promedio 3 meses",       en: "3-month average",     ru: "Среднее за 3 месяца",      fit: _fcMA3 },
+  { key: "lin6",   es: "Tendencia 6 meses",      en: "6-month trend",       ru: "Тренд за 6 месяцев",       fit: _fcLinRecent(6) },
+  { key: "holt",   es: "Suavizado (nivel+tendencia)", en: "Smoothing (Holt)", ru: "Сглаживание (Хольт)",   fit: _fcHolt(false) },
+  { key: "damped", es: "Suavizado amortiguado",  en: "Damped smoothing",    ru: "Затухающее сглаживание",   fit: _fcHolt(true) },
+  { key: "cagr6",  es: "Crecimiento compuesto 6m", en: "6-month CAGR",      ru: "Среднегодовой рост за 6 мес.", fit: _fcCagrRecent(6) }
 ];
-export function fcMethodName(key, es) { const m = FC_METHODS.find(x => x.key === key); return m ? (es ? m.es : m.en) : key; }
+// `lang`: idioma del deck ("es" | "en" | "ru"), no el de la interfaz.
+export function fcMethodName(key, lang) { const m = FC_METHODS.find(x => x.key === key); return m ? pick(m, lang) : key; }
 
 // ── detección de mes parcial (dato aún cargándose) ──────────────────────────────
 // TRUE si el último punto está muy por debajo de la mediana de los 3 previos (típico de

@@ -24,10 +24,10 @@ import { evaluarFrescura } from "./shared/frescura.js";
 import { LOAD_WINDOW, computeWindowStart, inicioVentanaSemanalCalendario, planVentanaSemanal } from "./shared/ventanaCarga.js";
 import { SIN_KAM } from "./core/config.js";
 import { mesCanonico, anioParaFilaMeta, limaYM } from "./domain/mesesMeta";
-import { ErrorSubida, describirErrorSubida } from "./domain/erroresSubida";
+import { ErrorSubida, describirErrorSubida, etiquetaTipoSubida } from "./domain/erroresSubida";
 import { filasComoObjetos } from "./workers/excelParse";
 import { alCerrarSesion } from "./shared/sesion";
-import { MSG_SIN_FILAS } from "./domain/permisosUI";
+import { msgSinFilas } from "./domain/permisosUI";
 
 
 // ── PARSER DE TAXIPARKS ─────────────────────────────────────────────────────
@@ -93,17 +93,17 @@ export function bdg(c, p, cls = "mcard-badge") {
                   : STATE.curMode === "diario"  ? t("rend.cmp.diaAnterior")
                   : t("rend.cmp.semAnterior");
   if (p === null || p === undefined)
-    return `<span class="${cls} b-neu" title="Sin dato previo (N/A)">N/A</span>`;
+    return `<span class="${cls} b-neu" title="${escapeHTML(t("bdg.sinPrevio"))}">N/A</span>`;
   // Actual sin dato (una tasa que el período no trae): sin esto daba "-100%".
   if (c === null || c === undefined)
-    return `<span class="${cls} b-neu" title="Sin dato (N/A)">N/A</span>`;
+    return `<span class="${cls} b-neu" title="${escapeHTML(t("bdg.sinDato"))}">N/A</span>`;
   if (p === 0)
-    return c > 0 ? `<span class="${cls} b-pos" title="Primer periodo con dato (no hay ${compLabel})">NEW</span>`
-                 : `<span class="${cls} b-neu" title="Sin movimiento">--</span>`;
+    return c > 0 ? `<span class="${cls} b-pos" title="${escapeHTML(t("bdg.primero", { c: compLabel }))}">NEW</span>`
+                 : `<span class="${cls} b-neu" title="${escapeHTML(t("bdg.sinMov"))}">--</span>`;
   const v = ((c - p) / p) * 100;
   const s = v >= 0 ? "+" : "";
   const a = v >= 0 ? "↑" : "↓";
-  const tooltip = escapeHTML(`Actual: ${fmt(c)} vs ${compLabel}: ${fmt(p)} → ${s}${v.toFixed(1)}%`);
+  const tooltip = escapeHTML(t("bdg.tip", { a: fmt(c), c: compLabel, p: fmt(p), v: `${s}${v.toFixed(1)}` }));
   return `<span class="${cls} ${v >= 0 ? "b-pos" : "b-neg"}" title="${tooltip}">${a}${s}${v.toFixed(1)}%</span>`;
 }
 
@@ -494,7 +494,7 @@ async function _pgFetch(table, query, extraHeaders = {}) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}${query}`, {
     headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, ...extraHeaders }
   });
-  if (!res.ok) throw new Error(`Error ${res.status} al cargar ${table}`);
+  if (!res.ok) throw new Error(t("datos.errHttpCargar", { s: res.status, tabla: table }));
   return res.json();
 }
 
@@ -644,7 +644,7 @@ export async function fetchAllPages(table, orderCol, opts = {}) {
       method: "HEAD",
       headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, Prefer: "count=exact" }
     });
-    if (!retryRes.ok) throw new Error(`Error ${retryRes.status} al contar filas de ${table}`);
+    if (!retryRes.ok) throw new Error(t("datos.errHttpContar", { s: retryRes.status, tabla: table }));
     return _fetchAllPagesWithCount(table, query, PAGE, retryRes, firstPagePromise, especulativas, estClave);
   }
   return _fetchAllPagesWithCount(table, query, PAGE, countRes, firstPagePromise, especulativas, estClave);
@@ -819,7 +819,7 @@ function _applyMetasProyectosSeguimiento(metas, proyectos, seguimiento) {
   // caller que sí sabe que venía de guardar (calcSaveMetas y compañía) usa el
   // valor de retorno para decir la frase precisa de SU caso.
   if (huboFallo) {
-    showBanner(false, "No se pudieron refrescar metas/proyectos/seguimiento (falla de red pasajera). Lo que ves puede estar desactualizado — recarga la página.");
+    showBanner(false, t("datos.errRefrescoDiferido"));
   }
 
   // Re-render solo si el usuario ya está parado en un tab que depende de esto
@@ -854,8 +854,8 @@ function _setRefreshing(on, snapAt) {
   if (!on) return;
   const horas = snapAt ? (Date.now() - snapAt) / 3600000 : 0;
   el.textContent = horas >= 12
-    ? `↻ Actualizando… (mostrando datos de hace ${Math.round(horas / 24) >= 1 ? `${Math.round(horas / 24)} día(s)` : `${Math.round(horas)} h`})`
-    : "↻ Actualizando…";
+    ? (Math.round(horas / 24) >= 1 ? t("top.refreshingDias", { n: Math.round(horas / 24) }) : t("top.refreshingHoras", { n: Math.round(horas) }))
+    : t("top.refreshing");
 }
 
 // Antigüedad del snapshot pintado, para que el indicador la muestre.
@@ -1132,7 +1132,7 @@ export async function loadFromSupabase(opts = {}) {
       if (!vigente()) return false;
     }
     if (_paintedFromCache) _setRefreshing(true, _snapAt);
-    else showLoad(true, "Cargando datos desde Supabase...");
+    else showLoad(true, t("datos.cargando"));
 
     const [partners, rendSem, frooms, flotas] = await critical;
     if (!vigente()) return false;
@@ -1158,7 +1158,7 @@ export async function loadFromSupabase(opts = {}) {
 
     const bannerOk = () => {
       const warnSuffix = STATE.parseWarnings.size
-        ? ` · ⚠ ${STATE.parseWarnings.size} campo(s) inválido(s)` : "";
+        ? ` · ⚠ ${t("datos.camposInvalidos", { n: STATE.parseWarnings.size })}` : "";
       showBanner(true, t("estado.datosCargados") + " · " + new Date().toLocaleTimeString("es-PE") + warnSuffix);
     };
     if (coreIgual && (!alt || altIgual)) {
@@ -1194,7 +1194,7 @@ export async function loadFromSupabase(opts = {}) {
       // Sin la escala fresca: la próxima llamada (precarga/switchMode) reintenta.
       STATE[_FLAG_ESCALA[alt]] = false;
       refrescoCompleto = false;
-      showBanner(false, `Error al cargar ${alt}: ` + altError.message);
+      showBanner(false, t(alt === "mensual" ? "datos.errCargarMensual" : "datos.errCargarDiario") + altError.message);
     }
 
     // metas/proyectos/seguimiento: se pidieron en paralelo desde el arranque de
@@ -1243,7 +1243,7 @@ export async function loadFromSupabase(opts = {}) {
     // Sin sesión válida la pantalla la decide auth.ts (login): un banner de
     // error acá solo parpadearía encima, justo antes de que se oculte la app.
     if (err && err.sinSesion) return false;
-    showBanner(false, "Error al cargar: " + err.message);
+    showBanner(false, t("datos.errCargar") + err.message);
     console.error(err);
   } finally {
     if (alt) { _scaleInflight[alt] = null; resolverAlt(); }
@@ -1595,7 +1595,7 @@ async function _fetchFullRendColumns(mode, rows, getSelf) {
     // Sin sesión válida la pantalla pasa al login (auth.ts): nada que avisar acá.
     if (err && err.sinSesion) return;
     console.error("ensureFullRendColumns falló:", err);
-    showBanner(false, "Faltan métricas de detalle (aceptación, funnel, ratios de flota): no se pudieron cargar y aparecen en 0. Recarga la página antes de exportar un PDF o un deck.");
+    showBanner(false, t("datos.errColumnasDiferidas"));
   }
 }
 
@@ -1666,7 +1666,7 @@ export function loadDiarioIfNeeded(silent) {
 }
 
 async function _loadMensual(silent) {
-  if (!silent) showLoad(true, "Cargando datos mensuales...");
+  if (!silent) showLoad(true, t("datos.cargandoMensual"));
   const epoca = STATE._authEpoch || 0;
   try {
     const rendM = await _fetchEscalaRaw("mensual");
@@ -1679,7 +1679,7 @@ async function _loadMensual(silent) {
   } catch(err) {
     // Con la sesión ya descartada (época cambiada) el error es esperable y no
     // hay nada que avisar: la pantalla ya es la de login.
-    if ((STATE._authEpoch || 0) === epoca) showBanner(false, "Error al cargar mensual: " + err.message);
+    if ((STATE._authEpoch || 0) === epoca) showBanner(false, t("datos.errCargarMensual") + err.message);
   } finally {
     if (!silent) showLoad(false);
   }
@@ -1749,7 +1749,7 @@ function _applyMensualRows(rendM) {
 }
 
 async function _loadDiario(silent) {
-  if (!silent) showLoad(true, "Cargando datos diarios...");
+  if (!silent) showLoad(true, t("datos.cargandoDiario"));
   const epoca = STATE._authEpoch || 0;
   try {
     const rendD = await _fetchEscalaRaw("diario");
@@ -1757,7 +1757,7 @@ async function _loadDiario(silent) {
     _applyDiarioRows(rendD);
     _guardarEscalaCache("diario", rendD);
   } catch (err) {
-    if ((STATE._authEpoch || 0) === epoca) showBanner(false, "Error al cargar diario: " + err.message);
+    if ((STATE._authEpoch || 0) === epoca) showBanner(false, t("datos.errCargarDiario") + err.message);
   } finally {
     if (!silent) showLoad(false);
   }
@@ -1862,7 +1862,7 @@ export async function loadConversionIfNeeded() {
 
 // ── UPLOAD RENDIMIENTO MENSUAL ────────────────────────────────────────────────
 export async function uploadRendimientoMensual(rows) {
-  if (!rows.length) throw new Error("Archivo vacío");
+  if (!rows.length) throw new Error(t("subida.archivoVacio"));
 
   const keys = Object.keys(rows[0]);
   const mesColMap = {};
@@ -1905,7 +1905,7 @@ export async function uploadRendimientoMensual(rows) {
   });
 
   const flat = Object.values(agg);
-  if (!flat.length) throw new Error("No se encontraron datos. Verifica que las columnas tengan formato MM.YYYY - Métrica");
+  if (!flat.length) throw new Error(t("subida.sinDatosFormato", { f: "MM.YYYY - Métrica" }));
 
   for (let i = 0; i < flat.length; i += 500) {
     const { error } = await sb.from("rendimiento_mensual")
@@ -1917,7 +1917,7 @@ export async function uploadRendimientoMensual(rows) {
 
 // ── UPLOAD RENDIMIENTO DIARIO ─────────────────────────────────────────────────
 export async function uploadRendimientoDiario(rows) {
-  if (!rows.length) throw new Error("Archivo vacío");
+  if (!rows.length) throw new Error(t("subida.archivoVacio"));
 
   const keys = Object.keys(rows[0]);
   const dateColMap = {};
@@ -1952,7 +1952,7 @@ export async function uploadRendimientoDiario(rows) {
   // new_partner/new_service en vez de new_from_*). La traduccion vive en
   // domain/taxiparks.adaptarEsquema — la MISMA que usa la Edge Function.
   const flat = adaptarEsquema(Object.values(agg), "diario");
-  if (!flat.length) throw new Error("No se encontraron datos. Verifica que las columnas tengan formato DD.MM.YYYY - Métrica");
+  if (!flat.length) throw new Error(t("subida.sinDatosFormato", { f: "DD.MM.YYYY - Métrica" }));
 
   for (let i = 0; i < flat.length; i += 500) {
     const { error } = await sb.from("rendimiento_diario")
@@ -1968,7 +1968,7 @@ export async function uploadRendimientoDiario(rows) {
 // El mes se toma de: (1) prefijo de fecha en algun header, (2) columna MES,
 // (3) fallback al mes mas reciente ya cargado (con aviso).
 export async function uploadConversion(rows) {
-  if (!rows.length) throw new Error("Archivo vacío");
+  if (!rows.length) throw new Error(t("subida.archivoVacio"));
   const keys = Object.keys(rows[0]);
 
   let globalMes = null;
@@ -1983,7 +1983,7 @@ export async function uploadConversion(rows) {
     const all = (STATE.allDates || []).concat((STATE.rawDataMensual || []).map(r => r.date));
     const months = all.map(d => String(d).slice(0, 7)).filter(Boolean).sort();
     globalMes = months.length ? months[months.length - 1] : null;
-    if (globalMes) showBanner(true, `Conversión: sin columna MES ni fecha en headers → se asumió el mes ${globalMes}.`);
+    if (globalMes) showBanner(true, t("subida.convMesAsumido", { m: globalMes }));
   }
 
   // Detecta columna por nombre normalizado (ignora prefijos "01 ", "02 ").
@@ -2029,10 +2029,7 @@ export async function uploadConversion(rows) {
   });
 
   const data = [...seen.values()];
-  if (!data.length) throw new Error(
-    `No se encontraron filas válidas. CLID detectado: ${cClid || "ninguno"}; ` +
-    `funnel first_order: ${cFO || "ninguno"}. Revisa que el Excel tenga una columna CLID ` +
-    `y las columnas del funnel (01 first_order, 02 n5_success, …).`);
+  if (!data.length) throw new Error(t("subida.convSinFilas", { clid: cClid || t("subida.ninguno"), fo: cFO || t("subida.ninguno") }));
   for (let i = 0; i < data.length; i += 500) {
     const { error } = await sb.from("conversion_pais")
       .upsert(data.slice(i, i + 500), { onConflict: "clid,mes" });
@@ -2140,15 +2137,15 @@ export async function handleFile(file, type, inputEl) {
   // Validación de tamaño máximo (10 MB)
   const MAX_MB = 10;
   if (file.size > MAX_MB * 1024 * 1024) {
-    showBanner(false, `El archivo excede ${MAX_MB} MB (${(file.size / 1024 / 1024).toFixed(1)} MB). Reduce el tamaño e intenta de nuevo.`);
+    showBanner(false, t("subida.muyGrande", { max: MAX_MB, mb: (file.size / 1024 / 1024).toFixed(1) }));
     _limpiarInput();
     return;
   }
 
-  showLoad(true, `Procesando ${type}... (Web Worker)`);
+  showLoad(true, t("subida.procesando", { tipo: etiquetaTipoSubida(type) }));
   const reader = new FileReader();
   reader.onerror = () => {
-    showBanner(false, "No se pudo leer el archivo.");
+    showBanner(false, t("subida.noSeLeyo"));
     showLoad(false);
     _limpiarInput();
   };
@@ -2164,7 +2161,7 @@ export async function handleFile(file, type, inputEl) {
       worker.onerror = (ev2) => {
         try { if (ev2 && ev2.preventDefault) ev2.preventDefault(); } catch (_) {}
         try { worker.terminate(); } catch (_) {}
-        showBanner(false, "No se pudo procesar el Excel (falló el lector del archivo). Recarga la página e intenta de nuevo.");
+        showBanner(false, t("subida.errWorker"));
         showLoad(false);
         _limpiarInput();
       };
@@ -2173,7 +2170,7 @@ export async function handleFile(file, type, inputEl) {
         const { success, rawRows, error, canales } = e.data;
         worker.terminate();
         if (!success) {
-          showBanner(false, error || "Error procesando el archivo.");
+          showBanner(false, error || t("subida.errProcesar"));
           showLoad(false);
           _limpiarInput();
           return;
@@ -2212,7 +2209,7 @@ export async function handleFile(file, type, inputEl) {
       worker.postMessage({ fileData: ev.target.result, type });
     } catch(e) {
       try { if (worker) worker.terminate(); } catch (_) {}
-      showBanner(false, "Error al leer el archivo: " + e.message);
+      showBanner(false, t("subida.errLeer") + e.message);
       showLoad(false);
       _limpiarInput();
     }
@@ -2287,7 +2284,7 @@ export async function uploadPartners(rows) {
     return true;
   });
 
-  if (!data.length) throw new Error("No se encontraron datos en la hoja DATOS");
+  if (!data.length) throw new Error(t("subida.sinDatosHoja"));
 
   const { error } = await sb.from("partners").upsert(data, { onConflict: "clid" });
   if (error) throw error;
@@ -2305,7 +2302,7 @@ export async function uploadPartners(rows) {
 //   KAM:             KAM, Kam, kam
 //   Activo:          ACTIVO, Activo, activo  (true / false / 1 / 0 / si / no)
 export async function uploadFlotas(rows) {
-  if (!rows.length) throw new Error("Archivo vacío");
+  if (!rows.length) throw new Error(t("subida.archivoVacio"));
 
   // Helper local: busca en row el primer valor no vacio entre varias keys
   const pick = (r, ...keys) => {
@@ -2341,7 +2338,7 @@ export async function uploadFlotas(rows) {
   }).filter(Boolean);
 
   if (skippedNoClid.length) {
-    showBanner(false, `Aviso: ${skippedNoClid.length} fila(s) sin CLID descartada(s).`);
+    showBanner(false, t("subida.avisoSinClid", { n: skippedNoClid.length }));
     if (DEBUG) console.warn("uploadFlotas: filas sin CLID:", skippedNoClid);
   }
 
@@ -2357,13 +2354,13 @@ export async function uploadFlotas(rows) {
   if (dupKeys.length) {
     const sample = dupKeys.slice(0, 5).map(d => `${d.clid}·${d.nombre || "?"}·${d.ciudad || "?"}`).join("  |  ");
     showBanner(false,
-      `Aviso: ${dupKeys.length} fila(s) con CLID duplicado consolidada(s). Se conservo la ULTIMA ocurrencia. Ej: ${sample}` +
-      (dupKeys.length > 5 ? "  (ver consola)" : "")
+      t("subida.avisoClidDup", { n: dupKeys.length, ej: sample }) +
+      (dupKeys.length > 5 ? "  " + t("subida.verConsola") : "")
     );
     if (DEBUG) console.warn("uploadFlotas: duplicados consolidados:", dupKeys);
   }
 
-  if (!data.length) throw new Error("No se encontraron CLIDs validos en el archivo");
+  if (!data.length) throw new Error(t("subida.sinClids"));
 
   for (let i = 0; i < data.length; i += 500) {
     const { error } = await sb.from("flotas")
@@ -2391,7 +2388,7 @@ export async function updateFlotaField(clid, patch) {
 // escribe con .select() pasa acá lo que volvió; vacío = no se guardó nada.
 export function _exigirFilas(data) {
   if (!data || !data.length) {
-    const e = new Error(MSG_SIN_FILAS);
+    const e = new Error(msgSinFilas());
     e.code = "42501";
     throw e;
   }
@@ -2595,16 +2592,15 @@ export async function uploadMetas(rows) {
 
   if (skippedBadClid.length) {
     showBanner(false,
-      `${skippedBadClid.length} fila(s) con CLID en notacion cientifica DESCARTADAS. ` +
-      `Formatea la columna CLID como TEXTO en el Excel y resube.`
+      t("subida.clidCientifico", { n: skippedBadClid.length })
     );
     if (DEBUG) console.error("uploadMetas: CLIDs degradados:", skippedBadClid);
   }
   if (skippedNoCity.length) {
     const sample = skippedNoCity.slice(0, 3).map(s => `${s.partner}·${s.mes}`).join("  |  ");
     showBanner(false,
-      `Aviso: ${skippedNoCity.length} fila(s) sin CIUDAD ignorada(s). Ej: ${sample}` +
-      (skippedNoCity.length > 3 ? "  (ver consola)" : "")
+      t("subida.avisoSinCiudad", { n: skippedNoCity.length, ej: sample }) +
+      (skippedNoCity.length > 3 ? "  " + t("subida.verConsola") : "")
     );
     if (DEBUG) console.warn("uploadMetas: filas sin city descartadas:", skippedNoCity);
   }
@@ -2612,17 +2608,12 @@ export async function uploadMetas(rows) {
   if (skippedNoYear.length) {
     // Un mes que no se reconoce y sin AÑO: no se inventa un año, se rechaza.
     throw new ErrorSubida("validacion",
-      `${skippedNoYear.length} fila(s) con un MES que no se reconoce (${[...new Set(skippedNoYear)].slice(0, 3).join(", ")}) ` +
-      `y sin columna AÑO. Usa el nombre del mes (ENERO…DICIEMBRE) o agrega una columna AÑO. No se guardó nada.`);
+      t("subida.mesSinAnio", { n: skippedNoYear.length, ej: [...new Set(skippedNoYear)].slice(0, 3).join(", ") }));
   }
   if (_derivados.size) {
     const lista = [..._derivados.entries()].map(([m, y]) => `• ${m} ${y}`).join("\n");
-    const ok = confirm(
-      `El archivo no dice el AÑO de estas metas (falta la columna AÑO o está vacía).\n\n` +
-      `Se van a guardar como:\n${lista}\n\n` +
-      `(Regla: el mes más cercano a hoy — en diciembre, ENERO es del año siguiente.)\n\n` +
-      `¿Es correcto? Si no, cancela y agrega una columna AÑO al Excel.`);
-    if (!ok) throw new ErrorSubida("cancelado", "Carga de metas cancelada.");
+    const ok = confirm(t("subida.confirmAnioDerivado", { lista }));
+    if (!ok) throw new ErrorSubida("cancelado", t("subida.metasCancelada"));
   }
 
   // Dedupe por (clid, city, mes, mes_year): mantener la ULTIMA ocurrencia. Postgres falla
@@ -2642,8 +2633,8 @@ export async function uploadMetas(rows) {
     const sample = dupKeys.slice(0, 3)
       .map(d => `${d.partner}·${d.city}·${d.mes}`).join("  |  ");
     showBanner(false,
-      `Aviso: ${dupKeys.length} fila(s) duplicada(s) consolidada(s). Ej: ${sample}` +
-      (dupKeys.length > 3 ? "  (ver consola para lista completa)" : "")
+      t("subida.avisoDupMetas", { n: dupKeys.length, ej: sample }) +
+      (dupKeys.length > 3 ? "  " + t("subida.verConsolaLista") : "")
     );
     if (DEBUG) console.warn("uploadMetas: duplicados consolidados:", dupKeys);
   }
@@ -3072,12 +3063,12 @@ export function ensurePartnerLogos(force) {
 export function _logoAImagen(file, maxPx = 240) {
   return new Promise((resolve, reject) => {
     if (!/^image\/(png|jpeg|webp)$/.test(file.type))
-      return reject(new Error("Formato no soportado. Usá PNG, JPG o WEBP."));
+      return reject(new Error(t("logo.errFormato")));
     const fr = new FileReader();
-    fr.onerror = () => reject(new Error("No se pudo leer el archivo."));
+    fr.onerror = () => reject(new Error(t("subida.noSeLeyo")));
     fr.onload = () => {
       const img = new Image();
-      img.onerror = () => reject(new Error("El archivo no es una imagen válida."));
+      img.onerror = () => reject(new Error(t("logo.errNoImagen")));
       img.onload = () => {
         const esc = Math.min(1, maxPx / Math.max(img.width, img.height));
         const w = Math.max(1, Math.round(img.width * esc));
@@ -3100,7 +3091,7 @@ export function _logoAImagen(file, maxPx = 240) {
 
 export async function guardarLogoPartner(clid, file) {
   const { mime, data } = await _logoAImagen(file);
-  if (data.length > 400000) throw new Error("La imagen sigue siendo muy pesada. Probá con una más simple.");
+  if (data.length > 400000) throw new Error(t("logo.errPesada"));
   const { error } = await sb.from("partner_logos")
     .upsert({ clid, mime, data, updated_at: new Date().toISOString() }, { onConflict: "clid" });
   if (error) throw error;

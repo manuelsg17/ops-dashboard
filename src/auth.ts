@@ -17,6 +17,7 @@ import { snapshotClear } from "./data/cache.js";
 import { logAccess, resetAccessLogSession } from "./shared/accessLog.js";
 import { resetearEstadoDeSesion } from "./shared/sesion";
 import { perfMark } from "./shared/perf";
+import { t } from "./core/i18n";
 
 // ── LOCK DE AUTH CON ESCAPE ──────────────────────────────────────────────────
 // supabase-js serializa las operaciones de auth con un Web Lock COMPARTIDO entre
@@ -346,9 +347,9 @@ export async function handleLogin() {
   const btn      = document.getElementById("loginBtn");
 
   errEl.textContent = "";
-  if (!email || !password) { errEl.textContent = "Ingresa tu email y contraseña."; return; }
+  if (!email || !password) { errEl.textContent = t("login.errVacio"); return; }
 
-  btn.textContent = "Ingresando...";
+  btn.textContent = t("login.loading");
   btn.disabled    = true;
 
   // El boton solo se restauraba ante error: si signInWithPassword NUNCA resolvia,
@@ -358,23 +359,23 @@ export async function handleLogin() {
   // dashboard no anda" y saber que hay que cerrar las otras pestañas.
   const watchdog = setTimeout(() => {
     if (!btn.disabled) return;                 // ya resolvio, no pisar nada
-    errEl.textContent = "El servidor tardó demasiado en responder. Cerrá las otras pestañas del dashboard y volvé a intentar.";
-    btn.textContent   = "Ingresar";
+    errEl.textContent = t("login.errTimeout");
+    btn.textContent   = t("login.submit");
     btn.disabled      = false;
   }, 15000);
 
   try {
     const { error } = await sb.auth.signInWithPassword({ email, password });
     if (error) {
-      errEl.textContent = "Credenciales incorrectas. Intenta de nuevo.";
-      btn.textContent   = "Ingresar";
+      errEl.textContent = t("login.errCred");
+      btn.textContent   = t("login.submit");
       btn.disabled      = false;
     }
     // En exito NO se restaura el boton a proposito: el handler de SIGNED_IN
     // (showApp) oculta la pantalla de login entera.
   } catch (e) {
-    errEl.textContent = "No se pudo completar el ingreso: " + ((e && e.message) || e);
-    btn.textContent   = "Ingresar";
+    errEl.textContent = t("login.errOtro") + ((e && e.message) || e);
+    btn.textContent   = t("login.submit");
     btn.disabled      = false;
   } finally {
     clearTimeout(watchdog);

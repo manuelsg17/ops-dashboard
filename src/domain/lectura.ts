@@ -21,6 +21,8 @@
 // (ago 2026) y tiene que ser LA MISMA que usa el color (pColor/pEstado) — si
 // el texto dice "faltan X" mientras la barra ya esta verde, el informe se
 // contradice solo.
+import { pick } from "../core/i18nExport";
+
 export const META_CUMPLIDA_PCT = 95;
 export const LECTURA_MAX = 4;
 
@@ -29,9 +31,9 @@ function _L(ctx) {
   if (ctx.lang) return ctx.lang;
   return ctx.es === false ? "en" : "es";
 }
+// Mismo resolver que el resto de las exportaciones (core/i18nExport): ru → en.
 function _T(ctx, es, en, ru) {
-  const l = _L(ctx);
-  return l === "en" ? en : l === "ru" ? (ru || en) : es;
+  return pick({ es, en, ru }, _L(ctx));
 }
 
 export function p2Lectura(ctx) {
@@ -67,7 +69,7 @@ export function p2Lectura(ctx) {
       const cierre = k.pct > 0 && pctMes > 0 ? (k.real * 100) / pctMes : null;
       const cierrePct = cierre != null && k.meta > 0 ? (cierre / k.meta) * 100 : null;
       out.push(T(
-        `Vas al ${k.pct.toFixed(0)}% de ${k.lbl.toLowerCase()} con el ${pctMes.toFixed(0)}% del mes transcurrido${cierrePct != null ? `: a este ritmo cerrás en ${k.fmt(cierre)} (${cierrePct.toFixed(0)}% de la meta)` : ""}.`,
+        `Vas al ${k.pct.toFixed(0)}% de ${k.lbl.toLowerCase()} con el ${pctMes.toFixed(0)}% del mes transcurrido${cierrePct != null ? `: a este ritmo cierras en ${k.fmt(cierre)} (${cierrePct.toFixed(0)}% de la meta)` : ""}.`,
         `You are at ${k.pct.toFixed(0)}% of ${k.lbl.toLowerCase()} with ${pctMes.toFixed(0)}% of the month elapsed${cierrePct != null ? `: at this pace you close at ${k.fmt(cierre)} (${cierrePct.toFixed(0)}% of target)` : ""}.`,
         `Вы на ${k.pct.toFixed(0)}% по «${k.lbl.toLowerCase()}» при пройденных ${pctMes.toFixed(0)}% месяца${cierrePct != null ? `: при таком темпе закроете на ${k.fmt(cierre)} (${cierrePct.toFixed(0)}% от цели)` : ""}.`));
     } else if (adel.length && !cortos.length) {
@@ -85,7 +87,7 @@ export function p2Lectura(ctx) {
   const ad = kpis.find(k => k.key === "ad"), sh = kpis.find(k => k.key === "sh");
   if (ad && sh && ad.meta > 0 && sh.meta > 0 && ad.pct >= META_CUMPLIDA_PCT && sh.pct < META_CUMPLIDA_PCT) {
     out.push(T(
-      `Tenés los conductores (${ad.pct.toFixed(0)}% de la meta) pero no las horas (${sh.pct.toFixed(0)}%): la gente ya está adentro y conecta menos de lo previsto — es un tema de actividad, no de captación.`,
+      `Tienes los conductores (${ad.pct.toFixed(0)}% de la meta) pero no las horas (${sh.pct.toFixed(0)}%): la gente ya está adentro y conecta menos de lo previsto — es un tema de actividad, no de captación.`,
       `You have the drivers (${ad.pct.toFixed(0)}% of target) but not the hours (${sh.pct.toFixed(0)}%): they are already onboard and connecting less than planned — an activity issue, not an acquisition one.`,
       `Водители есть (${ad.pct.toFixed(0)}% от цели), а часов нет (${sh.pct.toFixed(0)}%): люди уже в парке, но выходят на линию меньше плана — это вопрос активности, а не набора.`));
   }
@@ -131,7 +133,7 @@ export function p2Lectura(ctx) {
   const F = ctx.funnel;
   if (F && F.faltan >= 5 && !ctx.funnelEnBloque) {
     out.push(T(
-      `De cada 100 perfiles que registrás, ${F.mio.toFixed(0)} llegan a su primer viaje contra ${F.mediana.toFixed(0)} de tus pares: con esa tasa serían ${Math.round(F.faltan)} conductores más sin traer una persona extra.`,
+      `De cada 100 perfiles que registras, ${F.mio.toFixed(0)} llegan a su primer viaje contra ${F.mediana.toFixed(0)} de tus pares: con esa tasa serían ${Math.round(F.faltan)} conductores más sin traer una persona extra.`,
       `Of every 100 profiles you register, ${F.mio.toFixed(0)} reach their first trip vs ${F.mediana.toFixed(0)} among your peers: at that rate it would be ${Math.round(F.faltan)} more drivers without adding a single person.`,
       `Из каждых 100 зарегистрированных вами профилей ${F.mio.toFixed(0)} доезжают до первой поездки против ${F.mediana.toFixed(0)} у коллег: при их ставке это ${Math.round(F.faltan)} водителей больше без единого нового человека.`));
   }
@@ -190,7 +192,7 @@ export function p2Accion(ctx) {
   if (!cortos.length) {
     const F = ctx.funnel;
     if (F && F.faltan >= 5) return T(
-      `Trabajar la activación: con la tasa de tus pares, los perfiles que ya registrás darían ${Math.round(F.faltan)} conductores más.`,
+      `Trabajar la activación: con la tasa de tus pares, los perfiles que ya registras darían ${Math.round(F.faltan)} conductores más.`,
       `Work on activation: at your peers' rate, the profiles you already register would yield ${Math.round(F.faltan)} more drivers.`,
       `Займитесь активацией: при ставке коллег уже привлекаемые профили дали бы ${Math.round(F.faltan)} водителей больше.`);
     return null;

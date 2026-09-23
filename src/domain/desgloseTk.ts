@@ -1,3 +1,4 @@
+import { t } from "../core/i18n";
 // ─────────────────────────────────────────────────────────────────────────────
 // DESGLOSE TUKTUK AL GUARDAR: ¿qué se BORRA y qué se REESCRIBE de lo ya guardado?
 //
@@ -156,28 +157,24 @@ export function mensajeCambiosTk(
   const nB = Math.min(c.borrar.length, MAX_EJEMPLOS - Math.min(c.reescribir.length, MAX_EJEMPLOS / 2));
   const nR = Math.min(c.reescribir.length, MAX_EJEMPLOS - nB);
   const linea = (f: FilaCambioTk) => `• ${f.partner} · ${f.city} · ` + f.cambios
-    .map(d => `${TK_LABEL[d.col]} TukTuk ${fmtNum(d.viejo)} → ${d.nuevo === null ? "vacío" : fmtNum(d.nuevo)}`)
+    .map(d => `${TK_LABEL[d.col]} TukTuk ${fmtNum(d.viejo)} → ${d.nuevo === null ? t("tk.cambio.vacio") : fmtNum(d.nuevo)}`)
     .join(" · ");
   const bloque = (lista: FilaCambioTk[], n: number) =>
     lista.slice(0, n).map(linea).join("\n") +
-    (lista.length > n ? `\n…y ${lista.length - n} más` : "");
+    (lista.length > n ? "\n" + t("calc.conf.yMas", { n: lista.length - n }) : "");
 
   let txt =
-    `⚠️ Este guardado BORRA o REESCRIBE el desglose TukTuk que ya estaba guardado\n` +
+    t("tk.cambio.cab") + "\n" +
     `${ctx.kam} · ${ctx.mes}${ctx.anio != null ? " " + ctx.anio : ""} · ` +
-    `${c.afectadas} partner-ciudad afectado(s)\n`;
+    t("tk.cambio.afectadas", { n: c.afectadas }) + "\n";
   if (c.borrar.length) {
-    txt += `\nSe BORRAN (${c.borrar.length}) — ` +
-      (ctx.hayPctDeclarado
-        ? `en el reparto actual no tienen porción TukTuk:\n`
-        : `no hay % de TukTuk declarado, así que el desglose anterior ya no corresponde a la meta:\n`) +
+    txt += "\n" + t(ctx.hayPctDeclarado ? "tk.cambio.borranSinPorcion" : "tk.cambio.borranSinPct", { n: c.borrar.length }) + "\n" +
       bloque(c.borrar, nB) + "\n";
   }
   if (c.reescribir.length) {
-    txt += `\nSe REESCRIBEN (${c.reescribir.length}) — el % declarado da un valor distinto al guardado:\n` +
+    txt += "\n" + t("tk.cambio.reescriben", { n: c.reescribir.length }) + "\n" +
       bloque(c.reescribir, nR) + "\n";
   }
-  txt += `\nSi cancelas, NO se guarda NADA (ni las metas ni el desglose).\n` +
-    `¿Confirmar y guardar?`;
+  txt += "\n" + t("tk.cambio.pie");
   return txt;
 }

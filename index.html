@@ -90,7 +90,7 @@
       <p id="loginError" class="login-error"></p>
       <button id="loginBtn" type="submit" class="login-btn" data-i18n="login.submit">Ingresar</button>
     </form>
-    <p class="login-footer" data-i18n="login.footer">Acceso restringido · Uso interno Yango Peru</p>
+    <p class="login-footer" data-i18n="login.footer">Acceso restringido · Uso interno Yango Perú</p>
   </div>
 </div>
 
@@ -203,7 +203,7 @@
            todavía está llegando la data fresca. Inline a propósito — data.js
            lo muestra/oculta con .style.display (ver la nota de CLAUDE.md sobre
            no convertir a clase CSS elementos toggleados desde JS). -->
-      <span id="dataRefreshing" class="data-refreshing" style="display:none" title="Mostrando los últimos datos guardados mientras se descargan los actuales">↻ Actualizando…</span>
+      <span id="dataRefreshing" class="data-refreshing" style="display:none" title="Mostrando los últimos datos guardados mientras se descargan los actuales" data-i18n-title="top.refreshingTip">↻ Actualizando…</span>
       <!-- (#dbLastUpdate se movió al sidebar, junto a "Datos cargados".) -->
       <span id="langSwitch"></span>
       <!-- El email es el disparador del menú de sesión: "Salir" era un botón
@@ -251,7 +251,7 @@
 
       <div class="sb-label" data-i18n="sidebar.ciudad">Ciudad</div>
       <select class="sb-sel" id="cityFilter">
-        <option value="all" data-i18n="sidebar.totalPeru">Total Peru</option>
+        <option value="all" data-i18n="sidebar.totalPeru">Total Perú</option>
         <option value="LIMA">Lima</option>
         <option value="TRUJILLO">Trujillo</option>
         <option value="AREQUIPA">Arequipa</option>
@@ -291,8 +291,8 @@
                      a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414
                      a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
           </svg>
-          <p>Carga datos para comenzar</p>
-          <p class="empty-sub">Sube el Excel de Rendimiento o espera la carga desde Supabase</p>
+          <p data-i18n="rend.vacio">Carga datos para comenzar</p>
+          <p class="empty-sub" data-i18n="rend.vacioSub">Sube el Excel de Rendimiento o espera la carga desde Supabase</p>
         </div>
         <div id="rendContent" style="display:none"></div>
       </div>
@@ -305,8 +305,8 @@
             <circle cx="12" cy="12" r="6"/>
             <circle cx="12" cy="12" r="2"/>
           </svg>
-          <p>Carga el archivo de <strong>Metas</strong></p>
-          <p class="empty-sub">Formato: CLID | MES | CIUDAD | SUPPLY HOURS | ACTIVE DRIVERS | N+R</p>
+          <p data-i18n-html="metas.vacioArchivo">Carga el archivo de <strong>Metas</strong></p>
+          <p class="empty-sub" data-i18n="metas.vacioFormato">Formato: CLID | MES | CIUDAD | SUPPLY HOURS | ACTIVE DRIVERS | N+R</p>
         </div>
         <div id="metasContent" style="display:none"></div>
       </div>
@@ -330,7 +330,7 @@
 
       <!-- Seguimiento (tracker de reuniones · Gantt) -->
       <div class="tab-panel" id="tab-seguimiento">
-        <div class="empty"><p>Carga datos de <strong>Rendimiento</strong> para usar Seguimiento.</p></div>
+        <div class="empty"><p data-i18n-html="seg.cargaRend">Carga datos de <strong>Rendimiento</strong> para usar Seguimiento.</p></div>
       </div>
 
       <!-- Portal de Partner (Track C2): única vista para role='partner'.
@@ -347,8 +347,8 @@
               <circle cx="12" cy="12" r="3"/>
               <path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/>
             </svg>
-            <p>Carga el archivo <strong>Partners</strong> para configurar CLIDs</p>
-            <p class="empty-sub">Hoja DATOS con columnas: CLID | KAM | PARTNER</p>
+            <p data-i18n-html="cfg.vacio">Carga el archivo <strong>Partners</strong> para configurar CLIDs</p>
+            <p class="empty-sub" data-i18n="cfg.vacioSub">Hoja DATOS con columnas: CLID | KAM | PARTNER</p>
           </div>
         </div>
       </div>

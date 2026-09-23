@@ -1,6 +1,6 @@
 //@ts-nocheck
 import { ensurePdfLibs } from "./shared/lazyLibs.js";
-import { t, mesLabel } from "./core/i18n";
+import { t, mesLabel, kamLabel } from "./core/i18n";
 import { dn } from "./shared/huella";
 import { logAccess } from "./shared/accessLog.js";
 // Núcleo de cálculo compartido (snapshot vs flujo, proyecciones, ponderados).
@@ -197,12 +197,12 @@ export function metasLineToggleHTML() {
     const on  = line === d.k;
     const dis = diario && d.k !== "agg";
     return `<button class="mode-btn${on ? " active" : ""}" ${dis ? "disabled" : ""}
-      title="${dis ? "Sin datos diarios por sub-flota — usa escala semanal o mensual" : escapeHTML(d.tip)}"
+      title="${escapeHTML(dis ? t("rend.diarioSinSubflotaTip") : d.tip)}"
       ${dis ? "" : `data-act="setMetasLine" data-line="${escapeHTML(d.k)}"`}
       style="${dis ? "opacity:.4;cursor:not-allowed" : ""}">${d.emoji} ${d.label}</button>`;
   }).join("");
   const note = diario
-    ? `<span class="agy-style-213">Fleet/TukTuk/Combinado requieren escala semanal o mensual</span>`
+    ? `<span class="agy-style-213">${t("rend.diarioSinSubflota")}</span>`
     : "";
   return `<div class="mode-toggle-row agy-style-214">${btns}${note}</div>`;
 }
@@ -367,12 +367,12 @@ export function _metaLineRow(label, actual, meta, fmtFn, metaOnlyNote, numKey) {
   if (meta == null) {  // solo actual (sin meta cargada)
     return `<div class="agy-style-215">
       <div class="agy-style-216"><span>${label}</span>
-        <span class="agy-style-217">${_hn(numKey, "real", fmtFn(actual))} · <em class="agy-style-22">sin meta</em></span></div></div>`;
+        <span class="agy-style-217">${_hn(numKey, "real", fmtFn(actual))} · <em class="agy-style-22">${t("metas.sinMetaSello")}</em></span></div></div>`;
   }
   if (actual == null) {  // solo meta (ej. Utilización, sin actual medible)
     return `<div class="agy-style-215">
       <div class="agy-style-216"><span>${label}</span>
-        <span><strong class="agy-style-218"${numKey ? dn(numKey, "meta") : ""}>${fmtFn(meta)}</strong> <span class="agy-style-219">meta${metaOnlyNote ? " · " + metaOnlyNote : ""}</span></span></div></div>`;
+        <span><strong class="agy-style-218"${numKey ? dn(numKey, "meta") : ""}>${fmtFn(meta)}</strong> <span class="agy-style-219">${escapeHTML(t("metas.metaMin"))}${metaOnlyNote ? " · " + metaOnlyNote : ""}</span></span></div></div>`;
   }
   const p  = meta > 0 ? (actual / meta) * 100 : 0;
   const pV = Math.min(p, 100);
@@ -555,14 +555,14 @@ export function _metasSinPeriodosHTML(mesName) {
 function _metasAlcance() {
   const f = getCurrentFilters();
   return partesAlcance({
-    city: f.city, kam: f.kam,
+    city: f.city, kam: kamLabel(f.kam),   // SIN_KAM → etiqueta traducida ("all" pasa igual)
     nSel: (f.selected || []).length,
     nTotal: document.querySelectorAll("#pList input").length
   }, t, cityLabel);
 }
 function _metasTagAlcance() {
   const a = _metasAlcance();
-  return a.length ? escapeHTML(a.join(" · ")) : "Peru";
+  return a.length ? escapeHTML(a.join(" · ")) : "Perú";
 }
 function _metasAlcanceHTML() {
   const a = _metasAlcance();
@@ -594,8 +594,8 @@ function _metasControlsHTML(mesName, _mesesDisponibles) {  // las opciones salen
   const _delYear = _metasMesActualYear(mesName);
   const delBtnHTML = STATE.isAdmin
     ? `<button class="apply-btn agy-style-234" data-html2canvas-ignore="true" data-act="deleteMetasMes" data-mes="${escapeHTML(mesName)}" data-year="${_delYear ?? ""}"
-         title="Borra todas las metas de ${escapeHTML(mesName)} para re-subir el Excel">
-         🗑️ Eliminar metas de ${escapeHTML(mesName)}
+         title="${escapeHTML(t("metas.borrarMesTip", { m: mesLabel(mesName) }))}">
+         ${escapeHTML(t("metas.borrarMes", { m: mesLabel(mesName) }))}
        </button>`
     : "";
   return `<div class="agy-style-235">
@@ -625,7 +625,7 @@ function _renderMetasLineView(cfg) {
   if (cfg.cobertura && cfg.cobertura.enRango === 0) {
     return html + `<div class="section"><div class="agy-style-224">${_metasSinPeriodosHTML(mesName)}</div></div>`;
   }
-  html += secH(icon, color, t("metas.secMes", { t: title, m: mesLabel(mesName) }), sub, _metasTagAlcance());
+  html += secH(icon, color, t("metas.secMes", { t: title, m: escapeHTML(mesLabel(mesName)) }), sub, _metasTagAlcance());
 
   if (!metaRows.length) {
     html += `<div class="section"><div class="agy-style-224">${emptyHint}</div></div>`;
@@ -730,7 +730,7 @@ function _renderMetasLineView(cfg) {
         <div class="city-card" style="border-top-color:${col}">
           <div class="city-name">
             <span style="width:10px;height:10px;border-radius:50%;background:${col};display:inline-block"></span>
-            ${escapeHTML(kam)}
+            ${escapeHTML(kamLabel(kam))}
             <span class="agy-style-244">(${us.length} cuenta${us.length === 1 ? "" : "s"})</span>
           </div>
           ${rows}
@@ -769,7 +769,7 @@ function _renderMetasLineView(cfg) {
         </div>
         <div class="pcard-sub">
           <span style="width:7px;height:7px;border-radius:50%;background:${kcolor};display:inline-block;margin-right:3px"></span>
-          ${escapeHTML(_kam)} &nbsp;·&nbsp; ${escapeHTML(m.city)}
+          ${escapeHTML(kamLabel(_kam))} &nbsp;·&nbsp; ${escapeHTML(m.city)}
         </div>
         ${rows}
         ${cfg.partnerFoot && !m._sinMeta ? cfg.partnerFoot(m, a) : ""}
@@ -816,8 +816,7 @@ export function _renderMetasFleet(mesName, fechas, selSet, cityFilter, kamFilter
     partnerFoot: (m, a) => a
       ? `<div class="agy-style-230">${escapeHTML(t("metas.autosPropios", { n: fmt(a.ownedNow || 0), b: fmt(a.branded || 0) }))}</div>`
       : "",
-    emptyHint: `No hay metas <strong>Fleet</strong> cargadas para ${escapeHTML(mesName)}.<br>
-      Genéralas desde la <strong>Calculadora → Fleet</strong> y guárdalas, o ajusta el filtro.`
+    emptyHint: t("metas.vacioFleet", { m: escapeHTML(mesLabel(mesName)) })
   });
 }
 
@@ -844,8 +843,7 @@ export function _renderMetasTk(mesName, fechas, selSet, cityFilter, kamFilter, m
       { id: "sh", label: t("metas.horasConexion"), sub: t("metas.acumulado"), color: "#8b5cf6",
         meta: m => m.mtkSH, act: a => a.sh, proj: a => a.projSh, fmtFn: v => fmtSmart(v) }
     ],
-    emptyHint: `No hay metas <strong>TukTuk</strong> cargadas para ${escapeHTML(mesName)}.<br>
-      Genéralas desde la <strong>Calculadora → TukTuk</strong> y guárdalas, o ajusta el filtro.`
+    emptyHint: t("metas.vacioTk", { m: escapeHTML(mesLabel(mesName)) })
   });
 }
 
@@ -885,11 +883,10 @@ export function _renderMetasComb(mesName, fechas, selSet, cityFilter, kamFilter,
     partnerFoot: m => {
       const hasTk = m.mtkNR != null;
       return hasTk
-        ? `<div class="agy-style-230" title="La meta del mes ya cubre Taxi + TukTuk; meta_tk_nr es la del criterio TukTuk, no se suma acá">Meta del mes = Taxi + TukTuk · criterio TukTuk aparte: ${fmt(m.mtkNR)} N+R</div>`
-        : `<div class="agy-style-230" title="La meta del mes cubre Taxi + TukTuk juntos">Meta del mes = Taxi + TukTuk</div>`;
+        ? `<div class="agy-style-230" title="${escapeHTML(t("metas.pieCombTkTip"))}">${escapeHTML(t("metas.pieCombTk", { n: fmt(m.mtkNR) }))}</div>`
+        : `<div class="agy-style-230" title="${escapeHTML(t("metas.pieCombTip"))}">${escapeHTML(t("metas.pieComb"))}</div>`;
     },
-    emptyHint: `No hay metas cargadas para ${escapeHTML(mesName)} con el filtro actual.<br>
-      Genéralas desde la <strong>Calculadora</strong> y guárdalas, o ajusta el filtro.`
+    emptyHint: t("metas.vacioComb", { m: escapeHTML(mesLabel(mesName)) })
   });
 }
 
@@ -1180,11 +1177,10 @@ export function _renderMetasImpl() {
   const noMetaCount = combos.filter(c => c.noMeta).length;
   const noMetaBanner = noMetaCount > 0
     ? `<div class="agy-style-238">
-         ⚠️ <strong>${noMetaCount}</strong> partner${noMetaCount>1?"s":""} con performance pero <strong>sin meta asignada</strong> en ${escapeHTML(mesName)}.
-         Su FACT suma al total pero el % de cumplimiento puede verse alto.
+         ${t(noMetaCount > 1 ? "metas.sinMetaBannerN" : "metas.sinMetaBanner1", { n: noMetaCount, m: escapeHTML(mesLabel(mesName)) })}
        </div>`
     : "";
-  html += secH("🎯","#8b5cf6",t("metas.secMes",{ t: t("metas.cumplimiento"), m: mesLabel(mesName) }),t("metas.sub.progMes"),_metasTagAlcance());
+  html += secH("🎯","#8b5cf6",t("metas.secMes",{ t: t("metas.cumplimiento"), m: escapeHTML(mesLabel(mesName)) }),t("metas.sub.progMes"),_metasTagAlcance());
   html += `<div class="section">${noMetaBanner}<div class="metric-row">
     ${metaResCard(t("metric.ad.label"), t("rend.per.ultimaSemana"),  tAD, tMA,  tPAD, "#8b5cf6", undefined, "metas.agg.pais.ad")}
     ${metaResCard(t("metric.nr.label"), t("metas.acumMesSub"),  tNR, tMNR, tPNR, "#f97316", undefined, "metas.agg.pais.nr")}
@@ -1295,8 +1291,8 @@ export function _renderMetasImpl() {
     const alertHtml = noGoalPartners.length ? `
       <details class="agy-style-240">
         <summary class="agy-style-241">
-          ⚠️ ${noGoalPartners.length} sin meta asignada
-          <span class="agy-style-242">click para ver</span>
+          ${t("metas.sinMetaAsignadaN", { n: noGoalPartners.length })}
+          <span class="agy-style-242">${t("metas.clickVer")}</span>
         </summary>
         <div class="agy-style-243">
           ${noGoalPartners.map(escapeHTML).join(", ")}
@@ -1306,7 +1302,7 @@ export function _renderMetasImpl() {
       <div class="city-card" style="border-top-color:${col}">
         <div class="city-name">
           <span style="width:10px;height:10px;border-radius:50%;background:${col};display:inline-block"></span>
-          ${escapeHTML(kam)}
+          ${escapeHTML(kamLabel(kam))}
           <span class="agy-style-244">(${totalAccounts} cuentas)</span>
         </div>
         ${alertHtml}
@@ -1341,7 +1337,7 @@ export function _renderMetasImpl() {
           </div>
           <div class="pcard-sub">
             <span style="width:7px;height:7px;border-radius:50%;background:${kcolor};display:inline-block;margin-right:3px"></span>
-            ${escapeHTML(c.kam)} &nbsp;·&nbsp; ${escapeHTML(c.city)}
+            ${escapeHTML(kamLabel(c.kam))} &nbsp;·&nbsp; ${escapeHTML(c.city)}
           </div>
           <div class="agy-style-246">
             <span>${escapeHTML(t("metric.ad.short"))}</span><strong${dn(_pk("ad"), "real")}>${fmt(c.ad)}</strong>
@@ -1365,7 +1361,7 @@ export function _renderMetasImpl() {
           </div>
           <div class="pcard-sub">
             <span style="width:7px;height:7px;border-radius:50%;background:${kcolor};display:inline-block;margin-right:3px"></span>
-            ${escapeHTML(c.kam)} &nbsp;·&nbsp; ${escapeHTML(c.city)}
+            ${escapeHTML(kamLabel(c.kam))} &nbsp;·&nbsp; ${escapeHTML(c.city)}
           </div>
           ${miniBarFull(t("metric.ad.short"), c.ad, c.mA,  c.projAD, undefined, _pk("ad"))}
           ${miniBarFull(t("metric.nr.short"),  c.nr, c.mNR, c.projNR, undefined, _pk("nr"))}
@@ -1427,11 +1423,7 @@ export function metaResCard(label, sub, real, meta, proj, color, fmtFn, numKey) 
   // El texto del tooltip TIENE que decir lo que el código hace: una vez se
   // "corrigió" el cálculo para que coincidiera con un tooltip impreciso, al
   // revés de lo que correspondía.
-  const projTip = STATE.curMode === "mensual"
-    ? `Flujos (N+R, horas): no se extrapolan, el período mensual ya viene completo. `
-      + `Active Drivers: período de mayor AD del rango × 1.4 (potencial).`
-    : `Flujos (N+R, horas): total acumulado × días del mes / días transcurridos. `
-      + `Active Drivers: período de mayor AD del rango × 1.4 (potencial).`;
+  const projTip = escapeHTML(t(STATE.curMode === "mensual" ? "metas.projTipMensual" : "metas.projTip"));
   return `
     <div class="meta-sum-card">
       <div class="mcard-label">${label}</div>
@@ -1614,12 +1606,10 @@ export async function deleteMetasMes(mes, year) {
   const n = STATE.metasData.filter(m =>
     m.mes === mesU.toUpperCase() && (yearN == null || m.mYear === yearN)
   ).length;
-  if (!confirm(
-    `¿Confirmas borrar las metas de ${mesU}${yearN ? " " + yearN : ""} (${n} registro${n === 1 ? "" : "s"})?\n\n` +
-    `Útil para re-subir el Excel corregido. Esta acción NO se puede deshacer.`
-  )) return;
+  const mesTxt = mesLabel(mesU) + (yearN ? " " + yearN : "");
+  if (!confirm(t(n === 1 ? "metas.confirmBorrar1" : "metas.confirmBorrarN", { m: mesTxt, n }))) return;
 
-  showLoad(true, `Eliminando metas de ${mesU}...`);
+  showLoad(true, t("metas.borrando", { m: mesTxt }));
   try {
     let q = sb.from("metas").delete().ilike("mes", mesU);
     if (yearN != null) q = q.eq("mes_year", yearN);
@@ -1633,7 +1623,7 @@ export async function deleteMetasMes(mes, year) {
       STATE.metasMesSelYear = null;
     }
 
-    showBanner(true, `Metas de ${mesU} eliminadas. Vuelve a subir el Excel para recargarlas.`);
+    showBanner(true, t("metas.borradas", { m: mesTxt }));
     await loadFromSupabase();   // refresca STATE.metasData + re-renderiza el tab activo
 
     // loadFromSupabase solo re-renderiza Metas si quedan filas; si ya no quedan,
@@ -1645,7 +1635,7 @@ export async function deleteMetasMes(mes, year) {
       if (cont)  cont.style.display  = "none";
     }
   } catch (err) {
-    showBanner(false, `Error al eliminar metas: ${err.message}`);
+    showBanner(false, t("metas.errBorrar") + err.message);
     console.error("deleteMetasMes:", err.message);
   } finally {
     showLoad(false);

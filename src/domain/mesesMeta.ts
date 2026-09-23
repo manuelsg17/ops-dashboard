@@ -9,8 +9,9 @@
 // Este módulo es PURO (sin STATE ni DOM) para poder probar el escenario de
 // enero sin esperar a enero. Regla única de orden: año*100 + mes.
 
-export const MESES_ES = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
-  "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
+// Claves de BD ("ENERO"…"DICIEMBRE"): la tabla única vive en core/meses.ts.
+import { MES_NOMBRES } from "../core/meses";
+export const MESES_ES = MES_NOMBRES;
 
 const _NUM: Record<string, number> = {
   enero: 1, ene: 1, january: 1, jan: 1,
