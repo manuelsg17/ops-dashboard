@@ -176,7 +176,7 @@ Navegación lateral por grupos y rol, encabezado de página con chips de alcance
 
 ## 6. Decisiones (23-sep-2026)
 
-1. **Dirección visual**: Manuel pidió ver 2-3 alternativas antes de decidir. Las olas 0-3 no dependen de esto; la Ola 4 (tokens) arranca recién con la dirección elegida.
+1. **Dirección visual (elegida tras ver 3 alternativas)**: la **estructura clara de A** (navegación lateral clara agrupada, superficies neutras, rojo solo para marca/acción principal, chips de filtros activos) + las **tarjetas KPI de B** con barra de **avance contra la meta** y su **delta** vs período anterior. De la alternativa C (analítica densa, pestañas arriba, tabla con minigráficos) **no se toma nada**, por decisión explícita de Manuel. **Modo oscuro: sí, al final** (después de la Ola 6), apoyado en los tokens.
 2. **Vista Partner: se retira.** Lo único que tiene (embudo de conversión, adquisición por canal, cohortes) se muda a Presentación/Rendimiento antes de borrarla. Va en la Ola 6, pero el inventario de "qué es único" se hace en la Ola 1b.
 3. **Migración de la UNIQUE de `metas` (B1)**: se prepara y prueba en local en la Ola 1c; producción solo con confirmación explícita.
 4. **Proyección al cierre** (portal, y por coherencia en toda vista mensual): **solo para el mes en curso**. En un mes ya cerrado no se muestra, porque ya no puede avanzar. Textual de Manuel: *"en meses pasados ya en el filtro mensual no hace sentido seguirla mostrando, porque no logrará más avances en ese mes porque ya cerró"*. Va en la Ola 1b.
