@@ -1,5 +1,20 @@
 //@ts-nocheck
 // rawdata.js — Pestaña Data Raw: vista completa sin filtrar para comparar con Excel
+//
+// Ola 6 (sep-2026): Data Raw pasa a ser SOLO CONSULTA. La clasificación de
+// sub-flotas (antes "Vista Flotas") y la conciliación CLID → db_id se mudaron a
+// Configuración → Clasificación (configView.ts): son datos maestros, no una
+// forma de mirar los registros. Acá queda un enlace para encontrarlas.
+
+import { registerActions } from "./shared/actions.js";
+import { t } from "./core/i18n";
+import { logAccess } from "./shared/accessLog.js";
+import { filaCSV } from "./shared/csv";
+import { fechaLimaISO } from "./core/dates";
+import { escapeHTML } from "./core/security";
+import { fmt, fmt5, fmtK, d2s, cityLabel } from "./core/format";
+import { STATE } from "./core/config.js";
+import { btn, emptyState, icon } from "./shared/ui";
 
 export const RAW_STATE = {
   page:       0,
@@ -9,60 +24,47 @@ export const RAW_STATE = {
   dateFrom:   "",
   dateTo:     "",
   sortCol:    "date",
-  sortDir:    "asc",
-  view:       "data",  // "data" = registros · "flotas" = mapeo CLID→flota · "recon" = conciliación por db_id
-  editingClid: null,   // CLID de la fila en modo edicion en la vista Flotas
-  expanded:   {}       // vista Conciliación: { clid: true } = CLID desglosado a db_id
+  sortDir:    "asc"
 };
+
+const e = s => escapeHTML(s == null ? "" : String(s));
+
+function _src() {
+  return STATE.curMode === "mensual" ? STATE.rawDataMensualFull
+       : STATE.curMode === "diario"  ? STATE.rawDataDiarioFull
+       :                              STATE.rawDataFull;
+}
+
+function _filtrar(src) {
+  const q = RAW_STATE.search.toLowerCase();
+  return src.filter(r => {
+    if (RAW_STATE.city !== "all" && r.city !== RAW_STATE.city) return false;
+    if (RAW_STATE.dateFrom && r.date < RAW_STATE.dateFrom) return false;
+    if (RAW_STATE.dateTo   && r.date > RAW_STATE.dateTo)   return false;
+    if (q && !r.partner.toLowerCase().includes(q) && !(r.kam || "").toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
 
 // ── ENTRY POINT ───────────────────────────────────────────────────────────────
 export function renderRawData() {
   const content = document.getElementById("rawdataContent");
   if (!content) return;
-
-  // Si la vista es "flotas", renderizamos un panel distinto
-  if (RAW_STATE.view === "flotas") {
-    content.innerHTML = _renderFlotasView();
-    return;
-  }
-  // Vista "Conciliación": resumen por CLID desglosable a db_id (para cuadrar vs Excel)
-  if (RAW_STATE.view === "recon") {
-    content.innerHTML = _renderReconView();
-    return;
-  }
-
-  const src = STATE.curMode === "mensual" ? STATE.rawDataMensualFull
-            : STATE.curMode === "diario"  ? STATE.rawDataDiarioFull
-            :                              STATE.rawDataFull;
+  const src = _src();
 
   if (!src || !src.length) {
-    content.innerHTML = `
-      <div class="empty">
-        <p>${t("raw.vacio")}</p>
-        <p class="empty-sub">${t("raw.vacioSub")}</p>
-      </div>`;
+    content.innerHTML = emptyState({ icon: "table", title: t("raw.vacio"), text: t("raw.vacioSub") }) + _linkClasif();
     return;
   }
 
-  // Inicializar rangos de fecha si están vacíos
+  // Inicializar el rango de fechas si está vacío o quedó fuera de la escala
+  // actual (cambiar de semanal a mensual deja fechas que no existen).
   const allDates = [...new Set(src.map(r => r.date))].sort();
-  if (!RAW_STATE.dateFrom) RAW_STATE.dateFrom = allDates[0] || "";
-  if (!RAW_STATE.dateTo)   RAW_STATE.dateTo   = allDates[allDates.length - 1] || "";
-
-  // Ciudades únicas del full dataset
+  if (!RAW_STATE.dateFrom || !allDates.includes(RAW_STATE.dateFrom)) RAW_STATE.dateFrom = allDates[0] || "";
+  if (!RAW_STATE.dateTo   || !allDates.includes(RAW_STATE.dateTo))   RAW_STATE.dateTo   = allDates[allDates.length - 1] || "";
   const allCities = [...new Set(src.map(r => r.city).filter(Boolean))].sort();
 
-  // ── Aplicar filtros ──────────────────────────────────────────────────────
-  let filtered = src.filter(r => {
-    if (RAW_STATE.city !== "all" && r.city !== RAW_STATE.city) return false;
-    if (RAW_STATE.dateFrom && r.date < RAW_STATE.dateFrom) return false;
-    if (RAW_STATE.dateTo   && r.date > RAW_STATE.dateTo)   return false;
-    if (RAW_STATE.search) {
-      const q = RAW_STATE.search.toLowerCase();
-      if (!r.partner.toLowerCase().includes(q) && !(r.kam || "").toLowerCase().includes(q)) return false;
-    }
-    return true;
-  });
+  const filtered = _filtrar(src);
 
   // ── Ordenar ──────────────────────────────────────────────────────────────
   const col = RAW_STATE.sortCol;
@@ -86,131 +88,98 @@ export function renderRawData() {
   const total      = filtered.length;
   const totalPages = Math.max(1, Math.ceil(total / RAW_STATE.PAGE_SIZE));
   if (RAW_STATE.page >= totalPages) RAW_STATE.page = 0;
-  const pageRows   = filtered.slice(
-    RAW_STATE.page * RAW_STATE.PAGE_SIZE,
-    (RAW_STATE.page + 1) * RAW_STATE.PAGE_SIZE
-  );
+  const pageRows   = filtered.slice(RAW_STATE.page * RAW_STATE.PAGE_SIZE, (RAW_STATE.page + 1) * RAW_STATE.PAGE_SIZE);
 
-  // ── Helpers de cabecera con sort ─────────────────────────────────────────
-  function thSort(label, colKey) {
+  // Encabezado ordenable: botón dentro del <th> (accesible por teclado) y
+  // aria-sort en el <th>.
+  const thSort = (label, colKey, num = false) => {
     const active = RAW_STATE.sortCol === colKey;
-    const arrow  = active ? (RAW_STATE.sortDir === "asc" ? " ↑" : " ↓") : "";
-    const cls    = active ? (RAW_STATE.sortDir === "asc" ? "sa" : "sd") : "";
-    return `<th class="${cls}" data-act="rawSort" data-col="${escapeHTML(colKey)}" class="agy-style-447">${label}${arrow}</th>`;
-  }
+    const sort = active ? (RAW_STATE.sortDir === "asc" ? "ascending" : "descending") : "none";
+    const ico = active ? icon(RAW_STATE.sortDir === "asc" ? "arrow-up" : "arrow-down", { size: 12 }) : "";
+    return `<th scope="col" aria-sort="${sort}"${num ? ' class="ui-num"' : ""}>
+      <button type="button" class="raw-sort${active ? " raw-sort--on" : ""}" data-act="rawSort" data-col="${e(colKey)}">${e(label)}${ico}</button></th>`;
+  };
 
-  // ── Date selects ─────────────────────────────────────────────────────────
-  // I6: ciudades y fechas vienen de la base / del Excel: escapadas como
-  // cualquier otro dato (una ciudad con `"` rompía el atributo value).
-  const dateFromOpts = allDates.map(d =>
-    `<option value="${escapeHTML(d)}"${d === RAW_STATE.dateFrom ? " selected" : ""}>${escapeHTML(d2s(d))}</option>`
-  ).join("");
-  const dateToOpts = allDates.map(d =>
-    `<option value="${escapeHTML(d)}"${d === RAW_STATE.dateTo ? " selected" : ""}>${escapeHTML(d2s(d))}</option>`
-  ).join("");
-  const cityOpts = allCities.map(c =>
-    `<option value="${escapeHTML(c)}"${RAW_STATE.city === c ? " selected" : ""}>${escapeHTML(c)}</option>`
-  ).join("");
+  // I6: ciudades y fechas vienen de la base / del Excel: escapadas.
+  const dOpts = sel => allDates.map(d => `<option value="${e(d)}"${d === sel ? " selected" : ""}>${e(d2s(d))}</option>`).join("");
+  const cityOpts = allCities.map(c => `<option value="${e(c)}"${RAW_STATE.city === c ? " selected" : ""}>${e(cityLabel(c))}</option>`).join("");
 
-  // ── Build HTML ───────────────────────────────────────────────────────────
-  let html = secH("🗂️", "#6366f1", t("raw.titulo"),
-    t("raw.sub", { t: fmt(src.length), d: fmt(STATE.rawData.length), e: fmt(src.length - STATE.rawData.length) }), "");
-
-  // Toggle Data Raw / Flotas
-  html += _rawViewToggle();
-
-  // Controles de filtro
-  html += `
-    <div class="section agy-style-30">
-      <div class="agy-style-197">
-        <input class="crud-input" id="rawSearchReg" placeholder="${escapeHTML(t("raw.buscarPartnerKam"))}"
-          value="${RAW_STATE.search.replace(/"/g, "&quot;")}"
-          data-act-input="rawSearch" data-reset="1"
-          class="agy-style-209"/>
-        <select class="sb-sel" data-act-change="rawSetCity" data-reset="1">
-          <option value="all"${RAW_STATE.city === "all" ? " selected" : ""}>${escapeHTML(t("raw.todasCiudades"))}</option>
-          ${cityOpts}
-        </select>
-        <select class="sb-sel" data-act-change="rawSetDateFrom" data-reset="1">
-          ${dateFromOpts}
-        </select>
-        <span class="agy-style-54">→</span>
-        <select class="sb-sel" data-act-change="rawSetDateTo" data-reset="1">
-          ${dateToOpts}
-        </select>
-        <button class="crud-btn" data-act="exportRawCSV"
-          class="agy-style-449">
-          ${escapeHTML(t("raw.exportarCsv"))}
-        </button>
-      </div>
-      <div class="agy-style-450">${t("raw.registrosPaginas", { n: fmt(total), p: fmt(totalPages) })}</div>
+  let html = `
+    <div class="raw-bar" role="search">
+      <input class="ui-input raw-bar__search" type="search" id="rawSearchReg" placeholder="${e(t("raw.buscarPartnerKam"))}"
+        value="${e(RAW_STATE.search)}" data-act-input="rawSearch" data-reset="1" autocomplete="off" aria-label="${e(t("raw.buscarPartnerKam"))}"/>
+      <select class="ui-select raw-bar__sel" data-act-change="rawSetCity" data-reset="1" aria-label="${e(t("calc.col.ciudad"))}">
+        <option value="all"${RAW_STATE.city === "all" ? " selected" : ""}>${e(t("raw.todasCiudades"))}</option>
+        ${cityOpts}
+      </select>
+      <span class="raw-bar__range">
+        <select class="ui-select raw-bar__date" data-act-change="rawSetDateFrom" data-reset="1" aria-label="${e(t("raw6.desde"))}">${dOpts(RAW_STATE.dateFrom)}</select>
+        <span class="raw-bar__arrow" aria-hidden="true">→</span>
+        <select class="ui-select raw-bar__date" data-act-change="rawSetDateTo" data-reset="1" aria-label="${e(t("raw6.hasta"))}">${dOpts(RAW_STATE.dateTo)}</select>
+      </span>
+      <span class="raw-bar__end">${btn({ label: t("raw6.exportarCsv"), icon: "download", act: "exportRawCSV" })}</span>
+    </div>
+    <div class="raw-meta">
+      <span>${e(t("raw6.meta", { t: fmt(src.length), d: fmt(STATE.rawData.length), x: fmt(src.length - STATE.rawData.length) }))}</span>
+      <span>${t("raw.registrosPaginas", { n: fmt(total), p: fmt(totalPages) })}</span>
     </div>`;
 
-  // Tabla
-  html += `
-    <div class="tbl-wrap">
-      <table class="dtbl">
-        <thead>
-          <tr>
-            ${thSort(t("raw.col.fecha"), "date")}
-            ${thSort(t("calc.col.partner"), "partner")}
-            ${thSort(t("sidebar.kam"), "kam")}
-            ${thSort(t("calc.col.ciudad"), "city")}
-            ${thSort("AD", "activeDrivers")}
-            ${thSort("N+R", "nr")}
-            ${thSort(t("metric.sh.short"), "supplyHours")}
-            ${thSort(t("raw.col.comision"), "commission")}
-            ${thSort(t("raw.col.viajes"), "trips")}
-          </tr>
-        </thead>
-        <tbody>`;
-
-  pageRows.forEach(r => {
+  const rows = pageRows.map(r => {
     const nr = r.newPartner + r.newService + r.reactivated;
-    html += `
-          <tr>
-            <td class="agy-style-452">${d2s(r.date)}</td>
-            <td>
-              <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${STATE.partnerColors[r.partner] || "#ccc"};margin-right:5px"></span>
-              ${escapeHTML(r.partner)}
-            </td>
-            <td class="agy-style-453">${escapeHTML(r.kam) || "–"}</td>
-            <td class="agy-style-453">${escapeHTML(r.city) || "–"}</td>
-            <td class="tn">${fmt5(r.activeDrivers)}</td>
-            <td class="tn">${fmt5(nr)}</td>
-            <td class="tn">${fmt5(r.supplyHours)}</td>
-            <td class="tn" title="$${fmt5(r.commission)}">${fmtK(r.commission)}</td>
-            <td class="tn">${fmt5(r.trips)}</td>
-          </tr>`;
-  });
+    return `<tr>
+      <td class="raw-td-date">${e(d2s(r.date))}</td>
+      <td>${e(r.partner)}</td>
+      <td>${e(r.kam) || "–"}</td>
+      <td>${e(r.city) || "–"}</td>
+      <td class="ui-num">${fmt5(r.activeDrivers)}</td>
+      <td class="ui-num">${fmt5(nr)}</td>
+      <td class="ui-num">${fmt5(r.supplyHours)}</td>
+      <td class="ui-num" title="$${fmt5(r.commission)}">${fmtK(r.commission)}</td>
+      <td class="ui-num">${fmt5(r.trips)}</td>
+    </tr>`;
+  }).join("");
 
-  // Fila de totales (siempre visible, basada en el set filtrado completo)
   html += `
-          <tr class="agy-style-454">
-            <td colspan="4" class="agy-style-455">${t("raw.total", { n: fmt(total) })}</td>
-            <td class="tn agy-style-456">${fmt5(totAD)}</td>
-            <td class="tn agy-style-456">${fmt5(totNR)}</td>
-            <td class="tn agy-style-456">${fmt5(totSH)}</td>
-            <td class="tn agy-style-456" title="$${fmt5(totCom)}">${fmtK(totCom)}</td>
-            <td class="tn agy-style-456">${fmt5(totTrip)}</td>
-          </tr>
-        </tbody>
+    <div class="ui-table-wrap ui-table-wrap--scroll raw-table-wrap">
+      <table class="ui-table ui-table--sticky-first raw-table">
+        <thead><tr>
+          ${thSort(t("raw.col.fecha"), "date")}
+          ${thSort(t("calc.col.partner"), "partner")}
+          ${thSort(t("sidebar.kam"), "kam")}
+          ${thSort(t("calc.col.ciudad"), "city")}
+          ${thSort("AD", "activeDrivers", true)}
+          ${thSort("N+R", "nr", true)}
+          ${thSort(t("metric.sh.short"), "supplyHours", true)}
+          ${thSort(t("raw.col.comision"), "commission", true)}
+          ${thSort(t("raw.col.viajes"), "trips", true)}
+        </tr></thead>
+        <tbody>${rows || `<tr><td colspan="9" class="raw-empty-row">${e(t("raw6.sinCoincidencias"))}</td></tr>`}</tbody>
+        <tfoot><tr class="raw-total">
+          <td colspan="4">${e(t("raw.total", { n: fmt(total) }))}</td>
+          <td class="ui-num">${fmt5(totAD)}</td>
+          <td class="ui-num">${fmt5(totNR)}</td>
+          <td class="ui-num">${fmt5(totSH)}</td>
+          <td class="ui-num" title="$${fmt5(totCom)}">${fmtK(totCom)}</td>
+          <td class="ui-num">${fmt5(totTrip)}</td>
+        </tr></tfoot>
       </table>
     </div>`;
 
-  // Paginación
   if (totalPages > 1) {
     html += `
-    <div class="agy-style-82">
-      <button class="crud-btn" data-act="rawPagePrev"
-        ${RAW_STATE.page === 0 ? "disabled" : ""} class="agy-style-83">${escapeHTML(t("raw.anterior"))}</button>
+    <div class="raw-pager">
+      ${btn({ label: t("raw6.anterior"), size: "sm", icon: "chevron-left", act: "rawPagePrev", disabled: RAW_STATE.page === 0 })}
       <span>${t("raw.pagina", { a: `<strong>${RAW_STATE.page + 1}</strong>`, b: `<strong>${totalPages}</strong>` })}</span>
-      <button class="crud-btn" data-act="rawPageNext" data-total="${totalPages}"
-        ${RAW_STATE.page === totalPages - 1 ? "disabled" : ""} class="agy-style-83">${escapeHTML(t("raw.siguiente"))}</button>
+      ${btn({ label: t("raw6.siguiente"), size: "sm", act: "rawPageNext", data: { total: totalPages }, disabled: RAW_STATE.page === totalPages - 1 })}
     </div>`;
   }
-
+  html += _linkClasif();
   content.innerHTML = html;
+}
+
+function _linkClasif() {
+  return `<p class="raw-link">${icon("info", { size: 14 })}<span>${e(t("raw6.clasifMovida"))}</span>
+    <button type="button" class="ui-link-btn" data-act="rawIrClasif">${e(t("raw6.irClasif"))}</button></p>`;
 }
 
 // ── SORT ──────────────────────────────────────────────────────────────────────
@@ -227,24 +196,9 @@ export function rawSortBy(col) {
 
 // ── EXPORT CSV ────────────────────────────────────────────────────────────────
 export function exportRawCSV() {
-  const src    = STATE.curMode === "mensual" ? STATE.rawDataMensualFull
-               : STATE.curMode === "diario"  ? STATE.rawDataDiarioFull
-               :                              STATE.rawDataFull;
-  const rows = src.filter(r => {
-    if (RAW_STATE.city !== "all" && r.city !== RAW_STATE.city) return false;
-    if (RAW_STATE.dateFrom && r.date < RAW_STATE.dateFrom) return false;
-    if (RAW_STATE.dateTo   && r.date > RAW_STATE.dateTo)   return false;
-    if (RAW_STATE.search) {
-      const q = RAW_STATE.search.toLowerCase();
-      if (!r.partner.toLowerCase().includes(q) && !(r.kam || "").toLowerCase().includes(q)) return false;
-    }
-    return true;
-  });
-
+  const rows = _filtrar(_src() || []);
   // I10: logAccess como el resto de las exportaciones (Monitoreo cuenta las
-  // descargas) y celdas RFC 4180 + fórmulas neutralizadas (shared/csv.ts):
-  // antes un `"` en el nombre corría las columnas y un nombre que empezara con
-  // `=` se ejecutaba como fórmula al abrirlo en Excel.
+  // descargas) y celdas RFC 4180 + fórmulas neutralizadas (shared/csv.ts).
   logAccess("download_csv", "data_raw");
   const header = ["Fecha", "Partner", "KAM", "Ciudad", "AD", "N+R", "Horas", "Comision", "Viajes"];
   const lines  = [filaCSV(header)];
@@ -255,8 +209,7 @@ export function exportRawCSV() {
       r.activeDrivers, nr, r.supplyHours, r.commission, r.trips
     ]));
   });
-
-  // UTF-8 BOM so Excel opens with correct encoding
+  // UTF-8 BOM para que Excel lo abra con la codificación correcta
   const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement("a");
@@ -266,873 +219,19 @@ export function exportRawCSV() {
   URL.revokeObjectURL(url);
 }
 
-// \u2500\u2500 TOGGLE ENTRE VISTA REGISTROS Y VISTA FLOTAS \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-export function _rawViewToggle() {
-  const isData   = RAW_STATE.view !== "flotas";
-  const btn = (v, label) => `
-    <button data-act="rawSwitchView" data-view="${escapeHTML(v)}"
-      style="padding:6px 14px;font-size:.78rem;font-weight:700;border:1px solid #e5e5e5;cursor:pointer;
-        background:${RAW_STATE.view===v?'#FF0000':'#fff'};color:${RAW_STATE.view===v?'#fff':'#555'};
-        border-radius:6px">${label}</button>`;
-  return `
-    <div class="agy-style-457">
-      ${btn("data", t("raw.viewData"))}
-      ${btn("flotas", t("raw.viewFlotas"))}
-      ${btn("recon", t("raw.viewRecon"))}
-    </div>`;
-}
-
-export function rawSwitchView(v) {
-  RAW_STATE.view = v;
-  RAW_STATE.page = 0;
-  renderRawData();
-}
-
-// Buscador sin perder foco: renderRawData reconstruye todo el panel (destruye el
-// input al re-render). Guardamos el caret y re-enfocamos el mismo id tras el
-// re-render → se puede escribir corrido (fix Fase 7). Espejo del arreglo de Config.
+// Buscador sin perder foco: renderRawData reconstruye el panel; se guarda el
+// caret y se re-enfoca el mismo id tras el re-render (fix Fase 7).
 export function rawSearchInput(inp, resetPage) {
   RAW_STATE.search = inp.value;
   if (resetPage) RAW_STATE.page = 0;
   const id = inp.id, pos = inp.selectionStart;
   renderRawData();
   const el = id && document.getElementById(id);
-  if (el) { el.focus(); try { el.setSelectionRange(pos, pos); } catch (e) {} }
+  if (el) { el.focus(); try { el.setSelectionRange(pos, pos); } catch (err) { /* type=search sin selección */ } }
 }
 
-// \u2500\u2500 VISTA FLOTAS \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-// Vista de auditoria del mapeo CLID \u2192 flota. La FUENTE DE VERDAD es la tabla
-// `partners` (Configuracion). La tabla `flotas` solo:
-//   - Marca CLIDs como inactivos (no se muestran en el dashboard)
-//   - Anota la ciudad para auditoria
-//   - Aporta nombre/KAM como fallback SOLO si el CLID no esta en `partners`
-//
-// Columnas:
-//   - CLID
-//   - Nombre Excel: lo que vino del Excel de rendimiento (informativo)
-//   - Nombre EFECTIVO: el que el dashboard usa (Configuracion > flota > Excel)
-//   - KAM EFECTIVO: idem
-//   - Ciudad: lo que dice flota (o lo que vino del Excel)
-//   - Estado: activa / inactiva
-//   - Accion: editar (solo afecta tabla `flotas`)
-export function _renderFlotasView() {
-  const flotasMap = STATE.flotasMap || {};
-  const clids = Object.keys(flotasMap);
-
-  // Mapa por CLID con la info del rendimiento.
-  // `nombre_excel` = lo que vino crudo del Excel (campo `_partnerExcel`,
-  // preservado al cargar desde BD). Si no esta, usa `_partnerOriginal` o
-  // `partner` como ultimo fallback (compatibilidad con datos viejos donde el
-  // upload pisaba el partner con CLID_MAP).
-  const fromRawAll = new Map();
-  STATE.rawDataFull.forEach(r => {
-    if (!r.clid) return;
-    if (!fromRawAll.has(r.clid)) {
-      const excel = r._partnerExcel || r._partnerOriginal || r.partner;
-      fromRawAll.set(r.clid, { nombre_excel: excel, ciudad: r.city });
-    }
-  });
-
-  // Fleetrooms por CLID (sub-flotas con db_id real). Fuente: rawDataFull ya trae
-  // db_id + fleetroom por fila. clid → Map(db_id → nombre). Solo db_id != ''.
-  const fleetroomsByClid = new Map();
-  STATE.rawDataFull.forEach(r => {
-    if (!r.clid || !r.db_id) return;
-    let m = fleetroomsByClid.get(r.clid);
-    if (!m) { m = new Map(); fleetroomsByClid.set(r.clid, m); }
-    if (!m.has(r.db_id)) m.set(r.db_id, r.fleetroom || "");
-  });
-
-  const allCLIDs = new Set([...clids, ...fromRawAll.keys()]);
-
-  const q = (RAW_STATE.search || "").toLowerCase().trim();
-  const ciudadF = RAW_STATE.city;
-
-  const rows = [...allCLIDs].map(clid => {
-    const f          = flotasMap[clid];
-    const raw        = fromRawAll.get(clid);
-    const enPartners = !!STATE.CLID_MAP[clid];
-
-    // Fuente de verdad: partners. Fallback: flota. Ultimo recurso: Excel raw.
-    const nombre_partners = STATE.CLID_MAP[clid] || "";
-    const kam_partners    = (STATE.KAM_MAP[clid] || "").trim();
-    const nombre_flota    = (f && f.nombre_asignado) || "";
-    const kam_flota       = (f && f.kam) || "";
-    const nombre_excel    = (raw && raw.nombre_excel) || (f && f.nombre_original) || "";
-
-    const nombre_efectivo = nombre_partners || nombre_flota || nombre_excel || "\u2014";
-    const kam_efectivo    = kam_partners    || kam_flota    || "\u2014";
-    const ciudad          = (f && f.ciudad) || (raw && raw.ciudad) || "";
-
-    const tieneFlota = !!f;
-    const activo     = !f || f.activo !== false;
-
-    return {
-      clid, enPartners,
-      nombre_partners, nombre_flota, nombre_excel, nombre_efectivo,
-      kam_partners, kam_flota, kam_efectivo,
-      ciudad, tieneFlota, activo
-    };
-  })
-  .filter(r => {
-    if (ciudadF !== "all" && r.ciudad !== ciudadF) return false;
-    if (q) {
-      const hay = [r.clid, r.nombre_excel, r.nombre_partners, r.nombre_flota,
-                   r.kam_partners, r.kam_flota, r.ciudad]
-        .some(s => (s || "").toLowerCase().includes(q));
-      if (!hay) return false;
-    }
-    return true;
-  })
-  .sort((a, b) => (a.nombre_efectivo || a.clid).localeCompare(b.nombre_efectivo || b.clid));
-
-  // Stats
-  const conConfig = rows.filter(r => r.enPartners).length;
-  const sinConfig = rows.filter(r => !r.enPartners).length;
-  const inactivas = rows.filter(r => !r.activo).length;
-
-  const allCities = [...new Set([...STATE.rawDataFull.map(r => r.city), ...Object.values(flotasMap).map(f => f.ciudad)].filter(Boolean))].sort();
-  const cityOpts = allCities.map(c => `<option value="${escapeHTML(c)}"${RAW_STATE.city===c?" selected":""}>${escapeHTML(cityLabel(c))}</option>`).join("");
-
-  let html = secH("\uD83D\uDE9A", "#FF0000", t("raw.vistaFlotas"),
-    t("raw.vistaFlotasSub", { n: fmt(rows.length), c: fmt(conConfig), s: fmt(sinConfig), i: fmt(inactivas) }), "");
-
-  html += _rawViewToggle();
-
-  html += `
-    <div class="section agy-style-371">
-      <div class="agy-style-458">
-        ${t("raw.fuenteVerdad")}
-        <div class="agy-style-459">${t("raw.fleetroomNota")}</div>
-      </div>
-      <div class="agy-style-460">
-        <input class="crud-input" id="rawSearchFlotas" placeholder="${escapeHTML(t("raw.buscarCPKC"))}"
-          value="${(RAW_STATE.search || "").replace(/"/g, "&quot;")}"
-          data-act-input="rawSearch"
-          class="agy-style-461"/>
-        <select class="sb-sel" data-act-change="rawSetCity">
-          <option value="all"${RAW_STATE.city==="all"?" selected":""}>${escapeHTML(t("raw.todasCiudades"))}</option>
-          ${cityOpts}
-        </select>
-        <button class="crud-btn" data-act="exportFlotasCSV"
-          class="agy-style-449">${escapeHTML(t("raw.exportarCsv"))}</button>
-      </div>
-      <div class="agy-style-462">
-        <span class="agy-style-463">${escapeHTML(t("raw.patronesTuktuk"))}</span>
-        ${(STATE.tuktukPatterns || []).map(w => `
-          <span class="agy-style-464">
-            ${escapeHTML(w)}
-            <button data-act="removeTuktukPattern" data-word="${escapeHTML(w)}" title="${escapeHTML(t("raw.quitar"))}" class="agy-style-465">\u00D7</button>
-          </span>`).join("")}
-        <input id="newTuktukPattern" class="crud-input" placeholder="${escapeHTML(t("raw.ejMototaxi"))}" class="agy-style-466" data-act-keydown="addTuktukPatternEnter"/>
-        <button class="crud-btn" data-act="addTuktukPattern" class="agy-style-467">${escapeHTML(t("raw.agregar"))}</button>
-      </div>
-    </div>
-    <div class="tbl-wrap">
-      <table class="dtbl">
-        <thead>
-          <tr>
-            <th>CLID</th>
-            <th>${escapeHTML(t("calc.col.ciudad"))}</th>
-            <th>${escapeHTML(t("raw.col.nombreExcel"))}</th>
-            <th>${escapeHTML(t("raw.col.nombreEfectivo"))} <span class="agy-style-468">${escapeHTML(t("raw.col.efectivo"))}</span></th>
-            <th>${escapeHTML(t("sidebar.kam"))} <span class="agy-style-468">${escapeHTML(t("raw.col.efectivo"))}</span></th>
-            <th class="agy-style-469">Fleet</th>
-            <th class="agy-style-470">TukTuk</th>
-            <th class="agy-style-471">${t("raw.col.excluirTaxi")}</th>
-            <th class="agy-style-471">${escapeHTML(t("raw.col.delivery"))}</th>
-            <th class="agy-style-471">${escapeHTML(t("raw.col.cargo"))}</th>
-            <th class="agy-style-27">${escapeHTML(t("raw.col.estado"))}</th>
-            <th class="agy-style-472">${escapeHTML(t("raw.col.accion"))}</th>
-          </tr>
-        </thead>
-        <tbody>`;
-
-  // Opciones para selects (ciudades y KAMs disponibles)
-  const cityOptList = ["LIMA","TRUJILLO","AREQUIPA"];
-  const kamOptList  = [...new Set([
-    ...Object.values(STATE.KAM_MAP),
-    ...Object.values(STATE.flotasMap || {}).map(f => f.kam)
-  ].filter(Boolean))].sort();
-
-  // Celdas Fleet/TukTuk/Excluir-Taxi (3 <td>). Para CLIDs SIN fleetrooms (data
-  // legacy sin db_id): checkboxes por CLID → `partners` via flotaSetFlag (Fleet
-  // y TukTuk; Excluir no aplica a nivel CLID). Para CLIDs CON fleetrooms: el
-  // tagging es por sub-flota (sub-filas debajo) → aquí solo una nota "↓ por
-  // fleetroom", sin checkbox por CLID (evita ambigüedad). La sugerencia TukTuk
-  // (badge + resalte) nunca auto-marca ni auto-guarda.
-  function _flotaFlagCells(r, clidH, hasFleetrooms) {
-    if (hasFleetrooms) {
-      const note = `<span class="agy-style-473">${escapeHTML(t("raw.fleetroomAbbr"))}</span>`;
-      return `
-          <td class="agy-style-27">${note}</td>
-          <td class="agy-style-27">${note}</td>
-          <td class="agy-style-27">${note}</td>
-          <td class="agy-style-27">${note}</td>
-          <td class="agy-style-27">${note}</td>`;
-    }
-    const isFleet   = !!(STATE.CLID_IS_FLEET  || {})[r.clid];
-    const isTuktuk  = !!(STATE.CLID_IS_TUKTUK || {})[r.clid];
-    const suggested = !isTuktuk && _tuktukSuggested(r.nombre_excel);
-    // escapeHTML (no escapeJSAttr): ahora van en data-attributes, no dentro de
-    // un string JS de un handler inline — un solo contexto, un solo escape.
-    const pFall = escapeHTML(r.nombre_efectivo === "\u2014" ? "" : r.nombre_efectivo);
-    const kFall = escapeHTML(r.kam_efectivo === "\u2014" ? "" : r.kam_efectivo);
-    // I3: escribe a `partners` → solo si RLS lo va a aceptar.
-    const dis = _rawPuede("partners.escribir") ? "" : "disabled";
-    return `
-          <td class="agy-style-27">
-            <input type="checkbox" title="${escapeHTML(t("raw.fleetTip"))}" data-act-change="flotaSetFlag" data-clid="${clidH}" data-key="is_fleet" data-pfall="${pFall}" data-kfall="${kFall}" ${isFleet ? "checked" : ""} ${dis}/>
-          </td>
-          <td class="agy-style-27">
-            ${suggested ? `<div title="${escapeHTML(t("raw.nombreSugiereTuktukExcel"))}" class="agy-style-474">\u{1F6FA}?</div>` : ""}
-            <input type="checkbox" title="${escapeHTML(t("raw.tuktukTip"))}" data-act-change="flotaSetFlag" data-clid="${clidH}" data-key="is_tuktuk" data-pfall="${pFall}" data-kfall="${kFall}" ${isTuktuk ? "checked" : ""} ${dis} style="${suggested ? "outline:2px solid #f59e0b" : ""}"/>
-          </td>
-          <td class="agy-style-27"><span class="agy-style-90" title="${escapeHTML(t("raw.excluirTaxiTip"))}">\u2014</span></td>
-          <td class="agy-style-27"><span class="agy-style-90" title="${escapeHTML(t("raw.soloFleetroomTip"))}">\u2014</span></td>
-          <td class="agy-style-27"><span class="agy-style-90" title="${escapeHTML(t("raw.soloFleetroomTip"))}">\u2014</span></td>`;
-  }
-
-  // Sub-filas por fleetroom (una por db_id) debajo de la fila del CLID. Cada una
-  // con 5 checkboxes (Fleet/TukTuk/Excluir Taxi/Delivery/Cargo) →
-  // fleetroomSetFlag(db_id,...). La sugerencia TukTuk se evalúa sobre el
-  // NOMBRE del fleetroom. Delivery/Cargo (ago 2026) son EXCLUYENTES entre sí a
-  // nivel de UI (una sub-flota es una vertical, no dos) — tildar una destilda
-  // la otra en el momento; el guardado real sigue siendo uno a la vez, como
-  // los demás flags.
-  function _fleetroomSubRows(r, clidH, froomMap) {
-    const kamCtx  = escapeHTML(r.kam_efectivo === "—" ? "" : r.kam_efectivo);
-    const cityCtx = escapeHTML(r.ciudad || "");
-    return [...froomMap.entries()].sort((a, b) => (a[1] || a[0]).localeCompare(b[1] || b[0]))
-      .map(([dbId, name]) => {
-        const dbIdH    = escapeHTML(dbId);
-        const nameH    = escapeHTML(name || "");
-        const isFleet  = !!(STATE.FLEETROOM_IS_FLEET     || {})[dbId];
-        const isTuktuk = !!(STATE.FLEETROOM_IS_TUKTUK    || {})[dbId];
-        const isExcl   = !!(STATE.FLEETROOM_EXCLUDE_TAXI || {})[dbId];
-        const isDeliv  = !!(STATE.FLEETROOM_IS_DELIVERY  || {})[dbId];
-        const isCargo  = !!(STATE.FLEETROOM_IS_CARGO     || {})[dbId];
-        const sugg     = !isTuktuk && _tuktukSuggested(name);
-        // I3: fleetrooms solo admin o write:config (un KAM NO): deshabilitado
-        // en vez de dejar tildar algo que la base va a rechazar.
-        const disFr = _rawPuede("fleetrooms.escribir") ? "" : "disabled";
-        const cb = (key, checked, extraStyle = "") =>
-          `<input type="checkbox" data-act-change="fleetroomSetFlag" data-dbid="${dbIdH}" data-key="${escapeHTML(key)}" data-name="${nameH}" data-clid="${clidH}" data-kam="${kamCtx}" data-city="${cityCtx}" ${checked ? "checked" : ""} ${disFr} style="${extraStyle}"/>`;
-        const dbShort = escapeHTML(String(dbId).slice(0, 10));
-        return `
-        <tr class="agy-style-475">
-          <td class="agy-style-476">↳</td>
-          <td colspan="4" class="agy-style-477">
-            <span class="agy-style-478">${escapeHTML(name || t("raw.sinNombreParen"))}</span>
-            ${sugg ? `<span title="${escapeHTML(t("raw.nombreSugiereTuktuk"))}" class="agy-style-479">🛺?</span>` : ""}
-            <span class="agy-style-480" title="${escapeHTML(String(dbId))}">${dbShort}…</span>
-          </td>
-          <td class="agy-style-27" title="Fleet">${cb("is_fleet", isFleet)}</td>
-          <td class="agy-style-27" title="TukTuk">${cb("is_tuktuk", isTuktuk, sugg ? "outline:2px solid #f59e0b" : "")}</td>
-          <td class="agy-style-27" title="${escapeHTML(t("raw.excluirTaxi"))}">${cb("exclude_from_taxi", isExcl)}</td>
-          <td class="agy-style-27" title="${escapeHTML(t("raw.deliveryTip"))}">${cb("is_delivery", isDeliv)}</td>
-          <td class="agy-style-27" title="${escapeHTML(t("raw.cargoTip"))}">${cb("is_cargo", isCargo)}</td>
-        </tr>`;
-      }).join("");
-  }
-
-  rows.slice(0, 500).forEach(r => {
-    const clidH  = escapeHTML(r.clid);
-    const isEditing = RAW_STATE.editingClid === r.clid;
-    const froomMap = fleetroomsByClid.get(r.clid);
-    const hasFleetrooms = !!(froomMap && froomMap.size);
-
-    if (isEditing) {
-      // \u2500\u2500\u2500 FILA EN MODO EDICION \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-      const cityOpts = cityOptList.map(c =>
-        `<option value="${escapeHTML(c)}"${r.ciudad===c?" selected":""}>${escapeHTML(cityLabel(c))}</option>`).join("");
-      const currentKamFlota = r.kam_flota || "";
-      const kamOpts  = `<option value="">${escapeHTML(t("raw.sinKamOpt"))}</option>` +
-        kamOptList.map(k => `<option value="${escapeHTML(k)}"${currentKamFlota===k?" selected":""}>${escapeHTML(k)}</option>`).join("");
-      const nombreWarning = r.enPartners
-        ? `<div class="agy-style-481">${t("raw.avisoEnPartners", { n: escapeHTML(r.nombre_partners) })}</div>`
-        : `<div class="agy-style-482">${t("raw.avisoNoEnPartners")}</div>`;
-      const kamWarning = r.kam_partners
-        ? `<div class="agy-style-481">${t("raw.avisoKamPartners", { k: escapeHTML(r.kam_partners) })}</div>`
-        : "";
-      html += `
-        <tr data-flota-clid="${clidH}" class="agy-style-483">
-          <td class="agy-style-484">${clidH}</td>
-          <td class="agy-style-485">
-            <select id="flEdCity_${clidH}" class="crud-input agy-style-486"><option value=""${r.ciudad?"":" selected"}>${escapeHTML(t("raw.sinCiudad"))}</option>${cityOpts}</select>
-          </td>
-          <td class="agy-style-487">${escapeHTML(r.nombre_excel || "\u2014")}</td>
-          <td class="agy-style-485">
-            <input id="flEdName_${clidH}" class="crud-input agy-style-488" value="${escapeHTML(r.nombre_flota || "")}" placeholder="${escapeHTML(t("raw.opcionalFallback"))}"/>
-            ${nombreWarning}
-          </td>
-          <td class="agy-style-485">
-            <select id="flEdKam_${clidH}" class="crud-input agy-style-486">${kamOpts}</select>
-            ${kamWarning}
-          </td>
-          ${_flotaFlagCells(r, clidH, hasFleetrooms)}
-          <td class="agy-style-489">
-            <label class="agy-style-490">
-              <input id="flEdActivo_${clidH}" type="checkbox"${r.activo?" checked":""}/>
-              <span>${r.activo?t("raw.activa"):t("raw.inactiva")}</span>
-            </label>
-          </td>
-          <td class="agy-style-491">
-            <button data-act="flotaSaveEdit" data-clid="${clidH}" class="agy-style-492">${escapeHTML(t("raw.guardar"))}</button>
-            <button data-act="flotaCancelEdit"          class="agy-style-493">\u2715</button>
-          </td>
-        </tr>`;
-    } else {
-      // \u2500\u2500\u2500 FILA EN MODO LECTURA \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-      const badge = !r.activo
-        ? `<span class="agy-style-494">${escapeHTML(t("raw.inactivaBadge"))}</span>`
-        : !r.enPartners
-          ? `<span class="agy-style-495">${escapeHTML(t("raw.sinConfig"))}</span>`
-          : `<span class="agy-style-496">${escapeHTML(t("raw.activaBadge"))}</span>`;
-      const cityCell = r.ciudad
-        ? cityLabel(r.ciudad)
-        : `<span class="agy-style-497">${escapeHTML(t("raw.sinCiudad"))}</span>`;
-      const nombreCell = r.enPartners
-        ? `<span class="agy-style-498">${escapeHTML(r.nombre_partners)}</span>
-           <div class="agy-style-25">${escapeHTML(t("raw.desdeConfig"))}</div>`
-        : r.nombre_flota
-          ? `<span class="agy-style-499">${escapeHTML(r.nombre_flota)}</span>
-             <div class="agy-style-500">${escapeHTML(t("raw.fallbackFlotas"))}</div>`
-          : `<span class="agy-style-497">${escapeHTML(r.nombre_excel || "\u2014")}</span>
-             <div class="agy-style-500">${escapeHTML(t("raw.soloExcel"))}</div>`;
-      const kamCell = r.kam_partners
-        ? `<span class="agy-style-498">${escapeHTML(r.kam_partners)}</span>
-           <div class="agy-style-25">${escapeHTML(t("raw.desdeConfig"))}</div>`
-        : r.kam_flota
-          ? `<span class="agy-style-499">${escapeHTML(r.kam_flota)}</span>
-             <div class="agy-style-500">${escapeHTML(t("raw.fallbackFlotas"))}</div>`
-          : `<span class="agy-style-89">\u2014</span>`;
-      html += `
-        <tr>
-          <td class="agy-style-501">${clidH}</td>
-          <td>${cityCell}</td>
-          <td class="agy-style-502">${escapeHTML(r.nombre_excel || "\u2014")}</td>
-          <td>${nombreCell}</td>
-          <td>${kamCell}</td>
-          ${_flotaFlagCells(r, clidH, hasFleetrooms)}
-          <td class="agy-style-27">${badge}</td>
-          <td class="agy-style-503">
-            ${!_rawPuede("flotas.escribir") ? `<span class="agy-style-89">\u2014</span>` : `<button data-act="flotaStartEdit" data-clid="${clidH}" title="${escapeHTML(t("raw.editarTip"))}" class="agy-style-504">\u270F\uFE0F</button>
-            ${r.tieneFlota
-              ? `<button data-act="flotaToggleActivo" data-clid="${clidH}" data-activo="${!r.activo ? 1 : 0}" title="${r.activo?t("raw.marcarInactiva"):t("raw.reactivar")}" style="padding:3px 8px;font-size:.7rem;background:${r.activo?"#fff5f5":"#f0fdf4"};border:1px solid ${r.activo?"#fecaca":"#86efac"};color:${r.activo?"#b91c1c":"#166534"};border-radius:5px;cursor:pointer">${r.activo?"\uD83D\uDEAB":"\u2713"}</button>`
-              : `<button data-act="flotaToggleActivo" data-clid="${clidH}" data-activo="0" title="${escapeHTML(t("raw.marcarInactivaCrear"))}" class="agy-style-505">\uD83D\uDEAB</button>`}`}
-          </td>
-        </tr>`;
-      // Sub-filas por fleetroom (solo lectura; el tagging es por db_id// Sub-filas por fleetroom (solo lectura; el tagging es por db_id).
-      if (hasFleetrooms) html += _fleetroomSubRows(r, clidH, froomMap);
-    }
-  });
-
-  if (rows.length > 500) {
-    html += `<tr><td colspan="10" class="agy-style-212">${t("raw.mostrandoPrimeros", { n: 500, t: fmt(rows.length) })}</td></tr>`;
-  }
-
-  html += `</tbody></table></div>`;
-
-  if (!Object.keys(flotasMap).length) {
-    html += `
-      <div class="agy-style-506">
-        ${t("raw.sinFlotas", { r: t("raw.rutaFlotasUpload") })}
-      </div>`;
-  }
-
-  return html;
-}
-
-// ── EDICION INLINE DE FLOTAS ──────────────────────────────────────────────────
-// Entrar en modo edicion para una fila (se renderiza con inputs)
-export function flotaStartEdit(clid) {
-  RAW_STATE.editingClid = clid;
-  renderRawData();
-}
-
-export function flotaCancelEdit() {
-  RAW_STATE.editingClid = null;
-  renderRawData();
-}
-
-// Guardar la edicion: lee los inputs de la fila y hace UPDATE/INSERT en Supabase.
-// Edita solo la tabla `flotas` (no toca `partners`). El nombre/KAM solo se usa
-// como fallback si el CLID no esta configurado en partners.
-export async function flotaSaveEdit(clid) {
-  const elCity   = document.getElementById(`flEdCity_${clid}`);
-  const elName   = document.getElementById(`flEdName_${clid}`);
-  const elKam    = document.getElementById(`flEdKam_${clid}`);
-  const elActivo = document.getElementById(`flEdActivo_${clid}`);
-  if (!elActivo) { showBanner(false, t("raw.errFilaEditada")); return; }
-
-  const ciudad          = elCity ? elCity.value : "";
-  const nombre_asignado = (elName && elName.value || "").trim();
-  const kam             = elKam ? elKam.value : "";
-  const activo          = elActivo.checked;
-
-  showLoad(true, t("raw.guardando"));
-  try {
-    const yaExiste = !!(STATE.flotasMap && STATE.flotasMap[clid]);
-    const payload = { ciudad, nombre_asignado, kam, activo };
-    if (yaExiste) {
-      await updateFlotaField(clid, payload);
-    } else {
-      await createFlota(clid, payload);
-    }
-    RAW_STATE.editingClid = null;
-    await _rawRefrescarYAvisar(t("raw.flotaActualizada"), t("raw.hecho.flotaActualizada"));
-  } catch (err) {
-    showBanner(false, t("raw.errorGuardar") + err.message);
-    console.error(err);
-  } finally {
-    showLoad(false);
-  }
-}
-
-// Toggle rapido del flag `activo` sin entrar en modo edicion.
-// Si el CLID no tiene registro en `flotas`, lo crea con activo=false (o lo
-// reactiva eliminando el registro, segun el caso).
-export async function flotaToggleActivo(clid, nuevoEstado) {
-  showLoad(true, nuevoEstado ? t("raw.reactivando") : t("raw.marcandoInactiva"));
-  try {
-    const yaExiste = !!(STATE.flotasMap && STATE.flotasMap[clid]);
-    if (yaExiste) {
-      await updateFlotaField(clid, { activo: nuevoEstado });
-    } else {
-      // Crear registro minimo en flotas para marcar como inactivo
-      const existing = STATE.CLID_MAP[clid] || "";
-      await createFlota(clid, { activo: nuevoEstado, nombre_asignado: existing });
-    }
-    await _rawRefrescarYAvisar(nuevoEstado ? t("raw.flotaReactivada") : t("raw.flotaInactiva"),
-      nuevoEstado ? t("raw.hecho.flotaReactivada") : t("raw.hecho.flotaInactiva"));
-  } catch (err) {
-    showBanner(false, t("raw.error") + err.message);
-    console.error(err);
-  } finally {
-    showLoad(false);
-  }
-}
-
-// Toggle rapido de is_fleet/is_tuktuk (escribe a `partners`, no a `flotas`).
-// Sin modo edicion — se guarda al instante al tildar/destildar. partnerFallback/
-// kamFallback = nombre/KAM EFECTIVOS ya resueltos para esta fila (si el CLID aun
-// no esta en `partners`, evita perder el nombre en el primer upsert).
-export async function flotaSetFlag(clid, key, checked, partnerFallback, kamFallback) {
-  showLoad(true, t("raw.guardando"));
-  try {
-    await setPartnerFlag(clid, key, checked, partnerFallback, kamFallback);
-    await _rawRefrescarYAvisar(t("raw.actualizado"), t("raw.hecho.clasificacion"));
-  } catch (err) {
-    showBanner(false, t("raw.error") + err.message);
-    console.error(err);
-  } finally {
-    showLoad(false);
-  }
-}
-
-// Toggle de is_fleet/is_tuktuk/exclude_from_taxi POR FLEETROOM (db_id) — escribe
-// a `fleetrooms`. Guarda al instante. name/kam/city = contexto de la sub-flota
-// (para el primer upsert si el fleetroom aun no tiene fila). Preserva los otros
-// dos flags dentro de setFleetroomFlag.
-export async function fleetroomSetFlag(dbId, key, checked, name, clid, kam, city) {
-  showLoad(true, t("raw.guardando"));
-  try {
-    // Delivery/Cargo son mutuamente excluyentes (una sub-flota es una
-    // vertical): al tildar una, la otra se destilda EN LA MISMA escritura
-    // (setFleetroomFlags) — dos writes secuenciales pisarían el recién guardado
-    // con el estado local todavía viejo. Al DEStildar no se toca la otra.
-    const exclusive = { is_delivery: "is_cargo", is_cargo: "is_delivery" }[key];
-    const patch = checked && exclusive ? { [key]: checked, [exclusive]: false } : { [key]: checked };
-    await setFleetroomFlags(dbId, patch, { clid, name, kam, city });
-    await _rawRefrescarYAvisar(t("raw.actualizado"), t("raw.hecho.clasificacionSubflota"));
-  } catch (err) {
-    showBanner(false, t("raw.error") + err.message);
-    console.error(err);
-  } finally {
-    showLoad(false);
-  }
-}
-
-// I4: el verde solo si la pantalla quedó refrescada (patrón de calcSaveMetas).
-// B8: refrescarTrasEscritura también invalida mensual/diario/conversión — el
-// tagging de un fleetroom o una flota desactivada cambian esos datasets, y
-// antes no llegaban hasta recargar la página.
-async function _rawRefrescarYAvisar(msgOk, queSeHizo) {
-  const ok = await refrescarTrasEscritura();
-  renderRawData();
-  showBanner(ok, ok ? msgOk
-    : t("comun.hechoSinRefresco", { q: queSeHizo }));
-}
-
-// Espejo de RLS para decidir qué controles de escritura mostrar (I3).
-function _rawPuede(accion) {
-  return puedeUI(accion, { rol: STATE.userRole, perms: STATE.perms });
-}
-
-// Sugerencia (NO filtro): true si el Nombre Excel de un CLID matchea algún
-// patrón TukTuk. Solo se usa para resaltar visualmente en Vista Flotas — nunca
-// para excluir datos ni auto-marcar is_tuktuk.
-export function _tuktukSuggested(nombreExcel) {
-  const patterns = (STATE.tuktukPatterns || []).map(w => w.toLowerCase());
-  const name = (nombreExcel || "").toLowerCase();
-  return patterns.some(w => name.includes(w));
-}
-// Gestión de la lista de patrones (cliente, sin round-trip a Supabase — es
-// pura sugerencia visual, no afecta ningún dato ya cargado).
-export function addTuktukPattern() {
-  const input = document.getElementById("newTuktukPattern");
-  const word  = (input?.value || "").trim().toLowerCase();
-  if (!word) return;
-  if (STATE.tuktukPatterns.includes(word)) { showBanner(false, t("raw.yaEnLista", { w: word })); return; }
-  STATE.tuktukPatterns.push(word);
-  lsSet("yangoTuktukPatterns", JSON.stringify(STATE.tuktukPatterns));
-  renderRawData();
-  showBanner(true, t("raw.agregadoTuktuk", { w: word }));
-}
-export function removeTuktukPattern(word) {
-  STATE.tuktukPatterns = STATE.tuktukPatterns.filter(w => w !== word);
-  lsSet("yangoTuktukPatterns", JSON.stringify(STATE.tuktukPatterns));
-  renderRawData();
-  showBanner(true, t("raw.eliminadoTuktuk", { w: word }));
-}
-
-export function exportFlotasCSV() {
-  logAccess("download_csv", "flotas");
-  const flotasMap = STATE.flotasMap || {};
-  const fromRawAll = new Map();
-  STATE.rawDataFull.forEach(r => {
-    if (!r.clid) return;
-    if (!fromRawAll.has(r.clid)) {
-      fromRawAll.set(r.clid, {
-        nombre_original: r._partnerOriginal || r.partner,
-        ciudad: r.city,
-        kam: r.kam || getKAMForPartner(r.partner) || ""
-      });
-    }
-  });
-  const allCLIDs = new Set([...Object.keys(flotasMap), ...fromRawAll.keys()]);
-  const headers = ["CLID","CIUDAD","NOMBRE_ORIGINAL","NOMBRE_ASIGNADO","KAM","ACTIVO"];
-  const lines = [headers.join(",")];
-  [...allCLIDs].forEach(clid => {
-    const f = flotasMap[clid];
-    const raw = fromRawAll.get(clid);
-    const row = [
-      clid,
-      (f && f.ciudad) || (raw && raw.ciudad) || "",
-      (raw && raw.nombre_original) || (f && f.nombre_original) || "",
-      (f && f.nombre_asignado) || "",
-      (f && f.kam) || (raw && raw.kam) || "",
-      (f ? (f.activo !== false ? "true" : "false") : "true")
-    ];
-    lines.push(filaCSV(row));
-  });
-  const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `flotas_${fechaLimaISO()}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-// \u2550\u2550 VISTA CONCILIACI\u00D3N (CLID \u2192 db_id) \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
-// Resumen por CLID desglosable a fleetroom (db_id) con las columnas del export de
-// Yango, para cuadrar contra el Excel de otro colega. Marca qu\u00E9 sub-flotas se
-// OMITEN del dashboard (TukTuk / Excluidas de Taxi). Corre sobre el dataset FULL
-// ya deduplicado (dropLegacyAggregateRows) \u2192 sin doble conteo legacy+fleetroom.
-
-// Formato K/M con 2 decimales (miles \u2192 "K", millones \u2192 "M"). N\u00FAmeros chicos tal
-// cual. El valor exacto va en el title (hover) para conciliaci\u00F3n fina.
-export function _fmtKM2(n) {
-  if (n === null || n === undefined || isNaN(n)) return "\u2014";
-  const neg = n < 0, abs = Math.abs(n);
-  let out;
-  if (abs >= 1e6)      out = (abs / 1e6).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "M";
-  else if (abs >= 1e3) out = (abs / 1e3).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "K";
-  else                 out = abs.toLocaleString("es-PE", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-  return neg ? "-" + out : out;
-}
-export function _num2(n) { return (n == null || isNaN(n)) ? "\u2014" : n.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-export function _pct1(n) { return (n == null || isNaN(n)) ? "\u2014" : (n * 100).toLocaleString("es-PE", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%"; }
-
-export function _reconNewAgg() { return { ad:0, sh:0, nuevos:0, react:0, trips:0, gmv:0, comm:0, ifsh:0, ofcars:0, accNum:0, accDen:0 }; }
-export function _reconAcc(a, r) {
-  a.ad     += r.activeDrivers || 0;
-  a.sh     += r.supplyHours   || 0;
-  a.nuevos += (r.newPartner || 0) + (r.newService || 0);
-  a.react  += r.reactivated   || 0;
-  a.trips  += r.trips         || 0;
-  a.gmv    += r.gmv           || 0;
-  a.comm   += r.commission    || 0;
-  a.ifsh   += r.internalFleetSh      || 0;
-  a.ofcars += r.ownedFleetActiveCars || 0;
-  if (r.acceptanceRate != null && r.trips) { a.accNum += r.acceptanceRate * r.trips; a.accDen += r.trips; }
-}
-// Clasificaci\u00F3n de una sub-flota (usa los predicados globales de data.js sobre una
-// fila muestra; para db_id='' legacy caen al flag por CLID). Devuelve el estado y
-// si se OMITE del dashboard (Taxi).
-export function _reconClasif(sample) {
-  const tuk  = typeof rowIsTuktuk        === "function" && rowIsTuktuk(sample);
-  const excl = typeof rowExcludedFromTaxi === "function" && rowExcludedFromTaxi(sample);
-  const fleet= typeof rowIsFleet          === "function" && rowIsFleet(sample);
-  if (tuk)             return { omit: true,  fleet, label: "\uD83D\uDEFA TukTuk (omitido)",   color: "#b45309", bg: "#fffbeb" };
-  if (excl)            return { omit: true,  fleet, label: "\u26D4 Excluido (omitido)",  color: "#b91c1c", bg: "#fff5f5" };
-  if (fleet)           return { omit: false, fleet, label: "\uD83D\uDE97 Fleet",              color: "#166534", bg: "" };
-  return                      { omit: false, fleet, label: "Taxi",                 color: "#64748b", bg: "" };
-}
-
-export function _renderReconView() {
-  const src0 = STATE.curMode === "mensual" ? STATE.rawDataMensualFull
-             : STATE.curMode === "diario"  ? STATE.rawDataDiarioFull
-             :                              STATE.rawDataFull;
-  if (!src0 || !src0.length) {
-    return secH("\uD83E\uDDFE", "#0284c7", t("raw.recon"), t("raw.sinDatosCargados"), "") + _rawViewToggle();
-  }
-  // FULL ya viene deduplicado; reaplicar es idempotente y garantiza no doble conteo.
-  const src = (typeof dropLegacyAggregateRows === "function") ? dropLegacyAggregateRows(src0) : src0;
-
-  const allDates = [...new Set(src.map(r => r.date))].sort();
-  if (!RAW_STATE.dateFrom) RAW_STATE.dateFrom = allDates[0] || "";
-  if (!RAW_STATE.dateTo)   RAW_STATE.dateTo   = allDates[allDates.length - 1] || "";
-  const allCities = [...new Set(src.map(r => r.city).filter(Boolean))].sort();
-  const q = (RAW_STATE.search || "").toLowerCase().trim();
-
-  const inRange = r =>
-    (RAW_STATE.city === "all" || r.city === RAW_STATE.city) &&
-    (!RAW_STATE.dateFrom || r.date >= RAW_STATE.dateFrom) &&
-    (!RAW_STATE.dateTo   || r.date <= RAW_STATE.dateTo);
-
-  // Agrupar por CLID \u2192 fleetroom (db_id)
-  const byClid = new Map();
-  src.forEach(r => {
-    if (!inRange(r)) return;
-    const clid = r.clid || "(sin clid)";
-    let c = byClid.get(clid);
-    if (!c) { c = { clid, partner: "", kam: "", cities: new Set(), agg: _reconNewAgg(), frooms: new Map() }; byClid.set(clid, c); }
-    c.partner = STATE.CLID_MAP[clid] || c.partner || r.partner || "";
-    c.kam     = STATE.KAM_MAP[clid]  || c.kam     || r.kam     || "";
-    if (r.city) c.cities.add(r.city);
-    _reconAcc(c.agg, r);
-    const fk = r.db_id || "";
-    let f = c.frooms.get(fk);
-    if (!f) { f = { db_id: fk, name: r.fleetroom || "", agg: _reconNewAgg(), sample: r }; c.frooms.set(fk, f); }
-    if (!f.name && r.fleetroom) f.name = r.fleetroom;
-    _reconAcc(f.agg, r);
-  });
-
-  let clids = [...byClid.values()];
-  if (q) clids = clids.filter(c =>
-    c.clid.toLowerCase().includes(q) || (c.partner || "").toLowerCase().includes(q) || (c.kam || "").toLowerCase().includes(q));
-  clids.sort((a, b) => b.agg.ad - a.agg.ad);
-
-  // Totales: full vs Taxi (lo que s\u00ED entra al dashboard) para ver lo omitido
-  const totFull = _reconNewAgg(), totTaxi = _reconNewAgg();
-  let omitCount = 0;
-  clids.forEach(c => {
-    _reconAcc2(totFull, c.agg);
-    c.frooms.forEach(f => {
-      const cl = _reconClasif(f.sample);
-      if (cl.omit) omitCount++; else _reconAcc2(totTaxi, f.agg);
-    });
-  });
-
-  // \u2500\u2500 Controles \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-  const dateFromOpts = allDates.map(d => `<option value="${escapeHTML(d)}"${d === RAW_STATE.dateFrom ? " selected" : ""}>${escapeHTML(d2s(d))}</option>`).join("");
-  const dateToOpts   = allDates.map(d => `<option value="${escapeHTML(d)}"${d === RAW_STATE.dateTo   ? " selected" : ""}>${escapeHTML(d2s(d))}</option>`).join("");
-  const cityOpts     = allCities.map(c => `<option value="${escapeHTML(c)}"${RAW_STATE.city === c ? " selected" : ""}>${escapeHTML(cityLabel(c))}</option>`).join("");
-  const singlePeriod = RAW_STATE.dateFrom === RAW_STATE.dateTo;
-
-  let html = secH("\uD83E\uDDFE", "#0284c7", t("raw.recon"),
-    t("raw.reconSub", { n: fmt(clids.length), o: fmt(omitCount) }), "");
-  html += _rawViewToggle();
-
-  html += `
-    <div class="section agy-style-371">
-      <div class="agy-style-507">
-        ${t("raw.reconResumen")}
-        ${singlePeriod ? "" : `<div class="agy-style-508">${t("raw.reconAviso")}</div>`}
-      </div>
-      <div class="agy-style-197">
-        <input class="crud-input" id="rawSearchRecon" placeholder="${escapeHTML(t("raw.buscarCPK"))}"
-          value="${(RAW_STATE.search || "").replace(/"/g, "&quot;")}" data-act-input="rawSearch"
-          class="agy-style-56"/>
-        <select class="sb-sel" data-act-change="rawSetCity">
-          <option value="all"${RAW_STATE.city === "all" ? " selected" : ""}>${escapeHTML(t("raw.todasCiudades"))}</option>${cityOpts}
-        </select>
-        <select class="sb-sel" data-act-change="rawSetDateFrom">${dateFromOpts}</select>
-        <span class="agy-style-54">\u2192</span>
-        <select class="sb-sel" data-act-change="rawSetDateTo">${dateToOpts}</select>
-        <button class="crud-btn" data-act="reconExpandAll" data-open="1" class="agy-style-83">${escapeHTML(t("raw.expandirTodo"))}</button>
-        <button class="crud-btn" data-act="reconExpandAll" data-open="0" class="agy-style-83">${escapeHTML(t("raw.colapsar"))}</button>
-        <button class="crud-btn" data-act="exportReconCSV" class="agy-style-449">${escapeHTML(t("raw.exportarCsv"))}</button>
-      </div>
-    </div>`;
-
-  // \u2500\u2500 Tabla \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-  const th = (l, extra = "") => `<th style="white-space:nowrap;${extra}">${l}</th>`;
-  const numCells = a => `
-    <td class="tn" title="${fmt5(a.ad)}">${_fmtKM2(a.ad)}</td>
-    <td class="tn" title="${fmt5(a.sh)}">${_fmtKM2(a.sh)}</td>
-    <td class="tn" title="${fmt5(a.nuevos)}">${_fmtKM2(a.nuevos)}</td>
-    <td class="tn" title="${fmt5(a.react)}">${_fmtKM2(a.react)}</td>
-    <td class="tn" title="${fmt5(a.nuevos + a.react)}" class="agy-style-499">${_fmtKM2(a.nuevos + a.react)}</td>
-    <td class="tn" title="${fmt5(a.trips)}">${_fmtKM2(a.trips)}</td>
-    <td class="tn" title="${fmt5(a.gmv)}">${_fmtKM2(a.gmv)}</td>
-    <td class="tn" title="${fmt5(a.comm)}">${_fmtKM2(a.comm)}</td>
-    <td class="tn" title="\u03A3 int.fleet.sh / \u03A3 autos">${a.ofcars > 0 ? _num2(a.ifsh / a.ofcars) : "\u2014"}</td>
-    <td class="tn">${a.accDen > 0 ? _pct1(a.accNum / a.accDen) : "\u2014"}</td>
-    <td class="tn" title="${fmt5(a.ofcars)}">${_fmtKM2(a.ofcars)}</td>`;
-
-  html += `
-    <div class="tbl-wrap">
-      <table class="dtbl">
-        <thead><tr>
-          <th class="agy-style-509"></th>
-          ${th(escapeHTML(t("raw.col.clidFlota")))}
-          ${th("AD")}${th(escapeHTML(t("metric.sh.short")))}${th(escapeHTML(t("raw.col.nuevos")))}${th(escapeHTML(t("raw.col.react")))}${th("N+R")}${th(escapeHTML(t("raw.col.viajes")))}${th("GMV")}${th(escapeHTML(t("raw.col.comision")))}
-          ${th(t("raw.col.shAutoFleet"))}${th(escapeHTML(t("raw.col.acept")))}${th(t("raw.col.autosFleet"))}${th(escapeHTML(t("raw.col.estado")))}
-        </tr></thead>
-        <tbody>`;
-
-  clids.slice(0, 400).forEach(c => {
-    const clidH  = escapeHTML(c.clid);
-    const open   = !!RAW_STATE.expanded[c.clid];
-    const froomArr = [...c.frooms.values()];
-    // omitido a nivel CLID (para el resumen)
-    let omitAd = 0, omitN = 0;
-    froomArr.forEach(f => { const cl = _reconClasif(f.sample); if (cl.omit) { omitAd += f.agg.ad; omitN++; } });
-    const cityStr = [...c.cities].map(cityLabel).join(", ");
-    const omitBadge = omitN
-      ? `<span title="${t("raw.omiteTip", { n: omitN, ad: fmt5(omitAd) })}" class="agy-style-510">${t("raw.omite", { n: omitN, ad: _fmtKM2(omitAd) })}</span>`
-      : `<span class="agy-style-511">\u2014</span>`;
-
-    html += `
-      <tr data-act="reconToggleClid" data-clid="${clidH}" class="agy-style-512">
-        <td class="agy-style-513">${froomArr.length > 1 || (froomArr[0] && froomArr[0].db_id) ? (open ? "\u25BE" : "\u25B8") : ""}</td>
-        <td>
-          <span class="agy-style-514">${escapeHTML(c.clid)}</span>
-          <span class="agy-style-515">${escapeHTML(c.partner || t("raw.sinNombreParen"))}</span>
-          <div class="agy-style-516">${escapeHTML(c.kam || t("raw.sinKamParen"))}${cityStr ? " \u00B7 " + escapeHTML(cityStr) : ""} \u00B7 ${t("raw.fleetroomsCount", { n: froomArr.length })}</div>
-        </td>
-        ${numCells(c.agg)}
-        <td class="agy-style-27">${omitBadge}</td>
-      </tr>`;
-
-    if (open) {
-      froomArr.sort((a, b) => b.agg.ad - a.agg.ad).forEach(f => {
-        const cl = _reconClasif(f.sample);
-        const dbShort = f.db_id ? escapeHTML(f.db_id.slice(0, 12)) + "\u2026" : t("raw.legacySinDbId");
-        html += `
-      <tr style="background:${cl.bg || "#fff"};${cl.omit ? "opacity:.92" : ""}">
-        <td></td>
-        <td class="agy-style-517">
-          <span class="agy-style-518">\u21B3</span>
-          <span class="agy-style-499">${escapeHTML(f.name || t("raw.sinNombre"))}</span>
-          <span class="agy-style-519" title="${escapeHTML(f.db_id)}">${dbShort}</span>
-        </td>
-        ${numCells(f.agg)}
-        <td class="agy-style-27"><span style="color:${cl.color};font-size:.66rem;font-weight:700;white-space:nowrap">${cl.label}</span></td>
-      </tr>`;
-      });
-    }
-  });
-
-  // Totales
-  html += `
-        <tr class="agy-style-520">
-          <td></td><td class="agy-style-521">TOTAL (todo)</td>${numCells(totFull)}<td></td>
-        </tr>
-        <tr class="agy-style-522">
-          <td></td><td class="agy-style-523" title="${escapeHTML(t("raw.totalTaxiTip"))}">${t("raw.totalTaxi")}</td>${numCells(totTaxi)}<td></td>
-        </tr>
-        </tbody>
-      </table>
-    </div>`;
-
-  if (clids.length > 400) {
-    html += `<div class="agy-style-212">${t("raw.primeros400", { n: fmt(clids.length) })}</div>`;
-  }
-  return html;
-}
-// Suma un agg dentro de otro (para totales).
-export function _reconAcc2(dst, a) {
-  dst.ad += a.ad; dst.sh += a.sh; dst.nuevos += a.nuevos; dst.react += a.react;
-  dst.trips += a.trips; dst.gmv += a.gmv; dst.comm += a.comm;
-  dst.ifsh += a.ifsh; dst.ofcars += a.ofcars; dst.accNum += a.accNum; dst.accDen += a.accDen;
-}
-
-export function reconToggleClid(clid) {
-  RAW_STATE.expanded[clid] = !RAW_STATE.expanded[clid];
-  renderRawData();
-}
-export function reconExpandAll(open) {
-  RAW_STATE.expanded = {};
-  if (open) {
-    const src = STATE.curMode === "mensual" ? STATE.rawDataMensualFull
-              : STATE.curMode === "diario"  ? STATE.rawDataDiarioFull
-              :                              STATE.rawDataFull;
-    (src || []).forEach(r => { if (r.clid) RAW_STATE.expanded[r.clid] = true; });
-  }
-  renderRawData();
-}
-
-// Export CSV: una fila por (clid, db_id) con valores EXACTOS + clasificaci\u00F3n.
-export function exportReconCSV() {
-  logAccess("download_csv", "conciliacion");
-  const src0 = STATE.curMode === "mensual" ? STATE.rawDataMensualFull
-             : STATE.curMode === "diario"  ? STATE.rawDataDiarioFull
-             :                              STATE.rawDataFull;
-  const src = (typeof dropLegacyAggregateRows === "function") ? dropLegacyAggregateRows(src0 || []) : (src0 || []);
-  const inRange = r =>
-    (RAW_STATE.city === "all" || r.city === RAW_STATE.city) &&
-    (!RAW_STATE.dateFrom || r.date >= RAW_STATE.dateFrom) &&
-    (!RAW_STATE.dateTo   || r.date <= RAW_STATE.dateTo);
-
-  const byKey = new Map();  // clid|db_id -> {clid, db_id, name, partner, kam, agg, sample}
-  src.forEach(r => {
-    if (!inRange(r)) return;
-    const clid = r.clid || "(sin clid)", fk = r.db_id || "";
-    const k = clid + "|" + fk;
-    let g = byKey.get(k);
-    if (!g) g = byKey.set(k, { clid, db_id: fk, name: r.fleetroom || "", partner: STATE.CLID_MAP[clid] || r.partner || "", kam: STATE.KAM_MAP[clid] || r.kam || "", agg: _reconNewAgg(), sample: r }).get(k);
-    if (!g.name && r.fleetroom) g.name = r.fleetroom;
-    _reconAcc(g.agg, r);
-  });
-
-  const header = ["CLID","db_id","Flota","Partner","KAM","Clasificacion","Omitido","AD","SupplyHours","Nuevos","Reactivados","N+R","Viajes","GMV","Comision","FleetSHxAuto","AcceptanceRate","FleetActiveCars"];
-  const lines = [header.join(",")];
-  [...byKey.values()].sort((a, b) => (a.partner || a.clid).localeCompare(b.partner || b.clid) || b.agg.ad - a.agg.ad).forEach(g => {
-    const a = g.agg, cl = _reconClasif(g.sample);
-    const clase = cl.label.replace(/[\u{1F6FA}\u26D4\u{1F697}]/gu, "").replace(/\s*\(omitido\)/, "").trim() || "Taxi";
-    const fleetShCar = a.ofcars > 0 ? (a.ifsh / a.ofcars) : "";
-    const accept = a.accDen > 0 ? (a.accNum / a.accDen) : "";
-    lines.push(filaCSV([g.clid, g.db_id, g.name, g.partner, g.kam, clase, cl.omit ? "SI" : "",
-      a.ad, a.sh, a.nuevos, a.react, a.nuevos + a.react, a.trips, a.gmv, a.comm, fleetShCar, accept, a.ofcars]));
-  });
-
-  const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `conciliacion_${RAW_STATE.dateFrom}_${RAW_STATE.dateTo}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-// ── ACCIONES DELEGADAS (Fase A2: reemplazan los handlers inline) ──────────────
-// Cada entrada mapea un data-act/data-act-* del HTML a su función. El dispatcher
-// (shared/actions.js) las invoca con (dataset, elemento, evento).
-import { registerActions } from "./shared/actions.js";
-import { t } from "./core/i18n";
-import { logAccess } from "./shared/accessLog.js";
-import { filaCSV } from "./shared/csv";
-import { fechaLimaISO } from "./core/dates";
-import { puede as puedeUI } from "./domain/permisosUI";
-import { refrescarTrasEscritura } from "./data.js";
-
+// ── ACCIONES DELEGADAS ────────────────────────────────────────────────────────
 registerActions({
-  // tabla de registros
   rawSort:        d => rawSortBy(d.col),
   rawSearch:      (d, el) => rawSearchInput(el, d.reset === "1"),
   rawSetCity:     (d, el) => { RAW_STATE.city = el.value;     if (d.reset === "1") RAW_STATE.page = 0; renderRawData(); },
@@ -1140,25 +239,9 @@ registerActions({
   rawSetDateTo:   (d, el) => { RAW_STATE.dateTo = el.value;   if (d.reset === "1") RAW_STATE.page = 0; renderRawData(); },
   rawPagePrev:    () => { RAW_STATE.page = Math.max(0, RAW_STATE.page - 1); renderRawData(); },
   rawPageNext:    d  => { RAW_STATE.page = Math.min((+d.total || 1) - 1, RAW_STATE.page + 1); renderRawData(); },
-  rawSwitchView:  d  => rawSwitchView(d.view),
-  exportRawCSV, exportFlotasCSV, exportReconCSV,
-
-  // patrones TukTuk
-  addTuktukPattern,
-  addTuktukPatternEnter: (d, el, e) => { if (e.key === "Enter") addTuktukPattern(); },
-  removeTuktukPattern:   d => removeTuktukPattern(d.word),
-
-  // flags por CLID / fleetroom
-  flotaSetFlag:     (d, el) => flotaSetFlag(d.clid, d.key, el.checked, d.pfall, d.kfall),
-  fleetroomSetFlag: (d, el) => fleetroomSetFlag(d.dbid, d.key, el.checked, d.name, d.clid, d.kam, d.city),
-
-  // edición de flotas
-  flotaStartEdit:    d => flotaStartEdit(d.clid),
-  flotaCancelEdit,
-  flotaSaveEdit:     d => flotaSaveEdit(d.clid),
-  flotaToggleActivo: d => flotaToggleActivo(d.clid, d.activo === "1"),
-
-  // conciliación
-  reconExpandAll:  d => reconExpandAll(d.open === "1"),
-  reconToggleClid: d => reconToggleClid(d.clid)
+  exportRawCSV,
+  rawIrClasif: () => {
+    if (window.CONFIG_STATE) { window.CONFIG_STATE.section = "clasificacion"; window.CONFIG_STATE.panel = null; }
+    if (typeof window.switchTab === "function") window.switchTab("config");
+  }
 });

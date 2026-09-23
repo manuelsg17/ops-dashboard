@@ -2,11 +2,16 @@
 // app.js — Inicialización principal, sidebar, tabs y helpers de UI
 
 // ── CONFIG PAGINATION STATE ───────────────────────────────────────────────────
-// section: "partners" (CRUD CLID/nombre/KAM) · "usuarios" (roles/permisos, admin-only) ·
-// "mantenimiento" (alerta de declive + eliminar datos, admin-only) — antes todo esto
-// vivía apilado en una sola página larga sin agrupar; reordenado a pedido explícito
-// de Manuel ("siento un desorden general", jul 2026).
-export const CONFIG_STATE = { page: 0, search: "", kamFilter: "all", PAGE_SIZE: 20, section: "partners" };
+// section (Ola 6): "partners" · "clasificacion" · "cargas" · "usuarios" (admin) ·
+// "monitoreo" (admin) · "preferencias" · "mantenimiento" (admin o delete:data).
+// La vista vive en configView.ts; qué sección ve cada rol lo decide ella.
+// estado: "todos" | "pendientes" (filtro de la tabla de Partners) · panel: null |
+// { modo: "editar"|"alta", clid } (panel lateral) · sel: CLIDs marcados para
+// reasignar KAM en bloque.
+export const CONFIG_STATE = {
+  page: 0, search: "", kamFilter: "all", PAGE_SIZE: 20, section: "partners",
+  estado: "todos", panel: null, sel: new Set()
+};
 
 // ── LOCALSTORAGE HELPER ───────────────────────────────────────────────────────
 export function lsSet(key, val) {
@@ -926,467 +931,95 @@ export function updateDeclineSettings() {
   if (STATE.rawData.length) renderRend(); // recalcula badges
 }
 
-// Barra de sub-secciones de Configuración (mismo patrón visual que
-// .mode-toggle-row/.mode-btn del selector de línea de Rendimiento/Metas).
-// "usuarios" y "mantenimiento" solo se ofrecen a admin — un viewer/kam no tiene
-// nada que hacer ahí (RLS igual lo bloquearía, esto es solo no ofrecer UI muerta).
-function _configSectionToggleHTML() {
-  const sec = CONFIG_STATE.section;
-  const defs = [
-    { k: "partners",      emoji: "👥", label: t("cfg.secPartners"),      adminOnly: false },
-    { k: "usuarios",      emoji: "🔐", label: t("cfg.secUsuarios"),      adminOnly: true },
-    { k: "monitoreo",     emoji: "📡", label: t("cfg.secMonitoreo"),     adminOnly: true },
-    { k: "mantenimiento", emoji: "🛠️", label: t("cfg.secMantenimiento"), adminOnly: true }
-  ].filter(d => !d.adminOnly || STATE.isAdmin);
-  const btns = defs.map(d => `
-    <button class="mode-btn${sec===d.k?" active":""}" data-act="cfgSetSection" data-section="${d.k}">
-      ${d.emoji} ${d.label}
-    </button>`).join("");
-  return `<div class="mode-toggle-row" style="margin-bottom:14px">${btns}</div>`;
+// ── CONFIG TAB ────────────────────────────────────────────────────────────────
+// Ola 6: Configuración vive en su propio chunk (configView.ts: Partners,
+// Clasificación, Cargas, Preferencias, Mantenimiento + los contenedores de
+// Usuarios y Monitoreo). Se importa bajo demanda: nadie paga ese código en el
+// arranque. Acá queda solo el cargador — renderConfig() sigue siendo el mismo
+// global de siempre (setUiLang, refrescos tras escribir, switchTab).
+let _cfgMod = null;
+let _cfgModP = null;
+function _cargarConfigView() {
+  if (!_cfgModP) {
+    _cfgModP = import("./configView").then(m => (_cfgMod = m))
+      .catch(err => { _cfgModP = null; throw err; });
+  }
+  return _cfgModP;
 }
 
-// ── CONFIG TAB ────────────────────────────────────────────────────────────────
 export function renderConfig() {
   const content = document.getElementById("configContent");
-  if (!Object.keys(STATE.CLID_MAP).length) {
-    content.innerHTML = `
-      <div class="empty">
-        <p>${t("cfg.cargaPartners")}</p>
-        <p class="empty-sub">${escapeHTML(t("cfg.cargaPartnersSub"))}</p>
-      </div>`;
+  if (!content) return;
+  if (!_cfgMod) {
+    if (!content.querySelector(".cfgx")) {
+      content.innerHTML = `<div class="cfgx-loading" role="status">${escapeHTML(t("cfg6.cargando"))}</div>`;
+    }
+    _cargarConfigView()
+      .then(() => { if (STATE.curTab === "config") renderConfig(); })
+      .catch(err => {
+        console.error("configView:", err);
+        content.innerHTML = alertBox({ tone: "bad", title: t("cfg6.errCargarVista"), text: String(err?.message || err),
+          actions: btn({ label: t("cfg6.recargar"), act: "reloadApp", size: "sm" }) });
+      });
     return;
   }
-  // Un viewer/kam no tiene sub-secciones admin-only disponibles: si quedó
-  // parado en una de ellas (ej. cambio de sesión) se cae a "partners".
-  if (CONFIG_STATE.section !== "partners" && !STATE.isAdmin) CONFIG_STATE.section = "partners";
-
-  let html = secH("⚙️", "#10b981", t("cfg.titulo"),
-    t("cfg.sub"), "");
-  html += _configSectionToggleHTML();
-
-  if (CONFIG_STATE.section === "usuarios" && STATE.isAdmin) {
-    html += _renderConfigUsuarios();
-  } else if (CONFIG_STATE.section === "monitoreo" && STATE.isAdmin) {
-    html += _renderConfigMonitoreo();
-  } else if (CONFIG_STATE.section === "mantenimiento" && STATE.isAdmin) {
-    html += _renderConfigMantenimiento();
-  } else {
-    html += _renderConfigPartners();
-  }
-
-  content.innerHTML = html;
-  if (CONFIG_STATE.section === "partners" || !STATE.isAdmin) renderConfigResults();
-  // Panel de usuarios (admin): pinta su propio estado sobre #adminUsersBox.
-  if (CONFIG_STATE.section === "usuarios" && typeof renderAdminUsers === "function") renderAdminUsers();
-  if (CONFIG_STATE.section === "monitoreo" && typeof renderMonitoreo === "function") renderMonitoreo();
+  _cfgMod.renderConfigView(content);
 }
 
-// ── Sub-sección: Monitoreo (solo admin) ──────────────────────────────────────
-// El contenido lo pinta renderMonitoreo() (monitoreo.js) sobre #monitoreoBox, y
-// solo tras un click explícito: listar accesos pega a la Edge Function
-// admin-users, no corresponde hacerlo en cada render de Configuración.
-function _renderConfigMonitoreo() {
-  return `
-    <div class="section agy-style-30">
-      <div class="agy-style-46">${escapeHTML(t("cfg.monitoreoTitulo"))}</div>
-      <div class="agy-style-47">${t("cfg.monitoreoSub")}</div>
-      <div id="monitoreoBox"></div>
-    </div>`;
+// ── CARGAS DE EXCEL: resultado de la última subida de ESTA sesión ────────────
+// handleFile (data.ts) no devuelve un resultado: todo lo que dice lo dice por
+// showBanner. Para que Configuración → Cargas pueda mostrar "cómo salió la
+// última subida" sin tocar data.ts, se observa el propio flujo:
+//   · inicio  = `change` del <input type=file> (captura en document, corre
+//               ANTES del listener de initFileHandlers),
+//   · mensajes = los showBanner que ocurren mientras está en curso,
+//   · fin     = handleFile vacía el input en TODOS sus caminos de salida
+//               (_limpiarInput) y ya no hay overlay de carga.
+// Es una foto de la sesión (se pierde al recargar), no un historial.
+const _INPUT_TIPO = {
+  fileRend: "rendimiento", fileRendMensual: "rendimientoMensual", fileRendDiario: "rendimientoDiario",
+  fileMetas: "metas", fileData: "data", fileFlotas: "flotas", fileConversion: "conversion"
+};
+export const CARGAS_SESION = {};   // tipo → { archivo, inicio, fin, estado: "en curso"|"ok"|"error", mensajes: [{ok,msg}] }
+let _cargaActiva = null;
+let _cargaTimer = null;
+
+function _repintarCargas() {
+  if (STATE.curTab === "config" && CONFIG_STATE.section === "cargas") renderConfig();
 }
 
-// ── Sub-sección: Usuarios y Accesos (solo admin) ─────────────────────────────
-// El contenido lo pinta renderAdminUsers() (adminUsers.js) sobre #adminUsersBox,
-// y solo tras un click explícito en "Cargar usuarios" — listar usuarios pega a
-// la Edge Function, no hace falta hacerlo en cada render de Configuración.
-function _renderConfigUsuarios() {
-  return `
-    <div class="section agy-style-30">
-      <div class="agy-style-46">${escapeHTML(t("cfg.usuariosTitulo"))}</div>
-      <div class="agy-style-47">${t("cfg.usuariosSub")}</div>
-      <div id="adminUsersBox"></div>
-    </div>`;
+function _seguirCarga(input, reg) {
+  clearInterval(_cargaTimer);
+  _cargaTimer = setInterval(() => {
+    if (input.value !== "" || document.getElementById("loadingEl")) return;
+    clearInterval(_cargaTimer);
+    _cargaTimer = null;
+    const ultimo = reg.mensajes[reg.mensajes.length - 1];
+    reg.estado = ultimo && ultimo.ok ? "ok" : "error";
+    reg.fin = Date.now();
+    if (_cargaActiva === reg) _cargaActiva = null;
+    if (_cfgMod && _cfgMod.invalidarUltimosCargados) _cfgMod.invalidarUltimosCargados();
+    _repintarCargas();
+  }, 400);
 }
 
-// ── Sub-sección: Mantenimiento (solo admin) ──────────────────────────────────
-// Alerta de declive (config de UI, no destructiva) + Eliminar Datos (destructiva).
-// Agrupadas aparte de "Partners" y "Usuarios" porque son acciones operativas, no
-// gestión de datos maestros — mezcladas antes en una sola página larga.
-function _renderConfigMantenimiento() {
-  const metricLabel = { activeDrivers: t("metric.ad.label"), supplyHours: t("metric.sh.label"), nr: t("metric.nr.label") };
-  let html = `
-    <div class="section agy-style-30">
-      <div class="agy-style-31">${escapeHTML(t("cfg.declineTitulo"))}</div>
-      <div class="agy-style-32">
-        <div>
-          <label class="agy-style-33">${escapeHTML(t("cfg.metrica"))}</label>
-          <select class="sb-sel agy-style-34" id="declineMetricSel" data-act-change="updateDeclineSettings">
-            <option value="activeDrivers"${STATE.declineMetric==="activeDrivers"?" selected":""}>${escapeHTML(t("metric.ad.label"))}</option>
-            <option value="supplyHours"${STATE.declineMetric==="supplyHours"?" selected":""}>${escapeHTML(t("metric.sh.label"))}</option>
-            <option value="nr"${STATE.declineMetric==="nr"?" selected":""}>${escapeHTML(t("metric.nr.label"))}</option>
-          </select>
-        </div>
-        <div>
-          <label class="agy-style-33">${escapeHTML(t("cfg.semanasConsec"))}</label>
-          <select class="sb-sel agy-style-10" id="declineThresholdSel" data-act-change="updateDeclineSettings">
-            ${[2,3,4,5].map(n => `<option value="${n}"${STATE.declineThreshold===n?" selected":""}>${escapeHTML(t("cfg.nSemanas", { n }))}</option>`).join("")}
-          </select>
-        </div>
-        <div class="agy-style-35">
-          ${t("cfg.declineAviso", { b: '<span class="decline-badge agy-style-36">⚠</span>', n: STATE.declineThreshold, m: metricLabel[STATE.declineMetric] })}
-        </div>
-      </div>
-    </div>`;
+document.addEventListener("change", ev => {
+  const input = ev.target;
+  const tipo = input && _INPUT_TIPO[input.id];
+  if (!tipo || !input.files || !input.files[0]) return;
+  const reg = { archivo: input.files[0].name, inicio: Date.now(), fin: null, estado: "en curso", mensajes: [] };
+  CARGAS_SESION[tipo] = reg;
+  _cargaActiva = reg;
+  _seguirCarga(input, reg);
+  _repintarCargas();
+}, true);
 
-  // El gate definitivo es RLS en Supabase: aunque alguien fuerce el render
-  // desde DevTools, la query DELETE falla con 401/PGRST.
-  html += `
-    <div class="section agy-style-37">
-      <div class="agy-style-38">${escapeHTML(t("cfg.eliminarTitulo"))}</div>
-      <div class="agy-style-39">${t("cfg.eliminarSub")}</div>
-      <div class="agy-style-8">
-        <div class="agy-style-41">
-          <label class="agy-style-42">${escapeHTML(t("cfg.tabla"))}</label>
-          <select class="crud-input agy-style-43" id="delTableSel">
-            <option value="rendimiento">${escapeHTML(t("mode.semanal"))}</option>
-            <option value="rendimiento_mensual">${escapeHTML(t("mode.mensual"))}</option>
-            <option value="rendimiento_diario">${escapeHTML(t("mode.diario"))}</option>
-            <option value="metas">${escapeHTML(t("metas.titulo"))}</option>
-          </select>
-        </div>
-        <div class="agy-style-41">
-          <label class="agy-style-42">${escapeHTML(t("cfg.mesOpcional"))}</label>
-          <input class="crud-input agy-style-44" id="delMonthInput" placeholder="${escapeHTML(t("cfg.mesVacio"))}" maxlength="7"/>
-        </div>
-        <button class="crud-btn crud-btn-del agy-style-45" data-act="deleteDashboardData">
-          ${escapeHTML(t("cfg.btnEliminar"))}
-        </button>
-      </div>
-    </div>`;
-
-  return html;
-}
-
-// ── Sub-sección: Partners (CLID/nombre/KAM) — la vista por defecto ───────────
-// I9: KAM_MAP trae "" para los partners sin KAM → una tarjeta SIN NOMBRE y una
-// opción en blanco en el filtro. Se agrupan bajo SIN_KAM (mismo bucket que el
-// sidebar), que nunca se escribe en la base.
-const _cfgKamDe = clid => (STATE.KAM_MAP[clid] || "").trim() || SIN_KAM;
-const _cfgKams = () => [...new Set(Object.keys(STATE.KAM_MAP).map(_cfgKamDe))]
-  .sort((a, b) => (a === SIN_KAM) - (b === SIN_KAM) || a.localeCompare(b));
-// KAMs reales, para los <select> de edición: SIN_KAM es un bucket de UI, no una persona.
-const _cfgKamsReales = () => _cfgKams().filter(k => k !== SIN_KAM);
-
-function _renderConfigPartners() {
-  const kams = _cfgKams();
-  let html = "";
-
-  // Stats per KAM
-  html += `<div class="section"><div class="agy-style-68">`;
-  kams.forEach(kam => {
-    const count = Object.keys(STATE.KAM_MAP).filter(c => _cfgKamDe(c) === kam).length;
-    const color = KAM_COLORS[kam] || "#888";
-    html += `
-      <div class="mcard" style="border-left:3px solid ${color}">
-        <div class="mcard-label">
-          <span style="width:8px;height:8px;border-radius:50%;background:${color};display:inline-block"></span>
-          ${escapeHTML(kamLabel(kam))}
-        </div>
-        <div class="mcard-val">${count}</div>
-        <div class="agy-style-54">${escapeHTML(t("cfg.clidsAsignados"))}</div>
-      </div>`;
-  });
-  html += `</div>`;
-
-  // CRUD table: toolbar ESTÁTICO (search + KAM filter) + contenedor de resultados
-  // que se repinta solo (renderConfigResults) → el input no se re-crea y conserva
-  // el foco al escribir (fix Fase 7).
-  const cfgKamF   = CONFIG_STATE.kamFilter;
-  const kamFilterOpts = kams.map(k => `<option value="${escapeHTML(k)}"${cfgKamF===k?" selected":""}>${escapeHTML(kamLabel(k))}</option>`).join("");
-  html += `
-    <div class="agy-style-69">${escapeHTML(t("cfg.partnersClids"))}</div>
-    <div class="agy-style-70">
-      <input class="crud-input agy-style-71" id="configSearch" placeholder="${escapeHTML(t("cfg.buscarCPK"))}" value="${CONFIG_STATE.search.replace(/"/g,'&quot;')}"
-        data-act-input="cfgSearch"/>
-      <select class="crud-input agy-style-10" id="configKamFilter" data-act-change="cfgKamFilter">
-        <option value="all"${cfgKamF==="all"?" selected":""}>${escapeHTML(t("calc.todosKam"))}</option>
-        ${kamFilterOpts}
-      </select>
-      <span id="configCount" class="agy-style-54"></span>
-    </div>
-    <div id="configResults"></div>
-    </div>`;   // cierra la .section abierta arriba (stats KAM + Partners & CLIDs)
-  return html;
-}
-
-// Repinta SOLO contador + tabla + paginación (sin re-crear el input de búsqueda).
-// Celda de LOGO en el CRUD de partners. El input file va oculto detrás del
-// botón: un `<input type=file>` desnudo en una tabla de 12 filas es ruido, y su
-// texto ("Sin archivo seleccionado") no se puede traducir ni acortar.
-export function _cfgLogoCelda(clid, partner) {
-  const url = (STATE.partnerLogos || {})[partner];
-  const puede = STATE.isAdmin || !!(STATE.perms && STATE.perms.has && STATE.perms.has("write:config"));
-  // STATE.perms es un Set: el `.includes` de antes tiraba TypeError para
-  // cualquier no-admin y rompía la tabla entera de Configuración → Partners.
-  const img = url
-    ? `<img src="${escapeHTML(url)}" alt="" class="cfg-logo-mini">`
-    : `<span class="agy-style-77">—</span>`;
-  if (!puede) return img;
-  return `<span class="cfg-logo-cel">
-    ${img}
-    <input type="file" accept="image/png,image/jpeg,image/webp" class="cfg-logo-input"
-           id="logoIn_${escapeHTML(clid)}" data-act-change="cfgSubirLogo" data-clid="${escapeHTML(clid)}">
-    <button class="crud-btn" data-act="cfgPedirLogo" data-clid="${escapeHTML(clid)}"
-            title="${escapeHTML(t("cfg.logo.subirTip"))}">${escapeHTML(url ? t("cfg.logo.cambiar") : t("cfg.logo.subir"))}</button>
-    ${url ? `<button class="crud-btn crud-btn-del" data-act="cfgBorrarLogo" data-clid="${escapeHTML(clid)}">${escapeHTML(t("cfg.eliminarBtn"))}</button>` : ""}
-  </span>`;
-}
-export function cfgPedirLogo(clid) { document.getElementById(`logoIn_${clid}`)?.click(); }
-export async function cfgSubirLogo(clid, input) {
-  const file = input?.files?.[0];
-  if (!file) return;
-  input.value = "";   // permite volver a elegir el MISMO archivo tras un error
-  try {
-    await guardarLogoPartner(clid, file);
-    renderConfigResults();
-  } catch (e) {
-    alert(t("cfg.logo.error") + " " + (e?.message || e));
-  }
-}
-export async function cfgBorrarLogo(clid) {
-  try { await borrarLogoPartner(clid); renderConfigResults(); }
-  catch (e) { alert(t("cfg.logo.error") + " " + (e?.message || e)); }
-}
-
-export function renderConfigResults() {
-  const box = document.getElementById("configResults");
-  if (!box) return;
-  const kams = _cfgKamsReales();
-  const cfgSearch = CONFIG_STATE.search.toLowerCase();
-  const cfgKamF   = CONFIG_STATE.kamFilter;
-  const allRows = Object.entries(STATE.CLID_MAP)
-    .sort((a, b) => a[1].localeCompare(b[1]))
-    .filter(([clid, partner]) => {
-      const kam = STATE.KAM_MAP[clid] || "";
-      if (cfgKamF !== "all" && _cfgKamDe(clid) !== cfgKamF) return false;
-      if (cfgSearch && !clid.toLowerCase().includes(cfgSearch) && !partner.toLowerCase().includes(cfgSearch) && !kam.toLowerCase().includes(cfgSearch)) return false;
-      return true;
-    });
-  const totalPages = Math.max(1, Math.ceil(allRows.length / CONFIG_STATE.PAGE_SIZE));
-  // I3: mostrar solo lo que RLS va a aceptar (domain/permisosUI.ts).
-  const _puedeEscribir = _puedeUI("partners.escribir");
-  const _puedeBorrar   = _puedeUI("partners.borrar");
-  if (CONFIG_STATE.page >= totalPages) CONFIG_STATE.page = 0;
-  const pageRows  = allRows.slice(CONFIG_STATE.page * CONFIG_STATE.PAGE_SIZE, (CONFIG_STATE.page + 1) * CONFIG_STATE.PAGE_SIZE);
-  const cnt = document.getElementById("configCount");
-  if (cnt) cnt.textContent = t(allRows.length === 1 ? "cfg.resultados1" : "cfg.resultadosN", { n: allRows.length });
-
-  let html = `
-    <div class="tbl-wrap">
-      <table class="dtbl" id="crudTable">
-        <thead>
-          <tr>
-            <th>CLID</th><th>${escapeHTML(t("calc.col.partner"))}</th><th>${escapeHTML(t("sidebar.kam"))}</th>
-            <th class="agy-style-72">Fleet</th>
-            <th class="agy-style-73">TukTuk</th>
-            <th class="agy-style-73">${escapeHTML(t("cfg.col.logo"))}</th>
-            <th class="agy-style-74">${escapeHTML(t("cfg.col.acciones"))}</th>
-          </tr>
-        </thead>
-        <tbody>`;
-
-  pageRows.forEach(([clid, partner]) => {
-      const kam   = STATE.KAM_MAP[clid] || "";
-      const color = KAM_COLORS[kam] || "#888";
-      const pdot  = STATE.partnerColors[partner] || "#ccc";
-      // Escapar valores para evitar XSS (CLID con apostrofes/HTML)
-      const clidH    = escapeHTML(clid);
-      const partnerH = escapeHTML(partner);
-      const kamH     = kam ? escapeHTML(kam) : `<span class="agy-style-77">${escapeHTML(kamLabel(SIN_KAM))}</span>`;
-      // Para uso dentro de comillas simples de onclick, escapar apostrofes
-      const isFleet  = !!(STATE.CLID_IS_FLEET  || {})[clid];
-      const isTuktuk = !!(STATE.CLID_IS_TUKTUK || {})[clid];
-      html += `
-        <tr data-clid="${clidH}">
-          <td class="agy-style-75">${clidH}</td>
-          <td>
-            <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${pdot};margin-right:5px"></span>
-            ${partnerH}
-          </td>
-          <td>
-            <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${color};margin-right:4px"></span>
-            ${kamH}
-          </td>
-          <td class="agy-style-27">${isFleet ? `<span class="agy-style-76">🚗 Fleet</span>` : `<span class="agy-style-77">—</span>`}</td>
-          <td class="agy-style-27">${isTuktuk ? `<span class="agy-style-78">🛺 TukTuk</span>` : `<span class="agy-style-77">—</span>`}</td>
-          <td class="agy-style-27">${_cfgLogoCelda(clid, partner)}</td>
-          <td class="agy-style-27">
-            ${_puedeEscribir ? `<button class="crud-btn crud-btn-edit" data-act="kamMakeEditable" data-clid="${clidH}">${escapeHTML(t("cfg.editar"))}</button>` : ""}
-            ${_puedeBorrar ? `<button class="crud-btn crud-btn-del"  data-act="kamCrudDelete" data-clid="${clidH}">${escapeHTML(t("cfg.eliminarBtn"))}</button>` : ""}
-            ${!_puedeEscribir && !_puedeBorrar ? `<span class="agy-style-77">—</span>` : ""}
-          </td>
-        </tr>`;
-    });
-
-  // Fila para agregar nuevo (solo si RLS lo va a aceptar)
-  const kamOpts = kams.map(k => `<option value="${escapeHTML(k)}">${escapeHTML(k)}</option>`).join("");
-  if (_puedeEscribir) html += `
-        <tr id="newClidRow" class="agy-style-79">
-          <td><input class="crud-input" id="newClid"    placeholder="CLID"/></td>
-          <td><input class="crud-input" id="newPartner" placeholder="${escapeHTML(t("cfg.nombrePartner"))}"/></td>
-          <td>
-            <select class="crud-input agy-style-80" id="newKam" data-act-change="kamNewKamChange">
-              ${kamOpts}
-              <option value="__new__">${escapeHTML(t("cfg.addKam"))}</option>
-            </select>
-            <input class="crud-input agy-style-81" id="newKamCustom" placeholder="${escapeHTML(t("cfg.nuevoKam"))}"/>
-          </td>
-          <td class="agy-style-27"><input type="checkbox" id="newFleet" title="Fleet"/></td>
-          <td class="agy-style-27"><input type="checkbox" id="newTuktuk" title="TukTuk"/></td>
-          <td class="agy-style-27"><span class="agy-style-77">—</span></td>
-          <td class="agy-style-27">
-            <button class="crud-btn crud-btn-add" data-act="kamCrudAdd">${escapeHTML(t("cfg.agregar"))}</button>
-          </td>
-        </tr>`;
-  html += `
-      </tbody></table>
-    </div>
-    ${totalPages > 1 ? `
-    <div class="agy-style-82">
-      <button class="crud-btn agy-style-83" data-act="cfgPagePrev"
-        ${CONFIG_STATE.page===0?"disabled":""}>${escapeHTML(t("raw.anterior"))}</button>
-      <span>${t("raw.pagina", { a: `<strong>${CONFIG_STATE.page+1}</strong>`, b: `<strong>${totalPages}</strong>` })}</span>
-      <button class="crud-btn agy-style-83" data-act="cfgPageNext" data-total="${totalPages}"
-        ${CONFIG_STATE.page===totalPages-1?"disabled":""}>${escapeHTML(t("raw.siguiente"))}</button>
-    </div>` : ""}`;
-  box.innerHTML = html;
-}
-
-// ── KAM CRUD FUNCTIONS ────────────────────────────────────────────────────────
-export function kamMakeEditable(clid) {
-  const row = document.querySelector(`#crudTable tr[data-clid="${clid}"]`);
-  if (!row) return;
-  const partner = STATE.CLID_MAP[clid] || "";
-  const kam     = STATE.KAM_MAP[clid]  || "";
-  const kams    = _cfgKamsReales();
-  // Include current KAM even if not in list (safety)
-  if (kam && !kams.includes(kam)) kams.push(kam);
-  // Sin KAM: opción vacía seleccionada. Antes quedaba seleccionado el PRIMER KAM
-  // de la lista sin que nadie lo eligiera, y "Guardar" se lo asignaba.
-  const editKamOpts = (kam ? "" : `<option value="" selected>— ${escapeHTML(kamLabel(SIN_KAM))} —</option>`) +
-    kams.map(k => `<option value="${escapeHTML(k)}"${k===kam?" selected":""}>${escapeHTML(k)}</option>`).join("");
-  const clidH    = escapeHTML(clid);
-  const partnerH = escapeHTML(partner);
-  const isFleet  = !!(STATE.CLID_IS_FLEET  || {})[clid];
-  const isTuktuk = !!(STATE.CLID_IS_TUKTUK || {})[clid];
-  row.innerHTML = `
-    <td class="agy-style-75">${clidH}</td>
-    <td><input class="crud-input" id="edit_partner_${clidH}" value="${partnerH}"/></td>
-    <td>
-      <select class="crud-input agy-style-80" id="edit_kam_${clidH}" data-act-change="kamEditKamChange" data-clid="${clidH}">
-        ${editKamOpts}
-        <option value="__new__">${escapeHTML(t("cfg.addKam"))}</option>
-      </select>
-      <input class="crud-input agy-style-81" id="edit_kam_custom_${clidH}" placeholder="${escapeHTML(t("cfg.nuevoKam"))}"/>
-    </td>
-    <td class="agy-style-27"><input type="checkbox" id="edit_fleet_${clidH}" ${isFleet ? "checked" : ""} title="Fleet"/></td>
-    <td class="agy-style-27"><input type="checkbox" id="edit_tuktuk_${clidH}" ${isTuktuk ? "checked" : ""} title="TukTuk"/></td>
-    <td class="agy-style-27"></td>
-    <td class="agy-style-27">
-      <button class="crud-btn crud-btn-save"   data-act="kamCrudEdit" data-clid="${clidH}">${escapeHTML(t("cfg.guardar"))}</button>
-      <button class="crud-btn crud-btn-cancel" data-act="renderConfig">${escapeHTML(t("cfg.cancelar"))}</button>
-    </td>`;
-}
-
-export function kamNewKamChange() {
-  const sel    = document.getElementById("newKam");
-  const custom = document.getElementById("newKamCustom");
-  if (custom) custom.style.display = sel.value === "__new__" ? "block" : "none";
-}
-
-export function kamEditKamChange(clid) {
-  const sel    = document.getElementById(`edit_kam_${clid}`);
-  const custom = document.getElementById(`edit_kam_custom_${clid}`);
-  if (custom) custom.style.display = sel.value === "__new__" ? "block" : "none";
-}
-
-export async function kamCrudEdit(clid) {
-  const partner  = document.getElementById(`edit_partner_${clid}`)?.value.trim();
-  const kamSel   = document.getElementById(`edit_kam_${clid}`);
-  const kamRaw   = kamSel?.value;
-  const kam      = kamRaw === "__new__"
-    ? (document.getElementById(`edit_kam_custom_${clid}`)?.value.trim() || "")
-    : (kamRaw || "").trim();
-  if (!partner || !kam) { showBanner(false, t("cfg.completaNombreKam")); return; }
-  const isFleet  = document.getElementById(`edit_fleet_${clid}`)?.checked || false;
-  const isTuktuk = document.getElementById(`edit_tuktuk_${clid}`)?.checked || false;
-  if (!_puedeUI("partners.escribir")) { showBanner(false, msgSinFilas()); return; }
-  showLoad(true, t("cfg.guardando"));
-  // .select(): sin él no hay forma de distinguir "guardado" de "RLS no tocó
-  // nada" (I3) — un UPDATE bloqueado no da error, afecta 0 filas.
-  const { data, error } = await sb.from("partners")
-    .upsert([{ clid, partner, kam, activo: true, is_fleet: isFleet, is_tuktuk: isTuktuk }], { onConflict: "clid" })
-    .select("clid");
-  showLoad(false);
-  if (error) { showBanner(false, t("cfg.errorGuardar") + error.message); return; }
-  if (!data || !data.length) { showBanner(false, msgSinFilas()); return; }
-  await _refrescarYAvisar(t("cfg.guardadoOk"), t("cfg.hecho.partnerGuardado"));
-}
-
-export async function kamCrudAdd() {
-  const clid    = document.getElementById("newClid")?.value.trim();
-  const partner = document.getElementById("newPartner")?.value.trim();
-  const kamSel  = document.getElementById("newKam");
-  const kamRaw  = kamSel?.value;
-  const kam     = kamRaw === "__new__"
-    ? (document.getElementById("newKamCustom")?.value.trim() || "")
-    : (kamRaw || "").trim();
-  if (!clid || !partner || !kam) { showBanner(false, t("cfg.completaClidKam")); return; }
-  if (STATE.CLID_MAP[clid]) {
-    const existing = `${STATE.CLID_MAP[clid]} (KAM: ${STATE.KAM_MAP[clid]})`;
-    if (!confirm(t("cfg.clidYaExiste", { c: clid, e: existing }))) return;
-  }
-  const isFleet  = document.getElementById("newFleet")?.checked || false;
-  const isTuktuk = document.getElementById("newTuktuk")?.checked || false;
-  if (!_puedeUI("partners.escribir")) { showBanner(false, msgSinFilas()); return; }
-  showLoad(true, t("cfg.guardando"));
-  const { data, error } = await sb.from("partners")
-    .upsert([{ clid, partner, kam, activo: true, is_fleet: isFleet, is_tuktuk: isTuktuk }], { onConflict: "clid" })
-    .select("clid");
-  showLoad(false);
-  if (error) { showBanner(false, t("cfg.errorAgregar") + error.message); return; }
-  if (!data || !data.length) { showBanner(false, msgSinFilas()); return; }
-  await _refrescarYAvisar(t("cfg.clidAgregado"), t("cfg.hecho.clidAgregado"));
-}
-
-export async function kamCrudDelete(clid) {
-  const partner = STATE.CLID_MAP[clid] || clid;
-  if (!_puedeUI("partners.borrar")) { showBanner(false, msgSinFilas()); return; }
-  if (!confirm(t("cfg.confirmEliminarClid", { p: partner, c: clid }))) return;
-  showLoad(true, t("cfg.eliminando"));
-  // I3: el DELETE bloqueado por RLS (partners_admin_delete = solo admin) NO da
-  // error — devuelve 0 filas. Antes eso se pintaba como "eliminado ✓".
-  const { data, error } = await sb.from("partners").delete().eq("clid", clid).select("clid");
-  showLoad(false);
-  if (error) { showBanner(false, t("cfg.errorEliminar") + error.message); return; }
-  if (!data || !data.length) { showBanner(false, msgSinFilas()); return; }
-  await _refrescarYAvisar(t("cfg.eliminadoOk", { p: partner }), t("cfg.hecho.partnerEliminado", { p: partner }));
-}
-
-// I4: después de ESCRIBIR, el verde solo si la pantalla quedó refrescada
-// (mismo patrón que calcSaveMetas). Si el guardado salió bien pero el refresco
-// no, decirlo tal cual: con un verde encima de una pantalla vieja lo razonable
-// es concluir "no se guardó" y volver a guardar.
-// refrescarTrasEscritura además invalida mensual/diario/conversión (B8).
-async function _refrescarYAvisar(msgOk, queSeHizo) {
-  const ok = await refrescarTrasEscritura();
-  if (STATE.curTab === "config") renderConfig();
-  showBanner(ok, ok ? msgOk
-    : t("comun.hechoSinRefresco", { q: queSeHizo }));
-}
-
-// Espejo de RLS para decidir qué controles mostrar (domain/permisosUI.ts).
-function _puedeUI(accion) {
-  return puedeUI(accion, { rol: STATE.userRole, perms: STATE.perms });
+// Ir a Configuración → Cargas (atajo desde el menú de la barra superior).
+export function cfgIrCargas() {
+  CONFIG_STATE.section = "cargas";
+  document.getElementById("uploadMenu")?.classList.remove("open");
+  syncMenusAria();
+  if (STATE.curTab === "config") renderConfig(); else switchTab("config");
 }
 
 // ── UI HELPERS ────────────────────────────────────────────────────────────────
@@ -1396,6 +1029,7 @@ function _puedeUI(accion) {
 // era una inyección. Ningún llamador pasa HTML a propósito (verificado con
 // grep, 23-sep-2026) — si alguno lo necesitara, que arme su propio nodo.
 export function showBanner(ok, msg) {
+  if (_cargaActiva) _cargaActiva.mensajes.push({ ok: !!ok, msg: msg == null ? "" : String(msg) });
   const el = document.getElementById("dsBanner");
   if (!el) return;
   el.style.display = "flex";
@@ -1422,129 +1056,21 @@ export function showLoad(show, msg = "Procesando...") {
   }
 }
 
-// ── ELIMINAR DATOS DE SUPABASE ────────────────────────────────────────────────
-export async function deleteDashboardData() {
-  const tableSel = document.getElementById("delTableSel");
-  const monthInp = document.getElementById("delMonthInput");
-  if (!tableSel || !monthInp) return;
-
-  // Guard defensivo. El enforcement real esta en RLS (is_admin()).
-  if (!STATE.isAdmin) {
-    showBanner(false, t("cfg.operacionBloqueada"));
-    return;
-  }
-
-  const table = tableSel.value;
-  const mes   = monthInp.value.trim();
-
-  const labels = {
-    rendimiento:         t("mode.semanal"),
-    rendimiento_mensual: t("mode.mensual"),
-    rendimiento_diario:  t("mode.diario"),
-    metas:               t("metas.titulo")
-  };
-
-  // Validar formato del mes si se proporciono
-  if (mes && !/^\d{4}-\d{2}$/.test(mes)) {
-    alert(t("cfg.formatoMesInvalido"));
-    return;
-  }
-
-  // B3: el filtro se arma UNA vez y se usa para el conteo previo Y para el
-  // borrado — así lo que se confirma es exactamente lo que se borra.
-  // metas: el input es "YYYY-MM" pero metas.mes es el NOMBRE ("JUNIO") y el año
-  // va en mes_year. Antes filtraba mes="2026-06": no borraba nada y avisaba OK.
-  let filtroMetas = null;
-  if (table === "metas" && mes) {
-    filtroMetas = filtroMetasDeMes(mes);
-    if (!filtroMetas) { alert(t("cfg.formatoMesInvalido")); return; }
-  }
-  const aplicarFiltro = (q) => {
-    if (!mes) {
-      // Supabase requiere un WHERE para DELETE. Usar filtro tautologico.
-      return q.neq("clid", "__NEVER_MATCH__");
-    }
-    const [y, m] = mes.split("-").map(Number);
-    const lastDay = new Date(y, m, 0).getDate();
-    const monthEnd = `${mes}-${String(lastDay).padStart(2, "0")}`;
-    const monthStart = `${mes}-01`;
-    if (table === "rendimiento")         return q.gte("fecha", monthStart).lte("fecha", monthEnd);
-    if (table === "rendimiento_diario")  return q.gte("date", monthStart).lte("date", monthEnd);
-    if (table === "rendimiento_mensual") return q.eq("mes", mes);
-    if (table === "metas")               return q.or(filtroMetas.orPostgrest).eq("mes_year", filtroMetas.anio);
-    return q;
-  };
-
-  const etiquetaMes = table === "metas" && filtroMetas
-    ? `${filtroMetas.nombres[0]} ${filtroMetas.anio}` : mes;
-  const scope = mes ? t("cfg.delMes", { m: etiquetaMes }) : t("cfg.delTodaTabla");
-
-  // Conteo PREVIO: la confirmación dice cuántas filas se van a borrar. Un 0 acá
-  // corta antes de preguntar — es justo el caso que antes "borraba" sin borrar.
-  showLoad(true, t("cfg.eliminandoTabla", { t: labels[table] }));
-  let previstas = null;
-  try {
-    const { count, error: cErr } = await aplicarFiltro(
-      sb.from(table).select("clid", { count: "exact", head: true }));
-    if (cErr) throw cErr;
-    previstas = count ?? 0;
-  } catch (err) {
-    showLoad(false);
-    showBanner(false, t("cfg.errorEliminar") + (err.message || err));
-    return;
-  }
-  showLoad(false);
-  if (previstas === 0) {
-    showBanner(false, mes ? t("cfg.sinFilasMes", { t: labels[table], m: etiquetaMes }) : t("cfg.sinFilas", { t: labels[table] }));
-    return;
-  }
-  if (!confirm(t("cfg.confirmarBorrado", { s: scope, t: labels[table] }) +
-    `\n\nSe van a eliminar ${previstas.toLocaleString("es-PE")} fila(s).`)) return;
-
-  showLoad(true, t("cfg.eliminandoTabla", { t: labels[table] }));
-
-  try {
-    // count:"exact" en el DELETE: PostgREST devuelve cuántas filas borró DE
-    // VERDAD. Con RLS, un DELETE sin permiso no da error: borra 0 (I3).
-    const { count: borradas, error } = await aplicarFiltro(sb.from(table).delete({ count: "exact" }));
-    if (error) throw error;
-    const n = borradas ?? 0;
-    if (n === 0) { showBanner(false, msgSinFilas()); return; }
-
-    monthInp.value = "";
-    if (table === "metas") { STATE.metasMesSel = null; STATE.metasMesSelYear = null; }
-
-    // I7: además del semanal, invalidar y rehacer mensual/diario (la escala
-    // activa se vuelve a armar en el acto — antes quedaba mostrando lo borrado).
-    const ok = await refrescarTrasEscritura();
-    const msg = t("cfg.eliminadoTabla", { t: labels[table], m: mes ? `(${etiquetaMes})` : t("cfg.todo") }) +
-      " · " + t("cfg.nFilas", { n: n.toLocaleString("es-PE") }) +
-      (n !== previstas ? " " + t("cfg.seEsperaban", { n: previstas.toLocaleString("es-PE") }) : "");
-    showBanner(ok, ok ? msg : `${msg}. ${t("comun.sinRefresco")}`);
-    if (STATE.curTab === "config") renderConfig();
-  } catch (err) {
-    showBanner(false, t("cfg.errorEliminar") + err.message);
-    console.error(err);
-  } finally {
-    showLoad(false);
-  }
-}
-
 // ── ACCIONES DELEGADAS (Fase A2) ─────────────────────────────────────────────
 import { registerActions } from "./shared/actions.js";
 // Import explicito (no global): app.ts se evalua antes de que vendor.ts espeje
 // los globales, y estas se llaman desde handlers que corren despues — pero el
 // import deja la dependencia a la vista, que es el punto.
-import { guardarLogoPartner, borrarLogoPartner, ensurePartnerLogos, refrescarTrasEscritura } from "./data.js";
-import { puede as puedeUI, msgSinFilas } from "./domain/permisosUI";
-import { filtroMetasDeMes } from "./domain/borrarDatos";
+import { alertBox, btn } from "./shared/ui";
 import { alCerrarSesion } from "./shared/sesion";
 
 // I2: la sub-sección, la búsqueda y la página de Configuración son del usuario
 // que se fue — el siguiente arranca en "Partners", sin filtro.
 alCerrarSesion(() => {
   CONFIG_STATE.page = 0; CONFIG_STATE.search = ""; CONFIG_STATE.kamFilter = "all";
-  CONFIG_STATE.section = "partners";
+  CONFIG_STATE.section = "partners"; CONFIG_STATE.estado = "todos"; CONFIG_STATE.panel = null;
+  CONFIG_STATE.sel.clear();
+  for (const k of Object.keys(CARGAS_SESION)) delete CARGAS_SESION[k];
 });
 import { t, setLang, getLang, aplicarI18nEstatico, selectorIdiomaHTML, kamLabel } from "./core/i18n";
 import { SIN_KAM } from "./core/config.js";
@@ -1614,9 +1140,6 @@ registerActions({
   setDatePreset: d => setDatePreset(d.preset),
   onKAMChange, selectAll, deselectAll, toggleSidebar,
   switchMode:      d => switchMode(d.mode),
-  cfgPedirLogo:    d => cfgPedirLogo(d.clid),
-  cfgSubirLogo:    (d, el) => cfgSubirLogo(d.clid, el),
-  cfgBorrarLogo:   d => cfgBorrarLogo(d.clid),
   switchTab:       d => switchTab(d.tab),
   toggleUploadMenu:  (d, el, e) => toggleUploadMenu(e),
   toggleUserMenu:    (d, el, e) => toggleUserMenu(e),
@@ -1624,23 +1147,11 @@ registerActions({
   // el guard para que el recovery de vendor.js pueda volver a intentar.
   reloadApp: () => { try { sessionStorage.removeItem("_chunkReloadOnce"); } catch (e) {} location.reload(); },
 
-  // configuración
+  // configuración (el resto de sus acciones vive en configView.ts, que se
+  // carga junto con la vista; estas tres se usan desde fuera de ese chunk)
   updateDeclineSettings,
-  deleteDashboardData,
-  cfgSetSection: d => { CONFIG_STATE.section = d.section; renderConfig(); },
-  cfgSearch:    (d, el) => { CONFIG_STATE.search = el.value; CONFIG_STATE.page = 0; renderConfigResults(); },
-  cfgKamFilter: (d, el) => { CONFIG_STATE.kamFilter = el.value; CONFIG_STATE.page = 0; renderConfigResults(); },
-  cfgPagePrev:  () => { CONFIG_STATE.page = Math.max(0, CONFIG_STATE.page - 1); renderConfigResults(); },
-  cfgPageNext:  d  => { CONFIG_STATE.page = Math.min((+d.total || 1) - 1, CONFIG_STATE.page + 1); renderConfigResults(); },
-
-  // CRUD de partners
-  kamMakeEditable:  d => kamMakeEditable(d.clid),
-  kamCrudDelete:    d => kamCrudDelete(d.clid),
-  kamCrudEdit:      d => kamCrudEdit(d.clid),
-  kamCrudAdd,
-  kamNewKamChange,
-  kamEditKamChange: d => kamEditKamChange(d.clid),
-  renderConfig
+  cfgSetSection: d => { CONFIG_STATE.section = d.section; CONFIG_STATE.panel = null; renderConfig(); },
+  cfgIrCargas
 });
 
 // Arranca el idioma apenas carga el modulo: la pantalla de LOGIN tambien se

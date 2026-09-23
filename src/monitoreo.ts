@@ -29,6 +29,9 @@
 import { registerActions } from "./shared/actions.js";
 import { t } from "./core/i18n";
 import { sb } from "./auth.js";
+import { escapeHTML } from "./core/security";
+import { fmt } from "./core/format";
+import { btn, badge, alertBox, emptyState, icon, kpiCard } from "./shared/ui";
 
 export const MON_STATE = {
   users: null,        // null = todavía no se pidió
@@ -37,6 +40,7 @@ export const MON_STATE = {
   ingestas: null,
   loading: false,
   error: "",
+  errores: {},        // por fuente: cuentas | audit | uso | ingestas → mensaje
   auditTable: "all",
   auditLimit: 100
 };
@@ -73,21 +77,27 @@ function _hace(iso) {
   return { txt: meses === 1 ? t("mon.haceMes", { n: meses }) : t("mon.haceMeses", { n: meses }), dias };
 }
 
-function _staleColor(dias) {
-  if (dias === Infinity) return "#9ca3af";
-  if (dias <= 7)  return "#10b981";
-  if (dias <= 30) return "#f59e0b";
-  return "#dc2626";
+// Tono semántico por antigüedad (Ola 6: sin hex en la vista).
+function _staleTone(dias) {
+  if (dias === Infinity) return "neutral";
+  if (dias <= 7)  return "ok";
+  if (dias <= 30) return "warn";
+  return "bad";
 }
 
+const _e = s => escapeHTML(s == null ? "" : String(s));
+const _msg = err => (err && (err.message || err.details)) || String(err || t("mon.motivoDesconocido"));
+
 // ── CARGA ────────────────────────────────────────────────────────────────────
+// Ola 6: cada fuente guarda SU error. Antes un fallo de audit_log/access_log/
+// ingest_log se convertía en [] y la pantalla decía "sin movimientos" o "sin
+// eventos": un fallo se leía como "no pasó nada".
 export async function monLoad() {
   MON_STATE.loading = true; MON_STATE.error = "";
+  MON_STATE.errores = {};
   renderMonitoreo();
   try {
-    // Las dos fuentes son independientes: si el audit_log falla (o la migración
-    // no está aplicada) igual queremos mostrar los accesos, y viceversa. Por eso
-    // allSettled y no all.
+    // Las fuentes son independientes: si una falla las otras igual se muestran.
     const [uRes, aRes, sRes, iRes] = await Promise.allSettled([
       sb.functions.invoke("admin-users", { body: { action: "list" } }),
       _loadAudit(),
@@ -105,14 +115,16 @@ export async function monLoad() {
       if (!detalle) {
         try { detalle = (await err?.context?.json?.())?.error; } catch (_) {}
       }
-      MON_STATE.error = t("mon.errCargarCuentas") +
-        (detalle || (err && err.message) || t("mon.motivoDesconocido"));
+      MON_STATE.errores.cuentas = detalle || (err && err.message) || t("mon.motivoDesconocido");
     }
     MON_STATE.audit = aRes.status === "fulfilled" ? aRes.value : [];
-    MON_STATE.uso   = sRes.status === "fulfilled" ? sRes.value : [];
+    if (aRes.status === "rejected") MON_STATE.errores.audit = _msg(aRes.reason);
+    MON_STATE.uso = sRes.status === "fulfilled" ? sRes.value : [];
+    if (sRes.status === "rejected") MON_STATE.errores.uso = _msg(sRes.reason);
     MON_STATE.ingestas = iRes.status === "fulfilled" ? iRes.value : [];
-  } catch (e) {
-    MON_STATE.error = (e && e.message) || String(e);
+    if (iRes.status === "rejected") MON_STATE.errores.ingestas = _msg(iRes.reason);
+  } catch (err) {
+    MON_STATE.error = _msg(err);
   } finally {
     MON_STATE.loading = false;
     renderMonitoreo();
@@ -153,33 +165,39 @@ async function _loadAudit() {
   return data || [];
 }
 
-export async function monSetAuditTable(t) {
-  MON_STATE.auditTable = t;
-  try { MON_STATE.audit = await _loadAudit(); } catch (e) { MON_STATE.audit = []; }
+export async function monSetAuditTable(tabla) {
+  MON_STATE.auditTable = tabla;
+  MON_STATE.errores = MON_STATE.errores || {};
+  try { MON_STATE.audit = await _loadAudit(); delete MON_STATE.errores.audit; }
+  catch (err) { MON_STATE.audit = []; MON_STATE.errores.audit = _msg(err); }
   renderMonitoreo();
 }
 
 // ── RENDER ───────────────────────────────────────────────────────────────────
+function _secHead(titulo, sub, extra = "") {
+  return `<div class="mon6-head"><div><h3 class="mon6-head__title">${_e(titulo)}</h3>${sub ? `<p class="mon6-head__sub">${_e(sub)}</p>` : ""}</div>${extra}</div>`;
+}
+const _errBox = (titulo, detalle) => alertBox({ tone: "bad", title: titulo, text: detalle });
+const _num = n => (n == null ? "—" : fmt(n));
+
 export function renderMonitoreo() {
   const box = document.getElementById("monitoreoBox");
   if (!box) return;
 
   if (MON_STATE.users == null && !MON_STATE.loading) {
-    box.innerHTML = `
-      <button class="apply-btn" data-act="monLoad">${escapeHTML(t("mon.cargarBtn"))}</button>
-      <span style="font-size:.75rem;color:#888;margin-left:10px">${t("mon.cargarHint")}</span>`;
+    box.innerHTML = emptyState({
+      icon: "activity", title: t("mon6.vacioTitulo"), text: t("mon.cargarHint"),
+      action: btn({ label: t("mon6.cargar"), variant: "primary", icon: "download", act: "monLoad" })
+    });
     return;
   }
   if (MON_STATE.loading) {
-    box.innerHTML = `<div style="padding:24px 0;color:#888;font-size:.85rem">${escapeHTML(t("mon.cargando"))}</div>`;
+    box.innerHTML = `<div class="mon6-loading" role="status">${icon("refresh", { size: 16 })}<span>${_e(t("mon.cargando"))}</span></div>`;
     return;
   }
 
-  let html = `<button class="apply-btn" data-act="monLoad" style="margin-bottom:14px">${escapeHTML(t("mon.actualizar"))}</button>`;
-  if (MON_STATE.error) {
-    html += `<div style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;padding:10px 12px;border-radius:8px;font-size:.78rem;margin-bottom:14px">${escapeHTML(MON_STATE.error)}</div>`;
-  }
-
+  let html = `<div class="mon6-top">${btn({ label: t("mon6.actualizar"), icon: "refresh", size: "sm", act: "monLoad" })}</div>`;
+  if (MON_STATE.error) html += _errBox(t("mon6.errGeneral"), MON_STATE.error);
   html += _renderAccesos();
   html += _renderAuditoria();
   html += _renderIngestas();
@@ -189,7 +207,10 @@ export function renderMonitoreo() {
 
 function _renderAccesos() {
   const users = MON_STATE.users || [];
-  if (!users.length) return "";
+  const err = (MON_STATE.errores || {}).cuentas;
+  const head = _secHead(t("mon.accesosTitulo"), t("mon.accesosSub"));
+  if (err) return `<section class="mon6-sec">${head}${_errBox(t("mon.errCargarCuentas").replace(/:\s*$/, ""), err)}</section>`;
+  if (!users.length) return `<section class="mon6-sec">${head}${emptyState({ icon: "users", title: t("mon6.sinCuentas") })}</section>`;
 
   const conFecha = users.map(u => ({ ...u, _h: _hace(u.lastSignInAt) }));
   const partners = conFecha.filter(u => u.role === "partner");
@@ -197,219 +218,165 @@ function _renderAccesos() {
   const activos7 = conFecha.filter(u => u._h.dias <= 7).length;
   const nunca    = conFecha.filter(u => u._h.dias === Infinity).length;
 
-  const kpi = (label, val, color, tip) => `
-    <div class="mcard" style="border-top:3px solid ${color}" title="${escapeHTML(tip)}">
-      <div class="mcard-label">${label}</div>
-      <div class="mcard-val" style="color:${color}">${fmt(val)}</div>
-    </div>`;
-
   const tabla = (titulo, list) => {
     if (!list.length) return "";
-    const rows = list
-      .slice()
-      .sort((a, b) => a._h.dias - b._h.dias)
-      .map(u => `<tr>
-        <td>${escapeHTML(u.email || "—")}</td>
-        <td><span style="font-size:.68rem;font-weight:700;padding:2px 8px;border-radius:10px;background:#f3f4f6;color:#374151">${escapeHTML(u.role || "viewer")}</span></td>
-        <td style="color:${_staleColor(u._h.dias)};font-weight:700">${escapeHTML(u._h.txt)}</td>
-        <td class="agy-style-90">${_fmtWhen(u.lastSignInAt)}</td>
-        <td class="agy-style-90">${_fmtWhen(u.createdAt)}</td>
+    const rows = list.slice().sort((a, b) => a._h.dias - b._h.dias).map(u => `<tr>
+        <td>${_e(u.email || "—")}</td>
+        <td>${badge(u.role || "viewer", "neutral")}</td>
+        <td>${badge(u._h.txt, _staleTone(u._h.dias))}</td>
+        <td class="mon6-muted">${_e(_fmtWhen(u.lastSignInAt))}</td>
+        <td class="mon6-muted">${_e(_fmtWhen(u.createdAt))}</td>
       </tr>`).join("");
-    return `<div style="font-weight:700;font-size:.78rem;margin:14px 0 6px">${titulo} (${list.length})</div>
-      <div class="tbl-wrap"><table class="dtbl">
-        <thead><tr><th>${escapeHTML(t("mon.col.cuenta"))}</th><th>${escapeHTML(t("mon.col.rol"))}</th><th>${escapeHTML(t("mon.col.ultimoAcceso"))}</th><th>${escapeHTML(t("mon.col.fechaExacta"))}</th><th>${escapeHTML(t("mon.col.creada"))}</th></tr></thead>
+    return `<h4 class="mon6-sub">${_e(titulo)} <span class="mon6-muted">(${list.length})</span></h4>
+      <div class="ui-table-wrap"><table class="ui-table">
+        <thead><tr><th scope="col">${_e(t("mon.col.cuenta"))}</th><th scope="col">${_e(t("mon.col.rol"))}</th><th scope="col">${_e(t("mon.col.ultimoAcceso"))}</th><th scope="col">${_e(t("mon.col.fechaExacta"))}</th><th scope="col">${_e(t("mon.col.creada"))}</th></tr></thead>
         <tbody>${rows}</tbody></table></div>`;
   };
 
-  return secH("🔑", "#0284c7", t("mon.accesosTitulo"), t("mon.accesosSub"), "") +
-    `<div class="section">
-      <div class="metric-row">
-        ${kpi(t("mon.kpiCuentas"), users.length, "#6366f1", t("mon.kpiCuentasTip"))}
-        ${kpi(t("mon.kpiActivas7"), activos7, "#10b981", t("mon.kpiActivas7Tip"))}
-        ${kpi(t("mon.kpiPartners"), partners.length, "#0284c7", t("mon.kpiPartnersTip"))}
-        ${kpi(t("mon.kpiNuncaEntraron"), nunca, nunca ? "#dc2626" : "#9ca3af", t("mon.kpiNuncaEntraronTip"))}
-      </div>
-      ${tabla(t("mon.tablaPartners"), partners)}
-      ${tabla(t("mon.tablaEquipo"), internos)}
-    </div>`;
+  return `<section class="mon6-sec">${head}
+    <div class="ui-kpi-grid mon6-kpis">
+      ${kpiCard({ label: t("mon6.kpiCuentas"), value: users.length, sub: t("mon.kpiCuentasTip") })}
+      ${kpiCard({ label: t("mon6.kpiActivas7"), value: activos7, sub: t("mon.kpiActivas7Tip") })}
+      ${kpiCard({ label: t("mon6.kpiPartners"), value: partners.length, sub: t("mon.kpiPartnersTip") })}
+      ${kpiCard({ label: t("mon6.kpiNunca"), value: nunca, sub: t("mon.kpiNuncaEntraronTip") })}
+    </div>
+    ${tabla(t("mon6.tablaPartners"), partners)}
+    ${tabla(t("mon6.tablaEquipo"), internos)}
+  </section>`;
 }
+
+const _TONO_ACCION = { INSERT: "ok", UPDATE: "warn", DELETE: "bad" };
 
 function _renderAuditoria() {
   const rows = MON_STATE.audit || [];
-  // OJO: `tabla` (no `t`) como parametro del map — `t` shadowearia el `t` de
-  // i18n usado mas abajo en esta misma funcion (mismo bug que en calculator.ts).
-  const sel = `<select class="sb-sel" style="max-width:240px" data-act-change="monSetAuditTable">
-      <option value="all"${MON_STATE.auditTable === "all" ? " selected" : ""}>${escapeHTML(t("mon.todasTablas"))}</option>
+  const err = (MON_STATE.errores || {}).audit;
+  // `tabla` (no `t`) como parámetro: `t` es el de i18n.
+  const sel = `<label class="mon6-filter"><span class="ui-sr-only">${_e(t("mon.col.tabla"))}</span>
+    <select class="ui-select ui-select--sm" data-act-change="monSetAuditTable">
+      <option value="all"${MON_STATE.auditTable === "all" ? " selected" : ""}>${_e(t("mon.todasTablas"))}</option>
       ${AUDIT_TABLES.map(tabla => `<option value="${tabla}"${MON_STATE.auditTable === tabla ? " selected" : ""}>${tabla}</option>`).join("")}
-    </select>`;
-
-  const body = rows.length
-    ? rows.map(r => {
-        const col = r.action === "DELETE" ? "#dc2626" : r.action === "INSERT" ? "#10b981" : "#f59e0b";
-        return `<tr>
-          <td class="agy-style-90">${_fmtWhen(r.at)}</td>
-          <td>${escapeHTML(r.user_email || "—")}</td>
-          <td><span style="font-size:.66rem;font-weight:700;color:#fff;background:${col};padding:2px 8px;border-radius:10px">${escapeHTML(r.action)}</span></td>
-          <td>${escapeHTML(r.table_name || "")}</td>
-          <td class="agy-style-90">${escapeHTML(r.row_key || "")}</td>
-        </tr>`;
-      }).join("")
-    : `<tr><td colspan="5" style="text-align:center;color:#888;padding:18px">${escapeHTML(t("mon.sinMovimientos"))}</td></tr>`;
-
-  return secH("🧾", "#8b5cf6", t("mon.auditTitulo"),
-      t("mon.auditSub", { n: MON_STATE.auditLimit }), "") +
-    `<div class="section">
-      <div style="margin-bottom:10px">${sel}</div>
-      <div class="tbl-wrap"><table class="dtbl">
-        <thead><tr><th>${escapeHTML(t("mon.col.cuando"))}</th><th>${escapeHTML(t("mon.col.quien"))}</th><th>${escapeHTML(t("mon.col.accion"))}</th><th>${escapeHTML(t("mon.col.tabla"))}</th><th>${escapeHTML(t("mon.col.registro"))}</th></tr></thead>
-        <tbody>${body}</tbody></table></div>
-    </div>`;
+    </select></label>`;
+  const head = _secHead(t("mon.auditTitulo"), t("mon.auditSub", { n: MON_STATE.auditLimit }), sel);
+  if (err) return `<section class="mon6-sec">${head}${_errBox(t("mon6.errAudit"), err)}</section>`;
+  if (!rows.length) return `<section class="mon6-sec">${head}${emptyState({ icon: "file-text", title: t("mon.sinMovimientos") })}</section>`;
+  const body = rows.map(r => `<tr>
+      <td class="mon6-muted">${_e(_fmtWhen(r.at))}</td>
+      <td>${_e(r.user_email || "—")}</td>
+      <td>${badge(r.action || "", _TONO_ACCION[r.action] || "neutral")}</td>
+      <td>${_e(r.table_name || "")}</td>
+      <td class="mon6-muted mon6-mono">${_e(r.row_key || "")}</td>
+    </tr>`).join("");
+  return `<section class="mon6-sec">${head}
+    <div class="ui-table-wrap ui-table-wrap--scroll"><table class="ui-table">
+      <thead><tr><th scope="col">${_e(t("mon.col.cuando"))}</th><th scope="col">${_e(t("mon.col.quien"))}</th><th scope="col">${_e(t("mon.col.accion"))}</th><th scope="col">${_e(t("mon.col.tabla"))}</th><th scope="col">${_e(t("mon.col.registro"))}</th></tr></thead>
+      <tbody>${body}</tbody></table></div>
+  </section>`;
 }
 
-// Panel de USO: qué se abre y qué se descarga. Separado de "Accesos" (que sale
-// de auth.users) y de "Registro de cambios" (que sale de triggers) porque son
-// tres fuentes con niveles de confianza distintos — ver la cabecera del archivo.
-
 // ── INGESTA AUTOMATICA DE TAXIPARKS ─────────────────────────────────────────
-// Responde de un vistazo: se actualizo la data? que escala? entraron los 48
-// KPIs? hubo errores? Sin esto habria que mirar las filas de rendimiento y
-// adivinar si la corrida del martes funciono.
+// ¿Se actualizó la data? ¿qué escala? ¿entraron los KPIs? ¿hubo errores?
+const _TONO_INGESTA = { ok: "ok", rechazado: "warn" };
 function _renderIngestas() {
   const items = MON_STATE.ingestas;
   if (items == null) return "";
+  const err = (MON_STATE.errores || {}).ingestas;
+  const head = _secHead(t("mon.ingestaTitulo"), t("mon.ultimaCarga"));
+  if (err) return `<section class="mon6-sec">${head}${_errBox(t("mon6.errIngestas"), err)}</section>`;
+  if (!items.length) return `<section class="mon6-sec">${head}${emptyState({ icon: "database", title: t("mon6.sinIngestasTitulo"), text: t("mon6.sinIngestasTxt") })}</section>`;
 
-  if (!items.length) {
-    return secH("🔄", "#0284c7", t("mon.ingestaTitulo"), t("mon.ingestaCarga"), "") +
-      `<div class="section"><div class="agy-style-224">${t("mon.sinIngestasAun")}</div></div>`;
-  }
-
-  // Estado por escala: cuando entro por ultima vez cada una. Es la pregunta
-  // operativa real — "¿la semanal esta al dia?"— y no se responde mirando una
-  // lista cronologica mezclada.
+  // Estado por escala: cuándo entró por última vez cada una — la pregunta
+  // operativa real ("¿la semanal está al día?").
   const porEscala = ["semanal", "mensual", "diario"].map(esc => {
     const ult = items.find(i => i.scale === esc && i.status === "ok");
-    const h   = _hace(ult && ult.at);
-    return { esc, ult, h };
+    return { esc, ult, h: _hace(ult && ult.at) };
+  });
+  const tarjeta = ({ esc, ult, h }) => kpiCard({
+    label: t(`mode.${esc}`), value: h.txt,
+    sub: ult ? t("mon.filasPeriodos", { f: fmt(ult.filas_escritas || 0), p: (ult.periodos || []).length }) : t("mon.sinIngestas")
   });
 
-  const tarjeta = ({ esc, ult, h }) => {
-    const col = !ult ? "#9ca3af" : _staleColor(h.dias);
-    const nombre = esc.charAt(0).toUpperCase() + esc.slice(1);
-    return `<div class="mcard" style="border-top:3px solid ${col}">
-      <div class="mcard-label">${nombre}</div>
-      <div class="mcard-val" style="color:${col};font-size:1.05rem">${escapeHTML(h.txt)}</div>
-      <div class="agy-style-90" style="font-size:.68rem">
-        ${ult ? t("mon.filasPeriodos", { f: fmt(ult.filas_escritas || 0), p: (ult.periodos || []).length }) : t("mon.sinIngestas")}
-      </div>
-    </div>`;
-  };
-
   const filas = items.map(i => {
-    const col = i.status === "ok" ? "#10b981" : i.status === "rechazado" ? "#f59e0b" : "#dc2626";
     const falt = (i.kpis_faltantes || []).length;
     const kpiTxt = i.kpis_ok == null ? "—"
-      : `${i.kpis_ok}${falt ? ` <span style="color:#f59e0b" title="${escapeHTML(t("mon.faltaron", { l: (i.kpis_faltantes || []).slice(0, 12).join(", ") }))}">(−${falt})</span>` : ""}`;
-    const per = (i.periodos || []);
-    const perTxt = !per.length ? "—"
-      : per.length <= 2 ? per.join(", ")
-      : `${per[0]} … ${per[per.length - 1]} (${per.length})`;
+      : `${_e(i.kpis_ok)}${falt ? ` <span title="${_e(t("mon.faltaron", { l: (i.kpis_faltantes || []).slice(0, 12).join(", ") }))}">${badge("−" + falt, "warn")}</span>` : ""}`;
+    const per = i.periodos || [];
+    const perTxt = !per.length ? "—" : per.length <= 2 ? per.join(", ") : `${per[0]} … ${per[per.length - 1]} (${per.length})`;
     return `<tr>
-      <td class="agy-style-90">${_fmtWhen(i.at)}</td>
-      <td><span style="font-size:.66rem;font-weight:700;color:#fff;background:${col};padding:2px 8px;border-radius:10px">${escapeHTML(i.status)}</span></td>
-      <td>${escapeHTML(i.scale || "")}<span class="agy-style-90" style="font-size:.64rem;margin-left:4px">${escapeHTML(i.formato || "")}</span></td>
-      <td class="tn">${i.filas_escritas == null ? "—" : fmt(i.filas_escritas)}</td>
-      <td class="tn">${kpiTxt}</td>
-      <td class="agy-style-90" style="font-size:.7rem">${escapeHTML(perTxt)}</td>
-      <td class="agy-style-90" style="font-size:.7rem;color:${i.error ? "#b91c1c" : "#888"}">${escapeHTML(i.error || "")}</td>
+      <td class="mon6-muted">${_e(_fmtWhen(i.at))}</td>
+      <td>${badge(i.status || "", _TONO_INGESTA[i.status] || "bad")}</td>
+      <td>${_e(i.scale || "")} <span class="mon6-muted">${_e(i.formato || "")}</span></td>
+      <td class="ui-num">${_num(i.filas_escritas)}</td>
+      <td class="ui-num">${kpiTxt}</td>
+      <td class="mon6-muted">${_e(perTxt)}</td>
+      <td class="${i.error ? "mon6-err" : "mon6-muted"}">${_e(i.error || "")}</td>
     </tr>`;
   }).join("");
 
-  // Un KPI faltante NO es un error: entra como 0 y el grafico se ve plano sin
+  // Un KPI faltante NO es un error: entra como 0 y el gráfico se ve plano sin
   // que nadie se entere. Por eso se avisa arriba y no solo en la fila.
   const ultOk = items.find(i => i.status === "ok");
-  const alerta = ultOk && (ultOk.kpis_faltantes || []).length
-    ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 12px;font-size:.76rem;color:#92400e;margin-bottom:12px">
-         ${t("mon.avisoKpisFaltantes", { n: (ultOk.kpis_faltantes || []).length, t: (ultOk.kpis_faltantes || []).length + (ultOk.kpis_ok || 0) })}
-         <div style="margin-top:4px;font-family:monospace;font-size:.7rem">${escapeHTML((ultOk.kpis_faltantes || []).slice(0, 15).join(", "))}</div>
-       </div>` : "";
+  const faltan = ultOk ? (ultOk.kpis_faltantes || []) : [];
+  const alerta = faltan.length
+    ? alertBox({ tone: "warn", title: t("mon6.kpisFaltantes", { n: faltan.length, t: faltan.length + (ultOk.kpis_ok || 0) }),
+        text: faltan.slice(0, 15).join(", ") })
+    : "";
 
-  return secH("🔄", "#0284c7", t("mon.ingestaTitulo"),
-      t("mon.ultimaCarga"), "") +
-    `<div class="section">
-      ${alerta}
-      <div class="metric-row">${porEscala.map(tarjeta).join("")}</div>
-      <div class="tbl-wrap" style="margin-top:14px"><table class="dtbl">
-        <thead><tr><th>${escapeHTML(t("mon.col.cuando"))}</th><th>${escapeHTML(t("raw.col.estado"))}</th><th>${escapeHTML(t("sidebar.escala"))}</th><th class="tn">${escapeHTML(t("mon.col.filas"))}</th>
-          <th class="tn" title="${escapeHTML(t("mon.col.kpisTip"))}">${escapeHTML(t("mon.col.kpis"))}</th><th>${escapeHTML(t("mon.col.periodos"))}</th><th>${escapeHTML(t("mon.col.detalle"))}</th></tr></thead>
-        <tbody>${filas}</tbody></table></div>
-    </div>`;
+  return `<section class="mon6-sec">${head}${alerta}
+    <div class="ui-kpi-grid mon6-kpis">${porEscala.map(tarjeta).join("")}</div>
+    <div class="ui-table-wrap"><table class="ui-table">
+      <thead><tr><th scope="col">${_e(t("mon.col.cuando"))}</th><th scope="col">${_e(t("raw.col.estado"))}</th><th scope="col">${_e(t("sidebar.escala"))}</th><th scope="col" class="ui-num">${_e(t("mon.col.filas"))}</th>
+        <th scope="col" class="ui-num" title="${_e(t("mon.col.kpisTip"))}">${_e(t("mon.col.kpis"))}</th><th scope="col">${_e(t("mon.col.periodos"))}</th><th scope="col">${_e(t("mon.col.detalle"))}</th></tr></thead>
+      <tbody>${filas}</tbody></table></div>
+  </section>`;
 }
 
+// USO: qué se abre y qué se descarga. Separado de "Accesos" (auth.users) y de
+// "Registro de cambios" (triggers): tres fuentes con confianza distinta.
 function _renderUso() {
   const evs = MON_STATE.uso;
   if (evs == null) return "";
-  if (!evs.length) {
-    return secH("📈", "#f59e0b", t("mon.usoTitulo"), t("mon.ultimos30d"), "") +
-      `<div class="section"><div class="agy-style-224">${t("mon.sinEventosAun")}</div></div>`;
-  }
+  const err = (MON_STATE.errores || {}).uso;
+  const head = _secHead(t("mon.usoTitulo"), t("mon.ultimos30dSub"));
+  if (err) return `<section class="mon6-sec">${head}${_errBox(t("mon6.errUso"), err)}</section>`;
+  if (!evs.length) return `<section class="mon6-sec">${head}${emptyState({ icon: "activity", title: t("mon6.sinEventosTitulo"), text: t("mon6.sinEventosTxt") })}</section>`;
 
-  const logins    = evs.filter(e => e.event === "login").length;
-  const descargas = evs.filter(e => e.event === "download_pdf" || e.event === "download_csv").length;
-  const personas  = new Set(evs.map(e => e.user_email).filter(Boolean)).size;
+  const logins    = evs.filter(ev => ev.event === "login").length;
+  const descargas = evs.filter(ev => ev.event === "download_pdf" || ev.event === "download_csv").length;
+  const personas  = new Set(evs.map(ev => ev.user_email).filter(Boolean)).size;
 
-  // Ranking de pestañas: cuenta de PRIMERAS visitas por sesión (ver accessLog.js),
-  // así que se lee como "cuántas sesiones abrieron esta sección", no como clicks.
+  // Ranking de pestañas: PRIMERAS visitas por sesión (ver accessLog.js).
   const porTab = {};
-  evs.filter(e => e.event === "tab").forEach(e => { porTab[e.detail || "?"] = (porTab[e.detail || "?"] || 0) + 1; });
+  evs.filter(ev => ev.event === "tab").forEach(ev => { porTab[ev.detail || "?"] = (porTab[ev.detail || "?"] || 0) + 1; });
   const tabs = Object.entries(porTab).sort((a, b) => b[1] - a[1]);
-
   const porDesc = {};
-  evs.filter(e => e.event.startsWith("download")).forEach(e => {
-    const k = (e.detail || "?").split(":")[0];
+  evs.filter(ev => ev.event.startsWith("download")).forEach(ev => {
+    const k = (ev.detail || "?").split(":")[0];
     porDesc[k] = (porDesc[k] || 0) + 1;
   });
   const descs = Object.entries(porDesc).sort((a, b) => b[1] - a[1]);
 
-  const kpi = (label, val, color, tip) => `
-    <div class="mcard" style="border-top:3px solid ${color}" title="${escapeHTML(tip)}">
-      <div class="mcard-label">${label}</div>
-      <div class="mcard-val" style="color:${color}">${fmt(val)}</div>
-    </div>`;
+  // Cada lista escala contra SU propio máximo (I12). El ancho es dato → inline.
+  const barras = list => {
+    if (!list.length) return `<p class="mon6-muted">${_e(t("mon.sinDatos"))}</p>`;
+    const max = Math.max(1, list[0][1]);
+    return list.map(([k, n]) => `
+      <div class="mon6-bar">
+        <div class="mon6-bar__row"><span>${_e(k)}</span><strong>${fmt(n)}</strong></div>
+        <div class="ui-progress"><div class="ui-progress__bar" style="width:${Math.min(n / max * 100, 100).toFixed(1)}%"></div></div>
+      </div>`).join("");
+  };
 
-  // Cada lista escala contra SU propio máximo (I12). Antes las descargas usaban
-  // el máximo de las PESTAÑAS: con 5 descargas contra 1 visita la barra medía
-  // 500% y se salía del contenedor.
-  const barras = (list, color) => { const max = list.length ? Math.max(1, list[0][1]) : 1; return list.length
-    ? list.map(([k, n]) => `
-        <div style="margin-bottom:7px">
-          <div style="display:flex;justify-content:space-between;font-size:.74rem;margin-bottom:2px">
-            <span>${escapeHTML(k)}</span><strong>${fmt(n)}</strong>
-          </div>
-          <div style="height:6px;background:#f0f0f0;border-radius:3px;overflow:hidden">
-            <div style="height:100%;width:${Math.min(n / max * 100, 100).toFixed(1)}%;background:${color}"></div>
-          </div>
-        </div>`).join("")
-    : `<div class="agy-style-90" style="font-size:.76rem">${escapeHTML(t("mon.sinDatos"))}</div>`; };
-
-  return secH("📈", "#f59e0b", t("mon.usoTitulo"),
-      t("mon.ultimos30dSub"), "") +
-    `<div class="section">
-      <div class="metric-row">
-        ${kpi(t("mon.kpiIngresos"), logins, "#0284c7", t("mon.kpiIngresosTip"))}
-        ${kpi(t("mon.kpiPersonas"), personas, "#10b981", t("mon.kpiPersonasTip"))}
-        ${kpi(t("mon.kpiDescargas"), descargas, "#8b5cf6", t("mon.kpiDescargasTip"))}
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;margin-top:14px">
-        <div>
-          <div style="font-weight:700;font-size:.78rem;margin-bottom:8px">${escapeHTML(t("mon.seccionesMasAbiertas"))}</div>
-          <div title="${escapeHTML(t("mon.seccionesTip"))}">${barras(tabs, "#0284c7")}</div>
-        </div>
-        <div>
-          <div style="font-weight:700;font-size:.78rem;margin-bottom:8px">${escapeHTML(t("mon.queDescarga"))}</div>
-          ${barras(descs, "#8b5cf6")}
-        </div>
-      </div>
-    </div>`;
+  return `<section class="mon6-sec">${head}
+    <div class="ui-kpi-grid mon6-kpis">
+      ${kpiCard({ label: t("mon6.kpiIngresos"), value: logins, sub: t("mon.kpiIngresosTip") })}
+      ${kpiCard({ label: t("mon6.kpiPersonas"), value: personas, sub: t("mon.kpiPersonasTip") })}
+      ${kpiCard({ label: t("mon6.kpiDescargas"), value: descargas, sub: t("mon.kpiDescargasTip") })}
+    </div>
+    <div class="mon6-cols">
+      <div><h4 class="mon6-sub" title="${_e(t("mon.seccionesTip"))}">${_e(t("mon.seccionesMasAbiertas"))}</h4>${barras(tabs)}</div>
+      <div><h4 class="mon6-sub">${_e(t("mon.queDescarga"))}</h4>${barras(descs)}</div>
+    </div>
+  </section>`;
 }
 
 registerActions({
