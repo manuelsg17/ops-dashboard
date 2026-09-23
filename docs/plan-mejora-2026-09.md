@@ -201,7 +201,18 @@ Navegación lateral por grupos y rol, encabezado de página con chips de alcance
 | 2 — velocidad | Integrada (`0ae1080`) | Huella: 0 diferencias. Medido con 300 ms de latencia simulada (Chrome headless, token vencido, KAM): primer pintado con caché 448→88 ms (semanal) y 827→108 ms (mensual); 0 frames con el login visible (antes ~23); segundo render salteado si los datos no cambiaron; abrir Presentación 180,8→116,0 kB gzip. Sesión vencida verificada en pantalla: se renueva sola y la app sigue abierta |
 | 3 — diccionarios | Integrada (`1974389`) | Huella: 0 diferencias. Deck en ruso verificado en pantalla sin claves crudas. `check:drift` ampliado (placeholders, tríos, ternarios de idioma) con prueba de que dispara. 8 tablas de meses → 1; tuteo en toda la app |
 | 5 — shell y navegación | Integrada (`20b6a96`) | Huella: 0 diferencias. Revisado en pantalla: navegación lateral agrupada, encabezado con chips de alcance ("Ciudad: Arequipa ×", "Restablecer" vuelve todo a por defecto), panel de Filtros plegable. El agente verificó 4 roles × 8 pestañas × 1440/1024 sin errores ni desborde |
-| 6 — rediseño por vista | En curso (6 worktrees en paralelo): Rendimiento · Metas · Calculadora · Configuración + Data Raw · Seguimiento + Portal · Presentación + retiro de Vista Partner | — |
+| 6 — rediseño por vista | Integrada (`e26fa54`) | Calculadora, Metas, Configuración + Data Raw, Rendimiento, Presentación (+ retiro de Vista Partner), Seguimiento + Portal, y una pasada de integración (meta de Rendimiento y Metas desde una sola función `metasResumenPais`; cruce Rendimiento↔Metas en 73 comparaciones, 0 diferencias). **Huella completa vs Ola 3: 0 cifras cambiadas, 0 quitadas, 24 nuevas** (variaciones de Metas). 484 tests |
+| 7 — modo oscuro + limpieza de CSS | En curso | — |
+
+Decisiones abiertas para Manuel (surgidas en la Ola 6):
+1. Metas → filtro "Sobre meta" usa el corte vigente de la app (>150%, el morado de "revisa la meta"). ¿O ≥100%?
+2. Metas mensual con el mes en curso no muestra variación (un mes parcial contra uno completo siempre da negativo). ¿OK?
+3. Deck: la banda "Top 1" es un solo partner (su valor se ve en el tooltip en pantalla, no en el PDF). ¿Se quita?
+4. Deck: las hojas nuevas (embudo, canales, N+R por origen) entran al PDF por defecto. ¿O a mano?
+5. Calculadora: eliminar las metas de un KAM pide confirmación pero no exige teclear el nombre. ¿Agregar esa protección?
+6. "Salir" cierra la sesión en todos los dispositivos (signOut global). ¿Solo el dispositivo actual?
+7. Usuarios → "KAM vinculado" es solo lectura: fijarlo desde la app exige una acción nueva en la Edge Function `admin-users` y desplegarla en producción.
+8. Móvil: se quitó el botón flotante de Filtros (tapaba contenido); para filtrar se usa el botón del encabezado.
 
 Nota de producto (pregunta para Manuel, no es regresión): "Salir" llama a `sb.auth.signOut()` sin `scope`, que por defecto es **global**: cerrar sesión en un dispositivo cierra la sesión del mismo usuario en todos los demás. Así se cerró dos veces la sesión de prueba del coordinador cuando un agente probó "Salir" con el mismo usuario.
 
