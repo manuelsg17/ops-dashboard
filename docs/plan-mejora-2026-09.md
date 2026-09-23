@@ -209,7 +209,7 @@ Decisiones de Manuel sobre lo surgido en la Ola 6 (24-sep-2026):
 2. Variación en mensual con el mes en curso: **se queda oculta** (ok).
 3. Deck: **quitar la banda "Top 1"** (es un solo partner, identificable).
 4. Hojas nuevas del deck: **entran al PDF por defecto** (sí).
-5. Calculadora → borrar metas del KAM: **escribir el mes para confirmar** (como en Metas).
+5. Calculadora → borrar metas del KAM: **escribir el nombre del KAM para confirmar** (corrección de Manuel; primero había elegido el mes).
 6. "Salir": **sigue cerrando todas las sesiones** (signOut global).
 7. "KAM vinculado": **prepararlo** (acción `setKam` en `admin-users`, probada en local); el despliegue a producción de la Edge Function requiere un visto bueno final aparte.
 8. Filtros en móvil sin botón flotante: Manuel lo revisa y confirma.
