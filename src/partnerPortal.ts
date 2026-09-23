@@ -14,9 +14,16 @@
 //
 // Corolario práctico: STATE.rawData YA viene recortado para un partner, así que
 // los agregados de abajo son "su total" sin filtrar nada explícitamente.
+//
+// Diseño (Ola 6, sep-2026): es lo que ve alguien de AFUERA de la empresa, así
+// que es la pantalla más cuidada y la que menos información interna muestra
+// (nada de KAMs, frescura de ingesta, jerga de columnas). Sistema de diseño:
+// tarjetas ui-kpi con delta, barras ui-progress contra la meta, gráficos con
+// chartTheme (paleta categórica de los tokens) y estilos en
+// src/styles/views/portal.css (prefijo pp-).
 
 import { registerActions } from "./shared/actions.js";
-import { t, mesLabel } from "./core/i18n";
+import { t, mesLabel, getLang } from "./core/i18n";
 import { logAccess } from "./shared/accessLog.js";
 import { stampPDF } from "./shared/pdfmeta.js";
 import { ensurePdfLibs } from "./shared/lazyLibs.js";
@@ -30,6 +37,12 @@ import { metaTasaPonderada } from "./domain/metaTasa";
 import { esMesEnCurso } from "./domain/mesEnCurso";
 import { escalaLista, reintentarCuandoEscalaLista } from "./shared/escalaLista";
 import { fechaLocalISO } from "./shared/fechaLocal";
+import { delta, badge, goalTone, emptyState, icon } from "./shared/ui";
+import { apexBase, seriesColor, chartTokens } from "./shared/chartTheme";
+import { alertDialog } from "./shared/confirmDialog";
+import { ensureFullRendColumns, ensurePartnerLogos } from "./data.js";
+import { ensureApex } from "./charts.js";
+import { ChartRegistry } from "./core/chartRegistry.js";
 
 export const PORTAL_STATE = { city: "all", line: "comb" };
 
@@ -40,10 +53,10 @@ export const PORTAL_STATE = { city: "all", line: "comb" };
 // TukTuk es ruido.
 // Texto: t("portal.linea.<k>") y t("portal.linea.<k>Tip").
 export const PORTAL_LINES = [
-  { k: "comb",  emoji: "🔀" },
-  { k: "agg",   emoji: "📊" },
-  { k: "fleet", emoji: "🚗" },
-  { k: "tk",    emoji: "🛺" }
+  { k: "comb",  icon: "chart-bar" },
+  { k: "agg",   icon: "taxi" },
+  { k: "fleet", icon: "car" },
+  { k: "tk",    icon: "tuktuk" }
 ];
 
 function _portalDataset(line) {
@@ -64,17 +77,19 @@ function _portalLine() {
 }
 
 function _portalAvailableLines() {
-  const diario = false;   // las 4 líneas ya funcionan en las 3 escalas
-  return PORTAL_LINES.filter(l => l.k === "agg" || (!diario && _portalDataset(l.k).length));
+  return PORTAL_LINES.filter(l => l.k === "agg" || _portalDataset(l.k).length);
 }
 
+// Selector de línea: control segmentado del sistema de diseño. Se arma a mano
+// (no con ui.segmented) porque la acción lee `data-line` — es el contrato que
+// usan app.ts y la huella de números (scripts/huella/huella.js).
 function _portalLineToggle() {
   const avail = _portalAvailableLines();
   if (avail.length < 2) return "";   // sin alternativas, el selector sobra
   const cur = _portalLine();
-  return `<div class="mode-toggle-row" style="margin-bottom:14px">${
-    avail.map(l => `<button class="mode-btn${cur === l.k ? " active" : ""}"
-      title="${escapeHTML(t(`portal.linea.${l.k}Tip`))}" data-act="portalSetLine" data-line="${l.k}">${l.emoji} ${t(`portal.linea.${l.k}`)}</button>`).join("")
+  return `<div class="ui-segmented" role="group" aria-label="${escapeHTML(t("portal.linea.aria"))}">${
+    avail.map(l => `<button type="button" class="ui-segmented__btn" aria-pressed="${cur === l.k}"
+      title="${escapeHTML(t(`portal.linea.${l.k}Tip`))}" data-act="portalSetLine" data-line="${l.k}">${icon(l.icon, { size: 14 })}<span>${escapeHTML(t(`portal.linea.${l.k}`))}</span></button>`).join("")
   }</div>`;
 }
 
@@ -100,16 +115,14 @@ function _portalSeries(rows, fn) {
   return { dates: Object.keys(by).sort(), values: seriesByDate(by) };
 }
 
-// WoW en % entre los dos últimos valores de una serie. null cuando no hay base
-// de comparación — un "0%" ahí sería mentira, no un dato neutro.
+// Variación en % entre un período y el anterior. null cuando no hay base de
+// comparación — un "0%" ahí sería mentira, no un dato neutro.
 function _portalWow(cur, prev) {
   if (prev == null || prev === 0 || cur == null) return null;
   return ((cur - prev) / prev) * 100;
 }
 function _wowCell(pct) {
-  if (pct == null) return `<td class="tn agy-style-90">—</td>`;
-  const col = pct >= 0 ? "#10b981" : "#FF0000";
-  return `<td class="tn"><span style="color:${col};font-weight:700">${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%</span></td>`;
+  return `<td class="ui-num">${delta(pct, { naLabel: "—" })}</td>`;
 }
 
 function _sum(rows, fn) { return rows.reduce((s, r) => s + (fn(r) || 0), 0); }
@@ -121,7 +134,7 @@ function _portalAccept(rows) {
   return v == null ? null : v * 100;
 }
 
-// KPI del último período (snapshot) + período anterior, para el badge.
+// KPI del último período (snapshot) + período anterior, para el delta.
 function _portalKpis(rows) {
   const dates = [...new Set(rows.map(r => r.date))].sort();
   const last  = dates[dates.length - 1] || "";
@@ -146,17 +159,46 @@ function _portalKpis(rows) {
   };
 }
 
-// numKey (opcional): clave de la huella de números (shared/huella.ts).
-function _kpiCard(label, sub, valor, actual, previo, color, fmtFn = fmt, numKey = "") {
-  return `
-    <div class="mcard" style="border-top:3px solid ${color}">
-      <div class="mcard-label">${label}</div>
-      <div class="mcard-sub-label">${sub}</div>
-      <div class="mcard-val"${numKey ? dn(numKey) : ""}>${fmtFn(valor)}</div>
-      <div class="agy-style-257">${bdgMode(actual, previo)}
-        <span class="agy-style-258">${t("portal.vsAnterior")}</span>
+// Delta del KPI con la MISMA semántica que bdgMode() (data.ts), que es la que
+// tenía el portal: en diario no se compara (día contra día no aporta), sin base
+// o sin dato → "N/A", base 0 con actual > 0 → "Nuevo".
+function _deltaHtml(actual, previo) {
+  if (STATE.curMode === "diario") return "";
+  if (previo == null || actual == null) return delta(null, { naLabel: "N/A" });
+  if (previo === 0) return actual > 0 ? badge(t("portal.nuevo"), "info") : delta(null, { naLabel: "—" });
+  return delta(((actual - previo) / previo) * 100);
+}
+
+function _prevLabel() {
+  const k = STATE.curMode === "mensual" ? "rend.cmp.mesAnterior" : STATE.curMode === "diario" ? "rend.cmp.diaAnterior" : "rend.cmp.semAnterior";
+  return t("rend.cmp.vs", { p: t(k) });
+}
+
+// Tarjeta KPI del sistema de diseño (misma estructura que ui.kpiCard) con la
+// clave de la huella de números en el VALOR. kpiCard() no la puede llevar: su
+// valor es texto escapado. numKey: shared/huella.ts.
+function _kpiCard(label, sub, valor, actual, previo, fmtFn = fmt, numKey = "") {
+  const d = _deltaHtml(actual, previo);
+  return `<div class="ui-kpi">
+      <div class="ui-kpi__label">${escapeHTML(label)}</div>
+      <div class="ui-kpi__row"><span class="ui-kpi__value"${numKey ? dn(numKey) : ""}>${fmtFn(valor)}</span>
+        ${d ? `<span class="ui-kpi__delta">${d}<span class="ui-kpi__prev">${escapeHTML(_prevLabel())}</span></span>` : ""}
       </div>
+      <div class="ui-kpi__sub">${escapeHTML(sub)}</div>
     </div>`;
+}
+
+// Encabezado de sección (h2 + bajada). Sin iconos de color: la jerarquía la
+// dan el tamaño y el peso, no un arcoíris.
+function _secH(title, sub, right = "") {
+  return `<div class="pp-sec__head"><div><h2 class="pp-sec__title">${title}</h2>${sub ? `<p class="pp-sec__sub">${sub}</p>` : ""}</div>${right}</div>`;
+}
+
+// Nombre del mes dentro de una frase ("de la meta de septiembre"): en español y
+// ruso los meses van en minúscula; en inglés, con mayúscula.
+function _mesEnFrase(mes) {
+  const s = mesLabel(mes) || "";
+  return ({ es: 1, ru: 1 })[getLang()] ? s.toLocaleLowerCase() : s;
 }
 
 // Metas del mes vs actual — solo de los CLIDs del partner (RLS ya recortó
@@ -218,6 +260,7 @@ function _portalMetas(line, rows) {
   const anioMes = mesYearSel != null ? mesYearSel
     : (last ? reportYM(last, STATE.curMode, parseLocalDate).y : null);
   const proyOn = esMesEnCurso(MES_NOMBRES.indexOf(mes) + 1, anioMes);
+  const mesFrase = escapeHTML(_mesEnFrase(mes));
 
   // Qué meta aplica según la línea. `null` = ese KPI no tiene meta cargada para
   // esta línea (distinto de meta 0).
@@ -261,52 +304,159 @@ function _portalMetas(line, rows) {
       m => (pesoU.get(`${m.partner}|||${m.city}`) || {})[peso]);
     const mShCar = wMeta("mSHcar", "owned"), mAcc = wMeta("mAcc", "trips"), mUtil = wMeta("mUtil", "owned");
     if (mShCar == null && mAcc == null && mUtil == null) return "";
-    return secH("🎯", "#0284c7", t("portal.metasFlota", { m: escapeHTML(mesLabel(mes)) }), t("portal.metasFlotaSub"), "") +
-      `<div class="section">
-        ${_portalMetaRow(t("portal.shCarInterno"), shCar, mShCar, null, v => fmt(v), "portal.metas.fleet.shCar")}
-        ${_portalMetaRow(t("portal.aceptacion"), accept, mAcc, null, v => fmt(v) + "%", "portal.metas.fleet.accept")}
-        ${mUtil != null ? `<div class="agy-style-196"><div class="agy-style-259">
-            <span>${t("portal.utilizacion")}</span><span><strong${dn("portal.metas.fleet.util.meta")}>${fmt(mUtil)}%</strong> <span class="agy-style-89">${t("metas.metaSinActual")}</span></span>
-          </div></div>` : ""}
-      </div>`;
+    return `<section class="pp-sec ui-card">` +
+      _secH(t("portal.metasFlota", { m: escapeHTML(mesLabel(mes)) }), t("portal.metasFlotaSub")) +
+      `<div class="pp-goals">
+        ${_portalMetaRow(t("portal.shCarInterno"), shCar, mShCar, null, v => fmt(v), "portal.metas.fleet.shCar", mesFrase)}
+        ${_portalMetaRow(t("portal.aceptacion"), accept, mAcc, null, v => fmt(v) + "%", "portal.metas.fleet.accept", mesFrase)}
+        ${mUtil != null ? `<div class="pp-goal">
+            <div class="pp-goal__head"><span class="pp-goal__label">${escapeHTML(t("portal.utilizacion"))}</span>
+              <span class="pp-goal__nums"><strong${dn("portal.metas.fleet.util.meta")}>${fmt(mUtil)}%</strong></span></div>
+            <div class="pp-goal__caption">${escapeHTML(t("portal.meta.soloMeta"))}</div>
+          </div>` : ""}
+      </div></section>`;
   }
 
   if (mA == null && mNR == null && mH == null) return "";
   const tit = line === "tk" ? "portal.metasTk" : line === "comb" ? "portal.metasComb" : "portal.metas";
-  return secH("🎯", "#8b5cf6", t(tit, { m: escapeHTML(mesLabel(mes)) }),
-      proyOn ? t("portal.metasSubEnCurso") : t("portal.metasSubCerrado"), "") +
-    `<div class="section">
-      ${_portalMetaRow(t("metric.ad.label"), adAct, mA, proyOn ? projAD(adSerie, last) : null, fmt, `portal.metas.${line}.ad`)}
-      ${_portalMetaRow(t("metric.nr.label"), nrAct, mNR, proyOn ? projectFlow(nrAct, daysElapsed, daysRemaining) : null, fmt, `portal.metas.${line}.nr`)}
-      ${_portalMetaRow(t("metric.sh.label"), shAct, mH, proyOn ? projectFlow(shAct, daysElapsed, daysRemaining) : null, fmtSmart, `portal.metas.${line}.sh`)}
-    </div>`;
+  return `<section class="pp-sec ui-card">` +
+    _secH(t(tit, { m: escapeHTML(mesLabel(mes)) }),
+      proyOn ? t("portal.metasSubEnCurso") : t("portal.metasSubCerrado")) +
+    `<div class="pp-goals">
+      ${_portalMetaRow(t("metric.ad.label"), adAct, mA, proyOn ? projAD(adSerie, last) : null, fmt, `portal.metas.${line}.ad`, mesFrase)}
+      ${_portalMetaRow(t("metric.nr.label"), nrAct, mNR, proyOn ? projectFlow(nrAct, daysElapsed, daysRemaining) : null, fmt, `portal.metas.${line}.nr`, mesFrase)}
+      ${_portalMetaRow(t("metric.sh.label"), shAct, mH, proyOn ? projectFlow(shAct, daysElapsed, daysRemaining) : null, fmtSmart, `portal.metas.${line}.sh`, mesFrase)}
+    </div></section>`;
 }
 
-// Fila meta-vs-actual con barra de avance y (si aplica) marca de proyección.
-function _portalMetaRow(label, act, meta, proj, fmtFn, numKey = "") {
+// Fila meta-vs-actual: valor, barra de avance (ui-progress, mismos cortes que
+// el resto de la app vía goalTone) con la proyección como franja clara, y un
+// pie "83.2% de la meta de septiembre (3,343)".
+function _portalMetaRow(label, act, meta, proj, fmtFn, numKey = "", mesFrase = "") {
   const _k = sfx => numKey ? dn(numKey, sfx) : "";   // huella de números
   if (meta == null || !meta) return "";
   // Sin actual medible (tasa sin dato en el rango): la meta se muestra, pero
   // sin barra ni % — un 0% se leería como incumplimiento total.
   if (act == null) return `
-    <div class="agy-style-196"><div class="agy-style-259">
-      <span>${label}</span><span><strong${_k("real")}>—</strong> <span class="agy-style-89">/ <span${_k("meta")}>${fmtFn(meta)}</span> · ${t("portal.sinDatoRango")}</span></span>
-    </div></div>`;
+    <div class="pp-goal">
+      <div class="pp-goal__head"><span class="pp-goal__label">${escapeHTML(label)}</span>
+        <span class="pp-goal__nums"><strong${_k("real")}>—</strong></span></div>
+      <div class="pp-goal__caption"><span>${t("portal.meta.sinDato", { v: `<span${_k("meta")}>${fmtFn(meta)}</span>` })}</span></div>
+    </div>`;
   const p  = (act / meta) * 100;
   const pp = proj != null ? (proj / meta) * 100 : null;
+  const tone = goalTone(p) || "bad";
+  const toneP = goalTone(pp) || tone;
+  const w = v => Math.max(0, Math.min(100, v)).toFixed(1);
+  const cap = t("portal.meta.caption", {
+    p: `<span class="pp-tone--${tone} pp-goal__pct"${_k("pct")}>${p.toFixed(1)}%</span>`,
+    m: mesFrase,
+    v: `<span${_k("meta")}>${fmtFn(meta)}</span>`
+  });
+  const proyTxt = pp != null ? `<span class="pp-goal__proj pp-tone--${toneP}">${t("portal.meta.proy", {
+    v: `<strong${_k("proj")}>${fmtFn(proj)}</strong>`, p: `${pp.toFixed(1)}%`
+  })}</span>` : "";
   return `
-    <div class="agy-style-196">
-      <div class="agy-style-259">
-        <span>${label}</span>
-        <span><strong${_k("real")}>${fmtFn(act)}</strong> <span class="agy-style-89">/ <span${_k("meta")}>${fmtFn(meta)}</span></span>
-          <strong style="color:${pColor(p)};margin-left:6px"${_k("pct")}>${p.toFixed(1)}%</strong></span>
+    <div class="pp-goal">
+      <div class="pp-goal__head"><span class="pp-goal__label">${escapeHTML(label)}</span>
+        <span class="pp-goal__nums"><strong${_k("real")}>${fmtFn(act)}</strong></span></div>
+      <div class="ui-progress ui-progress--${tone}" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+        aria-valuenow="${Math.round(Math.max(0, Math.min(100, p)))}" aria-label="${escapeHTML(label)}">
+        ${pp != null && pp > p ? `<div class="ui-progress__proj" style="width:${w(pp)}%"></div>` : ""}
+        <div class="ui-progress__bar" style="width:${w(p)}%"></div>
       </div>
-      <div class="agy-style-260" style="position:relative">
-        ${pp != null && pp > p ? `<div style="position:absolute;top:0;left:0;height:100%;width:${Math.min(pp,100).toFixed(1)}%;background:${pColor(pp)};opacity:.32;border-radius:5px"></div>` : ""}
-        <div style="position:relative;height:100%;width:${Math.min(p, 100).toFixed(1)}%;background:${pColor(p)};border-radius:5px"></div>
-      </div>
-      ${pp != null ? `<div style="font-size:.68rem;color:${pColor(pp)};margin-top:3px">${t("portal.proyCierre")} <strong${_k("proj")}>${fmtFn(proj)}</strong> (${pp.toFixed(1)}%)</div>` : ""}
+      <div class="pp-goal__caption"><span>${cap}</span>${proyTxt}</div>
     </div>`;
+}
+
+// ── Encabezado del informe (entra al PDF) ───────────────────────────────────
+// El encabezado de la app ya dice "Tu desempeño" y el nombre del partner, pero
+// el PDF solo captura #portalContent: sin esto el archivo no diría de quién es.
+function _portalLogo(nombre) {
+  const url = (STATE.partnerLogos || {})[nombre];
+  if (url) return `<img class="pp-hero__logo" src="${escapeHTML(url)}" alt="">`;
+  const ini = String(nombre || "").trim().split(/\s+/).slice(0, 2).map(w => w[0] || "").join("").toUpperCase();
+  return `<div class="pp-hero__logo pp-hero__logo--mono" aria-hidden="true">${escapeHTML(ini)}</div>`;
+}
+
+// Logos: carga diferida (data.ts), una vez por sesión. Si trae el logo de este
+// partner se repinta; si no, queda el monograma.
+let _logosPedidos = false;
+function _pedirLogos(nombre) {
+  if (_logosPedidos || STATE._logosCargados) return;
+  _logosPedidos = true;
+  ensurePartnerLogos().then(() => {
+    if (STATE.curTab === "portal" && (STATE.partnerLogos || {})[nombre]) renderPartnerPortal();
+  }).catch(() => { /* sin logo, monograma */ });
+}
+
+// Columnas diferidas (aceptación, autos propios, horas internas de flota…): el
+// portal las pide él mismo. Antes dependía de la precarga en idle de app.ts, y
+// un partner que arrancaba en mensual veía la aceptación en "—". Se pinta con
+// lo que hay y se repinta cuando llegan (una vez por escala).
+const _colsPedidas = {};
+const _PENDIENTE = {};
+function _pedirColumnas() {
+  const mode = STATE.curMode || "semanal";
+  if (_colsPedidas[mode]) return;
+  _colsPedidas[mode] = true;
+  const p = Promise.resolve(ensureFullRendColumns());
+  // Solo se repinta si la carga estaba EN VUELO: si la precarga de app.ts ya las
+  // había traído, repintar no cambia nada y solo pisa los gráficos a mitad de
+  // su render. (race con una promesa ya resuelta = "ya estaba".)
+  Promise.race([p, Promise.resolve(_PENDIENTE)]).then(v => {
+    if (v !== _PENDIENTE) return;
+    p.then(() => {
+      if (STATE.curTab === "portal" && STATE.curMode === mode) renderPartnerPortal();
+    });
+  }).catch(() => { _colsPedidas[mode] = false; });
+}
+
+// ── Gráficos de evolución (chartTheme) ──────────────────────────────────────
+function _merge(a, b) {
+  if (Array.isArray(b) || b == null || typeof b !== "object") return b;
+  const out = { ...(a && typeof a === "object" && !Array.isArray(a) ? a : {}) };
+  Object.keys(b).forEach(k => { out[k] = _merge(out[k], b[k]); });
+  return out;
+}
+// Eje X corto: "03/08" en semanal/diario (el año ya está en el encabezado),
+// "09/2026" en mensual. Con la fecha completa ApexCharts las recortaba.
+const _etiquetaEje = d => (d && d.length === 10) ? d2s(d).slice(0, 5) : d2s(d);
+const _fmtEje = v => (v == null || !isFinite(v)) ? "—" : Math.abs(v) >= 10000 ? fmtSmart(v) : fmt(v);
+
+function _portalChart(id, dates, name, values, color) {
+  if (!window.ApexCharts) { ensureApex().then(() => _portalChart(id, dates, name, values, color)); return; }
+  const el = document.getElementById(id);
+  if (!el) return;
+  // Sin ancho (pestaña todavía oculta, panel de filtros abriéndose en móvil)
+  // ApexCharts dibuja con NaN: se espera a que el contenedor tenga tamaño.
+  if (!el.getBoundingClientRect().width && typeof ResizeObserver !== "undefined") {
+    const ro = new ResizeObserver(() => {
+      if (!el.isConnected) { ro.disconnect(); return; }
+      if (el.getBoundingClientRect().width) { ro.disconnect(); _portalChart(id, dates, name, values, color); }
+    });
+    ro.observe(el);
+    return;
+  }
+  const prev = STATE.charts && STATE.charts[id];
+  if (prev) { try { prev.destroy(); } catch (e) { /* huérfano */ } delete STATE.charts[id]; }
+  const opts = _merge(apexBase(), {
+    chart: { type: "area", height: 220, animations: { enabled: false } },
+    series: [{ name, data: values }],
+    colors: [color],
+    stroke: { width: 2, curve: "straight" },
+    fill: { type: "gradient", gradient: { shadeIntensity: 0, opacityFrom: 0.18, opacityTo: 0.02, stops: [0, 100] } },
+    markers: { size: dates.length <= 14 ? 3 : 0, strokeWidth: 0, hover: { size: 5 } },
+    legend: { show: false },
+    grid: { padding: { left: 8, right: 20 } },
+    xaxis: { categories: dates.map(_etiquetaEje), labels: { rotate: 0, hideOverlappingLabels: true, trim: false } },
+    yaxis: { labels: { formatter: _fmtEje }, forceNiceScale: true },
+    tooltip: { y: { formatter: _fmtEje } }
+  });
+  const ch = new ApexCharts(el, opts);
+  ch.render();
+  if (STATE.charts) STATE.charts[id] = ch;
+  ChartRegistry.register(id, ch);
 }
 
 // ── RENDER ───────────────────────────────────────────────────────────────────
@@ -319,55 +469,66 @@ export function renderPartnerPortal() {
   // después cambiaban — delante del partner. Se espera al dataset correcto.
   if (!escalaLista(STATE)) {
     const esc = STATE.curMode === "mensual" ? "datos.cargandoMensual" : STATE.curMode === "diario" ? "datos.cargandoDiario" : "datos.cargandoSemanal";
-    box.innerHTML = `<div class="empty"><p>${t(esc)}</p></div>`;
+    box.innerHTML = `<div class="pp">${emptyState({ title: t(esc), icon: "clock" })}</div>`;
     reintentarCuandoEscalaLista("portal", STATE, renderPartnerPortal, () => STATE.curTab === "portal");
     return;
   }
+  _pedirColumnas();
 
   const line = _portalLine();
   const rows = _portalRows(line);
+  const ciudades = [...new Set((STATE.rawData || []).map(r => r.city).filter(Boolean))].sort();
+
+  // Barra de controles: línea + ciudad (solo si opera en más de una) + PDF.
+  // data-html2canvas-ignore: no sale en el PDF (el encabezado ya dice qué línea
+  // y escala se está viendo).
+  const ciudadSel = ciudades.length > 1 ? `<label class="pp-toolbar__field">
+      <span class="pp-toolbar__label">${escapeHTML(t("sidebar.ciudad"))}</span>
+      <select class="ui-select ui-select--sm" data-act-change="portalSetCity">
+        <option value="all">${escapeHTML(t("metas.todas"))}</option>
+        ${ciudades.map(c => `<option value="${escapeHTML(c)}"${PORTAL_STATE.city === c ? " selected" : ""}>${escapeHTML(cityLabel(c))}</option>`).join("")}
+      </select></label>` : "";
+  const toolbar = (conPdf) => `<div class="pp-toolbar" data-html2canvas-ignore="true">
+      ${_portalLineToggle()}${ciudadSel}
+      ${conPdf ? `<button type="button" class="ui-btn ui-btn--primary ui-btn--sm pp-toolbar__pdf" id="portalPdfBtn" data-act="portalDownloadPDF">${icon("download", { size: 14 })}<span>${escapeHTML(t("portal.descargarPDF"))}</span></button>` : ""}
+    </div>`;
+
   if (!rows.length) {
-    box.innerHTML = _portalLineToggle() + `
-      <div class="empty">
-        <p>${t("portal.sinDatos")}</p>
-        <p class="empty-sub">${t("portal.sinDatosSub")}</p>
-      </div>`;
+    box.innerHTML = `<div class="pp">${toolbar(false)}${emptyState({
+      title: t("portal.sinDatos"), text: t("portal.sinDatosSub"), icon: "calendar"
+    })}</div>`;
     return;
   }
 
   const k = _portalKpis(rows);
   const misPartners = [...new Set(rows.map(r => r.partner))].sort();
-  const ciudades    = [...new Set((STATE.rawData || []).map(r => r.city).filter(Boolean))].sort();
   // Dos formas: "último mes/día" vs "última semana" (concordancia de género), y
-  // "vs el mes anterior" para la nota del WoW.
+  // "vs el mes anterior" para la nota de la variación.
   const escalaN = t(STATE.curMode === "mensual" ? "portal.ultMes" : STATE.curMode === "diario" ? "portal.ultDia" : "portal.ultSemana");
-  const escala  = t(STATE.curMode === "mensual" ? "portal.escMes" : STATE.curMode === "diario" ? "portal.escDia" : "portal.escSemana");
+  const cap = s => s ? s.charAt(0).toLocaleUpperCase() + s.slice(1) : s;
 
   // Título: normalmente 1-2 nombres (RLS recorta a los CLIDs del partner). Se
   // acota igual por robustez — un partner con muchos CLIDs bajo razones
   // sociales distintas no debe romper el encabezado.
   const titulo = misPartners.length > 3
-    ? misPartners.slice(0, 3).map(escapeHTML).join(" · ") + ` <span class="agy-style-261">${t("portal.yMas", { n: misPartners.length - 3 })}</span>`
+    ? misPartners.slice(0, 3).map(escapeHTML).join(" · ") + ` <span class="pp-hero__more">${t("portal.yMas", { n: misPartners.length - 3 })}</span>`
     : (misPartners.map(escapeHTML).join(" · ") || t("portal.tuOperacion"));
+  _pedirLogos(misPartners[0]);
 
-  let html = _portalLineToggle();
-  html += secH("📊", "#FF0000", titulo,
-    t("portal.tituloSub", { e: escalaN }),
-    d2s(k.last));
+  const fechas = [...new Set(rows.map(r => r.date))].sort();
+  const rango = fechas.length > 1 ? `${d2s(fechas[0])} – ${d2s(fechas[fechas.length - 1])}` : d2s(fechas[0]);
+  const lineaTxt = t(`portal.linea.${line}`);
+  const ciudadTxt = PORTAL_STATE.city === "all" ? "" : ` · ${escapeHTML(cityLabel(PORTAL_STATE.city))}`;
 
-  // Barra de herramientas: filtro de ciudad (solo si opera en más de una) + PDF.
-  // El botón lleva data-html2canvas-ignore para no salir dentro del propio PDF.
-  html += `<div class="section agy-style-262">`;
-  if (ciudades.length > 1) {
-    html += `<label class="agy-style-263">${t("sidebar.ciudad")}</label>
-      <select class="sb-sel agy-style-10" data-act-change="portalSetCity">
-        <option value="all">${t("metas.todas")}</option>
-        ${ciudades.map(c => `<option value="${escapeHTML(c)}"${PORTAL_STATE.city === c ? " selected" : ""}>${cityLabel(c)}</option>`).join("")}
-      </select>`;
-  }
-  html += `<button class="apply-btn agy-style-264" id="portalPdfBtn" data-html2canvas-ignore="true"
-      data-act="portalDownloadPDF">${t("portal.descargarPDF")}</button>
-    </div>`;
+  let html = `<div class="pp">` + toolbar(true);
+  html += `<header class="pp-hero ui-card">
+      ${_portalLogo(misPartners[0])}
+      <div class="pp-hero__text">
+        <h2 class="pp-hero__name">${titulo}</h2>
+        <p class="pp-hero__meta">${escapeHTML(lineaTxt)} · ${escapeHTML(t(`mode.${STATE.curMode}`))}${ciudadTxt} · ${escapeHTML(t("portal.hero.rango", { r: rango }))}</p>
+      </div>
+      <div class="pp-hero__date"><span class="pp-hero__date-lbl">${escapeHTML(t("portal.hero.datosAl"))}</span><strong>${d2s(k.last)}</strong></div>
+    </header>`;
 
   // ── KPIs ────────────────────────────────────────────────────────────────
   // Fleet tiene sus propios KPIs (tasas de flota); el resto de las líneas
@@ -385,7 +546,7 @@ export function renderPartnerPortal() {
     const rowsLast = rows.filter(r => r.date === dLast);
     const rowsPrev = dPrev ? rows.filter(r => r.date === dPrev) : [];
     // OJO: acá estaba el bug de los "+0.0%" — se pasaba el MISMO valor como
-    // actual y como anterior, así que bdgMode() siempre comparaba un número
+    // actual y como anterior, así que el delta siempre comparaba un número
     // contra sí mismo. Ahora el período anterior se calcula de verdad.
     const fl = rs => {
       const owned = _sum(rs, r => r.ownedFleetActiveCars || 0);
@@ -397,49 +558,52 @@ export function renderPartnerPortal() {
       };
     };
     const now = fl(rowsLast), prev = fl(rowsPrev);
-    html += `<div class="section"><div class="metric-row">
-      ${_kpiCard("🚗 " + t("portal.autosPropios"), escalaN, now.owned, now.owned, prev.owned, "#0284c7", fmt, "portal.kpi.fleet.owned")}
-      ${_kpiCard("🎨 " + t("metas.brandeados"), escalaN, now.branded, now.branded, prev.branded, "#7e22ce", fmt, "portal.kpi.fleet.branded")}
-      ${_kpiCard("⏱️ " + t("portal.shCarInterno"), escalaN, now.shCar, now.shCar, prev.shCar, "#8b5cf6", v => fmt(v), "portal.kpi.fleet.shCar")}
-      ${_kpiCard("✅ " + t("portal.aceptacion"), `${escalaN} · ${t("portal.ponderadaViajes")}`, now.accept, now.accept, prev.accept, "#10b981", v => v == null ? "—" : fmt(v) + "%", "portal.kpi.fleet.accept")}
-    </div></div>`;
+    html += `<div class="ui-kpi-grid pp-kpis">
+      ${_kpiCard(t("portal.autosPropios"), cap(escalaN), now.owned, now.owned, prev.owned, fmt, "portal.kpi.fleet.owned")}
+      ${_kpiCard(t("metas.brandeados"), cap(escalaN), now.branded, now.branded, prev.branded, fmt, "portal.kpi.fleet.branded")}
+      ${_kpiCard(t("portal.shCarInterno"), cap(escalaN), now.shCar, now.shCar, prev.shCar, v => fmt(v), "portal.kpi.fleet.shCar")}
+      ${_kpiCard(t("portal.aceptacion"), `${cap(escalaN)} · ${t("portal.ponderadaViajes")}`, now.accept, now.accept, prev.accept, v => v == null ? "—" : fmt(v) + "%", "portal.kpi.fleet.accept")}
+    </div>`;
   } else {
-    html += `<div class="section"><div class="metric-row">
-      ${_kpiCard("📊 " + t("metric.ad.label"), escalaN, k.ad,  k.ad,  k.adP, "#FF0000", fmt, `portal.kpi.${line}.ad`)}
-      ${_kpiCard("🆕 " + t("metric.nr.label"), t("portal.acumRango"), k.nr, k.nrL, k.nrP, "#f97316", fmt, `portal.kpi.${line}.nr`)}
-      ${_kpiCard("⏱️ " + t("metric.sh.label"), t("portal.acumRango"), k.sh, k.shL, k.shP, "#8b5cf6", fmtSmart, `portal.kpi.${line}.sh`)}
-      ${_kpiCard("🚕 " + t("metric.tr.label"), t("portal.acumRango"), k.tr, k.trL, k.trP, "#0284c7", fmtSmart, `portal.kpi.${line}.tr`)}
-    </div></div>`;
+    html += `<div class="ui-kpi-grid pp-kpis">
+      ${_kpiCard(t("metric.ad.label"), cap(escalaN), k.ad,  k.ad,  k.adP, fmt, `portal.kpi.${line}.ad`)}
+      ${_kpiCard(t("metric.nr.label"), cap(t("portal.acumRango")), k.nr, k.nrL, k.nrP, fmt, `portal.kpi.${line}.nr`)}
+      ${_kpiCard(t("metric.sh.label"), cap(t("portal.acumRango")), k.sh, k.shL, k.shP, fmtSmart, `portal.kpi.${line}.sh`)}
+      ${_kpiCard(t("metric.tr.label"), cap(t("portal.acumRango")), k.tr, k.trL, k.trP, fmtSmart, `portal.kpi.${line}.tr`)}
+    </div>`;
   }
+  html += `<p class="pp-note">${escapeHTML(line === "fleet" ? t("portal.notaFleet") : t("portal.tituloSub", { e: escalaN }))}</p>`;
 
   html += _portalMetas(line, rows);
 
-  // ── Evolución: una gráfica por KPI (mismo estilo que el deck) ───────────
+  // ── Evolución: una gráfica por KPI, color fijo por KPI (paleta de tokens) ─
   const charts = line === "fleet"
-    ? [{ id: "portalChAd",  label: t("portal.autosPropios"), color: "#0284c7", fn: r => r.ownedFleetActiveCars || 0 },
-       { id: "portalChNr",  label: t("metas.brandeados"),    color: "#7e22ce", fn: r => r.brandedActiveCars || 0 },
-       { id: "portalChSh",  label: t("portal.horasInternas"), color: "#8b5cf6", fn: r => r.internalFleetSh || 0 },
-       { id: "portalChTr",  label: t("metric.tr.label"),     color: "#0284c7", fn: r => r.trips || 0 }]
-    : [{ id: "portalChAd",  label: t("metric.ad.label"),     color: "#FF0000", fn: r => r.activeDrivers || 0 },
-       { id: "portalChNr",  label: t("metric.nr.label"),     color: "#f97316", fn: r => (r.newPartner || 0) + (r.newService || 0) + (r.reactivated || 0) },
-       { id: "portalChSh",  label: t("metric.sh.label"),     color: "#8b5cf6", fn: r => r.supplyHours || 0 },
-       { id: "portalChTr",  label: t("metric.tr.label"),     color: "#0284c7", fn: r => r.trips || 0 }];
+    ? [{ id: "portalChAd",  label: t("portal.autosPropios"),  fn: r => r.ownedFleetActiveCars || 0 },
+       { id: "portalChNr",  label: t("metas.brandeados"),     fn: r => r.brandedActiveCars || 0 },
+       { id: "portalChSh",  label: t("portal.horasInternas"), fn: r => r.internalFleetSh || 0 },
+       { id: "portalChTr",  label: t("metric.tr.label"),      fn: r => r.trips || 0 }]
+    : [{ id: "portalChAd",  label: t("metric.ad.label"),      fn: r => r.activeDrivers || 0 },
+       { id: "portalChNr",  label: t("metric.nr.label"),      fn: r => (r.newPartner || 0) + (r.newService || 0) + (r.reactivated || 0) },
+       { id: "portalChSh",  label: t("metric.sh.label"),      fn: r => r.supplyHours || 0 },
+       { id: "portalChTr",  label: t("metric.tr.label"),      fn: r => r.trips || 0 }];
 
-  html += secH("📈", "#10b981", t("portal.evolucion"), t("portal.evolucionSub", { e: t(`mode.${STATE.curMode}`) }), "");
-  html += `<div class="section"><div class="agy-style-527">${
-    charts.map(c => `<div class="chart-card">
-      <div class="chart-head"><span class="chart-title">${escapeHTML(c.label)}</span></div>
-      <div id="${c.id}"></div></div>`).join("")
-  }</div></div>`;
+  html += `<section class="pp-sec">` +
+    _secH(t("portal.evolucion"), t("portal.evolucionSub", { e: escapeHTML(t(`mode.${STATE.curMode}`).toLocaleLowerCase()) })) +
+    `<div class="pp-charts">${
+      charts.map(c => `<div class="ui-card pp-chart">
+        <div class="pp-chart__title">${escapeHTML(c.label)}</div>
+        <div id="${c.id}" class="pp-chart__plot"></div></div>`).join("")
+    }</div></section>`;
 
-  // ── Detalle por período, con WoW ────────────────────────────────────────
-  html += secH("📋", "#6366f1", t("portal.detalle"), t("portal.detalleSub", { e: escala }), "");
-  html += `<div class="section"><div class="tbl-wrap"><table class="dtbl"><thead><tr>
-      <th>${t("portal.th.periodo")}</th>
-      <th class="tn">${t("portal.th.ad")}</th><th class="tn">WoW</th>
-      <th class="tn">${t("portal.th.nr")}</th><th class="tn">WoW</th>
-      <th class="tn">${t("portal.th.sh")}</th><th class="tn">WoW</th>
-      <th class="tn">${t("metric.tr.label")}</th><th class="tn">WoW</th>
+  // ── Detalle por período, con variación vs el período anterior ───────────
+  html += `<section class="pp-sec">` +
+    _secH(t("portal.detalle"), t("portal.detalleSub")) +
+    `<div class="ui-table-wrap"><table class="ui-table ui-table--sticky-first pp-table"><thead><tr>
+      <th>${escapeHTML(t("portal.th.periodo"))}</th>
+      <th class="ui-num">${escapeHTML(t("portal.th.ad"))}</th><th class="ui-num">${escapeHTML(t("portal.th.var"))}</th>
+      <th class="ui-num">${escapeHTML(t("portal.th.nr"))}</th><th class="ui-num">${escapeHTML(t("portal.th.var"))}</th>
+      <th class="ui-num">${escapeHTML(t("portal.th.sh"))}</th><th class="ui-num">${escapeHTML(t("portal.th.var"))}</th>
+      <th class="ui-num">${escapeHTML(t("metric.tr.label"))}</th><th class="ui-num">${escapeHTML(t("portal.th.var"))}</th>
     </tr></thead><tbody>`;
   const porFecha = new Map();
   rows.forEach(r => {
@@ -451,31 +615,31 @@ export function renderPartnerPortal() {
     a.tr += r.trips || 0;
   });
   const fechasAsc = [...porFecha.keys()].sort();
-  // Se recorre DESCENDENTE para mostrar lo más reciente arriba, pero el WoW se
-  // calcula contra el período inmediatamente ANTERIOR en el tiempo (índice-1 del
-  // array ascendente), no contra la fila de abajo en pantalla.
+  // Se recorre DESCENDENTE para mostrar lo más reciente arriba, pero la
+  // variación se calcula contra el período inmediatamente ANTERIOR en el tiempo
+  // (índice-1 del array ascendente), no contra la fila de abajo en pantalla.
   [...fechasAsc].reverse().forEach(d => {
     const v = porFecha.get(d);
     const i = fechasAsc.indexOf(d);
     const prev = i > 0 ? porFecha.get(fechasAsc[i - 1]) : null;
     html += `<tr>
       <td>${d2s(d)}</td>
-      <td class="tn"${dn("portal.detalle.ad", d)}>${fmt(v.ad)}</td>${_wowCell(_portalWow(v.ad, prev && prev.ad))}
-      <td class="tn"${dn("portal.detalle.nr", d)}>${fmt(v.nr)}</td>${_wowCell(_portalWow(v.nr, prev && prev.nr))}
-      <td class="tn"${dn("portal.detalle.sh", d)}>${fmtSmart(v.sh)}</td>${_wowCell(_portalWow(v.sh, prev && prev.sh))}
-      <td class="tn"${dn("portal.detalle.tr", d)}>${fmtSmart(v.tr)}</td>${_wowCell(_portalWow(v.tr, prev && prev.tr))}
+      <td class="ui-num"${dn("portal.detalle.ad", d)}>${fmt(v.ad)}</td>${_wowCell(_portalWow(v.ad, prev && prev.ad))}
+      <td class="ui-num"${dn("portal.detalle.nr", d)}>${fmt(v.nr)}</td>${_wowCell(_portalWow(v.nr, prev && prev.nr))}
+      <td class="ui-num"${dn("portal.detalle.sh", d)}>${fmtSmart(v.sh)}</td>${_wowCell(_portalWow(v.sh, prev && prev.sh))}
+      <td class="ui-num"${dn("portal.detalle.tr", d)}>${fmtSmart(v.tr)}</td>${_wowCell(_portalWow(v.tr, prev && prev.tr))}
     </tr>`;
   });
-  html += `</tbody></table></div></div>`;
+  html += `</tbody></table></div></section></div>`;
 
   box.innerHTML = html;
 
-  // Charts (mismo helper que el resto del dashboard; ApexCharts es lazy y
-  // buildLineChart se re-encola solo si todavía no llegó).
-  charts.forEach(c => {
+  // Charts: ApexCharts es lazy; _portalChart se re-encola solo si no llegó.
+  const tk = chartTokens();
+  charts.forEach((c, i) => {
     try {
       const s = _portalSeries(rows, c.fn);
-      buildLineChart(c.id, s.dates, [{ name: c.label, data: s.values }], [c.color]);
+      _portalChart(c.id, s.dates, c.label, s.values, seriesColor(i, tk));
     } catch (_) { /* el chart es accesorio: nunca romper la vista por él */ }
   });
 }
@@ -498,11 +662,12 @@ export async function portalDownloadPDF() {
   const content = document.getElementById("portalContent");
   if (!content) return;
   const btn = document.getElementById("portalPdfBtn");
-  if (btn) { btn.textContent = "⏳ " + t("metas.generandoPDF"); btn.disabled = true; }
+  const lbl = btn && btn.querySelector("span");
+  if (btn) { if (lbl) lbl.textContent = t("metas.generandoPDF"); btn.disabled = true; }
   try {
     await ensurePdfLibs();
     let bg = getComputedStyle(document.body).backgroundColor;
-    if (!bg || bg === "transparent" || bg === "rgba(0, 0, 0, 0)") bg = "#F2F2F2";
+    if (!bg || bg === "transparent" || bg === "rgba(0, 0, 0, 0)") bg = "white";
     const canvas = await html2canvas(content, { scale: 2, useCORS: true, logging: false, backgroundColor: bg });
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ orientation: "portrait", unit: "px", format: [canvas.width, canvas.height] });
@@ -512,10 +677,10 @@ export async function portalDownloadPDF() {
   } catch (err) {
     // Mensaje genérico a propósito: el portal es de cara externa, no le eco
     // detalles internos (payloads de Supabase, stacks) a un partner.
-    alert(t("portal.errPDF"));
     if (DEBUG) console.error(err);
+    await alertDialog({ title: t("portal.errPDFTitulo"), body: t("portal.errPDF"), tone: "bad" });
   } finally {
-    if (btn) { btn.textContent = t("portal.descargarPDF"); btn.disabled = false; }
+    if (btn) { if (lbl) lbl.textContent = t("portal.descargarPDF"); btn.disabled = false; }
   }
 }
 

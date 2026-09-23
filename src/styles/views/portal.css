@@ -1,0 +1,117 @@
+/* ═════════════════════════════════════════════════════════════════════════
+   views/portal.css — Portal del partner (Ola 6, sep-2026)
+
+   Lo que ve un partner EXTERNO: la pantalla más cuidada de la app. Solo tokens
+   semánticos (nada de hex) para heredar el modo oscuro. Componentes base
+   (ui-kpi, ui-progress, ui-table, ui-segmented, ui-card) en components.css;
+   acá solo el layout y las piezas propias (prefijo pp-).
+   ═════════════════════════════════════════════════════════════════════════ */
+
+.pp { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
+
+/* ── Barra de controles (no sale en el PDF) ───────────────────────────────── */
+.pp-toolbar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3);
+}
+.pp-toolbar__field { display: inline-flex; align-items: center; gap: var(--space-2); }
+.pp-toolbar__label { font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--color-text-muted); }
+.pp-toolbar__field .ui-select { width: auto; min-width: 140px; }
+.pp-toolbar__pdf { margin-left: auto; }
+
+/* ── Encabezado del informe ───────────────────────────────────────────────── */
+.pp-hero {
+  display: flex; align-items: center; gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+}
+.pp-hero__logo {
+  flex: 0 0 auto; width: 56px; height: 56px; border-radius: var(--radius-md);
+  object-fit: contain; background: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+.pp-hero__logo--mono {
+  display: flex; align-items: center; justify-content: center;
+  font-size: var(--text-lg); font-weight: var(--weight-bold); letter-spacing: .02em;
+  color: var(--color-text-muted); background: var(--color-surface-sunken);
+}
+.pp-hero__text { flex: 1 1 auto; min-width: 0; }
+.pp-hero__name {
+  margin: 0; font-size: var(--text-xl); font-weight: var(--weight-bold);
+  line-height: var(--leading-tight); color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+.pp-hero__more { font-size: var(--text-md); font-weight: var(--weight-regular); color: var(--color-text-muted); }
+.pp-hero__meta { margin: var(--space-1) 0 0; font-size: var(--text-md); color: var(--color-text-muted); }
+.pp-hero__date {
+  flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.pp-hero__date-lbl { font-size: var(--text-xs); color: var(--color-text-subtle); }
+.pp-hero__date strong { font-size: var(--text-lg); color: var(--color-text); }
+
+/* ── KPIs ─────────────────────────────────────────────────────────────────── */
+/* 4 en fila en escritorio, 2×2 en tablet, 1 columna en móvil: nunca una
+   tarjeta sola en una fila de 3. */
+.pp-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.pp-note { margin: calc(-1 * var(--space-3)) 0 0; font-size: var(--text-xs); color: var(--color-text-subtle); }
+
+/* ── Secciones ────────────────────────────────────────────────────────────── */
+.pp-sec { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.pp-sec.ui-card { padding: var(--space-5); }
+.pp-sec__head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-3); }
+.pp-sec__title { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semibold); color: var(--color-text); line-height: var(--leading-tight); }
+.pp-sec__sub { margin: 2px 0 0; font-size: var(--text-sm); color: var(--color-text-muted); }
+
+/* ── Metas ────────────────────────────────────────────────────────────────── */
+.pp-goals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-5); }
+.pp-goal { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.pp-goal__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.pp-goal__label { font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--color-text-muted); }
+.pp-goal__nums strong {
+  font-size: var(--text-xl); font-weight: var(--weight-bold); color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+.pp-goal .ui-progress { height: 8px; }
+.pp-goal__caption {
+  display: flex; flex-direction: column; gap: 2px; line-height: var(--leading-normal);
+  font-size: var(--text-sm); color: var(--color-text-muted); font-variant-numeric: tabular-nums;
+}
+.pp-goal__pct { font-weight: var(--weight-bold); }
+.pp-goal__proj { font-size: var(--text-xs); }
+.pp-goal__proj strong { font-weight: var(--weight-bold); }
+
+.pp-tone--ok   { color: var(--color-ok-fg); }
+.pp-tone--warn { color: var(--color-warn-fg); }
+.pp-tone--bad  { color: var(--color-bad-fg); }
+.pp-tone--over { color: var(--color-over-fg); }
+
+/* ── Gráficos ─────────────────────────────────────────────────────────────── */
+.pp-charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.pp-chart { min-width: 0; padding: var(--space-4) var(--space-4) var(--space-2); }
+.pp-chart__title { font-size: var(--text-md); font-weight: var(--weight-semibold); color: var(--color-text); }
+.pp-chart__plot { min-width: 0; min-height: 220px; }
+
+/* ── Tabla de detalle ─────────────────────────────────────────────────────── */
+.pp-table td:first-child { white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* display:flex (no inline-flex) a propósito: html2canvas 1.4 no dibuja el
+   texto de un inline-flex suelto en una celda de tabla — en el PDF quedaban
+   las píldoras vacías. Medido: con flex + margin-left:auto sale completo. */
+.pp-table .ui-delta { display: flex; width: fit-content; margin-left: auto; font-size: var(--text-xs); }
+
+/* ── Responsive ───────────────────────────────────────────────────────────── */
+@media (max-width: 1180px) {
+  .pp-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+  .pp-goals { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+  .pp-charts { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 600px) {
+  .pp-kpis { grid-template-columns: minmax(0, 1fr); }
+  .pp-hero { flex-wrap: wrap; gap: var(--space-3); padding: var(--space-4); }
+  .pp-hero__logo { width: 44px; height: 44px; }
+  .pp-hero__text { flex: 1 1 0; }
+  .pp-hero__name { font-size: var(--text-lg); }
+  .pp-hero__date { flex-direction: row; align-items: baseline; gap: var(--space-2); width: 100%; }
+  .pp-toolbar__pdf { margin-left: 0; }
+  .pp-toolbar .ui-segmented { max-width: 100%; overflow-x: auto; }
+}

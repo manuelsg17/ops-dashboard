@@ -26,6 +26,8 @@ import "./styles/views/calculator.css";
 import "./styles/views/metas.css";
 import "./styles/views/rendimiento.css";
 import "./styles/views/presentacion.css";
+import "./styles/views/seguimiento.css";
+import "./styles/views/portal.css";
 import { createClient } from "@supabase/supabase-js";
 import { t } from "./core/i18n";
 
