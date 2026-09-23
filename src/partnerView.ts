@@ -1413,7 +1413,7 @@ export function pvSearchKeydown(e) {
     const first = list && list.querySelector(".pv-opt");
     if (first) {
       // Reusar el handler del onmousedown
-      first.dispatchEvent(new MouseEvent("mousedown"));
+      first.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
     }
     e.preventDefault();
   } else if (e.key === "Escape") {

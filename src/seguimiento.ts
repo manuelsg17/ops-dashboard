@@ -580,7 +580,7 @@ export function segSelectPartner(p) {
 export function segSearchKeydown(e) {
   if (e.key === "Enter") {
     const f = document.querySelector("#segPartnerList .seg-opt");
-    if (f) f.dispatchEvent(new MouseEvent("mousedown"));
+    if (f) f.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
     e.preventDefault();
   } else if (e.key === "Escape") { segHidePartnerList(); }
 }

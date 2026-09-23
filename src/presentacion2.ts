@@ -29,6 +29,7 @@ window.Chart = Chart;
 // PARTNER, así que es justo donde menos puede haber una fórmula propia: si Metas
 // dice "proyectamos 210" y el deck dice 120 para el mismo partner y el mismo mes,
 // el problema no es cosmético, es de credibilidad delante del cliente.
+import { esMesEnCurso } from "./domain/mesEnCurso";
 import { projectFlow, retentionSeries, seriesByDate, snapshotValue,
          horasPorConductorBase, TK_HORAS_BASE_MIN, TK_MIN_ACTIVOS,
          pacingFlujo, median, fechasEnRango, tasaAcum, sumarTasa, leerTasa } from "./domain/metrics.js";
@@ -1311,8 +1312,24 @@ export function p2RefCard(label, arr, kind, es) {
 }
 
 // Tarjeta meta-vs-actual reutilizable (Fleet/TukTuk): actual/goal + % + barra.
+// ¿Se dibuja la proyección al cierre para el mes META `mesName`? Decisión 4 de
+// Manuel (23-sep-2026): solo para el mes EN CURSO — un mes cerrado "no logrará
+// más avances". Misma regla que Metas y el portal (domain/mesEnCurso.ts). El año
+// sale de los períodos del mes que el deck está mirando (p2MonthDates ya lo
+// ancla al "Hasta"); sin períodos, se compara solo el mes.
+export function p2ProyeccionVisible(mesName) {
+  const ord = mesName ? _metasMesOrden(mesName) : 0;
+  if (!ord) return false;
+  if (ord >= 100000) return esMesEnCurso(ord % 100, Math.floor(ord / 100));
+  const ds = p2MonthDates(mesName);
+  const anio = ds.length ? p2ReportYM(ds[ds.length - 1]).y : null;
+  return esMesEnCurso(ord - 2000, anio);
+}
+
 // projV null → sin línea de proyección (KPIs de tasa/snapshot no proyectan).
+// Tampoco en un mes META ya cerrado (decisión 4, p2ProyeccionVisible).
 export function _p2MetaCard(label, real, goal, projV, fmtN, es) {
+  if (projV != null && !p2ProyeccionVisible(p2AvanceMes())) projV = null;
   const pct = goal > 0 ? (real / goal) * 100 : 0;
   const col = p2AvanceColor(pct);
   const ppct = (projV != null && goal > 0) ? (projV / goal) * 100 : null;
@@ -2988,7 +3005,7 @@ export function p2SearchKeydown(e) {
   if (e.key === "Enter") {
     const l = document.getElementById("present2PartnerList");
     const f = l && l.querySelector(".pv-opt");
-    if (f) f.dispatchEvent(new MouseEvent("mousedown"));
+    if (f) f.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
     e.preventDefault();
   } else if (e.key === "Escape") { p2HidePartnerList(); }
 }
