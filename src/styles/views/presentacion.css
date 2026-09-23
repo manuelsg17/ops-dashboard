@@ -1,0 +1,233 @@
+/* ═════════════════════════════════════════════════════════════════════════
+   views/presentacion.css — Presentación (Ola 6, sep-2026)
+
+   Alcance: la BARRA DE CONTROL del deck (partner, idioma del deck, vista,
+   sección, mes de la meta, comparar con, hojas, descarga), el selector de
+   hojas y las hojas NUEVAS mudadas desde Vista Partner (embudo, canales, N+R
+   por origen). El diseño de las hojas existentes NO se toca desde acá (vive en
+   styles.css y es lo que sale en el PDF).
+
+   Solo tokens semánticos (sin hex): el modo oscuro los re-apunta.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* ── Contenedor de la pantalla (va a pantalla completa: body.present-mode) ── */
+.p2-shell {
+  min-height: 100%;
+  display: flex; flex-direction: column; gap: var(--space-3);
+  padding: var(--space-4) var(--space-5) var(--space-6);
+  background: var(--color-bg);
+  font-family: var(--font-sans);
+}
+
+/* ── Barra de control ─────────────────────────────────────────────────────── */
+.p2-toolbar {
+  display: flex; flex-direction: column; gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.p2-toolbar__row {
+  display: flex; flex-wrap: wrap; align-items: flex-end;
+  gap: var(--space-3) var(--space-5);
+  min-width: 0;
+}
+.p2-toolbar__row--sub {
+  align-items: center;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.p2-toolbar__actions {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2);
+  margin-left: auto;
+}
+
+.p2-field { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.p2-field--inline { flex-direction: row; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.p2-field__lbl {
+  font-size: var(--text-xs); font-weight: var(--weight-semibold);
+  color: var(--color-text-muted); white-space: nowrap;
+}
+#present2ConvBar:empty { display: none; }
+
+/* Buscador de partner (combobox) */
+.p2-search { position: relative; width: 260px; max-width: 100%; }
+.p2-search > .ui-icon {
+  position: absolute; left: var(--space-2); top: 50%; transform: translateY(-50%);
+  color: var(--color-text-subtle); pointer-events: none;
+}
+.p2-search .ui-input { width: 100%; padding-left: 30px; }
+.p2-search__list {
+  display: none;
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 100;
+  max-height: 300px; overflow-y: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+.p2-search__list.is-open { display: block; }
+.p2-search__opt {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-md); color: var(--color-text);
+  cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.p2-search__opt:hover { background: var(--color-surface-muted); }
+.p2-search__opt.is-sel { font-weight: var(--weight-semibold); background: var(--color-surface-sunken); }
+.p2-search__empty { padding: var(--space-2) var(--space-3); font-size: var(--text-sm); color: var(--color-text-subtle); }
+
+/* Toggles de "Comparar con" (y de las bandas de cohorte) */
+.p2-cmp { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.p2-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 28px; padding: 0 var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font: inherit; font-size: var(--text-sm); font-weight: var(--weight-semibold);
+  cursor: pointer; white-space: nowrap;
+  transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
+}
+.p2-toggle:hover { color: var(--color-text); border-color: var(--color-border-input); }
+.p2-toggle:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.p2-toggle.is-on {
+  color: var(--color-text);
+  border-color: var(--color-text);
+  background: var(--color-surface-sunken);
+}
+.p2-toggle__dot { width: 8px; height: 8px; border-radius: 50%; flex: none; opacity: .45; }
+.p2-toggle.is-on .p2-toggle__dot { opacity: 1; }
+.p2-toggle__dot--city { background: var(--color-text-subtle); }
+
+/* Pares del embudo */
+.p2-conv-f { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--text-sm); color: var(--color-text-muted); white-space: nowrap; }
+.p2-num { width: 84px; font-variant-numeric: tabular-nums; }
+
+/* ── Selector de hojas: una sola fila con scroll horizontal ──────────────── */
+.p2-slides {
+  display: flex; align-items: center; gap: var(--space-1);
+  min-width: 0;
+}
+.p2-slides__track {
+  display: flex; gap: var(--space-1);
+  flex: 1 1 auto; min-width: 0;
+  position: relative;               /* offsetLeft de las hojas, relativo a la franja */
+  overflow-x: auto; overscroll-behavior-x: contain;
+  padding: 3px 2px;                 /* aire para el anillo de foco */
+  scrollbar-width: thin;
+}
+.p2-slide-chip {
+  flex: none;
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font: inherit; font-size: var(--text-sm); font-weight: var(--weight-semibold);
+  white-space: nowrap; cursor: pointer;
+  transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
+}
+.p2-slide-chip:hover { color: var(--color-text); border-color: var(--color-border-input); }
+.p2-slide-chip:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.p2-slide-chip.is-tk .ui-icon { color: var(--color-warn-fg); }
+.p2-slide-chip.is-active {
+  background: var(--color-text); border-color: var(--color-text); color: var(--color-text-inverse);
+}
+.p2-slide-chip.is-active .ui-icon { color: inherit; }
+.p2-slide-chip.is-off { opacity: .6; }
+.p2-slide-chip.is-off span { text-decoration: line-through; }
+
+/* ── Panel "Hojas que entran al PDF" ─────────────────────────────────────── */
+.p2-pdf-panel { padding: var(--space-3) var(--space-4); }
+.p2-pdf-panel__head {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-2); font-size: var(--text-md); color: var(--color-text);
+}
+.p2-pdf-panel__n { color: var(--color-text-muted); }
+.p2-pdf-panel__list {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 2px var(--space-4);
+}
+.p2-pdf-row {
+  display: flex; align-items: center; gap: var(--space-2); min-width: 0;
+  padding: var(--space-1); border-radius: var(--radius-sm);
+  font-size: var(--text-md); color: var(--color-text); cursor: pointer;
+}
+.p2-pdf-row:hover { background: var(--color-surface-muted); }
+/* El texto suelto dentro de un flex NO trunca (bug recurrente, 3 veces): el
+   rótulo es un BLOQUE con overflow, y el icono va en línea dentro de él. */
+.p2-pdf-row__lbl { display: block; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p2-pdf-row__lbl .ui-icon { color: var(--color-warn-fg); vertical-align: -2px; margin-right: 6px; }
+.p2-pdf-row em { font-size: var(--text-xs); color: var(--color-text-subtle); font-style: normal; flex: none; }
+.p2-pdf-row.is-na { cursor: default; color: var(--color-text-subtle); }
+.p2-pdf-row.is-na:hover { background: none; }
+
+.p2-freshness .ui-alert { margin: 0; }
+
+/* ── Progreso de la exportación ──────────────────────────────────────────── */
+.p2-progress {
+  position: fixed; inset: 0; z-index: 99999;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-4);
+  background: var(--color-surface);
+  opacity: .96;
+}
+.p2-progress__spin {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 4px solid var(--color-border); border-top-color: var(--color-text);
+  animation: p2-spin .7s linear infinite;
+}
+.p2-progress__msg { font-size: var(--text-base); font-weight: var(--weight-semibold); color: var(--color-text); }
+@keyframes p2-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .p2-progress__spin { animation-duration: 2s; } }
+
+/* ═════ HOJAS (van al PDF: escala tipográfica del deck, --sl-*) ═════════════ */
+
+/* "Sin dato" en lugar de líneas planas en 0 (ciudad sin filas en el rango). */
+.p2-sin-dato { font-size: var(--sl-lbl); font-weight: var(--weight-semibold); color: var(--color-text-subtle); font-style: italic; }
+.p2-nivel-vacio {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: var(--space-3);
+  border-left: 3px solid var(--color-border-strong);
+  padding: 6px 0 6px 6px;
+  font-weight: var(--weight-kpi); font-size: var(--sl-val2);
+}
+
+/* Embudo de conversión / adquisición por canal */
+.p2c-cuerpo { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.p2c-graf { flex: 1 1 0; min-height: 0; position: relative; }
+.p2c-tabla {
+  width: 100%; border-collapse: collapse; flex: 0 0 auto;
+  font-size: var(--sl-lbl); font-variant-numeric: tabular-nums; color: var(--color-text);
+}
+.p2c-tabla th {
+  font-size: var(--sl-th); font-weight: var(--weight-kpi); color: var(--color-text-muted);
+  text-transform: uppercase; letter-spacing: .3px; text-align: right; white-space: nowrap;
+  padding: 4px 6px; border-bottom: 1px solid var(--color-border-strong);
+}
+.p2c-tabla td { padding: 4px 6px; border-bottom: 1px solid var(--color-border); text-align: right; font-weight: var(--weight-semibold); }
+.p2c-tabla td.p2c-l { text-align: left; white-space: nowrap; }
+.p2c-tabla tr.p2c-yo td { font-weight: var(--weight-kpi); background: var(--color-surface-muted); }
+.p2c-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+.p2c-nota { flex: 0 0 auto; font-size: var(--sl-nota); color: var(--color-text-subtle); line-height: 1.4; }
+
+/* N+R por origen: una tarjeta por nivel (Perú + ciudades) */
+.p2nr-grid { flex: 1; min-height: 0; display: grid; gap: 8px; grid-template-columns: 1fr; grid-auto-rows: minmax(0, 1fr); }
+.p2nr-grid--2, .p2nr-grid--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.p2nr-grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.p2nr-bloque {
+  min-width: 0; min-height: 0;
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 6px 8px;
+  background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md);
+}
+.p2nr-cab { display: flex; align-items: center; gap: 6px; font-size: var(--sl-lbl); font-weight: var(--weight-kpi); }
+.p2nr-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.p2nr-graf { flex: 1 1 0; min-height: 60px; position: relative; }
+.p2nr-tabla { width: 100%; border-collapse: collapse; font-size: var(--sl-th); font-variant-numeric: tabular-nums; color: var(--color-text); }
+.p2nr-tabla th { font-weight: var(--weight-bold); color: var(--color-text-muted); text-align: right; padding: 1px 3px; white-space: nowrap; }
+.p2nr-tabla td { text-align: right; padding: 1px 3px; border-top: 1px solid var(--color-border); white-space: nowrap; }
+.p2nr-tabla td.p2nr-l { text-align: left; font-weight: var(--weight-semibold); color: var(--color-text-muted); }
+.p2nr-tabla tr.p2nr-tot td { font-weight: var(--weight-kpi); color: var(--color-text); }
+.p2-kpi-vacio { display: flex; align-items: center; justify-content: center; }

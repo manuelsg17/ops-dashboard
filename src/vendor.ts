@@ -21,6 +21,7 @@ import "./shared/perf";
 import "./styles/tokens.css";
 import "./styles/components.css";
 import "./styles.css";
+import "./styles/views/presentacion.css";
 import { createClient } from "@supabase/supabase-js";
 import { t } from "./core/i18n";
 
@@ -167,7 +168,7 @@ import * as shell        from "./shell";
 // SU PROPIA pestaña (Data Raw / Seguimiento),
 // nunca usada por rendimiento/metas/app (las únicas eager, junto con el login).
 // Antes vivían acá pese a sumar >2200 líneas pagadas por toda sesión sin uso —
-// ahora son chunks lazy más, vía loadViewModule, mismo patrón que partnerView/
+// ahora son chunks lazy más, vía loadViewModule, mismo patrón que
 // calculator/presentacion2/adminUsers/partnerPortal. forecast.js se movió
 // dentro de presentacion2.js (única consumidora, ver ese archivo).
 
@@ -214,7 +215,6 @@ if (import.meta.env.DEV && new URLSearchParams(location.search).get("ui") === "k
 // error, solo no hace nada). Mismo problema con "partnerPortal" vs el tab
 // real "portal" — más grave, es la única pantalla del rol partner.
 const _VIEW_IMPORTERS = {
-  partnerview: () => import("./partnerView.js"),
   present2:    () => import("./presentacion2.js"),
   calculator:  () => import("./calculator.js"),
   // Configuración carga adminUsers Y monitoreo: son dos sub-secciones de la

@@ -181,7 +181,7 @@ export function initApp() {
   const _prefetch = () => {
     if ((STATE._authEpoch || 0) !== _epoca) return;
     if (typeof window.prefetchViewModules === "function") {
-      window.prefetchViewModules(["present2", "partnerview", "calculator", "rawdata", "seguimiento"]);
+      window.prefetchViewModules(["present2", "calculator", "rawdata", "seguimiento"]);
     }
     _prefetchData().catch(() => {});
   };
@@ -394,7 +394,6 @@ export async function switchMode(mode) {
   if (_NEED_FULL_COLS.has(STATE.curTab) && typeof ensureFullRendColumns === "function") {
     try { await ensureFullRendColumns(); } catch (e) { /* nunca bloquear el render */ }
   }
-  if (STATE.curTab === "partnerview" && STATE.rawData.length) renderPartnerView();
   if (STATE.curTab === "calculator"  && STATE.rawData.length) renderCalculator();
   if (STATE.curTab === "present2"    && STATE.rawData.length && typeof renderPresent2 === "function") renderPresent2();
   if (STATE.curTab === "rawdata"     && typeof renderRawData === "function") renderRawData();
@@ -407,8 +406,8 @@ export async function switchMode(mode) {
 // Pestañas cuyo contenido depende de la ESCALA y viven en un chunk lazy: su HTML
 // sobrevive al cambio de escala porque el panel no se desmonta. Ver el comentario
 // en switchMode.
-export const _NEED_FULL_COLS = new Set(["partnerview", "present2", "rawdata", "calculator"]);
-const _PANELES_DE_ESCALA = ["present2Content", "partnerViewContent", "calculatorContent", "rawdataContent"];
+export const _NEED_FULL_COLS = new Set(["present2", "rawdata", "calculator"]);
+const _PANELES_DE_ESCALA = ["present2Content", "calculatorContent", "rawdataContent"];
 export function invalidarPanelesDeEscala() {
   _PANELES_DE_ESCALA.forEach(id => {
     const el = document.getElementById(id);
@@ -451,7 +450,6 @@ export function switchTab(tab) {
     // ── 3. CLEANUP del tab anterior ─────────────────────────────────────────
     if (prevTab && prevTab !== tab) {
       if (prevTab === "calculator"  && typeof calcCancelPendingRender === "function") calcCancelPendingRender();
-      if (prevTab === "partnerview" && typeof _pvDestroyCharts === "function")        _pvDestroyCharts();
       if (prevTab === "present2"    && typeof destroyPresent2Charts === "function")   destroyPresent2Charts();
       const apexConsumers = new Set(["rend","metas"]);
       if (apexConsumers.has(prevTab) && !apexConsumers.has(tab) && typeof destroyAllCharts === "function") {
@@ -492,7 +490,7 @@ export function switchTab(tab) {
     // contenido real lo pisa igual apenas termina, así que si el chunk ya está
     // cacheado esto ni se alcanza a ver.
     const LAZY_TAB_CONTENT = {
-      partnerview: "partnerViewContent", present2: "present2Content",
+      present2: "present2Content",
       calculator: "calculatorContent", config: "configContent", portal: "portalContent",
       rawdata: "rawdataContent"
     };
@@ -577,7 +575,6 @@ export function switchTab(tab) {
       if (tab === "seguimiento")                                                    renderSeguimiento();
       if (tab === "config")                                                         renderConfig();
       if (tab === "present2"    && STATE.rawData.length && typeof renderPresent2 === "function")    renderPresent2();
-      if (tab === "partnerview" && STATE.rawData.length && typeof renderPartnerView === "function")  renderPartnerView();
       if (tab === "calculator"  && STATE.rawData.length && typeof renderCalculator === "function")   renderCalculator();
     }));
   } finally {
@@ -867,7 +864,6 @@ export function onKAMChange() {
   if (STATE._suppressRestoreRender) return;
   if (STATE.curTab === "rend"        && STATE.rawData.length)                           renderRend();
   if (STATE.curTab === "metas"       && STATE.metasData.length && STATE.rawData.length) renderMetas();
-  if (STATE.curTab === "partnerview" && STATE.rawData.length)                           renderPartnerView();
   if (STATE.curTab === "calculator"  && STATE.rawData.length)                           renderCalculator();
 }
 
@@ -902,7 +898,6 @@ export function applyFilters() {
   }
   if (STATE.curTab === "rend"        && STATE.rawData.length)                           renderRend();
   if (STATE.curTab === "metas"       && STATE.metasData.length && STATE.rawData.length) renderMetas();
-  if (STATE.curTab === "partnerview" && STATE.rawData.length)                           renderPartnerView();
   if (STATE.curTab === "calculator"  && STATE.rawData.length)                           renderCalculator();
   // Data Raw NO va acá a propósito: está en NO_SIDEBAR_TABS y tiene sus propios
   // selectores de ciudad y fecha adentro, así que el sidebar no lo toca. Sí
