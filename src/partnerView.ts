@@ -6,6 +6,7 @@
 // Import explícito (no el espejo en window): ApexCharts es lazy y este módulo
 // necesita la MISMA promesa cacheada que usa charts.js, no una copia.
 import { ensureApex } from "./charts.js";
+import { fechaLocalISO } from "./shared/fechaLocal";
 import { datasetLinea } from "./shared/escala.js";
 import { SIN_KAM } from "./core/config.js";
 import { tasaAcum, sumarTasa, unirTasa, leerTasa } from "./domain/metrics.js";
@@ -518,7 +519,10 @@ export function renderPartnerView() {
     return;
   }
 
-  const partners = STATE.allPartners || [];
+  // sidebarPartners = Taxi ∪ solo-TukTuk (I12): con allPartners (solo Taxi) los
+  // partners solo-TukTuk (caso PIAGGIO) no se podían elegir, aunque la vista
+  // Combinado/TukTuk sí sabe mostrarlos.
+  const partners = STATE.sidebarPartners || STATE.allPartners || [];
   if (!partners.length) {
     el.innerHTML = `<div class="empty"><p>No hay partners cargados.</p></div>`;
     return;
@@ -543,8 +547,11 @@ export function renderPartnerView() {
 
   // Ciudades donde opera este partner (>= 1 row con datos)
   const partnerRows = STATE._byPartner?.get(partner) || STATE.rawData.filter(r => r.partner === partner);
-  const citiesOf = [...new Set(partnerRows.map(r => r.city).filter(Boolean))].sort();
-  const kam = getKAMForPartner(partner) || partnerRows[0]?.kam || SIN_KAM;
+  // Un partner solo-TukTuk no tiene filas en rawData (Taxi): sus ciudades y KAM
+  // salen del dataset de la línea (Combinado incluye TukTuk).
+  const _filasCab = partnerRows.length ? partnerRows : _pvLineDataset().filter(r => r.partner === partner);
+  const citiesOf = [...new Set(_filasCab.map(r => r.city).filter(Boolean))].sort();
+  const kam = getKAMForPartner(partner) || _filasCab[0]?.kam || SIN_KAM;
 
   // Detectar si recibe leads Yango (algún new_from_service > 0 históricamente)
   const recibeLeads = partnerRows.some(r => r.newService > 0);
@@ -1381,9 +1388,10 @@ export function _pvPaintPartnerList(q) {
   const list = document.getElementById("pvPartnerList");
   if (!list) return;
   const lower = (q || "").toLowerCase().trim();
+  const universo = STATE.sidebarPartners || STATE.allPartners || [];   // incluye solo-TukTuk (I12)
   const filtered = lower
-    ? STATE.allPartners.filter(p => p.toLowerCase().includes(lower))
-    : STATE.allPartners;
+    ? universo.filter(p => p.toLowerCase().includes(lower))
+    : universo;
   if (!filtered.length) {
     list.innerHTML = `<div class="agy-style-180">Sin coincidencias</div>`;
     return;
@@ -1456,7 +1464,7 @@ export async function pvDownloadPDF() {
     pdf.addImage(imgData, "JPEG", 0, 0, canvas.width, canvas.height);
     stampPDF(pdf, `Vista Partner — ${partner}`);
     const langSfx = (PARTNER_VIEW_STATE.lang || "es").toUpperCase();
-    pdf.save(`${partner}_${STATE.curMode}_${(new Date()).toISOString().slice(0,10)}_${langSfx}.pdf`);
+    pdf.save(`${partner}_${STATE.curMode}_${fechaLocalISO()}_${langSfx}.pdf`);
     showBanner(true, "PDF descargado");
   } catch (err) {
     alert("Error al generar PDF: " + err.message);
@@ -1486,14 +1494,19 @@ export function _pvConvColor(v, p25, p50, p75) {
 }
 
 // Relee los filtros de pares elegibles y re-renderiza SOLO la sección de conversión.
+// Campo vacío = sin ese límite (I12). Antes `+""` daba 0, no NaN: borrar
+// "AD máx" dejaba el tope en 0 y el cohorte quedaba vacío sin explicación.
+function _pvNumOr(id, def) {
+  const raw = document.getElementById(id)?.value;
+  if (raw == null || String(raw).trim() === "") return def;
+  const n = +raw;
+  return isNaN(n) ? def : n;
+}
 export function pvConvFilter() {
-  const adMin = +document.getElementById("pvConvAdMin")?.value;
-  const adMax = +document.getElementById("pvConvAdMax")?.value;
-  const ndMin = +document.getElementById("pvConvNdMin")?.value;
   PARTNER_VIEW_STATE.convFilter = {
-    adMin: isNaN(adMin) ? 0 : adMin,
-    adMax: isNaN(adMax) ? 999999 : adMax,
-    ndMin: isNaN(ndMin) ? 0 : ndMin
+    adMin: _pvNumOr("pvConvAdMin", 0),
+    adMax: _pvNumOr("pvConvAdMax", 999999),
+    ndMin: _pvNumOr("pvConvNdMin", 0)
   };
   _pvConvRefresh();
 }
