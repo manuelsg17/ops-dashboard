@@ -249,13 +249,16 @@ export interface ChipOptions {
   /** Acción para quitar el filtro. Sin ella el chip es solo informativo. */
   removeAct?: string;
   removeData?: DataAttrs;
+  /** Nombre accesible del botón de quitar, ya traducido ("Quitar filtro Ciudad: Lima").
+   *  Default en español. */
+  removeLabel?: string;
 }
 
 export function chip(o: ChipOptions): Html {
   const key = o.label ? `<span class="ui-chip__key">${esc(o.label)}:</span>` : "";
   const val = `<span class="ui-chip__val" title="${esc(o.value)}">${esc(o.value)}</span>`;
   if (!o.removeAct) return h(`<span class="ui-chip ui-chip--static">${key}${val}</span>`);
-  const aria = `Quitar filtro ${o.label ? o.label + ": " : ""}${o.value}`;
+  const aria = o.removeLabel ?? `Quitar filtro ${o.label ? o.label + ": " : ""}${o.value}`;
   return h(
     `<span class="ui-chip">${key}${val}` +
     `<button type="button" class="ui-chip__remove" aria-label="${esc(aria)}" title="${esc(aria)}"` +
@@ -356,28 +359,36 @@ export interface PageHeaderOptions {
   chips?: ChipOptions[];
   resetAct?: string;
   resetLabel?: string;
-  /** "Datos hasta 21-sep" ; stale=true lo pinta en ámbar. */
-  freshness?: { text: string; stale?: boolean };
+  /** "Datos hasta 21-sep" ; stale=true lo pinta en ámbar. `title` = detalle (tooltip). */
+  freshness?: { text: string; stale?: boolean; title?: string };
+  /** Nombre accesible de la fila de chips (default "Filtros activos"). */
+  chipsLabel?: string;
+  /** HTML extra a la derecha de la fila de metadatos (junto a la frescura). */
+  metaExtra?: Html;
+  /** HTML extra al pie del encabezado (p.ej. un aviso de estado). */
+  footer?: Html;
 }
 
 export function pageHeader(o: PageHeaderOptions): Html {
   const chips = o.chips?.length
-    ? `<div class="ui-chips" aria-label="Filtros activos">${o.chips.map(chip).join("")}` +
+    ? `<div class="ui-chips" role="group" aria-label="${esc(o.chipsLabel ?? "Filtros activos")}">${o.chips.map(chip).join("")}` +
       (o.resetAct ? `<button type="button" class="ui-link-btn"${dataAttrs({ act: o.resetAct })}>${esc(o.resetLabel ?? "Restablecer")}</button>` : "") +
       `</div>`
     : "";
   const fresh = o.freshness
-    ? `<span class="ui-freshness${o.freshness.stale ? " ui-freshness--stale" : ""}">` +
+    ? `<span class="ui-freshness${o.freshness.stale ? " ui-freshness--stale" : ""}"` +
+      (o.freshness.title ? ` title="${esc(o.freshness.title)}"` : "") + `>` +
       iconSvg(o.freshness.stale ? "alert-triangle" : "clock", { size: 12 }) + `${esc(o.freshness.text)}</span>`
     : "";
-  const meta = chips || fresh ? `<div class="ui-page-header__meta">${chips || "<span></span>"}${fresh}</div>` : "";
+  const right = o.metaExtra ? `<div class="ui-page-header__meta-end">${o.metaExtra}${fresh}</div>` : fresh;
+  const meta = chips || right ? `<div class="ui-page-header__meta">${chips || "<span></span>"}${right}</div>` : "";
   return h(
     `<header class="ui-page-header"><div class="ui-page-header__top">` +
     `<div class="ui-page-header__titles"><h1 class="ui-page-header__title">${esc(o.title)}</h1>` +
     (o.subtitle ? `<div class="ui-page-header__subtitle">${esc(o.subtitle)}</div>` : "") +
     `</div>` +
     (o.actions ? `<div class="ui-page-header__actions">${o.actions}</div>` : "") +
-    `</div>${meta}</header>`
+    `</div>${meta}${o.footer ?? ""}</header>`
   );
 }
 
@@ -385,16 +396,24 @@ export function pageHeader(o: PageHeaderOptions): Html {
 
 export interface SideNavItem { id: string; label: string; icon?: IconName }
 export interface SideNavGroup { label: string; items: SideNavItem[] }
+export interface SideNavOptions {
+  /** id del <nav>. */
+  id?: string;
+  /** title (tooltip) en cada ítem: hace falta cuando la navegación se contrae a
+   *  solo iconos y el texto queda visible solo para lectores de pantalla. */
+  itemTitles?: boolean;
+}
 
 /** Navegación agrupada. `act` recibe data-tab con el id del ítem. */
-export function sideNav(groups: SideNavGroup[], current: string, act: string, ariaLabel = "Secciones"): Html {
+export function sideNav(groups: SideNavGroup[], current: string, act: string, ariaLabel = "Secciones", opts: SideNavOptions = {}): Html {
   const body = groups.map(g =>
-    `<div class="ui-sidenav__group"><div class="ui-sidenav__label">${esc(g.label)}</div>` +
+    `<div class="ui-sidenav__group" role="group" aria-label="${esc(g.label)}"><div class="ui-sidenav__label" aria-hidden="true">${esc(g.label)}</div>` +
     g.items.map(it =>
       `<button type="button" class="ui-sidenav__item"${it.id === current ? ' aria-current="page"' : ""}` +
-      `${dataAttrs({ act, tab: it.id })}>${it.icon ? iconSvg(it.icon, { size: 18 }) : ""}<span>${esc(it.label)}</span></button>`
+      (opts.itemTitles ? ` title="${esc(it.label)}"` : "") +
+      `${dataAttrs({ act, tab: it.id })}>${it.icon ? iconSvg(it.icon, { size: 18 }) : ""}<span class="ui-sidenav__text">${esc(it.label)}</span></button>`
     ).join("") +
     `</div>`
   ).join("");
-  return h(`<nav class="ui-sidenav" aria-label="${esc(ariaLabel)}">${body}</nav>`);
+  return h(`<nav class="ui-sidenav"${opts.id ? ` id="${esc(opts.id)}"` : ""} aria-label="${esc(ariaLabel)}">${body}</nav>`);
 }
