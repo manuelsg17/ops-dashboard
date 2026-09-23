@@ -459,7 +459,7 @@ export function switchTab(tab) {
     document.body.classList.toggle("present-mode", tab === "present2");
     // Ocultar el sidebar de filtros en tabs donde no aplica (Fase 7): la data de
     // Configuración/Calculadora/Data Raw no depende de Escala/Fechas/Ciudad/KAM.
-    const NO_SIDEBAR_TABS = new Set(["config", "calculator", "rawdata", "seguimiento", "fleetext"]);
+    const NO_SIDEBAR_TABS = new Set(["config", "calculator", "rawdata", "seguimiento"]);
     document.body.classList.toggle("no-sidebar", NO_SIDEBAR_TABS.has(tab));
     // Guardar filtros actuales antes de cambiar
     STATE.savedFilters = {
@@ -473,7 +473,7 @@ export function switchTab(tab) {
 
     // Tabs bajo el dropdown "Análisis" (Fase 7: sincronizado con el nav visible —
     // incluye partnerview/calculator, excluye ops/proyectos ocultos).
-    const ANALISIS_TABS = ["rend", "partnerview", "calculator", "metas", "seguimiento", "fleetext", "rawdata"];
+    const ANALISIS_TABS = ["rend", "partnerview", "calculator", "metas", "seguimiento", "rawdata"];
     const navAnalisis = document.getElementById("navAnalisis");
     if (navAnalisis) navAnalisis.classList.toggle("active", ANALISIS_TABS.includes(tab));
     document.querySelectorAll(".nav-tab[data-tab]").forEach(btn => {
@@ -575,7 +575,6 @@ export function switchTab(tab) {
       if (tab === "metas"       && STATE.metasData.length && STATE.rawData.length) renderMetas();
       if (tab === "rawdata")                                                        renderRawData();
       if (tab === "seguimiento")                                                    renderSeguimiento();
-      if (tab === "fleetext")                                                       renderFleetExterno();
       if (tab === "config")                                                         renderConfig();
       if (tab === "present2"    && STATE.rawData.length && typeof renderPresent2 === "function")    renderPresent2();
       if (tab === "partnerview" && STATE.rawData.length && typeof renderPartnerView === "function")  renderPartnerView();
@@ -910,11 +909,6 @@ export function updateDeclineSettings() {
   if (STATE.rawData.length) renderRend(); // recalcula badges
 }
 
-// ── MODE TOGGLE HTML (compartido por Rendimiento y Metas) ─────────────────────
-export function modeToggleHTML() {
-  return ""; // El selector de escala vive en el sidebar — ver .mode-toggle-row
-}
-
 // Barra de sub-secciones de Configuración (mismo patrón visual que
 // .mode-toggle-row/.mode-btn del selector de línea de Rendimiento/Metas).
 // "usuarios" y "mantenimiento" solo se ofrecen a admin — un viewer/kam no tiene
@@ -1052,41 +1046,7 @@ function _renderConfigMantenimiento() {
       </div>
     </div>`;
 
-  // Fleet Externo: la sincronización real corre en GitHub Actions
-  // (.github/workflows/fleet-sync.yml, cron semanal) — este botón solo la
-  // dispara ANTES de tiempo vía la Edge Function trigger-fleet-sync. Ni el
-  // Action ni esta función tocan la base del colega desde el navegador: la
-  // credencial de solo-lectura vive como Secret de GitHub, nunca acá.
-  html += `
-    <div class="section agy-style-37">
-      <div class="agy-style-38">${escapeHTML(t("cfg.fleetExtTitulo"))}</div>
-      <div class="agy-style-39">${t("cfg.fleetExtSub")}</div>
-      <div class="agy-style-8">
-        <button class="crud-btn" id="fleetSyncBtn" data-act="triggerFleetSync">
-          ${escapeHTML(t("cfg.sincronizarAhora"))}
-        </button>
-        <span id="fleetSyncMsg" class="agy-style-54"></span>
-      </div>
-    </div>`;
   return html;
-}
-
-// ── Fleet Externo: disparo manual del sync (Edge Function trigger-fleet-sync) ─
-export async function triggerFleetSync() {
-  const btn = document.getElementById("fleetSyncBtn");
-  const msg = document.getElementById("fleetSyncMsg");
-  if (btn) { btn.disabled = true; btn.textContent = t("cfg.disparando"); }
-  if (msg) { msg.textContent = ""; }
-  try {
-    const { data, error } = await sb.functions.invoke("trigger-fleet-sync", { method: "POST" });
-    if (error) throw error;
-    if (data?.error) throw new Error(data.error);
-    showBanner(true, data?.message || t("cfg.syncDisparada"));
-  } catch (e) {
-    showBanner(false, t("cfg.errorSync") + e.message);
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = t("cfg.sincronizarAhora"); }
-  }
 }
 
 // ── Sub-sección: Partners (CLID/nombre/KAM) — la vista por defecto ───────────
@@ -1647,7 +1607,6 @@ registerActions({
   // configuración
   updateDeclineSettings,
   deleteDashboardData,
-  triggerFleetSync,
   cfgSetSection: d => { CONFIG_STATE.section = d.section; renderConfig(); },
   cfgSearch:    (d, el) => { CONFIG_STATE.search = el.value; CONFIG_STATE.page = 0; renderConfigResults(); },
   cfgKamFilter: (d, el) => { CONFIG_STATE.kamFilter = el.value; CONFIG_STATE.page = 0; renderConfigResults(); },

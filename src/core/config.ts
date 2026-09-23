@@ -78,20 +78,6 @@ export const METRICS = {
   }
 };
 
-// ── FLEET EXTERNO (Supabase de un colega, solo-lectura) ──────────────────────
-// Config desde la UI (tab Fleet Externo), guardada en localStorage — la
-// credencial del colega NO se commitea. Solo anon key pública (RLS del colega).
-export const FLEET_EXT = (function () {
-  const def = { enabled: false, url: "", anonKey: "", table: "" };
-  try {
-    const s = JSON.parse(localStorage.getItem("yangoFleetExtConfig") || "null");
-    if (s && s.url && s.anonKey) {
-      return { enabled: true, url: s.url.trim(), anonKey: s.anonKey.trim(), table: (s.table || "").trim() };
-    }
-  } catch (_) {}
-  return def;
-})();
-
 // Estado global de la aplicación.
 export const STATE = {
   rawData:             [],
@@ -142,10 +128,6 @@ export const STATE = {
   declineMetric:    "activeDrivers",
   proyectosData:    [],
   seguimientoData:  [],
-  fleetExterno:     [],
-  fleetExternoCols: [],
-  fleetExternoError: null,
-  fleetExternoLoaded: false,
   perms:            new Set(),   // grants granulares por usuario (Fase B2)
   parseWarnings:    new Set(),
   _mensualLoaded:   false,

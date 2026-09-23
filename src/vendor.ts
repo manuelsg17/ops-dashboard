@@ -152,8 +152,8 @@ import * as charts       from "./charts.js";
 import * as rendimiento  from "./rendimiento.js";
 import * as metas        from "./metas.js";
 import * as app          from "./app.js";
-// rawdata/seguimiento/fleetexterno NO se importan acá — cada una es
-// SU PROPIA pestaña (Data Raw / Seguimiento / Fleet Externo),
+// rawdata/seguimiento NO se importan acá — cada una es
+// SU PROPIA pestaña (Data Raw / Seguimiento),
 // nunca usada por rendimiento/metas/app (las únicas eager, junto con el login).
 // Antes vivían acá pese a sumar >2200 líneas pagadas por toda sesión sin uso —
 // ahora son chunks lazy más, vía loadViewModule, mismo patrón que partnerView/
@@ -201,8 +201,7 @@ const _VIEW_IMPORTERS = {
                        .then(([a, m]) => ({ ...a, ...m })),
   portal:      () => import("./partnerPortal.js"),
   rawdata:     () => import("./rawdata.js"),
-  seguimiento: () => import("./seguimiento.js"),
-  fleetext:    () => import("./fleetexterno.js")
+  seguimiento: () => import("./seguimiento.js")
 };
 
 const _loadedModules = {};

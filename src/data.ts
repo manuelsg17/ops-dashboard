@@ -273,9 +273,6 @@ export function txRowExtra(r) {
 // tests contra el calendario); se re-exportan acá para no cambiar la API.
 export { LOAD_WINDOW, computeWindowStart };
 
-// Columna de período por escala (cada tabla la nombra distinto).
-export const DATE_COL = { semanal: "fecha", mensual: "mes", diario: "date" };
-
 // Lista COMPLETA de períodos disponibles (RPC dashboard_dates). Alimenta los
 // selectores Desde/Hasta del sidebar SIN depender de qué ventana de datos esté
 // cargada — si dependiera, el usuario quedaría encerrado en la ventana inicial.
@@ -2582,11 +2579,6 @@ export function getFilteredByDateRange(from, to) {
     if (date >= from && date <= to) rows.push(...arr);
   }
   return rows;
-}
-
-export function getApdFull() {
-  if (!STATE._apdFull) STATE._apdFull = aggPD(STATE.rawData);
-  return STATE._apdFull;
 }
 
 // ── AGGREGATION (full precision, no intermediate rounding) ────────────────────
