@@ -198,7 +198,13 @@ Navegación lateral por grupos y rol, encabezado de página con chips de alcance
 | 4 — sistema de diseño (base) | Integrada (`974ed6f`) | Kit en `?ui=kit` revisado en pantalla. **Huella idéntica (0 diferencias)**: las pantallas actuales no cambiaron |
 | 1b — bugs de vistas | Integrada (`8d53b3b`) | Huella: 262 diferencias, todas esperadas (fila "No KAM" nueva en Rendimiento; en Metas VIA RAPIDA y RUTA DEL SILLAR pasan de Carla/Beto a "No KAM": −604/−51/+655, totales país iguales; ahora Metas y Rendimiento coinciden por KAM). Desborde de gráficos resuelto (medido); título "Vista filtrada — Lima" |
 | 1a + 1c — bugs de datos/Config + migración `metas` por año (solo local) | Integrada (`37f1908`) | Huella: mismas 262 diferencias, ninguna nueva. Metas en mes cerrado (agosto) sin proyección; selector con año y orden correcto; Config con tarjeta "No KAM". Migración **no aplicada en producción** |
-| 2 — velocidad | En curso | — |
-| 3 — diccionarios | En curso | — |
+| 2 — velocidad | Integrada (`0ae1080`) | Huella: 0 diferencias. Medido con 300 ms de latencia simulada (Chrome headless, token vencido, KAM): primer pintado con caché 448→88 ms (semanal) y 827→108 ms (mensual); 0 frames con el login visible (antes ~23); segundo render salteado si los datos no cambiaron; abrir Presentación 180,8→116,0 kB gzip. Sesión vencida verificada en pantalla: se renueva sola y la app sigue abierta |
+| 3 — diccionarios | Integrada (`1974389`) | Huella: 0 diferencias. Deck en ruso verificado en pantalla sin claves crudas. `check:drift` ampliado (placeholders, tríos, ternarios de idioma) con prueba de que dispara. 8 tablas de meses → 1; tuteo en toda la app |
+| 5 — shell y navegación | En curso | — |
+
+Anotado para la Ola 6:
+- Rendimiento → Tendencias "Perú por partner": la Ola 2 dejó top 8 + "Otros" en un **segundo eje Y**, que se presta a confusión; además varios partners comparten tonos casi iguales. Rediseñar esa sección (sin doble eje; paleta categórica de los tokens).
+- Presentación: la barra de controles del deck sigue el idioma del DECK (en ruso muestra "ЯЗЫК", "СРАВНИТЬ С"); tendría que seguir el idioma de la interfaz.
+- Portal: pedir las columnas diferidas desde `partnerPortal.ts` (la Ola 2 lo cubrió con la precarga en `app.ts`).
 
 Pendiente conocido del entorno local (no es del producto): la RPC `get_last_ingest_at` existe solo en producción y nunca se versionó, así que en local responde 404 (el código lo tolera).
