@@ -324,7 +324,7 @@ export async function fetchAndRenderLastIngest() {
   finally { renderFrescura(); }
 }
 
-// Badge #dbLastUpdate. Responde DOS preguntas distintas, y esa distinción es el
+// Frescura de los datos (encabezado de página). Responde DOS preguntas distintas, y esa distinción es el
 // punto del indicador:
 //
 //   1. ¿Cuándo corrió la ingesta?  → el timestamp de ingest_log.
@@ -341,8 +341,6 @@ export async function fetchAndRenderLastIngest() {
 // Se re-renderiza al cambiar de escala (switchMode) porque su respuesta cambia
 // con la escala, aunque el dato de la ingesta sea el mismo.
 export function renderFrescura() {
-  const el = document.getElementById("dbLastUpdate");
-  if (!el) return;
   const escala = normEscala(STATE.curMode);
   const f = evaluarFrescura(escala, STATE.allDates, new Date());
 
@@ -360,17 +358,22 @@ export function renderFrescura() {
   if (f.atrasado) {
     // El texto dice CUÁNTOS períodos faltan, no "hace mucho": un número que se
     // puede contrastar con el calendario es accionable, "desactualizado" no.
-    partes.push("⚠ " + t(
+    // (Sin "⚠": el encabezado pone el icono de alerta y el color ámbar.)
+    partes.push(t(
       escala === "mensual" ? "estado.faltanMeses" : escala === "diario" ? "estado.faltanDias" : "estado.faltanSemanas",
       { n: f.faltan }
     ));
   }
   if (!partes.length) return;
 
-  el.textContent = partes.join(" · ");
-  el.title = f.atrasado ? t("estado.frescuraDetalle", { e: f.esperado, d: f.diasDesdeCierre }) : "";
-  el.classList.toggle("stale", f.atrasado);
-  el.style.display = "";
+  // Ola 5: la frescura vive en el encabezado de página (shell.ts), que la pinta
+  // desde acá. Antes era el badge #dbLastUpdate del sidebar.
+  STATE._frescuraUI = {
+    text: partes.join(" · "),
+    stale: !!f.atrasado,
+    title: f.atrasado ? t("estado.frescuraDetalle", { e: f.esperado, d: f.diasDesdeCierre }) : ""
+  };
+  if (typeof schedulePageHeader === "function") schedulePageHeader();
 }
 
 // Ventana wall-clock para mensual/diario — a diferencia de semanal (que usa

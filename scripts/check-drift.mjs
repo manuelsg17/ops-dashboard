@@ -123,7 +123,7 @@ function chequearI18n() {
     // Sin comentarios: este mismo archivo documenta el uso con
     // data-i18n="clave" como EJEMPLO, y eso se reportaba como clave inexistente.
     const txt = sinComentarios(leer(f));
-    for (const m of txt.matchAll(/data-i18n(?:-title|-ph|-html)?="([a-zA-Z0-9_.]+)"/g))
+    for (const m of txt.matchAll(/data-i18n(?:-title|-ph|-html|-aria)?="([a-zA-Z0-9_.]+)"/g))
       if (!usadas.has(m[1])) usadas.set(m[1], f);
     // t(...) — todo literal "a.b" dentro del PRIMER argumento, no solo el caso
     // t("clave"): `t(uno ? "x.uno" : "x.varios", …)` también tiene que existir.

@@ -18,6 +18,8 @@ import { logAccess, resetAccessLogSession } from "./shared/accessLog.js";
 import { resetearEstadoDeSesion } from "./shared/sesion";
 import { perfMark } from "./shared/perf";
 import { t } from "./core/i18n";
+import { iconSvg } from "./shared/icons";
+import { renderShellNav, renderPageHeader } from "./shell";
 
 // ── LOCK DE AUTH CON ESCAPE ──────────────────────────────────────────────────
 // supabase-js serializa las operaciones de auth con un Web Lock COMPARTIDO entre
@@ -145,19 +147,12 @@ export function _applyRoleGate() {
   // nav desde DevTools, RLS solo le devuelve las filas de SUS CLIDs, y las
   // tablas que no le corresponden (seguimiento, proyectos, audit_log) no
   // tienen política para su rol, así que le vuelven vacías.
-  document.querySelectorAll(".nav-tabs").forEach(n => { n.style.display = esPartner ? "none" : ""; });
+  // Ola 5: lo que un partner no ve (navegación, ciudad/KAM/buscador/lista de
+  // partners del panel de filtros) se oculta por CSS con body.role-partner
+  // (styles.css) y la navegación se vuelve a pintar según el rol (shell.ts).
+  // Al ser una clase y no estilos inline, un login interno posterior sin
+  // recargar (I2) no hereda nada escondido.
   if (!esPartner) {
-    // I2: si en esta misma página antes entró un PARTNER (logout → login de un
-    // interno sin recargar), deshacer lo que su rama escondió/forzó: sin esto el
-    // interno quedaba sin lista de partners ni selector de KAM, parado en el
-    // portal.
-    ["pList", "kamFilter", "partnerSearch"].forEach(id => {
-      const el = document.getElementById(id);
-      const wrap = el?.previousElementSibling;
-      if (el && el.style.display === "none") el.style.display = "";
-      if (wrap && wrap.classList.contains("sb-label") && wrap.style.display === "none") wrap.style.display = "";
-    });
-    document.querySelectorAll(".sb-row").forEach(r => { if (r.style.display === "none") r.style.display = ""; });
     if (STATE.curTab === "portal") {
       STATE.curTab = "rend";
       document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
@@ -165,14 +160,6 @@ export function _applyRoleGate() {
     }
   }
   if (esPartner) {
-    // Sin lista de partners (solo se ve a sí mismo) ni selector de KAM.
-    ["pList", "kamFilter", "partnerSearch"].forEach(id => {
-      const el = document.getElementById(id);
-      const wrap = el?.previousElementSibling;   // su <div class="sb-label">
-      if (el)   el.style.display = "none";
-      if (wrap && wrap.classList.contains("sb-label")) wrap.style.display = "none";
-    });
-    document.querySelectorAll(".sb-row").forEach(r => { r.style.display = "none"; }); // Todos/Ninguno
     STATE.curTab = "portal";
     document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
     document.getElementById("tab-portal")?.classList.add("active");
@@ -188,6 +175,8 @@ export function _applyRoleGate() {
       });
     }
   }
+  renderShellNav();
+  renderPageHeader();
 }
 
 // ── ARRANQUE SIN ESPERAR AL REFRESH DEL TOKEN (Ola 2, V1) ───────────────────
@@ -416,6 +405,7 @@ export function _limpiarEstadoEnMemoria() {
   STATE._tuktukMensualByCityDate = null;
   STATE._tuktukMensualPartners   = null;
   STATE._tuktukMensualDates      = null;
+  STATE._frescuraUI              = null;   // encabezado de página (Ola 5)
   STATE.CLID_MAP        = {};
   STATE.KAM_MAP         = {};
   STATE.KAM_PARTNERS    = {};
@@ -503,7 +493,8 @@ export function showApp(user, opts = {}) {
   // inline-flex (por el "▾") y text-overflow:ellipsis no aplica a un nodo de
   // texto anónimo dentro de un contenedor flex — el email se salía del pill.
   const _ub = document.getElementById("userBadge");
-  _ub.innerHTML = `<span class="user-badge-mail"></span>`;
+  _ub.innerHTML = `<span class="user-badge-ico">${iconSvg("user", { size: 16 })}</span>` +
+    `<span class="user-badge-mail"></span>${iconSvg("chevron-down", { size: 14, className: "user-badge-chev" })}`;
   _ub.querySelector(".user-badge-mail").textContent = user.email;
   _ub.title = user.email;
   STATE.userEmail = user.email;   // firma de los PDFs exportados (shared/pdfmeta.js)
