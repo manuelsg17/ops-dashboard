@@ -211,3 +211,116 @@
   .rd-toolbar .ui-segmented .ui-segmented__btn { padding: 0 var(--space-2); }
   .rd-toolbar .ui-segmented .ui-segmented__btn .ui-icon { display: none; }
 }
+
+/* ═════════════════════════════════════════════════════════════════════════
+   "B · Suave" (fase 8, 24-sep-2026) — la versión de Rendimiento que eligió
+   Manuel en el prototipo (?ui=proto&v=b&p=rend): anillo de avance arriba de
+   cada KPI con meta, tiles por ciudad con minigráfico y superficies sin
+   bordes duros. Sobre la capa suave del sistema (tokens --radius-card /
+   --radius-table / --radius-control, --color-border-soft, --color-fill-soft,
+   --shadow-card — en oscuro sin sombra y con el borde del tema). Sin
+   color-mix(): html2canvas no lo entiende. Acotado a .rd-view--suave porque
+   el prototipo "Elegida" reusa las clases rd-*.
+   ═════════════════════════════════════════════════════════════════════════ */
+.rd-view--suave { gap: var(--space-5); }
+
+/* Encabezados de sección: sin línea, subtítulo al lado del título */
+.rd-view--suave .rd-sec { border-bottom: 0; padding-bottom: 0; margin-top: var(--space-3); align-items: center; }
+.rd-view--suave .rd-sec__titles { flex-direction: row; align-items: baseline; flex-wrap: wrap; column-gap: var(--space-3); row-gap: 2px; }
+.rd-view--suave .rd-sec__title { font-weight: var(--weight-bold); }
+.rd-view--suave .rd-sec__sub { color: var(--color-text-subtle); }
+
+/* Selector de línea: la píldora del segmentado, un poco más alta */
+.rd-view--suave .rd-toolbar .ui-segmented { padding: 4px; }
+.rd-view--suave .rd-toolbar .ui-segmented__btn { height: 32px; padding: 0 14px; }
+
+.rd-view--suave .rd-chart { padding: var(--space-4) var(--space-5); }
+
+/* ── Tiles KPI con anillo ─────────────────────────────────────────────── */
+.rd-kpis--tiles { gap: var(--space-4); }
+.rd-tile {
+  position: relative; display: flex; flex-direction: column; gap: 4px;
+  min-width: 0; padding: var(--space-5);
+  background: var(--color-surface); color: var(--color-text);
+  border: 1px solid var(--color-border-soft); border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+.rd-tile__slot { position: absolute; top: var(--space-4); right: var(--space-4); }
+.rd-tile__ico {
+  display: flex; align-items: center; justify-content: center;
+  width: 56px; height: 56px; border-radius: 50%;
+  background: var(--color-surface-sunken); color: var(--color-text-muted);
+}
+.rd-tile__lbl {
+  font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--color-text-muted);
+  line-height: var(--leading-tight);
+  overflow-wrap: anywhere; hyphens: auto;   /* "реактивированные" no se monta sobre el anillo */
+}
+/* El rótulo reserva el alto del anillo (top 16 + 56 − padding 20): la cifra
+   grande arranca debajo y nunca se monta sobre él, aunque sea larga. */
+.rd-tile--slot .rd-tile__lbl { max-width: calc(100% - 68px); }
+.rd-kpis--tiles:has(.rd-tile--slot) .rd-tile__lbl { min-height: 52px; }   /* misma línea base en toda la fila */
+.rd-tile__val {
+  margin-top: var(--space-1);
+  font-size: clamp(22px, 1.9vw, 28px); font-weight: 800; line-height: 1.1;
+  font-variant-numeric: tabular-nums; color: var(--color-text); overflow-wrap: anywhere;
+}
+.rd-tile__delta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 2px; }
+.rd-tile__prev, .rd-tile__sub { font-size: var(--text-xs); color: var(--color-text-subtle); }
+.rd-tile__cap {
+  margin-top: var(--space-1); font-size: var(--text-xs); line-height: var(--leading-normal);
+  color: var(--color-text-muted); font-variant-numeric: tabular-nums;
+}
+.rd-tile__cap--none { color: var(--color-text-subtle); }
+.rd-tile .ui-ring__txt { font-size: 16px; }
+.rd-tile .ui-ring__txt--long { font-size: 12.5px; }
+/* En la grilla automática de Fleet (10 tiles) el anillo va más chico. */
+.rd-kpis--auto .rd-tile .ui-ring, .rd-kpis--auto .rd-tile__ico { width: 48px; height: 48px; }
+.rd-kpis--auto .rd-tile--slot .rd-tile__lbl { max-width: calc(100% - 58px); }
+.rd-kpis--auto.rd-kpis--tiles:has(.rd-tile--slot) .rd-tile__lbl { min-height: 44px; }
+.rd-kpis--auto .rd-tile .ui-ring__txt { font-size: 13px; }
+.rd-kpis--auto .rd-tile .ui-ring__txt--long { font-size: 11px; }
+.rd-kpis--auto.rd-kpis--tiles { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
+
+/* ── Tiles por ciudad (tinte, sin sombra: se leen como un grupo) ──────── */
+.rd-cities { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.rd-city {
+  display: flex; flex-direction: column; gap: var(--space-2); min-width: 0;
+  padding: var(--space-5); border-radius: var(--radius-card);
+  background: var(--color-surface-muted); border: 1px solid var(--color-border-soft);
+}
+.rd-city__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-width: 0; }
+.rd-city__name { display: flex; align-items: center; min-width: 0; font-weight: var(--weight-bold); }
+.rd-spark { display: block; flex: none; }
+.rd-city__big { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px var(--space-2); }
+.rd-city__val { font-size: 28px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.rd-city__unit { font-size: var(--text-sm); color: var(--color-text-muted); }
+.rd-city__big .ui-delta { align-self: center; }
+.rd-city__rows { margin: 0; display: flex; flex-direction: column; }
+.rd-city__row {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+  padding: 4px 0; font-size: var(--text-sm); color: var(--color-text-muted);
+}
+.rd-city__row dt { margin: 0; }
+.rd-city__row dd { margin: 0; display: flex; align-items: center; gap: var(--space-2); }
+.rd-city__num { color: var(--color-text); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
+.rd-city .ui-delta { font-size: var(--text-xs); }
+
+/* ── Quién se movió: filas en tinte alterno, sin líneas ───────────────── */
+.rd-view--suave .rd-mov__row { border-bottom: 0; padding: 6px 10px; border-radius: var(--radius-control); }
+.rd-view--suave .rd-mov__row:nth-child(odd) { background: var(--color-fill-soft); }
+
+/* ── Tablas: sin filetes entre filas, aire alrededor ──────────────────── */
+.rd-view--suave .ui-table-wrap { padding: 0 var(--space-2) var(--space-2); }
+.rd-view--suave .ui-table tbody th, .rd-view--suave .ui-table tbody td { border-bottom-color: transparent; }
+.rd-view--suave .ui-table--sticky-first th:first-child,
+.rd-view--suave .ui-table--sticky-first td:first-child { border-right-color: transparent; }
+
+/* ── Tarjetas por partner ─────────────────────────────────────────────── */
+.rd-view--suave .rd-pcard { padding: var(--space-4) var(--space-5); }
+.rd-view--suave .rd-pcard__kpi, .rd-view--suave .rd-pcard__nr { border-color: transparent; border-radius: var(--radius-table); }
+
+@media (max-width: 720px) {
+  .rd-kpis--tiles:has(.rd-tile--slot) .rd-tile__lbl { min-height: 0; }
+  .rd-tile--slot .rd-tile__lbl { min-height: 52px; }
+}

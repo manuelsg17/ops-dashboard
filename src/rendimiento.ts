@@ -10,10 +10,10 @@ import { dn } from "./shared/huella";
 import { particionarPorKam, ordenarKams } from "./domain/desgloseKam";
 import { escalaLista, reintentarCuandoEscalaLista } from "./shared/escalaLista";
 import { partesAlcance } from "./shared/alcance";
-import { progressBar, segmented, btn, badge, alertBox, emptyState } from "./shared/ui";
+import { segmented, btn, badge, alertBox, emptyState, progressRing } from "./shared/ui";
 import { iconSvg } from "./shared/icons";
 import { chartTokens, seriesColor } from "./shared/chartTheme";
-import { rendTopPartners, valorMetricaPartner, indiceBase100 } from "./charts.js";
+import { rendTopPartners, valorMetricaPartner, indiceBase100, ESTILO_SUAVE } from "./charts.js";
 import { metasResumenPais, _metasFechasDelMes, _metasFechasMesCompleto } from "./metas.js";
 import { reportYM } from "./shared/mesReporte.js";
 import { parseLocalDate } from "./core/dates";
@@ -202,20 +202,49 @@ function _rdTrend(vals) {
   return `<span class="rd-trend ${cls}" title="${escapeHTML(lbl)}">${iconSvg(up ? "trending-up" : down ? "trending-down" : "minus", { size: 14, label: lbl })}</span>`;
 }
 
-// ── Tarjeta KPI ──────────────────────────────────────────────────────────────
-// Es la tarjeta del sistema de diseño (ui-kpi: valor · delta · avance contra la
-// meta, dirección B). No se usa ui.kpiCard() tal cual porque (1) la cifra tiene
-// que llevar su `data-num` y (2) el delta sigue la semántica de bdgMode (NEW,
-// nada en diario); la barra de avance sí es la de ui.progressBar().
+// Raíz de la vista. `rd-view--suave` = estilo "B · Suave" que eligió Manuel
+// (fase 8, 24-sep-2026): superficies redondeadas con tinte, sin bordes duros,
+// anillo de avance arriba de cada KPI con meta. Va en un modificador (y no en
+// .rd-view a secas) porque el prototipo de dev (src/dev/proto) reusa las clases
+// rd-* para su versión "Elegida" y tiene que seguir viéndose como se revisó.
+const RD_VIEW = "rd-view rd-view--suave";
+
+// ── Tarjeta KPI ("tile" suave) ───────────────────────────────────────────────
+// Valor · delta vs período anterior · avance contra la meta del mes. El avance
+// es un ANILLO arriba a la derecha (lo que Manuel eligió del prototipo B) y el
+// caption completo ("Septiembre: 6,371 de 8,758 · 72.7% · proyección 109.1%")
+// sigue visible abajo — y además es el nombre accesible del anillo. Sin meta
+// (Viajes, productividad…) el hueco del anillo lleva un icono neutro, o nada.
+// No se usa ui.kpiCard() porque la cifra lleva su `data-num` y el delta sigue
+// la semántica de bdgMode (NEW, nada en diario).
 function _rdKpi(o) {
   const d = _rdDelta(o.cur, o.prev, { invert: o.invert });
-  return `<div class="ui-kpi rd-kpi">
-    <div class="ui-kpi__label">${escapeHTML(o.label)}</div>
-    <div class="ui-kpi__row"><span class="ui-kpi__value"${o.numKey ? dn(o.numKey) : ""}>${escapeHTML(o.value)}</span>${
-      d ? `<span class="ui-kpi__delta">${d}<span class="ui-kpi__prev">${escapeHTML(_rdPrevLbl())}</span></span>` : ""}</div>
-    ${o.sub ? `<div class="ui-kpi__sub">${escapeHTML(o.sub)}</div>` : ""}
-    ${o.goal ? progressBar(o.goal) : ""}
+  const g = o.goal;
+  const conAnillo = !!g && g.pct != null && Number.isFinite(g.pct);
+  const slot = conAnillo
+    ? progressRing({ pct: g.pct, projPct: g.projPct, label: g.caption, size: 56, stroke: 7 })
+    : o.icon ? `<span class="rd-tile__ico">${iconSvg(o.icon, { size: 20 })}</span>` : "";
+  return `<div class="rd-tile${slot ? " rd-tile--slot" : ""}">
+    ${slot ? `<div class="rd-tile__slot">${slot}</div>` : ""}
+    <div class="rd-tile__lbl">${escapeHTML(o.label)}</div>
+    <div class="rd-tile__val"${o.numKey ? dn(o.numKey) : ""}>${escapeHTML(o.value)}</div>
+    ${d ? `<div class="rd-tile__delta">${d}<span class="rd-tile__prev">${escapeHTML(_rdPrevLbl())}</span></div>` : ""}
+    ${o.sub ? `<div class="rd-tile__sub">${escapeHTML(o.sub)}</div>` : ""}
+    ${g ? `<div class="rd-tile__cap${conAnillo ? "" : " rd-tile__cap--none"}">${escapeHTML(g.caption)}</div>` : ""}
   </div>`;
+}
+
+// Minigráfico de línea (tiles por ciudad). Decorativo en lo visual pero con
+// nombre accesible: la cifra y su variación ya están en texto al lado.
+function _rdSpark(vals, label, color, w = 96, h = 28) {
+  const v = vals.filter(x => x != null && Number.isFinite(x));
+  if (v.length < 2) return "";
+  const mn = Math.min(...v), mx = Math.max(...v), rg = mx - mn || 1;
+  const pts = vals.map((x, i) => x == null || !Number.isFinite(x) ? null :
+    `${(i / (vals.length - 1) * (w - 4) + 2).toFixed(1)},${(h - 3 - (x - mn) / rg * (h - 6)).toFixed(1)}`)
+    .filter(Boolean).join(" ");
+  return `<svg class="rd-spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${escapeHTML(label)}" style="color:${escapeHTML(color)}">` +
+    `<polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }
 
 // Encabezado de sección (sin icono ni color: el título de la PÁGINA y su
@@ -236,7 +265,7 @@ function _rdChart(id, title, name, caption = "") {
 }
 
 function _rdEmpty(title, text) {
-  return `<div class="rd-view">${rendLineToggleHTML()}${emptyState({ icon: "filter", title, text })}</div>`;
+  return `<div class="${RD_VIEW}">${rendLineToggleHTML()}${emptyState({ icon: "filter", title, text })}</div>`;
 }
 
 // ── Avance contra la meta del mes (lo que muestra la pestaña Metas) ──────────
@@ -380,7 +409,7 @@ function _rendPintarCargandoEscala() {
   if (empty) empty.style.display = "none";
   content.style.display = "";
   destroyAllCharts();
-  content.innerHTML = `<div class="rd-view">${rendLineToggleHTML()}${emptyState({
+  content.innerHTML = `<div class="${RD_VIEW}">${rendLineToggleHTML()}${emptyState({
     icon: "refresh", title: t("carga.escala", { e: t("mode." + (STATE.curMode || "semanal")) }) })}</div>`;
 }
 
@@ -506,7 +535,7 @@ export function _renderRendImpl() {
   const pTR = sumR(prevRows, r => r.trips || 0);
 
   const periodLabel = _rendPeriodLabel();
-  let html = `<div class="rd-view">` + rendLineToggleHTML();
+  let html = `<div class="${RD_VIEW}">` + rendLineToggleHTML();
 
   // ── 1. KPIs del país (o del alcance filtrado) ─────────────────────────────
   // El valor de N+R/Horas/Viajes es el ACUMULADO del rango; el delta compara el
@@ -514,12 +543,14 @@ export function _renderRendImpl() {
   // es el de la pestaña Metas para el mes del último período (ver _rendMetaMes).
   const metaInfo = _rendMetaMes(line, lastDate);
   const acum = t("rend.lbl.acumRango");
-  html += _rdSec(t("rd.kpis.titulo"), t("rd.kpis.sub", { p: periodLabel, d: d2s(lastDate) }));
-  html += `<div class="rd-kpis">
-    ${_rdKpi({ label: t("metric.ad.label"), value: fmt(tAD), numKey: "rend.pais.ad", cur: tAD, prev: pAD, sub: periodLabel, goal: _rdGoal(metaInfo, "ad") })}
-    ${_rdKpi({ label: t("metric.nr.label"), value: fmt(tNR), numKey: "rend.pais.nr", cur: lNR, prev: pNR, sub: acum, goal: _rdGoal(metaInfo, "nr") })}
-    ${_rdKpi({ label: t("metric.sh.label"), value: fmt(tSH), numKey: "rend.pais.sh", cur: lSH, prev: pSH, sub: acum, goal: _rdGoal(metaInfo, "sh") })}
-    ${_rdKpi({ label: t("metric.tr.label"), value: fmt(tTR), numKey: "rend.pais.tr", cur: lTR, prev: pTR, sub: acum,
+  // Sin encabezado de sección (como el prototipo B): qué mide cada tile lo dice
+  // su propia línea "última semana (14/09/2026)" / "acumulado del rango".
+  html += `<h2 class="ui-sr-only">${escapeHTML(t("rd.kpis.titulo"))}</h2>`;
+  html += `<div class="rd-kpis rd-kpis--tiles">
+    ${_rdKpi({ label: t("metric.ad.label"), value: fmt(tAD), numKey: "rend.pais.ad", cur: tAD, prev: pAD, sub: `${periodLabel} (${d2s(lastDate)})`, goal: _rdGoal(metaInfo, "ad"), icon: "users" })}
+    ${_rdKpi({ label: t("metric.nr.label"), value: fmt(tNR), numKey: "rend.pais.nr", cur: lNR, prev: pNR, sub: acum, goal: _rdGoal(metaInfo, "nr"), icon: "user" })}
+    ${_rdKpi({ label: t("metric.sh.label"), value: fmt(tSH), numKey: "rend.pais.sh", cur: lSH, prev: pSH, sub: acum, goal: _rdGoal(metaInfo, "sh"), icon: "clock" })}
+    ${_rdKpi({ label: t("metric.tr.label"), value: fmt(tTR), numKey: "rend.pais.tr", cur: lTR, prev: pTR, sub: acum, icon: "car",
                goal: metaInfo ? { pct: null, caption: t("rd.meta.sinMetaMensual") } : undefined })}
   </div>`;
   html += _rdGoalNota(metaInfo);
@@ -529,7 +560,7 @@ export function _renderRendImpl() {
     html += _rendTkKPIs(filtered.filter(r => r.date === lastDate), prevFiltered, metaInfo);
   }
 
-  // ── 2. Por ciudad (tabla compacta) ─────────────────────────────────────────
+  // ── 2. Por ciudad (un tile por ciudad, con minigráfico) ─────────────────────
   const ciudades = [];
   CITIES.forEach(city => {
     const cr = filteredByCity[city];
@@ -552,9 +583,17 @@ export function _renderRendImpl() {
       ptr: sumR(cP, r => r.trips || 0)
     });
   });
+  // Serie por fecha de cada ciudad con datos: la usan los minigráficos de los
+  // tiles y las 4 gráficas de "Comparativa por ciudad" (ver _rdPintarCiudad).
+  const citiesWithData = CITIES.filter(c => (filteredByCity[c] || []).length);
+  _rdCiudadData = {
+    dates,
+    cities: citiesWithData,
+    byDate: citiesWithData.map(c => aggCityDatec(filteredByCity[c], c))
+  };
   if (ciudades.length) {
     html += _rdSec(t("rend.ciudad.titulo"), t("rd.ciudad.sub", { p: periodLabel }));
-    html += _rdCiudadTabla(ciudades);
+    html += _rdCiudadTiles(ciudades, _rdCiudadData);
   }
 
   // ── 3. Quién se movió (lo más accionable: a quién llamar) ──────────────────
@@ -585,26 +624,7 @@ export function _renderRendImpl() {
     </div>`;
   }
 
-  // ── 4. Por KAM (tabla: último período + acumulado del rango) ────────────────
-  html += _rendKamSeccion(apd, lastRows, prevRows);
-
-  // ── 5. Productividad ──────────────────────────────────────────────────────
-  // Ratios, no volúmenes: responden "¿cada conductor rinde más o menos?", que es
-  // una pregunta distinta de "¿tenemos más conductores?". Un mes puede crecer en
-  // AD y caer en horas por conductor — sin estos ratios eso pasa desapercibido.
-  const prodOf = rs => {
-    const ad = sumR(rs, r => r.activeDrivers), sh = sumR(rs, r => r.supplyHours), tr = sumR(rs, r => r.trips || 0);
-    return { shAd: ratio(sh, ad), trAd: ratio(tr, ad), trSh: ratio(tr, sh) };
-  };
-  const pNow = prodOf(lastRows), pPrev = prodOf(prevRows);
-  html += _rdSec(t("rend.prod.titulo"), t("rend.prod.sub", { d: d2s(lastDate) }));
-  html += `<div class="rd-kpis rd-kpis--3">
-    ${_rdKpi({ label: t("rend.kpi.horasCond"),  value: fmt(pNow.shAd),        numKey: "rend.prod.shAd", cur: pNow.shAd, prev: pPrev.shAd, sub: t("rend.snapshotUlt") })}
-    ${_rdKpi({ label: t("rend.kpi.viajesCond"), value: fmt(pNow.trAd),        numKey: "rend.prod.trAd", cur: pNow.trAd, prev: pPrev.trAd, sub: t("rend.snapshotUlt") })}
-    ${_rdKpi({ label: t("rend.kpi.viajesHora"), value: pNow.trSh.toFixed(2),  numKey: "rend.prod.trSh", cur: pNow.trSh, prev: pPrev.trSh, sub: t("rend.snapshotUlt") })}
-  </div>`;
-
-  // ── 6. Tendencias ─────────────────────────────────────────────────────────
+  // ── 4. Tendencias ─────────────────────────────────────────────────────────
   // Perú por partner: top 8 por Conductores Activos del último período, sin
   // "Otros" dibujado (ni segundo eje): lo que queda fuera se dice en el pie.
   const partnersConDatos = [...new Set(apd.map(r => r.partner))];
@@ -625,14 +645,13 @@ export function _renderRendImpl() {
     ${_rdChart("chP_tr", t("metric.tr.label"),     "Viajes_Peru", pieTop("tr"))}
   </div>`;
 
-  // Comparativa entre ciudades: UNA gráfica por métrica con una línea por ciudad.
+  // ── 5. Comparativa entre ciudades: UNA gráfica por métrica con una línea por ciudad.
   // Lima es ~7 veces Trujillo/Arequipa: en valores absolutos las dos quedan
   // aplastadas contra el piso. Por defecto se muestra el ÍNDICE (primer período
   // del rango = 100), que compara RITMOS; "Valores" vuelve a las cifras. Se
   // eligió el índice y no small multiples (3 ciudades × 4 métricas = 12 gráficos)
   // porque cada render de ApexCharts bloquea 30-80 ms y la vista ya pasó de 16 a
   // 8 gráficos por eso; además el índice responde directo "¿qué ciudad crece más?".
-  const citiesWithData = CITIES.filter(c => (filteredByCity[c] || []).length);
   if (citiesWithData.length) {
     const toggle = String(segmented({
       options: [{ value: "indice", label: t("rd.ciudad.indice") }, { value: "valores", label: t("rd.ciudad.valores") }],
@@ -648,7 +667,26 @@ export function _renderRendImpl() {
     </div>`;
   }
 
-  // ── 7. Tabla ───────────────────────────────────────────────────────────────
+  // ── 6. Por KAM (tabla: último período + acumulado del rango) ────────────────
+  html += _rendKamSeccion(apd, lastRows, prevRows);
+
+  // ── 7. Productividad ──────────────────────────────────────────────────────
+  // Ratios, no volúmenes: responden "¿cada conductor rinde más o menos?", que es
+  // una pregunta distinta de "¿tenemos más conductores?". Un mes puede crecer en
+  // AD y caer en horas por conductor — sin estos ratios eso pasa desapercibido.
+  const prodOf = rs => {
+    const ad = sumR(rs, r => r.activeDrivers), sh = sumR(rs, r => r.supplyHours), tr = sumR(rs, r => r.trips || 0);
+    return { shAd: ratio(sh, ad), trAd: ratio(tr, ad), trSh: ratio(tr, sh) };
+  };
+  const pNow = prodOf(lastRows), pPrev = prodOf(prevRows);
+  html += _rdSec(t("rend.prod.titulo"), t("rend.prod.sub", { d: d2s(lastDate) }));
+  html += `<div class="rd-kpis rd-kpis--3 rd-kpis--tiles">
+    ${_rdKpi({ label: t("rend.kpi.horasCond"),  value: fmt(pNow.shAd),        numKey: "rend.prod.shAd", icon: "clock", cur: pNow.shAd, prev: pPrev.shAd, sub: t("rend.snapshotUlt") })}
+    ${_rdKpi({ label: t("rend.kpi.viajesCond"), value: fmt(pNow.trAd),        numKey: "rend.prod.trAd", icon: "car", cur: pNow.trAd, prev: pPrev.trAd, sub: t("rend.snapshotUlt") })}
+    ${_rdKpi({ label: t("rend.kpi.viajesHora"), value: pNow.trSh.toFixed(2),  numKey: "rend.prod.trSh", icon: "activity", cur: pNow.trSh, prev: pPrev.trSh, sub: t("rend.snapshotUlt") })}
+  </div>`;
+
+  // ── 8. Tabla ───────────────────────────────────────────────────────────────
   // Resumen de leads Yango para el encabezado
   const leadsSet  = new Set(apd.filter(r => r.date === lastDate && r.newService > 0).map(r => r.partner));
   const leadsNote = leadsSet.size > 0
@@ -657,7 +695,7 @@ export function _renderRendImpl() {
   html += _rdSec(t("rend.tabla.titulo"), t("rd.tabla.sub"), leadsNote);
   html += `<div class="ui-table-wrap ui-table-wrap--scroll rd-tabla-wrap"><div id="tblContainer"></div></div>`;
 
-  // ── 8. Tarjetas por Partner ────────────────────────────────────────────────
+  // ── 9. Tarjetas por Partner ────────────────────────────────────────────────
   html += _rdSec(t("rend.cards.titulo"), t("rend.cards.sub"));
   html += `<div class="rd-pcards" id="partnerCards"></div>`;
   html += `</div>`;
@@ -675,18 +713,13 @@ export function _renderRendImpl() {
   const tokenAtSchedule = _renderRendToken;
   const tabTokenAtSched = STATE._tabRenderId;
   const chartJobs = [
-    () => buildMultiLine("chP_ad", dates, partnersConDatos, byDate, "ad"),
-    () => buildMultiLine("chP_nr", dates, partnersConDatos, byDate, "nr"),
-    () => buildMultiLine("chP_sh", dates, partnersConDatos, byDate, "sh"),
-    () => buildMultiLine("chP_tr", dates, partnersConDatos, byDate, "tr"),
+    () => buildMultiLine("chP_ad", dates, partnersConDatos, byDate, "ad", null, ESTILO_SUAVE),
+    () => buildMultiLine("chP_nr", dates, partnersConDatos, byDate, "nr", null, ESTILO_SUAVE),
+    () => buildMultiLine("chP_sh", dates, partnersConDatos, byDate, "sh", null, ESTILO_SUAVE),
+    () => buildMultiLine("chP_tr", dates, partnersConDatos, byDate, "tr", null, ESTILO_SUAVE),
   ];
   // Una gráfica por métrica con una serie por ciudad (ver el comentario en la
   // sección de comparativa): 4 renders en vez de 4 × nº de ciudades.
-  _rdCiudadData = {
-    dates,
-    cities: citiesWithData,
-    byDate: citiesWithData.map(c => aggCityDatec(filteredByCity[c], c))
-  };
   ["ad", "nr", "sh", "tr"].forEach(metric => {
     chartJobs.push(() => _rdPintarCiudad(metric));
   });
@@ -719,8 +752,8 @@ function _rdPintarCiudad(metric) {
   });
   const colors = d.cities.map(c => seriesColor(_rdCityIdx(c), tk));
   const extra = _rdCiudadModo === "indice"
-    ? { yaxis: { labels: { formatter: v => v == null ? "" : Math.round(v) } } }
-    : undefined;
+    ? { ...ESTILO_SUAVE, yaxis: { labels: { formatter: v => v == null ? "" : Math.round(v) } } }
+    : ESTILO_SUAVE;
   buildLineChart("chC_" + metric, d.dates, series, colors, extra);
 }
 export function setRendCiudadModo(modo) {
@@ -741,25 +774,29 @@ export function setRendCiudadModo(modo) {
   });
 }
 
-// ── Tabla por ciudad ─────────────────────────────────────────────────────────
-function _rdCiudadTabla(ciudades) {
-  const conDelta = STATE.curMode !== "diario";
+// ── Por ciudad: un tile por ciudad ───────────────────────────────────────────
+// Reemplaza a la tabla compacta (prototipo B): conductores activos grandes con
+// su variación y minigráfico del rango; N+R, horas y viajes del último período
+// con su variación debajo. Mismas cifras, mismo formato y mismas claves de
+// huella (rend.ciudad.<métrica>.<ciudad>) que la tabla.
+function _rdCiudadTiles(ciudades, serie) {
   const rows = ciudades.slice().sort((a, b) => b.ad - a.ad);
-  const cols = [
-    { k: "ad", l: t("metric.ad.label"), f: fmt,      p: "pad" },
-    { k: "nr", l: t("metric.nr.label"), f: fmt,      p: "pnr" },
-    { k: "sh", l: t("metric.sh.label"), f: fmt,      p: "psh" },
-    { k: "tr", l: t("metric.tr.label"), f: fmtSmart, p: "ptr" }
+  const filas = [
+    { k: "nr", l: t("metric.nr.short"), f: fmt,      p: "pnr" },
+    { k: "sh", l: t("metric.sh.short"), f: fmt,      p: "psh" },
+    { k: "tr", l: t("metric.tr.short"), f: fmtSmart, p: "ptr" }
   ];
-  let h = `<div class="ui-table-wrap rd-tabla-compacta"><table class="ui-table rd-table">
-    <thead><tr><th scope="col">${escapeHTML(t("rd.col.ciudad"))}</th>${cols.map(c =>
-      `<th scope="col" class="ui-num">${escapeHTML(c.l)}</th>${conDelta ? `<th scope="col" class="rd-dcol"><span class="ui-sr-only">${escapeHTML(t("rd.col.delta", { m: c.l }))}</span>Δ</th>` : ""}`).join("")}</tr></thead><tbody>`;
-  rows.forEach(r => {
-    h += `<tr><th scope="row" class="rd-rowhead">${_rdDot(_rdCityVar(r.city))}${escapeHTML(cityLabel(r.city))}</th>` +
-      cols.map(c => `<td class="ui-num"${dn("rend", "ciudad", c.k, r.city)}>${c.f(r[c.k])}</td>` +
-        (conDelta ? `<td class="rd-dcol">${_rdDelta(r[c.k], r[c.p])}</td>` : "")).join("") + `</tr>`;
-  });
-  return h + `</tbody></table></div>`;
+  return `<div class="rd-cities">${rows.map(r => {
+    const i = serie ? serie.cities.indexOf(r.city) : -1;
+    const vals = i >= 0 ? serie.dates.map(dt => (serie.byDate[i][dt] || {}).ad || 0) : [];
+    const spark = _rdSpark(vals, t("rd.ciudad.sparkAria", { c: cityLabel(r.city) }), _rdCityVar(r.city));
+    return `<div class="rd-city">
+      <div class="rd-city__head"><span class="rd-city__name">${_rdDot(_rdCityVar(r.city))}${escapeHTML(cityLabel(r.city))}</span>${spark}</div>
+      <div class="rd-city__big"><span class="rd-city__val"${dn("rend", "ciudad", "ad", r.city)}>${fmt(r.ad)}</span><span class="rd-city__unit">${escapeHTML(t("rd.ciudad.unidad"))}</span>${_rdDelta(r.ad, r.pad)}</div>
+      <dl class="rd-city__rows">${filas.map(c => `<div class="rd-city__row"><dt>${escapeHTML(c.l)}</dt>` +
+        `<dd><span class="rd-city__num"${dn("rend", "ciudad", c.k, r.city)}>${c.f(r[c.k])}</span>${_rdDelta(r[c.k], r[c.p])}</dd></div>`).join("")}</dl>
+    </div>`;
+  }).join("")}</div>`;
 }
 
 // ── Quién se movió ───────────────────────────────────────────────────────────
@@ -1160,7 +1197,7 @@ const _FLEET_TREND_KEY = {
 export function buildFleetTrendLine(elId, dates, byDate, key, color) {
   // null (tasa sin base) queda como hueco en la línea, no como un punto en 0.
   const data = dates.map(d => { const v = byDate[d] ? byDate[d][key] : 0; return v == null ? null : (v || 0); });
-  buildLineChart(elId, dates, [{ name: _FLEET_TREND_KEY[key] ? t(_FLEET_TREND_KEY[key]) : key, data }], [color]);
+  buildLineChart(elId, dates, [{ name: _FLEET_TREND_KEY[key] ? t(_FLEET_TREND_KEY[key]) : key, data }], [color], ESTILO_SUAVE);
 }
 // Donut "Owned Cars por Partner" — snapshot del último período, Top 6 + Otros.
 // Parts-of-whole (dónde se concentra la flota) → donut es la elección correcta,
@@ -1217,7 +1254,7 @@ export function _scheduleFleetCharts(filtered, dates, lastRows) {
 // último período y del anterior. NO se usan AD/SH/N+R (mezclados a nivel fleetroom).
 export function _renderFleetView(lastRows, prevRows, lastDate, _prevDate) {
   const periodLabel = _rendPeriodLabel();
-  let html = `<div class="rd-view">` + rendLineToggleHTML();
+  let html = `<div class="${RD_VIEW}">` + rendLineToggleHTML();
   const c = _rendFleetAgg(lastRows), p = _rendFleetAgg(prevRows);
   const metaInfo = _rendMetaMes("fleet", lastDate);
 
@@ -1277,7 +1314,7 @@ function _rdFleetKpis(c, p, metaInfo) {
   const pct = v => v == null ? "—" : fmt(v) + "%";
   const snap = t("rend.snapshotUlt");
   const k = (label, val, prev, f, numKey, goal) => _rdKpi({ label, value: f(val), numKey, cur: val, prev, sub: snap, goal });
-  return `<div class="rd-kpis rd-kpis--auto">
+  return `<div class="rd-kpis rd-kpis--auto rd-kpis--tiles">
     ${k(t("rend.kpi.ownedCars"),   c.owned,            p.owned,            fmt, "rend.fleet.owned")}
     ${k(t("rend.kpi.shAuto"),      c.shCar,            p.shCar,            num, "rend.fleet.shCar", _rdGoal(metaInfo, "shCar"))}
     ${k(t("rend.kpi.aceptacion"),  c.accept,           p.accept,           pct, "rend.fleet.accept", _rdGoal(metaInfo, "accept"))}
@@ -1373,7 +1410,7 @@ export function _rendTkKPIs(lastRows, prevRows, metaInfo) {
   const c = agg(lastRows), p = agg(prevRows);
   const snap = t("rend.snapshotUlt");
   return _rdSec(t("rend.tk.autos"), t("rend.tk.autosSub")) +
-    `<div class="rd-kpis rd-kpis--2">
+    `<div class="rd-kpis rd-kpis--2 rd-kpis--tiles">
       ${_rdKpi({ label: t("rend.kpi.brandeados"), value: fmt(c.branded), numKey: "rend.tk.branded", cur: c.branded, prev: p.branded, sub: snap, goal: _rdGoal(metaInfo, "cars") })}
       ${_rdKpi({ label: t("rend.kpi.activeCars"), value: fmt(c.actCars), numKey: "rend.tk.activeCars", cur: c.actCars, prev: p.actCars, sub: snap })}
     </div>` +
@@ -1432,7 +1469,7 @@ export function _rendTkAdquisicion(lastRows, prevRows) {
   }).join("") : `<tr><td colspan="3" class="rd-muted">${escapeHTML(t("rend.tk.sinNuevos"))}</td></tr>`;
 
   return _rdSec(t("rend.tk.adq"), t("rend.tk.adqSub", { n: TK_META_NUEVOS_MES })) +
-    `<div class="rd-kpis rd-kpis--3">
+    `<div class="rd-kpis rd-kpis--3 rd-kpis--tiles">
       ${_rdKpi({ label: t("rend.kpi.nuevosProp"), value: fmt(propios), cur: propios, prev: pPropios, sub: rangoTxt })}
       ${_rdKpi({ label: t("rend.kpi.selfReg"),    value: fmt(self),    cur: self,    prev: pSelf,    sub: t("rend.tk.noCuenta") })}
       ${_rdKpi({ label: t("rend.kpi.pctAdq"),     value: pct.toFixed(1) + "%", cur: pct, prev: pPct, sub: t("rend.tk.propiosTotal") })}
@@ -1448,20 +1485,6 @@ export function _rendTkAdquisicion(lastRows, prevRows) {
     </table></div>`;
 }
 
-// Variante compacta de section header (sin fondo de ícono ni tag) — vivía en
-// insights.js (borrado en Fase A0 por no tener ruta de UI propia), pero
-// calculator.js/partnerView.js/seguimiento.js seguían usándola como global.
-// Restaurada acá al detectar el ReferenceError durante la conversión a módulos ES.
-export function _secH(emoji, color, title, subtitle) {
-  return `
-    <div class="agy-style-532">
-      <div class="agy-style-533">${emoji}</div>
-      <div class="agy-style-534">
-        <div class="agy-style-535">${escapeHTML(title)}</div>
-        <div class="agy-style-536">${escapeHTML(subtitle)}</div>
-      </div>
-    </div>`;
-}
 // ── ACCIONES DELEGADAS (Fase A2) ─────────────────────────────────────────────
 import { registerActions } from "./shared/actions.js";
 

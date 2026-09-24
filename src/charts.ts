@@ -67,12 +67,23 @@ export function valorMetricaPartner(byDate, p, d, metric) {
   if (metric === "tr") return dp.trips || 0;
   return dp.activeDrivers;
 }
-export function buildMultiLine(elId, dates, partners, byDate, metric, _fallbackColor) {
+export function buildMultiLine(elId, dates, partners, byDate, metric, _fallbackColor, extra) {
   const top = rendTopPartners(dates, partners, byDate);
   const tk = chartTokens();
   const series = top.map(p => ({ name: p, data: dates.map(d => valorMetricaPartner(byDate, p, d, metric)) }));
-  buildLineChart(elId, dates, series, top.map((_, i) => seriesColor(i, tk)), { chart: { height: 330 } });
+  buildLineChart(elId, dates, series, top.map((_, i) => seriesColor(i, tk)), _merge(extra || {}, { chart: { height: 330 } }));
 }
+
+// Estilo "B · Suave" de Rendimiento (fase 8): grilla punteada más liviana,
+// marcas de leyenda redondas y un trazo apenas más grueso. Solo apariencia:
+// mismas series, mismos ejes y mismo formato de números. Se pasa como `extra`
+// a buildLineChart/buildMultiLine (no cambia los gráficos de otras vistas).
+export const ESTILO_SUAVE = Object.freeze({
+  stroke:  { curve: "straight", width: 2.5, lineCap: "round" },
+  grid:    { strokeDashArray: 4 },
+  legend:  { markers: { width: 9, height: 9, radius: 9 }, itemMargin: { horizontal: 8, vertical: 2 } },
+  markers: { hover: { size: 5 } }
+});
 
 // Índice base 100 (comparativa por ciudad de Rendimiento): cada serie dividida
 // por su PRIMER valor > 0 del rango. Los puntos anteriores a esa base (serie en
