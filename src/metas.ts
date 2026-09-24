@@ -16,6 +16,7 @@ import { SIN_KAM } from "./core/config.js";
 import { parseLocalDate } from "./core/dates";
 import { esMesEnCurso } from "./domain/mesEnCurso";
 import { estadoMetaFila } from "./domain/estadoMeta";
+import { tieneCuotaTk, coberturaCuotaTk, sumaCuotaTk } from "./domain/cuotaTk";
 import { ordenarKams } from "./domain/desgloseKam";
 import { escalaLista, reintentarCuandoEscalaLista } from "./shared/escalaLista";
 import { partesAlcance } from "./shared/alcance";
@@ -431,15 +432,20 @@ function _mtAlerts(html) {
 // Celdas actual / meta / % (+ proyección) de una fila de las tablas por ciudad y
 // por KAM. MISMA lógica de casos que el viejo miniBar: sin meta (>0) solo se
 // muestra el actual; sin actual medible, solo la meta.
-function _mtKpiTds(real, meta, proj, F, numKey, showProj) {
+// `tk` (opcional): suma de la cuota TukTuk GUARDADA del grupo (null = ninguna
+// fila la trae → no se pinta nada). `sinMetaTxt` (opcional): rótulo propio de
+// la línea para "sin meta" (TukTuk: "sin cuota TukTuk declarada").
+function _mtKpiTds(real, meta, proj, F, numKey, showProj, tk = null, sinMetaTxt = "") {
   if (!_metasProyOn) proj = null;
   const dash = `<td class="ui-num mt-muted">—</td>`;
+  const tkSub = tk != null
+    ? `<div class="mt-tksub" title="${_E(t("mt.tk.deEsoTip"))}">${t("mt.tk.grupo", { v: `<span${_dn(numKey, "tk")}>${F(tk)}</span>` })}</div>` : "";
   if (real != null && !(meta > 0)) {
     return `<td class="ui-num"><span${_dn(numKey, "real")}>${F(real || 0)}</span></td>${dash}` +
-      `<td class="mt-pctcell"><span class="mt-note">${_E(t("metas.sinMetaCargada"))}</span></td>${showProj ? dash : ""}`;
+      `<td class="mt-pctcell"><span class="mt-note">${_E(sinMetaTxt || t("metas.sinMetaCargada"))}</span></td>${showProj ? dash : ""}`;
   }
   if (real == null) {
-    return `${dash}<td class="ui-num"><span${_dn(numKey, "meta")}>${F(meta || 0)}</span></td>` +
+    return `${dash}<td class="ui-num"><span${_dn(numKey, "meta")}>${F(meta || 0)}</span>${tkSub}</td>` +
       `<td class="mt-pctcell"><span class="mt-note">${_E(t("metas.metaSinActual"))}</span></td>${showProj ? dash : ""}`;
   }
   const p  = meta > 0 ? (real / meta) * 100 : 0;
@@ -447,7 +453,7 @@ function _mtKpiTds(real, meta, proj, F, numKey, showProj) {
   const projTd = !showProj ? "" : proj == null ? dash
     : `<td class="ui-num"><span${_dn(numKey, "proj")}>${F(proj)}</span> <span class="mt-sub">(${pp.toFixed(1)}%)</span></td>`;
   return `<td class="ui-num"><span${_dn(numKey, "real")}>${F(real)}</span></td>` +
-    `<td class="ui-num"><span${_dn(numKey, "meta")}>${F(meta)}</span></td>` +
+    `<td class="ui-num"><span${_dn(numKey, "meta")}>${F(meta)}</span>${tkSub}</td>` +
     `<td class="mt-pctcell"><div class="mt-pctwrap">${_mtPctBadge(p, meta, numKey)}${_mtBar(p, proj == null ? null : pp, meta)}</div></td>` +
     projTd;
 }
@@ -473,7 +479,7 @@ function _mtGroupTable(entLabel, groups) {
             `<div class="mt-sub">${_E(_mtCuentas(g.count))}</div>${g.extra || ""}</th>`
           : "") +
         `<td class="mt-kpiname">${_E(r.label)}</td>` +
-        _mtKpiTds(r.real, r.meta, r.proj, r.F || fmt, r.numKey, showProj) + `</tr>`;
+        _mtKpiTds(r.real, r.meta, r.proj, r.F || fmt, r.numKey, showProj, r.tk, r.sinMetaTxt) + `</tr>`;
     });
   });
   if (!body) return "";
@@ -528,6 +534,14 @@ function _mtSortTh(key, label, cls = "", attrs = "") {
     ` data-act="metasSort" data-key="${_E(key)}" title="${_E(t("mt.ordenar", { c: label }))}">${_E(label)}${arrow}</button></th>`;
 }
 
+// Cuota TukTuk GUARDADA dentro de la meta paraguas (Combinado / Agregador):
+// segunda línea "de eso TukTuk X" bajo la meta. Solo con c.tk != null — nunca se
+// estima (regla de Manuel: sin % declarado no hay cuota que mostrar).
+function _mtTkDeEso(c, F) {
+  if (c.tk == null) return "";
+  return `<div class="mt-tksub" title="${_E(t("mt.tk.deEsoTip"))}">${t("mt.tk.deEso", { v: `<span${_dn(c.numKey, "tk")}>${F(c.tk)}</span>` })}</div>`;
+}
+
 // Celdas de una fila de partner en la TABLA (actual · meta · % con badge).
 function _mtPartnerTds(c) {
   const F = c.F || fmt;
@@ -537,13 +551,13 @@ function _mtPartnerTds(c) {
     return `<td class="ui-num"><span${_dn(c.numKey, "real")}>${F(c.real)}</span></td>${dash}<td class="mt-muted">—</td>`;
   }
   if (c.mode === "meta") {
-    return `${dash}<td class="ui-num"><span${_dn(c.numKey, "meta")}>${F(c.meta)}</span></td>` +
+    return `${dash}<td class="ui-num"><span${_dn(c.numKey, "meta")}>${F(c.meta)}</span>${_mtTkDeEso(c, F)}</td>` +
       `<td class="mt-pctcell"><span class="mt-note">${_E(c.note || t("metas.sinActual"))}</span></td>`;
   }
   const proj = c.proj != null && _metasProyOn
     ? `<div class="mt-sub mt-projline">${t("mt.proyCorta", { v: `<span${_dn(c.numKey, "proj")}>${F(c.proj)}</span>` })}</div>` : "";
   return `<td class="ui-num"><span${_dn(c.numKey, "real")}>${F(c.real)}</span></td>` +
-    `<td class="ui-num"><span${_dn(c.numKey, "meta")}>${F(c.meta)}</span></td>` +
+    `<td class="ui-num"><span${_dn(c.numKey, "meta")}>${F(c.meta)}</span>${_mtTkDeEso(c, F)}</td>` +
     `<td class="mt-pctcell">${_mtPctBadge(c.pct, c.meta, c.numKey)}${proj}</td>`;
 }
 
@@ -553,17 +567,19 @@ function _mtCardKpi(c) {
   if (c.mode === "none") return "";
   if (c.mode === "real") {
     return `<div class="mt-pk"><div class="mt-pk__top"><span class="mt-pk__label">${_E(c.label)}</span>` +
-      `<span class="mt-pk__val"><span${_dn(c.numKey, "real")}>${F(c.real)}</span> · <em>${_E(t("metas.sinMetaSello"))}</em></span></div></div>`;
+      `<span class="mt-pk__val"><span${_dn(c.numKey, "real")}>${F(c.real)}</span> · <em>${_E(c.sello || t("metas.sinMetaSello"))}</em></span></div></div>`;
   }
   if (c.mode === "meta") {
     return `<div class="mt-pk"><div class="mt-pk__top"><span class="mt-pk__label">${_E(c.label)}</span>` +
-      `<span class="mt-pk__val"><strong${_dn(c.numKey, "meta")}>${F(c.meta)}</strong> <span class="mt-note">${_E(t("metas.metaMin"))}${c.note ? " · " + _E(c.note) : ""}</span></span></div></div>`;
+      `<span class="mt-pk__val"><strong${_dn(c.numKey, "meta")}>${F(c.meta)}</strong> <span class="mt-note">${_E(t("metas.metaMin"))}${c.note ? " · " + _E(c.note) : ""}</span></span></div>` +
+      _mtTkDeEso(c, F) + `</div>`;
   }
   const on = c.proj != null && _metasProyOn;
   const pp = on && c.meta > 0 ? (c.proj / c.meta) * 100 : 0;
   return `<div class="mt-pk"><div class="mt-pk__top"><span class="mt-pk__label">${_E(c.label)}</span>${_mtPctBadge(c.pct, c.meta, c.numKey)}</div>` +
     _mtBar(c.pct, on ? pp : null, c.meta) +
     `<div class="mt-pk__nums">${_E(t("mt.col.actual"))} <strong${_dn(c.numKey, "real")}>${F(c.real)}</strong> · ${_E(t("mt.col.meta"))} <strong${_dn(c.numKey, "meta")}>${F(c.meta)}</strong></div>` +
+    _mtTkDeEso(c, F) +
     (on ? `<div class="mt-pk__proj">${_E(t("metas.proyeccion"))}: <strong${_dn(c.numKey, "proj")}>${F(c.proj)}</strong> (${pp.toFixed(1)}%)</div>` : "") +
     `</div>`;
 }
@@ -571,14 +587,18 @@ function _mtCardKpi(c) {
 const _MT_FILTROS = ["todos", "bajo", "en", "sobre", "sin"];
 function _mtPartnersHTML(ctx) {
   const { rows, kpis } = ctx;
+  // Rótulos propios de "sin meta" (línea TukTuk: "sin cuota TukTuk declarada").
+  const sinTxt = ctx.sinTxt || {};
+  const chipLbl = k => k === "sin" && sinTxt.chip ? sinTxt.chip : t(`mt.filtro.${k}`);
+  const chipTip = k => k === "sin" && sinTxt.chipTip ? sinTxt.chipTip : t(`mt.filtro.${k}Tip`);
   rows.forEach(r => { r._st = _mtRowStatus(r); });
   const cnt = { todos: rows.length, bajo: 0, en: 0, sobre: 0, sin: 0 };
   rows.forEach(r => { if (cnt[r._st] != null) cnt[r._st]++; });
   if (!_MT_FILTROS.includes(_MT.filtro)) _MT.filtro = "todos";
   const chips = _MT_FILTROS.map(k =>
     `<button type="button" class="mt-fchip mt-fchip--${k}" aria-pressed="${_MT.filtro === k}" data-act="metasSetFiltro" data-value="${k}"` +
-    (k === "todos" ? "" : ` title="${_E(t(`mt.filtro.${k}Tip`))}"`) +
-    `>${k === "todos" ? "" : `<span class="mt-fchip__dot" aria-hidden="true"></span>`}${_E(t(`mt.filtro.${k}`))} <span class="mt-fchip__n">${cnt[k]}</span></button>`
+    (k === "todos" ? "" : ` title="${_E(chipTip(k))}"`) +
+    `>${k === "todos" ? "" : `<span class="mt-fchip__dot" aria-hidden="true"></span>`}${_E(chipLbl(k))} <span class="mt-fchip__n">${cnt[k]}</span></button>`
   ).join("");
   const vista = segmented({
     options: [{ value: "tabla", label: t("mt.vista.tabla"), icon: "table" },
@@ -592,7 +612,11 @@ function _mtPartnersHTML(ctx) {
 
   const nameCell = (r, tag, attrs = "", cls = "") => {
     const tip = r.tip ? ` <span class="mt-info" title="${_E(r.tip)}" aria-label="${_E(t("mt.detalle") + ": " + r.tip)}" role="img">${icon("info", { size: 13 })}</span>` : "";
-    const sm = r.sinMeta ? ` <span class="ui-badge ui-badge--neutral">${_E(t("mt.sinMeta"))}</span>` : "";
+    // En la tabla la columna del nombre es angosta (sticky, 260px): rótulo corto
+    // con el texto completo en el tooltip; en la tarjeta entra el completo.
+    const smTxt = tag === "th" && sinTxt.badgeCorto ? sinTxt.badgeCorto : (sinTxt.badge || t("mt.sinMeta"));
+    const smTip = sinTxt.badge ? ` title="${_E(sinTxt.badge)}"` : "";
+    const sm = r.sinMeta ? ` <span class="ui-badge ui-badge--neutral"${smTip}>${_E(smTxt)}</span>` : "";
     return `<${tag}${attrs} class="mt-pname${cls}">${_mtDot(r.color)}<span class="mt-pname__txt">${_E(r.partner)}</span>${sm}${tip}</${tag}>`;
   };
 
@@ -670,11 +694,15 @@ export function _metaLineRow(label, actual, meta, fmtFn, metaOnlyNote, numKey) {
 // Celda de partner a partir de un KPI de línea: misma regla que tenía la tarjeta
 // (`(m._sinMeta || mv != null) ? av : null`) — no mostrar el actual de un KPI
 // que el partner no tiene en esta línea, salvo en las cuentas SIN ninguna meta.
-function _mtLineCell(k, m, a, numKey) {
+function _mtLineCell(k, m, a, numKey, sello = "") {
   const mv = k.meta(m);
   const av0 = a ? k.act(a) : null;
   const av = (m._sinMeta || mv != null) ? av0 : null;
-  const base = { id: k.id, label: k.label, F: k.fmtFn || fmt, numKey, note: k.note, proj: null };
+  // Cuota TukTuk guardada (solo KPIs con tkMeta: Combinado). Se muestra con la
+  // meta, así que solo viaja cuando hay meta paraguas.
+  const tk = k.tkMeta && mv != null ? k.tkMeta(m) : null;
+  const base = { id: k.id, label: k.label, F: k.fmtFn || fmt, numKey, note: k.note, proj: null,
+                 tk: tk == null ? null : tk, sello };
   if (mv == null && av == null) return { ...base, mode: "none" };
   if (mv == null) return { ...base, mode: "real", real: av };
   if (av == null) return { ...base, mode: "meta", meta: mv };
@@ -989,7 +1017,10 @@ function _renderMetasLineView(cfg) {
   // y de N+R/Horas (flujos) contra una meta mensual: no aplican a Fleet, cuyos
   // KPIs son tasas que no dependen del largo del período.
   const tasas = cfg.line === "fleet";
-  let alerts = _metasAlcanceHTML() + (tasas ? "" : _metasEscalaAviso() + _metasCoberturaAviso(cfg.cobertura, mesName));
+  // cfg.avisoTop: aviso propio de la línea que va PRIMERO (TukTuk: cobertura de
+  // la cuota declarada por KAM). cfg.sinTxt: rótulos propios de "sin meta".
+  const sinTxt = cfg.sinTxt || null;
+  let alerts = (cfg.avisoTop || "") + _metasAlcanceHTML() + (tasas ? "" : _metasEscalaAviso() + _metasCoberturaAviso(cfg.cobertura, mesName));
   if (cfg.cobertura && cfg.cobertura.enRango === 0) {
     return html + _mtAlerts(alerts) + _metasSinPeriodosHTML(mesName);
   }
@@ -1002,7 +1033,7 @@ function _renderMetasLineView(cfg) {
 
   const units = _metasLineUnits(metaRows, act);
   const nSinMeta = units.length - metaRows.length;
-  alerts += _metasSinMetaAviso(nSinMeta, mesName);
+  alerts += cfg.sinMetaAviso ? cfg.sinMetaAviso(nSinMeta) : _metasSinMetaAviso(nSinMeta, mesName);
   html += _mtAlerts(alerts);
 
   // Delta de las tarjetas: mismo cálculo (actFn) sobre los períodos equivalentes
@@ -1030,7 +1061,12 @@ function _renderMetasLineView(cfg) {
   const rowsDe = (us, nk) => kpis.map(k => {
     const g = _metasAggKpi(k, us);
     if (g.meta == null && g.actual == null) return null;
-    return { label: k.label, real: g.actual, meta: g.meta, proj: g.proj, F: k.fmtFn, numKey: nk(k) };
+    // "TukTuk: X" solo si ALGUNA unidad del grupo trae la cuota guardada (y el
+    // grupo tiene meta paraguas, que es de lo que es parte).
+    const tk = k.tkMeta && g.meta != null
+      ? sumaCuotaTk(us.map(u => (u.m && !u.m._sinMeta && k.meta(u.m) != null) ? k.tkMeta(u.m) : null)) : null;
+    return { label: k.label, real: g.actual, meta: g.meta, proj: g.proj, F: k.fmtFn, numKey: nk(k),
+             tk, sinMetaTxt: sinTxt ? sinTxt.nota : "" };
   });
 
   // ── 2. Por Ciudad ─────────────────────────────────────────────────────────
@@ -1079,10 +1115,10 @@ function _renderMetasLineView(cfg) {
       sinMeta: !!m._sinMeta, color: STATE.partnerColors[m.partner] || "var(--cat-other)",
       tip:  cfg.partnerTip && !m._sinMeta ? cfg.partnerTip(m, a) : "",
       note: cfg.partnerNote ? cfg.partnerNote(m, a) : "",
-      cells: kpis.map(k => _mtLineCell(k, m, a, _nk("partner", k.id, `${m.partner}@${m.city}`)))
+      cells: kpis.map(k => _mtLineCell(k, m, a, _nk("partner", k.id, `${m.partner}@${m.city}`), sinTxt ? sinTxt.nota : ""))
     };
   });
-  html += _mtPartnersSection({ rows, kpis: kpis.map(k => ({ id: k.id, label: k.label })) });
+  html += _mtPartnersSection({ rows, kpis: kpis.map(k => ({ id: k.id, label: k.label })), sinTxt });
   return html;
 }
 
@@ -1181,15 +1217,19 @@ function _metasLineCfg(line, mesName, mesYearSel, fechas, selSet, cityFilter, ka
     kpis: [
       { id: "ad", label: t("metas.activeDrivers"), sub: t("metas.ultimoPeriodo"),
         meta: m => umbrella(m.mA), act: a => a.ad, proj: a => a.projAd,
-        snapSeries: a => a.adByDate, fmtFn: v => fmt(v) },
+        tkMeta: m => m.mtkAD, snapSeries: a => a.adByDate, fmtFn: v => fmt(v) },
       { id: "nr", label: t("metas.nuevosReact"), sub: t("metas.acumulado"),
-        meta: m => umbrella(m.mNR), act: a => a.nr, proj: a => a.projNr, fmtFn: v => fmt(v) },
+        meta: m => umbrella(m.mNR), act: a => a.nr, proj: a => a.projNr,
+        tkMeta: m => m.mtkNR, fmtFn: v => fmt(v) },
       { id: "sh", label: t("metas.horasConexion"), sub: t("metas.acumulado"),
-        meta: m => umbrella(m.mH), act: a => a.sh, proj: a => a.projSh, fmtFn: v => fmtSmart(v) }
+        meta: m => umbrella(m.mH), act: a => a.sh, proj: a => a.projSh,
+        tkMeta: m => m.mtkSH, fmtFn: v => fmtSmart(v) }
     ],
-    // Aclaración de la meta paraguas: detalle para quien lo busca (tooltip), no
-    // jerga en la tarjeta ("criterio TukTuk aparte: 28 N+R").
-    partnerTip: m => m.mtkNR != null ? t("mt.pieCombTk", { n: fmt(m.mtkNR) }) : "",
+    // tkMeta: cuota TukTuk GUARDADA (meta_tk_*), un DESGLOSE de la meta paraguas
+    // que se muestra como "de eso TukTuk X" bajo la meta (sep-2026, pedido de
+    // Manuel: "ver cuánto le corresponde a su cuota"). Reemplaza al tooltip
+    // viejo (mt.pieCombTk), que la describía como una meta APARTE — lectura que
+    // quedó mal desde que la Calculadora la escribe como parte del paraguas.
     emptyTitle: t("mt.vacio.comb", { m: mesLabel(mesName) })
   };
 }
@@ -1199,8 +1239,46 @@ export function _renderMetasFleet(mesName, fechas, selSet, cityFilter, kamFilter
     ..._metasLineCfg("fleet", mesName, _metasMesActualYear(mesName), fechas, selSet, cityFilter, kamFilter) });
 }
 export function _renderMetasTk(mesName, fechas, selSet, cityFilter, kamFilter, mesesDisponibles, cobertura) {
-  return _renderMetasLineView({ mesName, mesesDisponibles, cobertura,
-    ..._metasLineCfg("tk", mesName, _metasMesActualYear(mesName), fechas, selSet, cityFilter, kamFilter) });
+  const mesYearSel = _metasMesActualYear(mesName);
+  const cfg = _metasLineCfg("tk", mesName, mesYearSel, fechas, selSet, cityFilter, kamFilter);
+  return _renderMetasLineView({ mesName, mesesDisponibles, cobertura, ...cfg,
+    avisoTop: _metasTkCoberturaAviso(mesName, mesYearSel, selSet, cityFilter, kamFilter, cfg.metaRows.length > 0),
+    sinTxt: { badge: t("mt.tk.sinCuota"), badgeCorto: t("mt.tk.sinCuotaChip"), nota: t("mt.tk.sinCuotaNota"),
+              chip: t("mt.tk.sinCuotaChip"), chipTip: t("mt.tk.sinCuotaTip") },
+    sinMetaAviso: n => !n ? "" : alertBox({
+      tone: "info",
+      title: t(n === 1 ? "mt.tk.aviso.titulo1" : "mt.tk.aviso.tituloN", { n, m: mesLabel(mesName) }),
+      text: t("mt.tk.aviso.texto")
+    }) });
+}
+
+// Aviso de COBERTURA de la cuota TukTuk (línea TukTuk). La cuota (meta_tk_*)
+// solo existe si el KAM declaró el "% TukTuk de PnL" en la Calculadora; en
+// producción es la excepción (sep-2026: 3 de 94 filas, un KAM), así que sin
+// este aviso la vista se lee como "casi nadie tiene meta TukTuk" o, peor, el %
+// país (actual de TODAS las cuentas TukTuk contra la cuota de UNO) parece real.
+// Universo: los KAMs con alguna meta del mes (paraguas o cuota), con los mismos
+// filtros de la pestaña. Todos declararon → sin aviso. Nunca se estima nada.
+function _metasTkCoberturaAviso(mesName, mesYearSel, selSet, cityFilter, kamFilter, conAccion) {
+  const filas = _metasLineRows(mesName, mesYearSel,
+    m => (m.mA || 0) > 0 || (m.mNR || 0) > 0 || (m.mH || 0) > 0 || tieneCuotaTk(m),
+    selSet, cityFilter, kamFilter);
+  const cob = coberturaCuotaTk(filas.map(m => ({ kam: _metasKamDe(m), tieneCuota: tieneCuotaTk(m) })), [SIN_KAM]);
+  if (cob.completa) return "";
+  const lista = ks => ks.map(k => kamLabel(k)).join(", ");
+  const text = [t("mt.tkCob.texto"),
+    cob.declarados.length ? t("mt.tkCob.declarada", { k: lista(cob.declarados) }) : "",
+    t("mt.tkCob.sinDeclarar", { k: lista(cob.sinDeclarar) })].filter(Boolean).join(" ");
+  return alertBox({
+    tone: "warn",
+    title: t("mt.tkCob.titulo", { n: cob.declarados.length, total: cob.total }),
+    text,
+    // Sin filas de cuota la vista ya muestra el estado vacío con el mismo botón.
+    actions: conAccion
+      ? `<span data-html2canvas-ignore="true">` + btn({ label: t("mt.irCalculadora"), variant: "secondary", size: "sm",
+          icon: "calculator", act: "switchTab", data: { tab: "calculator" } }) + `</span>`
+      : ""
+  });
 }
 export function _renderMetasComb(mesName, fechas, selSet, cityFilter, kamFilter, mesesDisponibles, cobertura) {
   return _renderMetasLineView({ mesName, mesesDisponibles, cobertura,
@@ -1719,6 +1797,21 @@ export function _renderMetasImpl() {
     { id: "nr", label: t("metric.nr.short") },
     { id: "sh", label: t("metric.sh.short") }
   ];
+  // Cuota TukTuk GUARDADA (meta_tk_*) de cada fila de partner, con la MISMA
+  // granularidad que combos: por partner (todas las ciudades) o partner+ciudad.
+  // Es parte de la meta paraguas → "de eso TukTuk X" bajo la meta. Nunca estimada.
+  const _tkKey = (p, c) => cityFilter === "all" ? p : `${p}|||${c}`;
+  const _tkPor = new Map();
+  metas.forEach(m => {
+    const k = _tkKey(m.partner, m.city);
+    if (!_tkPor.has(k)) _tkPor.set(k, { ad: [], nr: [], sh: [] });
+    const e = _tkPor.get(k);
+    e.ad.push(m.mtkAD); e.nr.push(m.mtkNR); e.sh.push(m.mtkSH);
+  });
+  const _tkDe = (c, id) => {
+    const e = c.noMeta ? null : _tkPor.get(_tkKey(c.partner, c.city));
+    return e ? sumaCuotaTk(e[id]) : null;
+  };
   const rows = combos.map(c => {
     // Huella de números: la entidad es partner@ciudad; sin meta y sin filtro de
     // ciudad la "ciudad" es un rótulo traducido (metas.sinPlan) → solo el partner.
@@ -1737,7 +1830,7 @@ export function _renderMetasImpl() {
         return c.noMeta
           ? { id: k.id, label: k.label, mode: "real", real, F: fmt, numKey: _pk(k.id) }
           : { id: k.id, label: k.label, mode: "both", real, meta, proj, F: fmt, numKey: _pk(k.id),
-              pct: meta > 0 ? (real / meta) * 100 : 0 };
+              pct: meta > 0 ? (real / meta) * 100 : 0, tk: _tkDe(c, k.id) };
       })
     };
   });
