@@ -603,7 +603,13 @@ export async function fetchAllPages(table, orderCol, opts = {}) {
   const gte = opts.gte;
   const lt  = opts.lt;
   const cols = opts.columns || "*";
-  const params = new URLSearchParams({ select: cols, order: `${orderCol}.asc` });
+  // Desempate por `id` (PK en las 4 tablas paginadas): con ORDER BY solo por la
+  // fecha, las filas de la MISMA fecha no tienen orden garantizado entre dos
+  // consultas, y paginar por Range/OFFSET puede repetir una fila en dos páginas
+  // y saltarse otra — sobre todo con las páginas pedidas EN PARALELO (V5), donde
+  // Postgres puede sincronizar los seq scans y devolver los empates en otro
+  // orden. Con un orden total, cada fila cae en exactamente una página.
+  const params = new URLSearchParams({ select: cols, order: `${orderCol}.asc,id.asc` });
   if (gte && gte.value) params.set(gte.col, `gte.${gte.value}`);
   if (lt && lt.value)   params.append(lt.col, `lt.${lt.value}`);
   const query = `?${params.toString()}`;
