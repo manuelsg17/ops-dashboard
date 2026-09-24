@@ -15,7 +15,7 @@ import { iconSvg } from "./shared/icons";
 import { chartTokens, seriesColor } from "./shared/chartTheme";
 import { rendTopPartners, valorMetricaPartner, indiceBase100, ESTILO_SUAVE } from "./charts.js";
 import { metasResumenPais, _metasFechasDelMes, _metasFechasMesCompleto } from "./metas.js";
-import { reportYM } from "./shared/mesReporte.js";
+import { reportYM, diasMesReporteDe } from "./shared/mesReporte.js";
 import { parseLocalDate } from "./core/dates";
 import { opcionesMesMeta, mesNumero } from "./domain/mesesMeta";
 import { esMesEnCurso } from "./domain/mesEnCurso";
@@ -241,7 +241,7 @@ function _rdKpi(o) {
     ${d ? `<div class="rd-tile__delta">${d}<span class="rd-tile__prev">${escapeHTML(_rdPrevLbl())}</span></div>` : selloMes}
     ${o.sub ? `<div class="rd-tile__sub">${escapeHTML(o.sub)}</div>` : ""}
     ${o.extra ? `<div class="rd-tile__extra">${o.extra}</div>` : ""}
-    ${g ? `<div class="rd-tile__cap${conAnillo ? "" : " rd-tile__cap--none"}">${escapeHTML(g.caption)}</div>` : ""}
+    ${g ? `<div class="rd-tile__cap${conAnillo ? "" : " rd-tile__cap--none"}"${g.tip ? ` title="${escapeHTML(g.tip)}"` : ""}>${escapeHTML(g.caption)}</div>` : ""}
   </div>`;
 }
 
@@ -319,8 +319,12 @@ export function _rendMetaMes(line, lastDate) {
     mesTxt = new Intl.DateTimeFormat(getLang(), { month: "long", timeZone: "UTC" })
       .format(new Date(Date.UTC(2000, ym.m - 1, 15)));
   } catch (e) { /* mesLabel */ }
+  // Mensual con el mes en curso: hasta qué día llegan los datos con los que se
+  // proyecta (el mismo corte que usa Metas — shared/mesReporte).
+  const corte = STATE.curMode === "mensual" && res.proyOn
+    ? (diasMesReporteDe(STATE, mesDates[mesDates.length - 1], parseLocalDate).corte || "") : "";
   return {
-    mes: op.mes, anio: op.anio,
+    mes: op.mes, anio: op.anio, corte,
     mesTxt,                         // dentro de una frase
     mesCap: mesLabel(op.mes),       // al comienzo del caption
     enRango: mesDates.length, total,
@@ -346,7 +350,9 @@ function _rdGoal(info, id) {
     projPct = (k.proj / k.meta) * 100;
     caption += " · " + t("rd.meta.proy", { p: projPct.toFixed(1) + "%" });
   }
-  return { pct: k.pct, caption, projPct };
+  // Solo en los FLUJOS: la proyección de AD (máx × 1.4) no depende del corte.
+  const tip = projPct != null && info.corte && tipo === "mes" ? t("rd.mesCurso.corte", { c: d2s(info.corte) }) : "";
+  return { pct: k.pct, caption, projPct, tip };
 }
 function _rdGoalNota(info) {
   if (!info) return "";

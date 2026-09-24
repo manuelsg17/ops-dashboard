@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { reportYM, diasMesReporte } from "./mesReporte";
+import { reportYM, diasMesReporte, diasMesReporteDe } from "./mesReporte";
 import { parseLocalDate } from "../core/dates";
 
 const dias = (d: string, modo: string) => diasMesReporte(d, modo, parseLocalDate);
@@ -42,5 +42,30 @@ describe("diasMesReporte", () => {
   });
   it("sin fecha: no divide por cero", () => {
     expect(dias("", "semanal").daysInMonth).toBe(30);
+  });
+});
+
+describe("diasMesReporte — mensual con el mes EN CURSO", () => {
+  const hoy = new Date("2026-09-24T15:00:00Z");   // 24-sep en Lima
+  const sem = ["2026-08-31", "2026-09-07", "2026-09-14"];
+  it("se prorratea hasta el fin de la última semana cargada, con el corte", () => {
+    expect(diasMesReporte("2026-09-01", "mensual", parseLocalDate, { hoy, periodosSemanales: sem }))
+      .toEqual({ daysElapsed: 20, daysRemaining: 10, daysInMonth: 30, corte: "2026-09-20" });
+  });
+  it("sin semanas conocidas: hasta ayer", () => {
+    expect(diasMesReporte("2026-09-01", "mensual", parseLocalDate, { hoy }).daysElapsed).toBe(23);
+  });
+  it("un mes cerrado sigue completo aunque haya semanas", () => {
+    expect(diasMesReporte("2026-08-01", "mensual", parseLocalDate, { hoy, periodosSemanales: sem }))
+      .toEqual({ daysElapsed: 31, daysRemaining: 0, daysInMonth: 31 });
+  });
+  it("semanal y diario no cambian por estar en el mes en curso", () => {
+    expect(diasMesReporte("2026-09-14", "semanal", parseLocalDate, { hoy, periodosSemanales: sem }))
+      .toEqual({ daysElapsed: 20, daysRemaining: 10, daysInMonth: 30 });
+  });
+  it("diasMesReporteDe toma la escala y las semanas del estado", () => {
+    const S = { curMode: "mensual", _allPeriods: { semanal: sem } };
+    const r = diasMesReporteDe(S, "2026-08-01", parseLocalDate);
+    expect(r.daysRemaining).toBe(0);   // agosto: cerrado (independiente del reloj real mientras sea posterior)
   });
 });

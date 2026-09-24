@@ -11,11 +11,11 @@ import {
   snapshotValue, seriesByDate, projectSnapshot, projectFlow,
   weightedAvg, ratio, sumKpis, tasaAcum, sumarTasa, leerTasa
 } from "./domain/metrics.js";
-import { reportYM, diasMesReporte } from "./shared/mesReporte.js";
+import { reportYM, diasMesReporteDe } from "./shared/mesReporte.js";
 import { SIN_KAM } from "./core/config.js";
 import { parseLocalDate } from "./core/dates";
 import { esMesEnCurso } from "./domain/mesEnCurso";
-import { diasMesEnCursoMensual } from "./domain/diasMesEnCurso";
+import { d2s } from "./core/format";
 import { estadoMetaFila } from "./domain/estadoMeta";
 import { ordenarKams } from "./domain/desgloseKam";
 import { escalaLista, reintentarCuandoEscalaLista } from "./shared/escalaLista";
@@ -46,6 +46,14 @@ export function _metasKamDe(m) {
 // Vale SOLO durante un render de esta pestaña: fuera de ella (Rendimiento) se
 // usa metasResumenPais, que decide la proyección en cada llamada.
 let _metasProyOn = true;
+// Corte de datos de la proyección en MENSUAL con el mes en curso ("2026-09-20"),
+// para decirlo en el tooltip. "" en cualquier otro caso. Se fija por render,
+// igual que _metasProyOn.
+let _metasCorteProy = "";
+// Las proyecciones se MUESTRAN redondeadas, como los actuales ("7,343", no
+// "7,343.48" conductores): son estimaciones y el decimal es precisión falsa.
+// Solo formato: el % se sigue calculando con el valor sin redondear.
+const _mtProjTxt = (F, v) => F(Math.round(v));
 function _metasCalcProyOn(mesName, mesYearSel, mesDates) {
   const ord = _metasMesOrden(mesName);
   if (!ord) return false;
@@ -362,19 +370,12 @@ function _metasProjDays(lastDate) {
 }
 
 // Días para proyectar un FLUJO al cierre del mes de reporte de `lastDate`.
-// Igual que diasMesReporte salvo UN caso: escala MENSUAL con el mes EN CURSO
-// (24-sep-2026). Ahí la fila es el acumulado a la fecha (MTD), no un mes
-// cerrado, y se prorratea por los días ya cerrados en Lima
-// (domain/diasMesEnCurso) — igual que semanal/diario. Antes la proyección de
-// N+R y horas quedaba igual al actual (72,7% → 72,7%). Un mes cerrado sigue
-// con el período completo (daysRemaining 0 → sin extrapolar).
+// diasMesReporteDe: en escala MENSUAL con el mes EN CURSO la fila es el
+// acumulado a la fecha (MTD) y se prorratea hasta el corte de datos (ver
+// shared/mesReporte + domain/diasMesEnCurso) — la MISMA regla que el deck y el
+// portal. Antes la proyección de N+R y horas quedaba igual al actual.
 function _metasDiasProy(lastDate) {
-  if (STATE.curMode === "mensual" && lastDate) {
-    const ym = reportYM(lastDate, "mensual", parseLocalDate);
-    const mtd = diasMesEnCursoMensual(ym.m, ym.y);
-    if (mtd) return mtd;
-  }
-  return diasMesReporte(lastDate, STATE.curMode, parseLocalDate);
+  return diasMesReporteDe(STATE, lastDate, parseLocalDate);
 }
 // Proyección de un flujo a partir de su serie (camino del agregador). projA
 // (data.ts) no extrapola NUNCA en mensual; acá la excepción es el mes en curso,
@@ -470,7 +471,7 @@ function _mtKpiTds(real, meta, proj, F, numKey, showProj) {
   const p  = meta > 0 ? (real / meta) * 100 : 0;
   const pp = meta > 0 && proj != null ? (proj / meta) * 100 : 0;
   const projTd = !showProj ? "" : proj == null ? dash
-    : `<td class="ui-num"><span${_dn(numKey, "proj")}>${F(proj)}</span> <span class="mt-sub">(${pp.toFixed(1)}%)</span></td>`;
+    : `<td class="ui-num"><span${_dn(numKey, "proj")}>${_mtProjTxt(F, proj)}</span> <span class="mt-sub">(${pp.toFixed(1)}%)</span></td>`;
   return `<td class="ui-num"><span${_dn(numKey, "real")}>${F(real)}</span></td>` +
     `<td class="ui-num"><span${_dn(numKey, "meta")}>${F(meta)}</span></td>` +
     `<td class="mt-pctcell"><div class="mt-pctwrap">${_mtPctBadge(p, meta, numKey)}${_mtBar(p, proj == null ? null : pp, meta)}</div></td>` +
@@ -566,7 +567,7 @@ function _mtPartnerTds(c) {
       `<td class="mt-pctcell"><span class="mt-note">${_E(c.note || t("metas.sinActual"))}</span></td>`;
   }
   const proj = c.proj != null && _metasProyOn
-    ? `<div class="mt-sub mt-projline">${t("mt.proyCorta", { v: `<span${_dn(c.numKey, "proj")}>${F(c.proj)}</span>` })}</div>` : "";
+    ? `<div class="mt-sub mt-projline">${t("mt.proyCorta", { v: `<span${_dn(c.numKey, "proj")}>${_mtProjTxt(F, c.proj)}</span>` })}</div>` : "";
   return `<td class="ui-num"><span${_dn(c.numKey, "real")}>${F(c.real)}</span></td>` +
     `<td class="ui-num"><span${_dn(c.numKey, "meta")}>${F(c.meta)}</span></td>` +
     `<td class="mt-pctcell">${_mtPctBadge(c.pct, c.meta, c.numKey)}${proj}</td>`;
@@ -589,7 +590,7 @@ function _mtCardKpi(c) {
   return `<div class="mt-pk"><div class="mt-pk__top"><span class="mt-pk__label">${_E(c.label)}</span>${_mtPctBadge(c.pct, c.meta, c.numKey)}</div>` +
     _mtBar(c.pct, on ? pp : null, c.meta) +
     `<div class="mt-pk__nums">${_E(t("mt.col.actual"))} <strong${_dn(c.numKey, "real")}>${F(c.real)}</strong> · ${_E(t("mt.col.meta"))} <strong${_dn(c.numKey, "meta")}>${F(c.meta)}</strong></div>` +
-    (on ? `<div class="mt-pk__proj">${_E(t("metas.proyeccion"))}: <strong${_dn(c.numKey, "proj")}>${F(c.proj)}</strong> (${pp.toFixed(1)}%)</div>` : "") +
+    (on ? `<div class="mt-pk__proj">${_E(t("metas.proyeccion"))}: <strong${_dn(c.numKey, "proj")}>${_mtProjTxt(F, c.proj)}</strong> (${pp.toFixed(1)}%)</div>` : "") +
     `</div>`;
 }
 
@@ -1567,6 +1568,8 @@ export function _renderMetasImpl() {
                        total: _metasFechasMesCompleto(mesName, mesYearSel, to).length };
   // Decisión 4: la proyección al cierre solo se dibuja para el mes en curso.
   _metasProyOn = _metasCalcProyOn(mesName, mesYearSel, mesDates);
+  _metasCorteProy = STATE.curMode === "mensual" && _metasProyOn && mesDates.length
+    ? (_metasDiasProy(mesDates[mesDates.length - 1]).corte || "") : "";
 
   // Fase 3: líneas Fleet / TukTuk. Vista dedicada (meta vs actual de la línea) que
   // reemplaza el cuerpo de Metas. El agregador sigue con el flujo de abajo intacto.
@@ -1798,7 +1801,7 @@ export function metaResCard(label, sub, real, meta, proj, color, fmtFn, numKey, 
     return `<div class="ui-kpi mt-kpi">${lab}
       <div class="ui-kpi__row"><span class="ui-kpi__value"${_dn(numKey, "real")}>${F(real || 0)}</span>${dHtml}</div>
       <div class="ui-kpi__goal"><div class="ui-kpi__caption ui-kpi__caption--none">${_E(t("metas.sinMetaMes"))}</div>
-      ${proj == null ? "" : `<div class="ui-kpi__caption mt-proj">${_E(t("metas.proyeccion"))}: <strong${_dn(numKey, "proj")}>${F(proj)}</strong></div>`}</div>
+      ${proj == null ? "" : `<div class="ui-kpi__caption mt-proj">${_E(t("metas.proyeccion"))}: <strong${_dn(numKey, "proj")}>${_mtProjTxt(F, proj)}</strong></div>`}</div>
     </div>`;
   }
   // KPI solo-meta (ej. Utilización de Fleet: hay objetivo pero el dato real no
@@ -1822,7 +1825,9 @@ export function metaResCard(label, sub, real, meta, proj, color, fmtFn, numKey, 
   // El texto del tooltip TIENE que decir lo que el código hace: una vez se
   // "corrigió" el cálculo para que coincidiera con un tooltip impreciso, al
   // revés de lo que correspondía.
-  const projTip = t(STATE.curMode === "mensual" ? "metas.projTipMensual" : "metas.projTip");
+  const projTip = STATE.curMode === "mensual" && _metasCorteProy
+    ? t("metas.projTipMensual", { c: d2s(_metasCorteProy) })
+    : t("metas.projTip");
   const caption = t("mt.captionMeta", {
     p: `<span class="mt-tone mt-tone--${tone}"${_dn(numKey, "pct")}>${p.toFixed(1)}%</span>`,
     m: _E(mesTxt || ""),
@@ -1834,7 +1839,7 @@ export function metaResCard(label, sub, real, meta, proj, color, fmtFn, numKey, 
       ${_mtBar(p, proj == null ? null : pp, meta)}
       <div class="ui-kpi__caption" title="${_E(cumplTip)}">${caption}</div>
       ${proj == null ? "" : `<div class="ui-kpi__caption mt-proj" title="${_E(projTip)}">${t("mt.proyCierre", {
-        v: `<strong${_dn(numKey, "proj")}>${F(proj)}</strong>`, p: `<span class="mt-tone mt-tone--${_mtTone(pp, meta)}">${pp.toFixed(1)}%</span>` })}</div>`}
+        v: `<strong${_dn(numKey, "proj")}>${_mtProjTxt(F, proj)}</strong>`, p: `<span class="mt-tone mt-tone--${_mtTone(pp, meta)}">${pp.toFixed(1)}%</span>` })}</div>`}
     </div>
   </div>`;
 }
