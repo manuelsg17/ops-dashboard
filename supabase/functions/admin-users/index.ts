@@ -125,7 +125,7 @@ Deno.serve(async (req: Request) => {
       // Guard anti-lockout: no permitir que un admin se quite a SÍ MISMO el rol
       // admin (se quedaría sin poder volver a entrar a administrar).
       if (userId === user.id && role !== "admin") {
-        return json(req, { error: "No podés quitarte tu propio rol admin." }, 400);
+        return json(req, { error: "No puedes quitarte tu propio rol admin." }, 400);
       }
       const { error } = await admin.auth.admin.updateUserById(userId, {
         app_metadata: { role }
@@ -165,7 +165,7 @@ Deno.serve(async (req: Request) => {
       // Guard 1 — anti-lockout personal: nadie se borra a sí mismo. Es el error
       // más fácil de cometer y el único sin vuelta atrás desde la propia UI.
       if (userId === user.id) {
-        return json(req, { error: "No podés eliminar tu propia cuenta." }, 400);
+        return json(req, { error: "No puedes eliminar tu propia cuenta." }, 400);
       }
 
       // Guard 2 — anti-lockout del proyecto: no dejar el sistema sin ningún
