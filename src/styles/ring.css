@@ -1,0 +1,21 @@
+/* ═════════════════════════════════════════════════════════════════════════
+   ring.css — Anillo de avance contra la meta (ui.progressRing, fase 8)
+   Mismos tonos semánticos que .ui-progress: morado ≥100 · verde 95–99 ·
+   ámbar 80–94 · rojo <80; gris sin meta. Solo tokens (sirve en oscuro).
+   ═════════════════════════════════════════════════════════════════════════ */
+.ui-ring { display: block; flex: none; overflow: visible; }
+.ui-ring__track { stroke: var(--color-surface-sunken); }
+.ui-ring__bar   { stroke: currentColor; }
+.ui-ring__proj  { stroke: currentColor; opacity: .25; }
+.ui-ring--over    { color: var(--color-over-solid); }
+.ui-ring--ok      { color: var(--color-ok-solid); }
+.ui-ring--warn    { color: var(--color-warn-solid); }
+.ui-ring--bad     { color: var(--color-bad-solid); }
+.ui-ring--neutral { color: var(--color-border-strong); }
+.ui-ring__txt {
+  fill: var(--color-text); font-family: var(--font-sans);
+  font-size: 15px; font-weight: var(--weight-bold, 700);
+  font-variant-numeric: tabular-nums;
+}
+/* "100%" o más (3 cifras): letra más chica para que entre en el hueco. */
+.ui-ring__txt--long { font-size: 12px; letter-spacing: -.02em; }

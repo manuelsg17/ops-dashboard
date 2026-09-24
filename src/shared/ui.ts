@@ -206,6 +206,49 @@ export function progressBar(g: GoalProgress): Html {
   );
 }
 
+// ── Anillo de avance (fase 8, Rendimiento "B · Suave") ───────────────────────
+
+export interface ProgressRingOptions {
+  /** % de avance (77 = 77%). null → anillo vacío en gris con "—". */
+  pct: number | null;
+  /** % proyectado al cierre: arco translúcido detrás del avance. */
+  projPct?: number | null;
+  /** Nombre accesible completo, ya traducido (el caption de la meta). */
+  label: string;
+  /** Diámetro en px (default 64). */
+  size?: number;
+  /** Grosor del trazo en px (default 7). */
+  stroke?: number;
+}
+
+/** Anillo de avance contra la meta: mismo tono que progressBar (goalTone:
+ *  morado ≥100 · verde 95–99 · ámbar 80–94 · rojo <80). Es un <svg role="img">
+ *  con el caption como aria-label, así un lector de pantalla oye la frase
+ *  entera y no solo "77%". El % del centro se redondea (igual que el caption),
+ *  salvo entre 99,5 y 100: ahí queda en "99%", porque "100%" en verde se leería
+ *  como meta cumplida.
+ *  Estilos: src/styles/ring.css (prefijo ui-ring). */
+export function progressRing(o: ProgressRingOptions): Html {
+  const size = o.size ?? 64, sw = o.stroke ?? 7;
+  const r = (size - sw) / 2, c = 2 * Math.PI * r, mid = size / 2;
+  const tone = goalTone(o.pct) ?? "neutral";
+  const ok = o.pct != null && Number.isFinite(o.pct);
+  const pct = ok ? (o.pct as number) : 0;
+  const txt = ok ? `${pct < 100 ? Math.min(99, Math.round(pct)) : Math.round(pct)}%` : DASH;
+  const arco = (p: number, cls: string): string =>
+    `<circle class="${cls}" cx="${mid}" cy="${mid}" r="${r.toFixed(2)}" fill="none" stroke-width="${sw}" stroke-linecap="round" ` +
+    `stroke-dasharray="${(c * _clampPct(p) / 100).toFixed(2)} ${c.toFixed(2)}" transform="rotate(-90 ${mid} ${mid})"/>`;
+  const proj = ok && o.projPct != null && Number.isFinite(o.projPct) && o.projPct > pct
+    ? arco(o.projPct, "ui-ring__proj") : "";
+  return h(
+    `<svg class="ui-ring ui-ring--${tone}" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="${esc(o.label)}">` +
+    `<title>${esc(o.label)}</title>` +
+    `<circle class="ui-ring__track" cx="${mid}" cy="${mid}" r="${r.toFixed(2)}" fill="none" stroke-width="${sw}"/>` +
+    proj + (ok && pct > 0 ? arco(pct, "ui-ring__bar") : "") +
+    `<text class="ui-ring__txt${txt.length > 3 ? " ui-ring__txt--long" : ""}" x="50%" y="50%" dominant-baseline="central" text-anchor="middle" aria-hidden="true">${txt}</text></svg>`
+  );
+}
+
 // ── Tarjeta KPI ──────────────────────────────────────────────────────────────
 
 export interface KpiCardOptions {
