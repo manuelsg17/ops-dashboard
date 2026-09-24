@@ -1,165 +1,208 @@
 /* ═════════════════════════════════════════════════════════════════════════
-   views/calculator.css — Calculadora de metas (Ola 6, sep-2026)
+   views/calculator.css — Calculadora de metas (planilla viva, fase 8 sep-2026)
 
-   Flujo en cinco pasos, TODOS visibles como secciones; arriba un indicador de
-   pasos (sticky) que marca el actual y los listos. Solo tokens semánticos
+   UNA pantalla partida (prototipo "Elegida"): a la izquierda el panel de
+   metas, fijo al hacer scroll; a la derecha el reparto en vivo. Por debajo de
+   1100 px el panel pasa arriba de la tabla. Solo tokens semánticos
    (tokens.css): nada de hex, así el modo oscuro re-apunta sin tocar esto.
-   El rojo de marca aparece SOLO en el botón Guardar (componente ui-btn--primary)
-   y en el logo de la tarjeta para el partner.
+   El rojo de marca aparece SOLO en el botón Guardar (ui-btn--primary) y en el
+   logo de la tarjeta para el partner.
    ═════════════════════════════════════════════════════════════════════════ */
 
+/* El corte "panel al lado / panel arriba" depende del ANCHO DISPONIBLE (container
+   query), no del de la ventana: con el menú lateral abierto a 1100 px quedan
+   ~830 px, y con el menú en riel ~990; en ambos casos la tabla no entra al
+   lado de un panel de 300. Por debajo de 1100 px de ventana siempre apila. */
 .calc {
-  display: flex; flex-direction: column; gap: var(--space-4);
-  padding-bottom: var(--space-8);
+  container: calc / inline-size;
   color: var(--color-text);
   font-family: var(--font-sans);
 }
-
-/* ── Indicador de pasos ──────────────────────────────────────────────────── */
-.calc-stepper-wrap {
-  position: sticky; top: var(--shell-top, 0px); z-index: 5;
-  background: var(--color-bg);
-  padding: var(--space-2) 0;
+.calc-planilla {
+  display: grid; grid-template-columns: 356px minmax(0, 1fr);
+  gap: var(--space-5); align-items: start;
+  padding-bottom: var(--space-8);
 }
-.calc-stepper {
-  list-style: none; margin: 0; padding: var(--space-1);
-  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-1);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border); border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
-}
-.calc-step { min-width: 0; }
-.calc-step__btn {
-  width: 100%; min-width: 0;
-  display: flex; align-items: center; gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  background: transparent; border: 0; border-radius: var(--radius-sm);
-  font-family: var(--font-sans); text-align: left; color: var(--color-text-muted);
-  cursor: pointer;
-}
-.calc-step__btn:hover { background: var(--color-surface-muted); color: var(--color-text); }
-.calc-step__btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
-.calc-step__num {
-  flex: 0 0 auto;
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 24px; height: 24px; border-radius: var(--radius-pill);
-  font-size: var(--text-sm); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums;
-  color: var(--color-text-muted); background: var(--color-surface-sunken);
-  border: 1px solid var(--color-border-strong);
-}
-.calc-step__txt { display: flex; flex-direction: column; min-width: 0; }
-.calc-step__label {
-  font-size: var(--text-md); font-weight: var(--weight-semibold); line-height: var(--leading-tight);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.calc-step__state {
-  font-size: var(--text-xs); color: var(--color-text-subtle);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.calc-step.is-done .calc-step__num { color: var(--color-ok-fg); background: var(--color-ok-bg); border-color: var(--color-ok-border); }
-.calc-step.is-done .calc-step__state { color: var(--color-ok-fg); }
-/* Paso actual: info (azul), no el rojo de marca — el rojo es de "Guardar". */
-.calc-step.is-current .calc-step__btn { background: var(--color-info-bg); color: var(--color-text); }
-.calc-step.is-current .calc-step__num { color: var(--color-text-inverse); background: var(--color-info-solid); border-color: var(--color-info-solid); }
-.calc-step.is-current .calc-step__state { color: var(--color-info-fg); font-weight: var(--weight-semibold); }
-
-/* ── Sección de un paso ──────────────────────────────────────────────────── */
-.calc-paso {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border); border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
-  padding: var(--space-4) var(--space-5) var(--space-5);
-  scroll-margin-top: calc(var(--shell-top, 0px) + 72px);
-  border-left: 3px solid var(--color-border);
-}
-.calc-paso.is-done { border-left-color: var(--color-ok-solid); }
-.calc-paso.is-current { border-left-color: var(--color-info-solid); }
-.calc-paso__head { display: flex; align-items: flex-start; gap: var(--space-3); margin-bottom: var(--space-4); }
-.calc-paso__num {
-  flex: 0 0 auto;
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 28px; height: 28px; border-radius: var(--radius-pill);
-  font-size: var(--text-md); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums;
-  color: var(--color-text-muted); background: var(--color-surface-sunken);
-}
-.calc-paso.is-current .calc-paso__num { color: var(--color-text-inverse); background: var(--color-info-solid); }
-.calc-paso.is-done .calc-paso__num { color: var(--color-ok-fg); background: var(--color-ok-bg); }
-.calc-paso__titles { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.calc-paso__title {
-  margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semibold);
-  line-height: var(--leading-tight); color: var(--color-text);
-}
-.calc-paso__title:focus { outline: none; }
-.calc-paso__title:focus-visible { outline: 2px solid var(--focus-ring-color); outline-offset: 2px; }
-.calc-paso__sub { margin: 0; font-size: var(--text-md); color: var(--color-text-muted); line-height: var(--leading-normal); }
-.calc-paso__actions { flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; justify-content: flex-end; }
-.calc-paso__body { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
-
-/* ── Grillas de campos ───────────────────────────────────────────────────── */
-.calc-grid { display: grid; gap: var(--space-4); }
-.calc-grid--3 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
-.calc-grid--paso1 { grid-template-columns: minmax(200px, 280px) minmax(220px, 1fr); align-items: end; }
+.calc-muted { color: var(--color-text-subtle); font-weight: var(--weight-regular); }
 .calc-num { text-align: right; font-variant-numeric: tabular-nums; }
 
+/* ── Panel izquierdo ─────────────────────────────────────────────────────── */
+/* Alto máximo: lo que queda de la ventana DESCONTANDO el encabezado de la
+   página (título, estado de datos: ~160 px). Así, recién abierta la pantalla,
+   el pie con el cuadre y "Guardar" ya se ve sin bajar; una vez fijo arriba
+   queda un margen libre abajo, que es el precio de eso. */
+.calc-side {
+  --calc-side-reserva: 184px;
+  position: sticky; top: calc(var(--shell-top, 0px) + var(--space-4));
+  display: flex; flex-direction: column; gap: var(--space-4);
+  max-height: calc(100vh - var(--shell-top, 0px) - var(--calc-side-reserva));
+  min-height: 420px;
+  overflow: auto; overscroll-behavior: contain; scrollbar-width: thin;
+  padding: var(--space-5);
+  border-radius: var(--radius-card);
+}
+.calc-side__who { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: var(--space-2); align-items: end; }
+.calc-side__block { display: flex; flex-direction: column; gap: var(--space-3); }
+.calc-side__goals { display: flex; flex-direction: column; gap: var(--space-3); }
+.calc-side__h {
+  font-size: var(--text-xs); font-weight: var(--weight-semibold); text-transform: uppercase;
+  letter-spacing: .06em; color: var(--color-text-subtle);
+}
+.calc-side__sub { margin: calc(-1 * var(--space-2)) 0 0; font-size: var(--text-xs); color: var(--color-text-muted); line-height: var(--leading-normal); }
+
 .calc-mes {
-  display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
-  min-height: 36px; padding: 0 var(--space-3);
-  background: var(--color-surface-muted); border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm); color: var(--color-text-muted);
+  display: flex; align-items: center; gap: 0 var(--space-2); flex-wrap: wrap;
+  min-height: 36px; padding: 2px var(--space-3);
+  background: var(--color-fill-soft); border: 1px solid transparent;
+  border-radius: var(--radius-control); color: var(--color-text-muted);
 }
 .calc-mes__val { font-size: var(--text-base); font-weight: var(--weight-semibold); color: var(--color-text); }
-.calc-mes__sub { font-size: var(--text-sm); color: var(--color-text-muted); }
+.calc-mes__sub { font-size: var(--text-xs); color: var(--color-text-muted); }
 
-.calc-help {
-  margin: 0; font-size: var(--text-sm); line-height: var(--leading-normal);
-  color: var(--color-text-muted);
+/* Meta del KAM: campo grande + atajos + pista con la base del mes */
+.calc-goal { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.calc-goal__in {
+  height: 40px; font-size: var(--text-lg); font-weight: var(--weight-semibold);
+  text-align: right; font-variant-numeric: tabular-nums;
 }
-.calc-help--ref { display: flex; align-items: flex-start; gap: var(--space-2); }
-.calc-help--ref .ui-icon { margin-top: 2px; color: var(--color-info-fg); }
-.calc-help strong { color: var(--color-text); font-weight: var(--weight-semibold); }
+.calc-goal__chips { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.calc-qchip {
+  height: 26px; padding: 0 var(--space-2);
+  font-family: var(--font-sans); font-size: var(--text-xs); font-weight: var(--weight-semibold);
+  color: var(--color-text-muted); background: var(--color-surface);
+  border: 1px solid var(--color-border-strong); border-radius: var(--radius-pill);
+  cursor: pointer; white-space: nowrap;
+}
+.calc-qchip:hover { color: var(--color-text); background: var(--color-surface-muted); border-color: var(--color-border-input); }
+.calc-qchip:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.calc-qchip:disabled { cursor: default; color: var(--color-text-disabled); background: var(--color-surface-sunken); }
+.calc-goal__in::placeholder { font-weight: var(--weight-regular); }
+.calc-goal__hint strong { color: var(--color-text); font-weight: var(--weight-semibold); }
 
-/* Campo con "%" dentro: sin él, dos filas de campos con las mismas etiquetas
-   (metas en el paso 2, porcentajes en el 3) se confunden y alguien escribe
-   1701 donde va 17. */
+/* Ajustes avanzados (plegado) */
+.calc-adv { border-top: 1px solid var(--color-border-soft); padding-top: var(--space-3); }
+.calc-adv__sum {
+  cursor: pointer; display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 var(--space-2);
+  font-size: var(--text-md); font-weight: var(--weight-semibold); color: var(--color-text);
+}
+.calc-adv__sum::before { content: "▸"; color: var(--color-text-subtle); font-size: var(--text-sm); }
+.calc-adv[open] > .calc-adv__sum::before { content: "▾"; }
+.calc-adv__sum::-webkit-details-marker { display: none; }
+.calc-adv__sum { list-style: none; }
+.calc-adv__sum:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
+.calc-adv__res { font-size: var(--text-xs); font-weight: var(--weight-regular); color: var(--color-text-subtle); }
+.calc-adv__res:empty { display: none; }
+.calc-adv__body { display: flex; flex-direction: column; gap: var(--space-4); margin-top: var(--space-3); }
+.calc-adv__sec { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.calc-adv__sec--danger { padding-top: var(--space-3); border-top: 1px dashed var(--color-border); }
+.calc-adv__h { margin: 0; padding: 0; font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--color-text); }
+
+.calc-tkpct { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); }
+.calc-tkpct__f .ui-field__hint { line-height: var(--leading-tight); }
+/* Campo con "%" dentro: sin él, dos grupos de campos con las mismas etiquetas
+   (metas arriba, porcentajes acá) se confunden y alguien escribe 1701 donde va 17. */
 .calc-suffix { position: relative; }
-.calc-suffix__input { padding-right: var(--space-8); text-align: right; font-variant-numeric: tabular-nums; }
+.calc-suffix__input { padding-right: var(--space-6); text-align: right; font-variant-numeric: tabular-nums; }
 .calc-suffix__txt {
-  position: absolute; right: var(--space-3); top: 50%; transform: translateY(-50%);
-  font-size: var(--text-md); font-weight: var(--weight-semibold); color: var(--color-text-subtle);
+  position: absolute; right: var(--space-2); top: 50%; transform: translateY(-50%);
+  font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--color-text-subtle);
   pointer-events: none;
 }
 /* El absoluto que sale del %: es el número que se declara en el Loyalty Program. */
-.calc-tkpct__abs {
-  font-size: var(--text-md); font-weight: var(--weight-bold); color: var(--color-text);
-}
+.calc-tkpct__abs { font-size: var(--text-sm); font-weight: var(--weight-bold); color: var(--color-text); }
 
-/* Colapsables de referencia */
-.calc-details {
-  border: 1px solid var(--color-border); border-radius: var(--radius-md);
-  background: var(--color-surface);
+.calc-help {
+  margin: 0; font-size: var(--text-xs); line-height: var(--leading-normal);
+  color: var(--color-text-muted);
 }
+.calc-help strong { color: var(--color-text); font-weight: var(--weight-semibold); }
+
+/* Modo de guardado */
+.calc-modes {
+  margin: 0; padding: 0; border: 0; min-width: 0;
+  display: flex; flex-direction: column; gap: var(--space-2);
+}
+.calc-modes > legend { margin-bottom: var(--space-2); }
+.calc-mode {
+  display: flex; align-items: flex-start; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3); cursor: pointer;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border); border-radius: var(--radius-control);
+}
+.calc-mode:hover { border-color: var(--color-border-input); }
+.calc-mode.is-on { border-color: var(--color-info-solid); background: var(--color-info-bg); }
+.calc-mode input { margin: 2px 0 0; flex: 0 0 auto; cursor: pointer; accent-color: var(--color-info-solid); }
+.calc-mode:has(input:focus-visible) { box-shadow: var(--focus-ring); }
+.calc-mode__txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.calc-mode__label { font-size: var(--text-md); font-weight: var(--weight-semibold); color: var(--color-text); }
+.calc-mode__desc { font-size: var(--text-xs); color: var(--color-text-muted); line-height: var(--leading-normal); }
+
+/* Cuadre */
+.calc-cuadre-box {
+  display: flex; align-items: flex-start; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm); line-height: var(--leading-normal);
+  border-radius: var(--radius-control);
+}
+.calc-cuadre-box > .ui-icon { flex: 0 0 auto; margin-top: 2px; }
+.calc-cuadre-box--ok   { color: var(--color-ok-fg);   background: var(--color-ok-bg); }
+.calc-cuadre-box--warn { color: var(--color-warn-fg); background: var(--color-warn-bg); }
+.calc-cuadre-box--none { color: var(--color-text-muted); background: var(--color-surface-sunken); }
+.calc-cuadre-box__txt { flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.calc-cuadre-box__top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; }
+.calc-cuadre-box__head { font-weight: var(--weight-semibold); }
+.calc-cuadre-box__items { display: flex; flex-wrap: wrap; gap: 0 6px; font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.calc-cuadre-box__it.is-none { opacity: .8; }
+.calc-cuadre-box__sep { opacity: .6; }
+.calc-cuadre-box__hint { font-size: var(--text-xs); }
+
+/* Acciones: pegadas al pie del panel mientras se desplaza por dentro. */
+.calc-side__actions {
+  position: sticky; bottom: calc(-1 * var(--space-5));
+  margin: 0 calc(-1 * var(--space-5)) calc(-1 * var(--space-5));
+  padding: var(--space-3) var(--space-5) var(--space-5);
+  display: flex; flex-direction: column; gap: var(--space-2);
+  background: var(--color-surface); border-top: 1px solid var(--color-border-soft);
+}
+.calc-side__btns { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.calc-side__actions > .ui-alert { margin: 0; }
+.calc-side__btns .ui-btn { flex: 1 1 100%; justify-content: center; }
+
+/* ── Columna derecha ─────────────────────────────────────────────────────── */
+.calc-main { min-width: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.calc-main__head { display: flex; justify-content: space-between; align-items: flex-end; gap: var(--space-3); flex-wrap: wrap; }
+.calc-main__titles { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.calc-main__title { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semibold); line-height: var(--leading-tight); color: var(--color-text); }
+.calc-main__sub { margin: 0; font-size: var(--text-sm); color: var(--color-text-muted); }
+.calc-main__tools { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+
+.calc-legend { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); font-size: var(--text-xs); color: var(--color-text-muted); }
+.calc-legend__it { display: inline-flex; align-items: center; gap: 6px; }
+.calc-legend__sw { width: 14px; height: 14px; border-radius: var(--radius-sm); flex: 0 0 auto; }
+.calc-legend__sw--fija  { background: var(--color-info-bg); border: 1px solid var(--color-info-solid); }
+.calc-legend__sw--dirty { background: var(--color-warn-bg); border: 1px solid var(--color-warn-solid); }
+
+/* Colapsables (referencia, metas % KAM) */
+.calc-details {
+  border: 1px solid var(--color-border-soft); border-radius: var(--radius-table);
+  background: var(--color-surface); box-shadow: var(--shadow-card);
+}
+.calc-adv .calc-details { box-shadow: none; border-color: var(--color-border); }
 .calc-details > summary {
   cursor: pointer; list-style-position: inside;
   padding: var(--space-2) var(--space-3);
-  font-size: var(--text-md); font-weight: var(--weight-semibold); color: var(--color-text-muted);
+  font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--color-text-muted);
 }
 .calc-details > summary:hover { color: var(--color-text); }
-.calc-details > summary:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius-md); }
-.calc-details[open] > summary { border-bottom: 1px solid var(--color-border); }
+.calc-details > summary:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius-table); }
+.calc-details[open] > summary { border-bottom: 1px solid var(--color-border-soft); }
 .calc-details__body { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-3); }
-.calc-refs { display: flex; flex-direction: column; gap: var(--space-2); }
 
-/* ── Paso 4: cuadre y tabla de reparto ───────────────────────────────────── */
-.calc-cuadre { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
-.calc-cuadre__label {
-  font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--color-text-muted);
-  margin-right: var(--space-1);
-}
-.calc-cuadre .ui-badge { font-variant-numeric: tabular-nums; }
-
-.calc-dist-wrap { max-height: 560px; }
-.calc-dist td, .calc-ref-table td, .calc-fleet td { vertical-align: top; }
-.calc-dist .calc-cell-partner { min-width: 200px; }
+/* ── Tabla de reparto ────────────────────────────────────────────────────── */
+.calc-dist-wrap { max-height: 640px; }
+.calc-dist { font-size: var(--text-sm); }
+.calc-dist td, .calc-ref-table td, .calc-fleet td { vertical-align: middle; }
+.calc-dist .calc-cell-partner, .calc-fleet .calc-cell-partner { min-width: 180px; }
 .calc-cell-partner { font-weight: var(--weight-semibold); }
 .calc-cell-city { color: var(--color-text-muted); font-size: var(--text-sm); white-space: nowrap; }
 .calc-cell-muted { color: var(--color-text-muted); }
@@ -167,80 +210,55 @@
 .calc-cell-strong { font-weight: var(--weight-semibold); }
 .calc-cell-input { width: 1%; }
 .calc-empty-cell { text-align: center; color: var(--color-text-subtle); padding: var(--space-6); }
-.calc-dist .ui-num, .calc-fleet .ui-num { padding-top: 10px; }
-.calc-dist .calc-cell-input, .calc-fleet .calc-cell-input { padding-top: var(--space-2); }
 
 .calc-partner { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
-.calc-partner__name { overflow-wrap: anywhere; }
-.calc-partner__tags { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.calc-partner__name { display: flex; align-items: center; gap: 6px; overflow-wrap: anywhere; }
+.calc-partner__tags { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+.calc-partner__tags:empty { display: none; }
+.calc-dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: var(--radius-pill); }
+.calc-soltar { font-size: var(--text-xs); }
 
-.calc-num--cell { width: 104px; text-align: right; font-variant-numeric: tabular-nums; }
+.calc-num--cell { width: 96px; height: 32px; text-align: right; font-variant-numeric: tabular-nums; border-radius: var(--radius-control-sm); }
 .calc-num--fleet { width: 88px; }
+/* Fijado a mano (no sigue el reparto): tinte info en la fila y en la celda. */
+.calc-row--fija > td, .calc-row--fija:hover > td { background: var(--color-info-bg); }
+.calc-cell--fija .calc-num--cell { border-color: var(--color-info-solid); font-weight: var(--weight-semibold); }
 /* Ámbar = distinto de lo que hay en la base; al guardar se sobrescribe. */
-.calc-inp-dirty { border-color: var(--color-warn-solid); background: var(--color-warn-bg); }
-.calc-row--manual td { background: var(--color-warn-bg); }
-.calc-row--manual:hover td { background: var(--color-warn-bg); }
+.calc-inp-dirty, .calc-cell--fija .calc-inp-dirty { border-color: var(--color-warn-solid); background: var(--color-warn-bg); }
+/* Sin actividad Taxi el último mes ("Fijar a mano"). */
+.calc-row--manual > td, .calc-row--manual:hover > td { background: var(--color-warn-bg); }
 
 /* Porción TukTuk de la meta de una fila: debajo del campo, no como otra
    columna (serían 3 números más por fila). */
 .calc-tk-sub {
-  margin-top: var(--space-1); text-align: right; white-space: nowrap;
+  margin-top: 2px; text-align: right; white-space: nowrap;
   font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--color-info-fg);
 }
+.calc-cambio { font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
 
 .calc-dist tfoot th, .calc-dist tfoot td,
 .calc-ref-table tfoot th, .calc-ref-table tfoot td {
+  position: sticky; bottom: 0; z-index: 1;
   background: var(--color-surface-muted);
-  border-top: 1px solid var(--color-border-strong);
+  border-top: 1px solid var(--color-border);
   border-bottom: 0;
-  font-weight: var(--weight-semibold);
+  font-weight: var(--weight-bold);
   text-align: left;
 }
 .calc-dist tfoot .ui-num, .calc-ref-table tfoot .ui-num { text-align: right; }
-.calc-cuadre-row th { color: var(--color-text-muted); }
-.calc-cuadre-cell { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
-.calc-cuadre-cell__meta { color: var(--color-text-muted); font-weight: var(--weight-regular); font-size: var(--text-sm); }
-.calc-cuadre-cell__tag { display: inline-flex; align-items: center; gap: 2px; font-weight: var(--weight-bold); }
+.calc-dist tfoot th:first-child { z-index: 2; }
 .calc-tone--ok   { color: var(--color-ok-fg); }
 .calc-tone--warn { color: var(--color-warn-fg); }
 .calc-tone--bad  { color: var(--color-bad-fg); }
 
+.calc-ref > summary { font-weight: var(--weight-regular); }
+.calc-ref .calc-sub__title { margin: 0; font-size: var(--text-md); font-weight: var(--weight-semibold); color: var(--color-text); }
 .calc-ref-table--pct .calc-thead-sub th { top: 33px; }
 .calc-th-group { text-align: center; }
-
-/* Subsección dentro de un paso (Fleet, tarjeta) */
-.calc-sub {
-  display: flex; flex-direction: column; gap: var(--space-2);
-  padding-top: var(--space-4); margin-top: var(--space-2);
-  border-top: 1px solid var(--color-border);
-}
-.calc-sub__title { margin: 0; font-size: var(--text-base); font-weight: var(--weight-semibold); color: var(--color-text); }
 .calc-sub__text { margin: 0; font-size: var(--text-sm); color: var(--color-text-muted); }
 
-/* ── Paso 5: modo de guardado + acciones ─────────────────────────────────── */
-.calc-modes {
-  margin: 0; padding: 0; border: 0; min-width: 0;
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-2);
-}
-.calc-modes > legend { padding: 0; margin-bottom: var(--space-2); }
-.calc-mode {
-  display: flex; align-items: flex-start; gap: var(--space-2);
-  padding: var(--space-3); cursor: pointer;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border-strong); border-radius: var(--radius-md);
-}
-.calc-mode:hover { border-color: var(--color-border-input); }
-.calc-mode.is-on { border-color: var(--color-info-solid); background: var(--color-info-bg); }
-.calc-mode input { margin: 2px 0 0; flex: 0 0 auto; cursor: pointer; accent-color: var(--color-info-solid); }
-.calc-mode:has(input:focus-visible) { box-shadow: var(--focus-ring); }
-.calc-mode__txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.calc-mode__label { font-size: var(--text-base); font-weight: var(--weight-semibold); color: var(--color-text); }
-.calc-mode__desc { font-size: var(--text-sm); color: var(--color-text-muted); line-height: var(--leading-normal); }
-
-.calc-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
-.calc-actions__danger { margin-left: auto; }
-
 /* ── Tarjeta para el partner ─────────────────────────────────────────────── */
+.calc-share { display: flex; flex-direction: column; gap: var(--space-3); }
 .calc-share__controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-4); }
 .calc-share__btns { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .calc-combo { position: relative; width: 260px; max-width: 100%; }
@@ -248,7 +266,7 @@
   display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 20;
   margin-top: 2px; max-height: 280px; overflow-y: auto;
   background: var(--color-surface);
-  border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-strong); border-radius: var(--radius-control);
   box-shadow: var(--shadow-md);
 }
 .calc-combo__opt {
@@ -270,7 +288,7 @@
   max-width: 560px;
   padding: var(--space-5);
   background: var(--color-surface);
-  border: 1px solid var(--color-border-strong); border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border); border-radius: var(--radius-card);
   color: var(--color-text); font-family: var(--font-sans);
 }
 .calc-card__head { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-4); }
@@ -323,25 +341,33 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ── Anchos chicos ───────────────────────────────────────────────────────── */
-@media (max-width: 1100px) {
-  .calc-step__state { display: none; }
-  .calc-step__btn { padding: var(--space-2); }
-  /* A este ancho la etiqueta pasa a dos líneas en vez de cortarse con "…". */
-  .calc-step__label { white-space: normal; font-size: var(--text-sm); hyphens: auto; overflow-wrap: break-word; }
+/* ── Anchos ──────────────────────────────────────────────────────────────── */
+@container calc (max-width: 1099.98px) {
+  .calc-planilla { grid-template-columns: 300px minmax(0, 1fr); gap: var(--space-4); }
+  .calc-dist th, .calc-dist td { padding-left: 6px; padding-right: 6px; }
+  .calc-num--cell { width: 84px; padding: 0 6px; }
 }
-@media (max-width: 800px) {
-  .calc-stepper { grid-template-columns: repeat(5, auto); overflow-x: auto; }
-  .calc-step__label { display: none; }
-  .calc-grid--paso1 { grid-template-columns: 1fr; }
-  .calc-paso__head { flex-wrap: wrap; }
-  .calc-actions__danger { margin-left: 0; }
+/* Panel ARRIBA de la tabla: al lado quedaría la tabla sin aire. Deja de ser
+   fijo y sus metas van en fila. */
+@container calc (max-width: 999.98px) {
+  .calc-planilla { grid-template-columns: minmax(0, 1fr); }
+  .calc-side { position: static; max-height: none; min-height: 0; overflow: visible; }
+  .calc-side__who { grid-template-columns: minmax(160px, 240px) minmax(0, 1fr); }
+  .calc-side__goals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
+  .calc-side__actions { position: static; margin: 0; padding: 0; border-top: 0; background: transparent; }
+  .calc-side__btns .ui-btn { flex: 0 1 auto; }
+  .calc-modes { flex-direction: row; flex-wrap: wrap; }
+  .calc-mode { flex: 1 1 260px; }
+}
+@container calc (max-width: 700px) {
+  .calc-side__goals { grid-template-columns: minmax(0, 1fr); }
+  .calc-side__who { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 1024px) and (pointer: coarse) {
   .calc-num--cell { min-height: 40px; }
 }
 
 /* Los componentes ui- fijan su `display` (p.ej. .ui-badge inline-flex), que le
-   gana al [hidden] del navegador: sin esto el aviso "Cambios sin aplicar" se
-   vería siempre. */
+   gana al [hidden] del navegador: sin esto los absolutos del % TukTuk y las
+   cifras ocultas de la huella se verían siempre. */
 .calc [hidden] { display: none !important; }
