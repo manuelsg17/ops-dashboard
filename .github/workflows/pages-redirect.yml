@@ -1,0 +1,34 @@
+# Publica en GitHub Pages una página que REDIRIGE a Vercel.
+#
+# El dashboard se publica SOLO en Vercel desde el 24-sep-2026. La URL vieja
+# (manuelsg17.github.io/ops-dashboard) queda redirigiendo para que nadie siga
+# usando una versión congelada desde un marcador. Solo se corre a mano
+# (workflow_dispatch): el contenido vive en pages-redirect/ y no cambia.
+name: Pages → redirección a Vercel
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: './pages-redirect'
+      - id: deployment
+        uses: actions/deploy-pages@v5
