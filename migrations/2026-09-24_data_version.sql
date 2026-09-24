@@ -56,7 +56,10 @@ CREATE OR REPLACE FUNCTION public.data_version()
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-  SELECT jsonb_build_object(
+  -- Un partner externo no ve la actividad de las demás tablas (solo fechas y
+  -- conteos, pero igual es información interna): recibe NULL y su portal
+  -- revalida como siempre (sus datos, recortados por RLS, son pocos).
+  SELECT CASE WHEN public.is_partner() THEN NULL ELSE jsonb_build_object(
     'tablas', COALESCE((
       SELECT jsonb_object_agg(table_name, jsonb_build_array(n, at))
         FROM (SELECT table_name, count(*) AS n, max(at) AS at
@@ -74,7 +77,7 @@ AS $function$
                WHERE status = 'ok'
                GROUP BY scale) i
     ), '{}'::jsonb)
-  );
+  ) END;
 $function$;
 
 REVOKE ALL ON FUNCTION public.data_version() FROM PUBLIC;
