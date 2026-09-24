@@ -229,3 +229,7 @@ Anotado para la Ola 6:
 - Portal: pedir las columnas diferidas desde `partnerPortal.ts` (la Ola 2 lo cubrió con la precarga en `app.ts`).
 
 Pendiente conocido del entorno local (no es del producto): la RPC `get_last_ingest_at` existe solo en producción y nunca se versionó, así que en local responde 404 (el código lo tolera).
+
+## 9. Fase 8 (24-sep-2026) — pantallas elegidas en el prototipo `?ui=proto`
+- Rendimiento = "B · Suave" (anillos de avance arriba); Metas = "Elegida"; Calculadora = "Elegida" (planilla viva + atajos); Configuración = "B · Suave"; la capa suave de "Elegida" pasa a toda la app.
+- Pendiente después de integrar la Fase 8 (pedido de Manuel): **botón sol/luna en la barra superior**, junto al idioma, para cambiar entre claro y oscuro sin abrir el menú de usuario (el menú conserva Claro/Oscuro/Sistema).
