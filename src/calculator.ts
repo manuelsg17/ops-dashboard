@@ -16,6 +16,7 @@ import { tasaAcum, sumarTasa, leerTasa } from "./domain/metrics.js";
 import { logAccess } from "./shared/accessLog.js";
 import { dn } from "./shared/huella";
 import { alCerrarSesion } from "./shared/sesion";
+import { upsertMetas } from "./shared/upsertMetas";
 // calculator.js — Calculadora de Metas (flujo en PASOS, Ola 6 sep-2026)
 // El KAM ingresa su meta TOTAL y se reparte (disgrega) a cada partner+ciudad
 // segun su % de representacion en el ULTIMO MES. La pantalla es un flujo de
@@ -2222,8 +2223,8 @@ export async function calcSaveMetas() {
       for (const c of COLS) o[c] = merged[c] !== undefined ? merged[c] : null;
       return o;
     });
-    const { error } = await _conReintento(() =>
-      sb.from("metas").upsert(payload, { onConflict: "clid,city,mes,mes_year" }));
+    // upsertMetas: clave con año, o la anterior si la migración aún no se aplicó.
+    const { error } = await _conReintento(() => upsertMetas(sb, payload));
     if (error) throw error;
     const refrescoOk = await loadFromSupabase();
     // Forzar la re-lectura de lo guardado: si no, `saved` queda con el estado

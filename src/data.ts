@@ -17,6 +17,7 @@ import { snapshotLoad, snapshotSave, snapshotTouch, snapshotClear } from "./data
 import { perfMark, perfMeasure, perfNote } from "./shared/perf";
 import { huellaDatos } from "./shared/huellaDatos";
 import { t } from "./core/i18n";
+import { upsertMetas } from "./shared/upsertMetas";
 // Formulas de proyeccion: una sola definicion para todo el dashboard.
 import { projectFlow, projectSnapshot, dropDuplicatePeriods } from "./domain/metrics.js";
 import { sliceEscala, normEscala } from "./shared/escala.js";
@@ -2651,10 +2652,10 @@ export async function uploadMetas(rows) {
   }
 
   // UNIQUE (clid, city, mes, mes_year) desde la migración 2026-09-23: ENERO
-  // 2026 y ENERO 2027 son filas distintas. Un 42P10 acá = la migración no está
-  // aplicada en esta base (describirErrorSubida lo dice así).
-  const { error } = await sb.from("metas")
-    .upsert(deduped, { onConflict: "clid,city,mes,mes_year" });
+  // 2026 y ENERO 2027 son filas distintas. Si la base aún no tiene esa
+  // migración, upsertMetas cae a la clave anterior (mismo comportamiento que
+  // antes) en vez de fallar con 42P10.
+  const { error } = await upsertMetas(sb, deduped);
   if (error) throw error;
 }
 
