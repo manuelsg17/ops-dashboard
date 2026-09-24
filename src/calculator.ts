@@ -19,6 +19,7 @@ import { alCerrarSesion } from "./shared/sesion";
 import { upsertMetas } from "./shared/upsertMetas";
 import { cityLabel } from "./core/format";
 import { ATAJOS_META, metaAtajo, variacionPct, textoVariacion, estadoCelda, soltarCeldas, ordenarUnidades } from "./domain/calcPlanilla";
+import { absolutoTk, sumaPorcionesTk } from "./domain/tkResumen";
 // calculator.ts — Calculadora de Metas (planilla viva, fase 8 sep-2026)
 // El KAM ingresa su meta TOTAL y se reparte (disgrega) a cada partner+ciudad
 // segun su % de representacion en el ULTIMO MES. La pantalla es UNA planilla
@@ -93,7 +94,11 @@ export const CALC_STATE = {
   vista:       "agg",
   advOpen:     false,
   refOpen:     false,
-  pctKamOpen:  false
+  pctKamOpen:  false,
+  // Sección TukTuk: null = todavía no la tocó nadie → abierta si NO hay %
+  // declarado (ahí hay algo que hacer), cerrada si ya está declarado.
+  tkOpen:      null,
+  _tkOpenReset: false
 };
 
 // I2: al cerrar sesión, CALC_STATE vuelve a su estado inicial. Sin esto, salir y
@@ -569,7 +574,9 @@ export function _calcComputeStatus(m) {
   };
   let fleet = null;
   if (m.hasFleet) fleet = _calcFleetMetaCount(m.aggLast3);
-  return { agg, fleet, hasFleet: m.hasFleet };
+  // TukTuk: porción repartida (Σ de la tabla) vs el absoluto declarado.
+  const tk = _calcTieneTkPct() ? { sum: _calcTkTotales(m) || { ad: 0, sh: 0, nr: 0 } } : null;
+  return { agg, fleet, hasFleet: m.hasFleet, tk };
 }
 
 // ── CUADRE (panel izquierdo) ─────────────────────────────────────────────────
@@ -614,12 +621,29 @@ export function _calcCuadreBox(status) {
     const ft = f.total === 0 ? "neutral" : (f.filled >= f.total ? "ok" : "warn");
     fleet = badge(`Fleet: ${f.filled}/${f.total} ${t("calc.conMeta")}`, ft, { icon: "car" });
   }
+  // TukTuk: siempre una línea, para que el estado se vea también acá. No cambia
+  // el veredicto de arriba (la porción TukTuk es un DESGLOSE de la meta, no una
+  // meta aparte): solo muestra lo repartido vs lo declarado.
+  let tkLine;
+  const tkIco = icon("tuktuk", { size: 12 });
+  if (!status.tk) {
+    tkLine = `<span class="calc-cuadre-box__tk is-none">${tkIco}${escapeHTML(t("calc.tk.cuadreSin"))}</span>`;
+  } else {
+    const parts = _CALC_K3.filter(k => _calcTkAbs(k) != null).map(k => {
+      const q = _calcMetricCuadre(status.tk.sum[k], _calcTkAbs(k));
+      return `<span class="calc-cuadre-box__it">${escapeHTML(_calcCorto(k))} <strong class="ui-num">${fmt(q.sum)}</strong> / <span class="ui-num">${fmt(q.target)}</span>` +
+        (q.ok ? "" : ` <span class="ui-num calc-cuadre-box__gap">(${q.gap > 0 ? "+" : ""}${fmt(q.gap)})</span>`) + `</span>`;
+    });
+    tkLine = `<span class="calc-cuadre-box__tk">${tkIco}<strong>TukTuk</strong>` +
+      (parts.length ? parts.join(`<span class="calc-cuadre-box__sep" aria-hidden="true">·</span>`)
+                    : `<span>${escapeHTML(t("calc.tk.cuadreSinMeta"))}</span>`) + `</span>`;
+  }
   // Huella de números: el mismo texto que antes llevaba la fila de cuadre de la
   // tabla (meta + "Cuadra" o la diferencia), para que la huella no cambie.
   const huella = _CALC_K3.map(k =>
     `<span hidden${dn(`calc.dist.cuadre.${k}`)}>${_calcCuadre(status.agg[k].sum, +g[k] || 0)}</span>`).join("");
   return `<div class="calc-cuadre-box calc-cuadre-box--${tone}">${icon(ico, { size: 16 })}` +
-    `<div class="calc-cuadre-box__txt"><span class="calc-cuadre-box__top"><strong class="calc-cuadre-box__head">${escapeHTML(head)}</strong>${fleet}</span>${items}` +
+    `<div class="calc-cuadre-box__txt"><span class="calc-cuadre-box__top"><strong class="calc-cuadre-box__head">${escapeHTML(head)}</strong>${fleet}</span>${items}${tkLine}` +
     (extra ? `<span class="calc-cuadre-box__hint">${escapeHTML(extra)}</span>` : "") +
     `</div></div>${huella}`;
 }
@@ -660,6 +684,11 @@ export function _calcRefreshStatus() {
     el.hidden = !on;
     el.textContent = on ? `= ${fmt(Math.round(goal * decl / 100))}` : "";
   });
+
+  const tkB = document.getElementById("calcTkBadge");
+  if (tkB) tkB.innerHTML = _calcTkBadgeHTML();
+  const tkE = document.getElementById("calcTkEstado");
+  if (tkE) tkE.innerHTML = _calcTkEstadoHTML();
 
   const res = document.getElementById("calcAdvRes");
   if (res) res.textContent = _calcResumenAvanzados();
@@ -796,6 +825,9 @@ export function renderCalculator() {
 function _calcLeerUiDelDom() {
   const leer = (id, campo) => { const d = document.getElementById(id); if (d) CALC_STATE[campo] = !!d.open; };
   leer("calcAdv", "advOpen");
+  // Tras cambiar de KAM (todo de cero) la sección TukTuk vuelve a su default.
+  if (CALC_STATE._tkOpenReset) CALC_STATE._tkOpenReset = false;
+  else leer("calcTk", "tkOpen");
   leer("calcRef", "refOpen");
   leer("calcPctKam", "pctKamOpen");
 }
@@ -836,6 +868,7 @@ export function _calcPanel(m, allKAMs, status) {
         <p class="calc-side__sub">${escapeHTML(t("calc.metasDelMesSub"))}</p>
         <div class="calc-side__goals">${_CALC_K3.map(k => _kamGoalInput(k, m)).join("")}</div>
       </div>
+      ${_calcTkSeccion(m)}
       ${_calcAvanzados(m)}
       ${_calcAccionesPanel(status)}
     </aside>`;
@@ -894,8 +927,10 @@ export function _kamGoalInput(metric, m) {
 }
 
 // ── AJUSTES AVANZADOS (plegado) ──────────────────────────────────────────────
-// Lo que no se toca todos los meses: % TukTuk de PnL, cómo guardar, las metas %
-// del KAM (referencia) y, para un admin, eliminar las metas del KAM. El resumen
+// Lo que no se toca todos los meses: cómo guardar, las metas % del KAM
+// (referencia) y, para un admin, eliminar las metas del KAM. El % TukTuk de PnL
+// salió de acá (sep-2026, pedido de Manuel: "no veo a TukTuk y no me queda
+// claro si llené su data o no") a su propia sección, siempre a la vista. El resumen
 // muestra el modo de guardado elegido: es lo único de acá que cambia qué se
 // escribe al apretar Guardar, así que tiene que verse sin abrir nada.
 export function _calcAvanzados(m) {
@@ -904,10 +939,6 @@ export function _calcAvanzados(m) {
     <details class="calc-adv" id="calcAdv"${CALC_STATE.advOpen ? " open" : ""}>
       <summary class="calc-adv__sum"><span class="calc-adv__t">${escapeHTML(t("calc.avanzados"))}</span><span class="calc-adv__res" id="calcAdvRes">${escapeHTML(_calcResumenAvanzados())}</span></summary>
       <div class="calc-adv__body">
-        <section class="calc-adv__sec" aria-labelledby="calcTkT">
-          <h3 class="calc-adv__h" id="calcTkT">${escapeHTML(t("calc.tkPctTitulo"))} <span class="calc-muted">${escapeHTML(t("calc.tkPctOpcional"))}</span></h3>
-          ${_calcTkPctBlock(m)}
-        </section>
         ${canSave ? `<section class="calc-adv__sec">${_calcModoHTML()}<div id="calcHuecoTk">${_calcAvisoHuecoTk(m)}</div>
           <p class="calc-help">${escapeHTML(t("calc.actualizarHint2"))}</p></section>` : ""}
         <details class="calc-details" id="calcPctKam"${CALC_STATE.pctKamOpen ? " open" : ""}>
@@ -924,8 +955,7 @@ export function _calcAvanzados(m) {
 }
 
 function _calcResumenAvanzados() {
-  const modoTxt = STATE.canWrite ? t(CALC_STATE.saveMode === "full" ? "calc.modoFull" : "calc.modoEdits") : "";
-  return [modoTxt, _calcTieneTkPct() ? t("calc.tkPctActivo") : ""].filter(Boolean).join(" · ");
+  return STATE.canWrite ? t(CALC_STATE.saveMode === "full" ? "calc.modoFull" : "calc.modoEdits") : "";
 }
 
 // Metas % a nivel KAM (Otros proyectos, Fleet A2): referencia, no se reparten.
@@ -1008,6 +1038,65 @@ export function _calcAccionesPanel(status) {
     </div>`;
 }
 
+// ── SECCIÓN TUKTUK (panel izquierdo, siempre a la vista) ────────────────────
+// Feedback de Manuel (sep-2026): "no veo a TukTuk y no me queda claro si llené
+// su data o no". El % vivía dentro de "Ajustes avanzados", plegado, con una
+// pista chica en el resumen. Ahora es una sección propia justo debajo de las
+// tres metas y el ESTADO va en el <summary>: se lee sin abrir nada. Arranca
+// abierta si no hay % declarado (hay algo que hacer) y cerrada si ya lo está.
+// SOLO pantalla: la matemática (_calcTieneTkPct / _calcRepartoDe) no cambia.
+const _calcPctTxt = v => String(Math.round((+v || 0) * 100) / 100);
+
+// Absoluto que sale del % declarado (lo que va al Loyalty Program). La MISMA
+// cuenta que el "= 1,700" bajo cada campo (_calcTkPctBlock / _calcRefreshStatus).
+function _calcTkAbs(k) {
+  return absolutoTk((CALC_STATE.kamGoals || {})[k], (CALC_STATE.tkPct || {})[k]);
+}
+
+function _calcTkBadgeHTML() {
+  return _calcTieneTkPct()
+    ? badge(t("calc.tk.declarado"), "ok", { icon: "check-circle" })
+    : badge(t("calc.tk.sinDeclarar"), "warn", { icon: "alert-triangle" });
+}
+
+// Una línea: sin declarar → qué pasa (peso natural, no se guarda desglose);
+// declarado → los tres % con su absoluto ("AD 17% = 1,700 · Horas 20.2% = …").
+function _calcTkEstadoHTML() {
+  if (!_calcTieneTkPct()) return escapeHTML(t("calc.tk.sinDeclararTxt"));
+  const p = CALC_STATE.tkPct || {};
+  return _CALC_K3.map(k => {
+    const abs = _calcTkAbs(k);
+    return `<span class="calc-tk__it">${escapeHTML(_calcCorto(k))} <strong class="ui-num">${escapeHTML(_calcPctTxt(p[k]))}%</strong>` +
+      (abs == null ? "" : ` = <strong class="ui-num"${dn("calc.tk.abs", k)}>${fmt(abs)}</strong>`) + `</span>`;
+  }).join(`<span class="calc-tk__sep" aria-hidden="true">·</span>`);
+}
+
+export function _calcTkSeccion(m) {
+  const activo = _calcTieneTkPct();
+  const open = CALC_STATE.tkOpen == null ? !activo : !!CALC_STATE.tkOpen;
+  return `
+    <details class="calc-tk" id="calcTk"${open ? " open" : ""}>
+      <summary class="calc-tk__sum">
+        <span class="calc-tk__top">
+          <span class="calc-tk__t" id="calcTkT">${icon("tuktuk", { size: 14 })}${escapeHTML(t("calc.tk.titulo"))}</span>
+          <span id="calcTkBadge">${_calcTkBadgeHTML()}</span>
+        </span>
+        <span class="calc-tk__estado" id="calcTkEstado">${_calcTkEstadoHTML()}</span>
+      </summary>
+      <div class="calc-tk__body" role="group" aria-labelledby="calcTkT">${_calcTkPctBlock(m)}</div>
+    </details>`;
+}
+
+// Totales de la porción TukTuk del reparto: la suma EXACTA de las sub-líneas
+// "TukTuk" de la tabla (mismo redondeo por fila, mismas filas), para que el
+// cuadre y la tabla no se contradigan. null = sin % declarado.
+export function _calcTkTotales(m) {
+  const g = CALC_STATE.kamGoals;
+  const reparto = _calcRepartoDe(m.aggLast1, g);
+  if (!reparto) return null;
+  return sumaPorcionesTk([...m.aggLast1.values()].map(e => _calcAggMetaBases(e, g, m.distTot1, reparto)));
+}
+
 // ── % TUKTUK DECLARADO POR PnL ───────────────────────────────────────────────
 // Junto con las metas del mes, PnL baja qué PORCENTAJE de cada KPI corresponde a
 // TukTuk. Ese número se declara en los Loyalty Programs, así que MANDA sobre el
@@ -1024,7 +1113,6 @@ export function _calcAccionesPanel(status) {
 export function _calcTkPctBlock(m) {
   const p = CALC_STATE.tkPct || {};
   const g = CALC_STATE.kamGoals || {};
-  const activo = _calcTieneTkPct();
   // MISMO ORDEN que las metas de arriba (AD, SH, N+R), no el de la tabla de
   // PnL: dos grupos de tres campos con las mismas etiquetas en órdenes
   // distintos se cruzan al copiar y no hay nada en pantalla que lo delate.
@@ -1062,7 +1150,6 @@ export function _calcTkPctBlock(m) {
   return `
     <div class="calc-tkpct">${_CALC_K3.map(fila).join("")}</div>
     <div id="calcTkAvisos">${_calcTkAvisosHTML(m)}</div>
-    ${activo ? "" : `<p class="calc-help">${escapeHTML(t("calc.tkPctSinDeclarar"))}</p>`}
     <p class="calc-help">${escapeHTML(t("calc.tkPctSub"))}</p>`;
 }
 
@@ -1130,6 +1217,10 @@ export function _calcMainHTML(m) {
 // resto: por eso se tiñe ("fijado a mano") y el cuadre del panel avisa si la
 // suma deja de cerrar. Eso es la matemática de siempre; la pantalla solo lo dice.
 const _CALC_KPI_LBL = { ad: "AD", sh: "SH", nr: "N+R" };
+// Rótulo de la porción TukTuk (sub-línea bajo cada meta, totales y nota).
+// "TukTuk" es nombre de producto: igual en los tres idiomas. Sin ícono a
+// propósito: con él la sub-línea pasa el ancho del campo y la tabla desborda.
+const _CALC_TK_TAG = `<span class="calc-tk-tag">TukTuk</span>`;
 
 // Punto de color del partner: paleta categórica por hash del nombre (nunca el
 // rojo de marca), estable entre repintados.
@@ -1198,6 +1289,7 @@ export function _calcSec4_distribucion(agg, distTotals, monthLabel) {
   // (que viene ordenado para la tabla): los pozos y los pesos tienen que salir
   // del universo entero o las cuotas no suman la meta.
   const reparto = _calcRepartoDe(agg, g);
+  const tkTot = { ad: 0, sh: 0, nr: 0 };
   const rowsHtml = items.map(e => {
     const b = _calcAggMetaBases(e, g, distTotals, reparto);
     const ad = _calcGoalFor(e.partner, e.city, "ad", b.ad);
@@ -1211,9 +1303,10 @@ export function _calcSec4_distribucion(agg, distTotals, monthLabel) {
     // Program de ese partner. Solo con % declarado y en las unidades que tienen
     // porción TukTuk — en las demás sería ruido.
     const tkSub = k => (reparto && b[k + "Tk"] > 0)
-      ? `<div class="calc-tk-sub" title="${escapeHTML(t("calc.tkDeEsta"))}">${t("calc.tkSub", {
-          v: `<span class="ui-num"${dn("calc.dist", k + "Tk", ent)}>${escapeHTML(fmt(Math.round(b[k + "Tk"])))}</span>` })}</div>`
+      ? `<div class="calc-tk-sub" title="${escapeHTML(t("calc.tkDeEsta"))}">${_CALC_TK_TAG}` +
+        `<span class="ui-num"${dn("calc.dist", k + "Tk", ent)}>${escapeHTML(fmt(Math.round(b[k + "Tk"])))}</span></div>`
       : "";
+    if (reparto) _CALC_K3.forEach(k => { if (b[k + "Tk"] > 0) tkTot[k] += Math.round(b[k + "Tk"]); });
     const celda = (k, base) => `<td class="ui-num calc-cell-input${est[k].fijada ? " calc-cell--fija" : ""}">${_calcInputMeta(e.partner, e.city, k, base, est[k])}${tkSub(k)}</td>`;
     const cls = [b.noAct ? "calc-row--manual" : "", est.fija ? "calc-row--fija" : ""].filter(Boolean).join(" ");
     return `
@@ -1234,9 +1327,18 @@ export function _calcSec4_distribucion(agg, distTotals, monthLabel) {
     : (nManual ? alertBox({ tone: "warn", text: t("calc.hintManual2", { n: nManual }) }) : "");
   const mesCorto = /^\d{4}-\d{2}$/.test(monthLabel || "") ? mesNombre(+monthLabel.slice(5, 7) - 1, getLang(), { corto: true }) : "";
   const totalLbl = CALC_STATE.kam === "all" ? t("calc.totalGeneral") : t("calc.totalDe", { kam: kamLabel(CALC_STATE.kam) });
+  // Totales de la porción TukTuk bajo cada total (misma suma que el cuadre).
+  const tkTotSub = k => reparto
+    ? `<div class="calc-tk-sub">${_CALC_TK_TAG}<span class="ui-num"${dn("calc.dist.total", k + "Tk")}>${fmt(tkTot[k])}</span></div>`
+    : "";
+  // Qué es la sub-línea: una sola vez, arriba de la tabla (solo con % declarado).
+  const tkNota = reparto
+    ? `<p class="calc-tk-nota">${_CALC_TK_TAG}<span>${escapeHTML(t("calc.tk.notaTabla"))}</span></p>`
+    : "";
 
   return `
     ${hint}
+    ${tkNota}
     <div class="ui-table-wrap ui-table-wrap--scroll calc-dist-wrap">
       <table class="ui-table ui-table--sticky-first calc-dist">
         <caption class="ui-sr-only">${escapeHTML(t("calc.distribPartner", { m: _calcMesTxt(monthLabel || "") }))}</caption>
@@ -1254,11 +1356,11 @@ export function _calcSec4_distribucion(agg, distTotals, monthLabel) {
         <tfoot>
           <tr class="calc-total-row">
             <th scope="row">${escapeHTML(totalLbl)}</th><td></td>
-            <td class="ui-num" id="calcAggSumAD"${dn("calc.dist.total.ad")}>${fmt(sumAD)}</td>
+            <td class="ui-num"><span id="calcAggSumAD"${dn("calc.dist.total.ad")}>${fmt(sumAD)}</span>${tkTotSub("ad")}</td>
             <td class="ui-num"${dn("calc.dist.total.realAd")}>${fmt(baseAD)}</td>
             <td class="ui-num" id="calcAggCambioAD">${_calcCambioHTML(sumAD, baseAD)}</td>
-            <td class="ui-num" id="calcAggSumSH"${dn("calc.dist.total.sh")}>${fmt(sumSH)}</td>
-            <td class="ui-num" id="calcAggSumNR"${dn("calc.dist.total.nr")}>${fmt(sumNR)}</td>
+            <td class="ui-num"><span id="calcAggSumSH"${dn("calc.dist.total.sh")}>${fmt(sumSH)}</span>${tkTotSub("sh")}</td>
+            <td class="ui-num"><span id="calcAggSumNR"${dn("calc.dist.total.nr")}>${fmt(sumNR)}</span>${tkTotSub("nr")}</td>
           </tr>
         </tfoot>
       </table>
@@ -1883,6 +1985,8 @@ export function _calcResetParaNuevoKam() {
   CALC_STATE.saved     = {};
   CALC_STATE.savedKey  = "";     // fuerza a _calcSeedGuardadas a releer la BD del KAM nuevo
   CALC_STATE.selPartnerExport = null;
+  CALC_STATE.tkOpen = null;
+  CALC_STATE._tkOpenReset = true;
   _calcBorrarDraft();
 }
 

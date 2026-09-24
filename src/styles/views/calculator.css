@@ -79,6 +79,42 @@
 .calc-goal__in::placeholder { font-weight: var(--weight-regular); }
 .calc-goal__hint strong { color: var(--color-text); font-weight: var(--weight-semibold); }
 
+/* Sección TukTuk (% de PnL): siempre a la vista, con el ESTADO en el summary
+   (Declarado / Sin declarar + los tres % con su absoluto) para leerlo sin
+   abrir nada. Sale de "Ajustes avanzados" (feedback de Manuel, sep-2026). */
+.calc-tk { border-top: 1px solid var(--color-border-soft); padding-top: var(--space-3); }
+.calc-tk__sum { cursor: pointer; list-style: none; display: flex; flex-direction: column; gap: var(--space-1); }
+.calc-tk__sum::-webkit-details-marker { display: none; }
+.calc-tk__sum:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
+.calc-tk__top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; }
+.calc-tk__t {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--text-xs); font-weight: var(--weight-semibold); text-transform: uppercase;
+  letter-spacing: .06em; color: var(--color-text-subtle);
+}
+.calc-tk__t::before { content: "▸"; font-size: var(--text-sm); letter-spacing: 0; }
+.calc-tk[open] .calc-tk__t::before { content: "▾"; }
+.calc-tk__estado {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px;
+  font-size: var(--text-xs); line-height: var(--leading-normal); color: var(--color-text-muted);
+}
+.calc-tk__estado strong { color: var(--color-text); font-weight: var(--weight-semibold); }
+.calc-tk__it { white-space: nowrap; }
+.calc-tk__sep { opacity: .6; }
+.calc-tk__body { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); }
+
+/* Rótulo "TukTuk" de la porción de cada meta (tabla, totales, nota). */
+.calc-tk-tag {
+  display: inline-flex; align-items: center; flex: 0 0 auto;
+  padding: 0 3px; border-radius: var(--radius-sm);
+  font-size: var(--text-xs); font-weight: var(--weight-semibold); line-height: 16px;
+  color: var(--color-info-fg); background: var(--color-info-bg);
+}
+.calc-tk-nota {
+  margin: 0; display: flex; align-items: center; gap: var(--space-2);
+  font-size: var(--text-xs); color: var(--color-text-muted);
+}
+
 /* Ajustes avanzados (plegado) */
 .calc-adv { border-top: 1px solid var(--color-border-soft); padding-top: var(--space-3); }
 .calc-adv__sum {
@@ -155,6 +191,12 @@
 .calc-cuadre-box__it.is-none { opacity: .8; }
 .calc-cuadre-box__sep { opacity: .6; }
 .calc-cuadre-box__hint { font-size: var(--text-xs); }
+/* Línea TukTuk del cuadre: lo repartido vs lo declarado, o "sin declarar". */
+.calc-cuadre-box__tk {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px;
+  font-size: var(--text-xs); font-variant-numeric: tabular-nums;
+}
+.calc-cuadre-box__tk.is-none { opacity: .85; }
 
 /* Acciones: pegadas al pie del panel mientras se desplaza por dentro. */
 .calc-side__actions {
@@ -231,7 +273,7 @@
 /* Porción TukTuk de la meta de una fila: debajo del campo, no como otra
    columna (serían 3 números más por fila). */
 .calc-tk-sub {
-  margin-top: 2px; text-align: right; white-space: nowrap;
+  margin-top: 3px; display: flex; justify-content: flex-end; align-items: center; gap: 3px; white-space: nowrap;
   font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--color-info-fg);
 }
 .calc-cambio { font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
