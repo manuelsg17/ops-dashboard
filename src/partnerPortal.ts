@@ -31,7 +31,7 @@ import { opcionesCapturaClara, tokenClaro } from "./shared/exportClaro";
 // Mismo núcleo de cálculo que Metas, Rendimiento y el deck: el partner tiene que
 // ver EXACTAMENTE los números que su KAM le presenta.
 import { seriesByDate, projectFlow, ratio, tasaPonderada } from "./domain/metrics.js";
-import { reportYM, diasMesReporte, MES_NOMBRES } from "./shared/mesReporte.js";
+import { reportYM, diasMesReporteDe, MES_NOMBRES } from "./shared/mesReporte.js";
 import { datasetLinea } from "./shared/escala.js";
 import { dn } from "./shared/huella";
 import { metaTasaPonderada } from "./domain/metaTasa";
@@ -254,7 +254,7 @@ function _portalMetas(line, rows) {
   // rowsMes se arma con reportYM, así que los días también salen del mes de
   // REPORTE: con calcProjectionDays (mes calendario) la semana del 29-jun daba
   // los 30 días de junio bajo la meta de julio. Ver diasMesReporte.
-  const { daysElapsed, daysRemaining } = diasMesReporte(last, STATE.curMode, parseLocalDate);
+  const { daysElapsed, daysRemaining } = diasMesReporteDe(STATE, last, parseLocalDate);
   // Decisión 4 (Manuel, 23-sep-2026): la proyección al cierre SOLO para el mes
   // en curso — un mes cerrado "no logrará más avances". Regla única en
   // domain/mesEnCurso.ts (la misma de Metas y del deck).
@@ -355,7 +355,8 @@ function _portalMetaRow(label, act, meta, proj, fmtFn, numKey = "", mesFrase = "
     v: `<span${_k("meta")}>${fmtFn(meta)}</span>`
   });
   const proyTxt = pp != null ? `<span class="pp-goal__proj pp-tone--${toneP}">${t("portal.meta.proy", {
-    v: `<strong${_k("proj")}>${fmtFn(proj)}</strong>`, p: `${pp.toFixed(1)}%`
+    // Redondeada como el actual (estimación: el decimal es precisión falsa).
+    v: `<strong${_k("proj")}>${fmtFn(Math.round(proj))}</strong>`, p: `${pp.toFixed(1)}%`
   })}</span>` : "";
   return `
     <div class="pp-goal">

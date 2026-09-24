@@ -37,7 +37,7 @@ import { projectFlow, retentionSeries, seriesByDate, snapshotValue,
          horasPorConductorBase, TK_HORAS_BASE_MIN, TK_MIN_ACTIVOS,
          pacingFlujo, median, fechasEnRango, tasaAcum, sumarTasa, leerTasa } from "./domain/metrics.js";
 import { p2Lectura, p2Accion, META_CUMPLIDA_PCT, p2SenalesEjecutivas } from "./domain/lectura.js";
-import { reportYM, diasMesReporte, MES_NOMBRES } from "./shared/mesReporte.js";
+import { reportYM, diasMesReporteDe, MES_NOMBRES } from "./shared/mesReporte.js";
 import { makeT, pick, fmtL, fmtSmartL, fmtDecL, mesL, xl, ciudadL, EXPORT_STR } from "./core/i18nExport";
 // Idioma de la HERRAMIENTA (t) para los controles: la barra, el selector de
 // hojas, el chequeo previo y los avisos los lee el KAM, no el partner. El deck
@@ -193,7 +193,7 @@ export function p2ReportYM(dateStr) {
 // semana que arranca el 29/30/31 devuelve los días del mes ANTERIOR al que el
 // slide dice estar mostrando. Detalle en diasMesReporte.
 export function p2DiasMes(lastDate) {
-  return diasMesReporte(lastDate, STATE.curMode, parseLocalDate);
+  return diasMesReporteDe(STATE, lastDate, parseLocalDate);
 }
 
 // Resuelve si el partner se muestra con KPIs Fleet (SH/Auto Activo, Acceptance,

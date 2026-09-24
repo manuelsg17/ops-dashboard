@@ -1779,9 +1779,9 @@ export const I18N: Record<string, Record<string, string>> = {
   "metas.borrarMesTip": { es: "Borra todas las metas de {m} para volver a subir el Excel",
                          en: "Deletes all {m} goals so the Excel can be uploaded again",
                          ru: "Удаляет все цели за {m}, чтобы заново загрузить Excel" },
-  "metas.projTipMensual": { es: "Flujos (N+R, horas): no se extrapolan, el período mensual ya viene completo. Active Drivers: período de mayor AD del rango × 1.4 (potencial).",
-                           en: "Flows (N+R, hours): not extrapolated, the monthly period is already complete. Active Drivers: the range's highest-AD period × 1.4 (potential).",
-                           ru: "Потоки (N+R, часы): не экстраполируются, месячный период уже полный. Активные водители: период с максимумом AD в диапазоне × 1,4 (потенциал)." },
+  "metas.projTipMensual": { es: "Proyección con datos hasta el {c}. Flujos (N+R, horas): mes en curso, acumulado a la fecha × días del mes / días con datos. Active Drivers: período de mayor AD del rango × 1.4 (potencial).",
+                           en: "Projection with data through {c}. Flows (N+R, hours): month in progress, month-to-date total × days in month / days with data. Active Drivers: the range's highest-AD period × 1.4 (potential).",
+                           ru: "Прогноз по данным по {c}. Потоки (N+R, часы): текущий месяц, итог с начала месяца × дней в месяце / дней с данными. Активные водители: период с максимумом AD в диапазоне × 1,4 (потенциал)." },
   "metas.projTip": { es: "Flujos (N+R, horas): total acumulado × días del mes / días transcurridos. Active Drivers: período de mayor AD del rango × 1.4 (potencial).",
                     en: "Flows (N+R, hours): running total × days in month / days elapsed. Active Drivers: the range's highest-AD period × 1.4 (potential).",
                     ru: "Потоки (N+R, часы): накопленный итог × дней в месяце / прошедших дней. Активные водители: период с максимумом AD в диапазоне × 1,4 (потенциал)." },
@@ -2441,6 +2441,19 @@ export const I18N: Record<string, Record<string, string>> = {
   "mt.tk.deEsoTip":       { es: "Cuota TukTuk declarada en la Calculadora: es parte de la meta del mes, no se suma aparte.",
                             en: "TukTuk quota declared in the Calculator: it is part of the monthly goal, not added on top.",
                             ru: "Квота ТукТук из калькулятора: это часть месячной цели, а не прибавка к ней." },
+  // ── Rendimiento: escala mensual con el mes EN CURSO (24-sep-2026) ─────────
+  // El valor grande de N+R/Horas pasa a ser el del mes de la meta (a la fecha),
+  // el acumulado del rango queda en una línea chica, y el delta contra el mes
+  // anterior COMPLETO se oculta (mismo criterio que Metas).
+  "rd.mesCurso.sub":      { es: "{m}, a la fecha", en: "{m} to date", ru: "{m}, с начала месяца" },
+  "rd.mesCurso.rango":    { es: "Acumulado del rango", en: "Range total", ru: "Сумма за период" },
+  "rd.mesCurso.corte":    { es: "Proyección con datos hasta el {c} (mes en curso: acumulado a la fecha × días del mes / días con datos).",
+                            en: "Projection with data through {c} (month in progress: month-to-date total × days in month / days with data).",
+                            ru: "Прогноз по данным по {c} (текущий месяц: итог с начала месяца × дней в месяце / дней с данными)." },
+  "rd.mesCurso.chip":     { es: "Mes en curso", en: "Month in progress", ru: "Текущий месяц" },
+  "rd.mesCurso.sinDelta": { es: "El mes todavía no cerró: compararlo con el mes anterior completo daría una caída que no es real.",
+                            en: "The month hasn't closed yet: comparing it with the full previous month would show a drop that isn't real.",
+                            ru: "Месяц ещё не закрыт: сравнение с полным прошлым месяцем показало бы несуществующее падение." },
 };
 
 let _lang = "es";

@@ -272,6 +272,9 @@
   color: var(--color-text-muted); font-variant-numeric: tabular-nums;
 }
 .rd-tile__cap--none { color: var(--color-text-subtle); }
+/* Mensual con el mes en curso: el acumulado del rango, en chico bajo el valor del mes. */
+.rd-tile__extra { font-size: var(--text-xs); color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+.rd-tile__extra strong { font-weight: var(--weight-semibold); color: var(--color-text); }
 .rd-tile .ui-ring__txt { font-size: 16px; }
 .rd-tile .ui-ring__txt--long { font-size: 12.5px; }
 /* En la grilla automática de Fleet (10 tiles) el anillo va más chico. */
