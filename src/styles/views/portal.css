@@ -24,9 +24,9 @@
   padding: var(--space-4) var(--space-5);
 }
 .pp-hero__logo {
-  flex: 0 0 auto; width: 56px; height: 56px; border-radius: var(--radius-md);
+  flex: 0 0 auto; width: 56px; height: 56px; border-radius: var(--radius-card);
   object-fit: contain; background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-soft);
 }
 .pp-hero__logo--mono {
   display: flex; align-items: center; justify-content: center;

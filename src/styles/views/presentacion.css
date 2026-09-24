@@ -22,11 +22,11 @@
 /* ── Barra de control ─────────────────────────────────────────────────────── */
 .p2-toolbar {
   display: flex; flex-direction: column; gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-4) var(--space-5);
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
 }
 .p2-toolbar__row {
   display: flex; flex-wrap: wrap; align-items: flex-end;
@@ -36,7 +36,7 @@
 .p2-toolbar__row--sub {
   align-items: center;
   padding-top: var(--space-3);
-  border-top: 1px solid var(--color-border);
+  border-top: 1px solid var(--color-border-soft);
 }
 .p2-toolbar__actions {
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2);
@@ -123,7 +123,7 @@
   display: inline-flex; align-items: center; gap: 6px;
   height: 32px; padding: 0 var(--space-3);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-pill);
   background: var(--color-surface);
   color: var(--color-text-muted);
   font: inherit; font-size: var(--text-sm); font-weight: var(--weight-semibold);

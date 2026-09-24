@@ -45,7 +45,7 @@
 .sg-opt__tag {
   flex: 0 0 auto; font-size: var(--text-xs); font-weight: var(--weight-semibold);
   color: var(--color-ok-fg); background: var(--color-ok-bg);
-  padding: 1px var(--space-2); border-radius: var(--radius-sm);
+  padding: 1px var(--space-2); border-radius: var(--radius-pill);
 }
 .sg-context { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); margin-left: auto; min-width: 0; }
 .sg-context .ui-chip { max-width: 320px; }
@@ -93,19 +93,19 @@
 .sg-kanban { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); align-items: start; }
 .sg-col {
   display: flex; flex-direction: column; min-width: 0;
-  background: var(--color-surface-muted); border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  background: var(--color-surface-muted); border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-table);
 }
 .sg-col__head {
   display: flex; align-items: center; gap: var(--space-2);
-  padding: var(--space-3); border-bottom: 1px solid var(--color-border);
+  padding: var(--space-3); border-bottom: 1px solid var(--color-border-soft);
   font-size: var(--text-md); font-weight: var(--weight-semibold); color: var(--color-text);
 }
 .sg-col__title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sg-col__count {
   flex: 0 0 auto; min-width: 22px; text-align: center;
   font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--color-text-muted);
-  background: var(--color-surface); border: 1px solid var(--color-border);
+  background: var(--color-surface); border: 1px solid transparent;
   border-radius: var(--radius-pill); padding: 1px var(--space-2);
 }
 .sg-col__body { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); max-height: 640px; overflow-y: auto; }
@@ -113,7 +113,7 @@
 .sg-card {
   display: flex; flex-direction: column; gap: var(--space-2);
   padding: var(--space-3); background: var(--color-surface);
-  border: 1px solid var(--color-border); border-radius: var(--radius-md); box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-border-soft); border-radius: var(--radius-md); box-shadow: var(--shadow-card);
 }
 .sg-card--overdue { border-color: var(--color-bad-border); border-left: 3px solid var(--color-bad-solid); }
 .sg-card__partner {
