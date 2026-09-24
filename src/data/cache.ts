@@ -30,6 +30,12 @@ const STORE    = "snapshots";
 // diferidas). Los snapshots v1 no rompen nada —traen columnas de más, que se
 // ignoran— pero la regla del proyecto es subir la versión ante un cambio de
 // columnas, y cuesta un solo arranque sin caché.
+// Sep-2026 (egress): los snapshots ganaron `ver` (clave de versión) y `desde`
+// (cota de la ventana) para la revalidación condicional. NO se subió SCHEMA_V a
+// propósito: las filas tienen la misma forma, y un snapshot v2 sin `ver` sigue
+// sirviendo para pintar al instante — solo no se puede REUTILIZAR sin ir a la
+// red (versionDatos.reusarFilas exige la clave), así que la primera apertura
+// tras el despliegue descarga como antes y guarda la clave.
 const SCHEMA_V = 2;
 
 // Vida del snapshot.
@@ -106,10 +112,25 @@ export function snapshotSave(payload, parte = "core") {
 
 // "Los datos de red son idénticos a este snapshot": renueva su antigüedad sin
 // reescribirlo (V4). Mismo fire-and-forget que snapshotSave.
-export function snapshotTouch(parte = "core") {
+// `extra.ver` (sep-2026, egress): la clave de versión con que se acaba de
+// verificar. Tiene que viajar con la marca: si la versión cambió pero las filas
+// resultaron idénticas (p.ej. un UPDATE que después se revirtió), el registro
+// sigue con la clave VIEJA y, sin esto, cada apertura volvería a descargarlo
+// todo hasta el próximo cambio real.
+export function snapshotTouch(parte = "core", extra = {}) {
   const userId = (STATE && STATE.userId) || null;
   if (!userId) return Promise.resolve();
-  return _tx("readwrite", s => s.put({ at: Date.now() }, _keyVerif(userId, parte))).catch(() => {});
+  return _tx("readwrite", s => s.put({ ...extra, at: Date.now() }, _keyVerif(userId, parte))).catch(() => {});
+}
+
+// Descarta el snapshot de UNA parte (p.ej. "mensual" tras subir su Excel).
+export function snapshotDrop(parte) {
+  const userId = (STATE && STATE.userId) || null;
+  if (!userId) return Promise.resolve();
+  return _tx("readwrite", s => {
+    s.delete(_keyVerif(userId, parte));
+    return s.delete(_key(userId, parte));
+  }).catch(() => {});
 }
 
 // Devuelve el snapshot del usuario actual, o null si no hay / está vencido /
@@ -134,7 +155,9 @@ export function snapshotLoad(parte = "core") {
     const verif = verifReq && verifReq.result;
     const at = Math.max(rec.at || 0, (verif && verif.at) || 0);
     if (Date.now() - at > MAX_AGE_MS) return null;
-    return { ...rec, at };
+    // La marca de verificación es siempre posterior al registro (snapshotSave la
+    // borra): si trae una clave de versión, es la vigente.
+    return verif && verif.ver !== undefined ? { ...rec, at, ver: verif.ver } : { ...rec, at };
   }).catch(() => null);
 }
 

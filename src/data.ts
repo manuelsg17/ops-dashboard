@@ -13,7 +13,8 @@
 // Import explícito (no global bare): el caché se consulta al ARRANQUE, antes de
 // que muchas cosas estén listas, y no vale la pena que dependa del espejado a
 // window de vendor.js.
-import { snapshotLoad, snapshotSave, snapshotTouch, snapshotClear } from "./data/cache.js";
+import { snapshotLoad, snapshotSave, snapshotTouch, snapshotClear, snapshotDrop } from "./data/cache.js";
+import { claveVersion, claveVersionTabla, reusarFilas, TABLA_DE_ESCALA } from "./shared/versionDatos";
 import { perfMark, perfMeasure, perfNote } from "./shared/perf";
 import { huellaDatos } from "./shared/huellaDatos";
 import { t } from "./core/i18n";
@@ -547,6 +548,68 @@ async function _pgFetchConReintento(table, query) {
   }
 }
 
+// ── REVALIDACIÓN CONDICIONAL (sep-2026, egress) ────────────────────────────
+// Antes de re-descargar una tabla grande se pregunta si cambió: versión (RPC
+// `data_version`, migrations/2026-09-24_data_version.sql) + conteo de filas de
+// la misma consulta. Detalle y reglas en shared/versionDatos.ts. Las dos
+// preguntas son "blandas": ante cualquier falla devuelven null y la carga sigue
+// por el camino de siempre (descargar), nunca reutiliza sin poder confirmar.
+//
+// La versión tiene que leerse ANTES que los datos: si se leyera después y entre
+// medio se confirmara una escritura, el snapshot quedaría con una versión que
+// dice "incluye ese cambio" sin incluirlo, y la próxima apertura reutilizaría
+// filas viejas. Por eso quien descarga dispara `_dataVersion()` primero y usa
+// ESA respuesta al guardar.
+let _dvNoDisponible = false;   // la RPC no existe (404): no volver a pedirla en la sesión
+// Una sola lectura para las cargas que arrancan juntas (abrir Presentación pide
+// columnas + mensual + conversión a la vez). Reusar una versión leída hace un
+// instante sigue siendo "antes" de las descargas que vienen: es seguro.
+let _dvMemo = null, _dvMemoAt = 0;
+const _DV_MEMO_MS = 3000;
+function _dataVersion() {
+  const ahora = Date.now();
+  if (_dvMemo && ahora - _dvMemoAt < _DV_MEMO_MS) return _dvMemo;
+  _dvMemoAt = ahora;
+  _dvMemo = _dataVersionRed();
+  return _dvMemo;
+}
+// Tras una ESCRITURA propia la memoria no sirve: una versión leída antes de
+// escribir no incluye esa escritura. Lo llaman los refrescos post-escritura.
+function _dvOlvidar() { _dvMemo = null; _dvMemoAt = 0; }
+async function _dataVersionRed() {
+  if (_dvNoDisponible) return null;
+  try {
+    const token = await _authToken();
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/data_version`, {
+      method: "POST",
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: "{}"
+    });
+    // 404 = la migración todavía no está en este entorno (producción antes de
+    // aplicarla): se comporta como antes, sin volver a preguntar en la sesión.
+    if (res.status === 404) { _dvNoDisponible = true; return null; }
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (_) { return null; }
+}
+
+// Filas de `tabla` con `col >= desde` (sin cota si `desde` es null), vía HEAD
+// count=exact: solo cabeceras, sin cuerpo. null ante cualquier falla.
+async function _contarFilas(tabla, col, desde) {
+  try {
+    const token = await _authToken();
+    const params = new URLSearchParams({ select: col });
+    if (desde) params.set(col, `gte.${desde}`);
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${tabla}?${params.toString()}`, {
+      method: "HEAD",
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, Prefer: "count=exact" }
+    });
+    if (!res.ok) return null;
+    const n = Number((res.headers.get("content-range") || "").split("/")[1]);
+    return Number.isFinite(n) ? n : null;
+  } catch (_) { return null; }
+}
+
 // ── PAGINACIÓN PARALELA ───────────────────────────────────────────────────────
 // Descarga todas las páginas de una tabla en paralelo (sin esperar página a
 // página). `opts.gte` = { col, value } aplica un filtro de rango EN EL SERVIDOR
@@ -905,10 +968,12 @@ const _FLAG_ESCALA = { mensual: "_mensualLoaded", diario: "_diarioLoaded" };
 // `alt` = escala guardada (mensual/diario) o null. `epoca` = la de la sesión que
 // pidió la carga: si cambió mientras se leía IndexedDB (logout, o la sesión
 // provisional no se pudo validar — ver auth.ts), no se pinta nada.
-async function _hydrateFromCache(alt, epoca) {
+// `pSnap`: la lectura del snapshot núcleo ya disparada por loadFromSupabase (la
+// comparte con la revalidación condicional de la semanal).
+async function _hydrateFromCache(alt, epoca, pSnap) {
   let snap = null, snapAlt = null;
   try {
-    [snap, snapAlt] = await Promise.all([snapshotLoad(), alt ? snapshotLoad(alt) : null]);
+    [snap, snapAlt] = await Promise.all([pSnap || snapshotLoad(), alt ? snapshotLoad(alt) : null]);
   } catch (e) { snap = null; }
   if ((STATE._authEpoch || 0) !== epoca) return false;
   if (!snap || !snap.rend || !snap.rend.length) return false;
@@ -1005,6 +1070,25 @@ async function _fetchRendSemanal(pPeriodos, from) {
   return { rows, periodos, loadedFrom: plan.loadedFrom };
 }
 
+// Revalidación condicional de la semanal (sep-2026, egress): con un snapshot que
+// trae su clave de versión, primero se pregunta si la tabla cambió (versión +
+// conteo, en paralelo con la RPC de períodos) y, si no, se reutilizan sus filas
+// recortadas a la ventana de hoy — el mismo conjunto que devolvería la consulta.
+// Sin snapshot, sin clave o ante cualquier duda: _fetchRendSemanal, como antes.
+async function _rendSemanalCondicional(pPeriodos, pSnap, pDv, rol) {
+  const snap = await pSnap;
+  const verSnap = snap && snap.ver && typeof snap.ver === "object" ? snap.ver.semanal : null;
+  if (!verSnap || !Array.isArray(snap.rend) || !snap.rend.length) return _fetchRendSemanal(pPeriodos, null);
+  const desdeSnap = snap.winStart || null;
+  const [dv, periodos, n] = await Promise.all([pDv, pPeriodos, _contarFilas("rendimiento", "fecha", desdeSnap)]);
+  const plan = planVentanaSemanal(inicioVentanaSemanalCalendario(new Date()), periodos);
+  const ver = claveVersion(dv, "semanal", rol);
+  const rows = reusarFilas({ rows: snap.rend, ver: verSnap, desde: desdeSnap }, ver, plan.loadedFrom, "fecha", n);
+  perfNote("reuso:semanal", { reutilizado: !!rows, conteo: n, filas: snap.rend.length, igualVer: ver === verSnap });
+  if (rows) return { rows, periodos, loadedFrom: plan.loadedFrom, reutilizado: true };
+  return _fetchRendSemanal(pPeriodos, null);
+}
+
 // ── LOAD FROM SUPABASE ────────────────────────────────────────────────────────
 // Devuelve TRUE si la carga quedó completa, FALSE si algo no se pudo refrescar
 // (ver _FETCH_FAILED). Quien llama después de ESCRIBIR algo (calcSaveMetas,
@@ -1052,6 +1136,15 @@ export async function loadFromSupabase(opts = {}) {
     // explícitamente una ventana más vieja (lo usa ensureRangeLoaded cuando el
     // usuario elige un "Desde" fuera de lo cargado).
     if (!STATE._allPeriods) STATE._allPeriods = {};
+
+    // Versión de los datos: la PRIMERA request (ver _dataVersion) — se guarda
+    // con el snapshot y decide si la semanal/escala guardada se reutilizan.
+    // Fuera del arranque (re-load tras una escritura) no se reusa una lectura
+    // reciente: podría ser de antes de esa escritura.
+    if (!arranque) _dvOlvidar();
+    const rol = STATE.userRole || null;
+    const pDv = _dataVersion();
+    const pSnap = arranque ? snapshotLoad() : null;
 
     // V2 (Ola 2): TODA la red sale ANTES de hidratar el caché. Antes se esperaba
     // a leer IndexedDB + aplicar + renderizar el snapshot y recién ahí se
@@ -1109,7 +1202,10 @@ export async function loadFromSupabase(opts = {}) {
     // ventana por defecto a 6 semanas. Ahora cada login SIEMPRE arranca con el
     // default; ensanchar el rango es una acción explícita de la sesión actual,
     // no algo que se herede silenciosamente de la anterior.
-    const pRend = _fetchRendSemanal(pPeriodos, opts.from);
+    // Arranque con caché: revalidación condicional (puede no descargar nada).
+    // Re-load tras una escritura o un ensanche de ventana: siempre a la red.
+    const pRend = arranque ? _rendSemanalCondicional(pPeriodos, pSnap, pDv, rol)
+                           : _fetchRendSemanal(pPeriodos, opts.from);
 
     // 1. Partners + Rendimiento semanal (ventaneado) + fleetrooms + flotas EN
     // PARALELO — son las únicas 4 tablas que Rendimiento (el tab por defecto al
@@ -1141,7 +1237,7 @@ export async function loadFromSupabase(opts = {}) {
       _pgFetchConReintento("seguimiento", "?select=*&order=partner.asc,sort_order.asc,start_date.asc")
     ]);
     // V3: la escala guardada, en paralelo con todo lo anterior.
-    const pAlt = alt ? _fetchEscalaRaw(alt) : null;
+    const pAlt = alt ? _obtenerEscala(alt, pDv) : null;
     // Entre crear estas promesas y esperarlas hay un `await` (la hidratación
     // del caché): si una rechaza en ese hueco, sin esto quedaría como rechazo
     // sin handler. El `await` de más abajo recibe el error igual.
@@ -1149,7 +1245,7 @@ export async function loadFromSupabase(opts = {}) {
     if (pAlt) pAlt.catch(() => {});
 
     if (arranque) {
-      _paintedFromCache = await _hydrateFromCache(alt, epoca);
+      _paintedFromCache = await _hydrateFromCache(alt, epoca, pSnap);
       if (!vigente()) return false;
     }
     if (_paintedFromCache) _setRefreshing(true, _snapAt);
@@ -1169,9 +1265,9 @@ export async function loadFromSupabase(opts = {}) {
     perfNote("huella", { cache: _snapFp.core, red: fpCore, alt: alt || null });
 
     // V3: la escala guardada se aplica junto con el núcleo (usa sus mapas).
-    let altRows = null, altError = null;
+    let altRows = null, altError = null, altRes = null;
     if (pAlt) {
-      try { altRows = await pAlt; } catch (e) { altError = e; }
+      try { altRes = await pAlt; altRows = altRes.rows; } catch (e) { altError = e; }
       if (!vigente()) return false;
     }
     const fpAlt = altRows ? huellaDatos([altRows]) : null;
@@ -1243,18 +1339,20 @@ export async function loadFromSupabase(opts = {}) {
     // encadenar el bug a la siguiente sesión.
     // V4: si nada cambió no se reescriben los MB del snapshot, solo se renueva
     // su fecha de verificación.
+    // `ver`: la clave de versión leída ANTES de estos datos (pDv, ver
+    // _dataVersion). null si la RPC no está: ese snapshot nunca se reutiliza.
+    const verSem = claveVersion(await pDv, "semanal", rol);
+    if (!vigente()) return false;
     if (!falloDiferidas) {
-      if (coreIgual && defIgual) snapshotTouch();
+      if (coreIgual && defIgual) snapshotTouch("core", { ver: { semanal: verSem } });
       else snapshotSave({
         periodos: periodosSem, winStart,
         partners, rend, frooms, flotas, metas, proyectos, seguimiento,
-        fp: { core: fpCore, def: fpDef }
+        fp: { core: fpCore, def: fpDef },
+        ver: { semanal: verSem }
       });
     }
-    if (alt && altRows) {
-      if (altIgual) snapshotTouch(alt);
-      else snapshotSave({ rows: altRows, fp: fpAlt }, alt);
-    }
+    if (alt && altRes) _guardarEscalaCache(alt, altRes, altIgual);
 
   } catch (err) {
     if (!vigente()) return false;
@@ -1462,6 +1560,11 @@ function _indexCoreData() {
 // columnas diferidas en null (embudo y benchmark en "—") o directamente no se
 // re-pintaba y seguia mostrando el snapshot del cache.
 const _NEED_FULL_COLS_LOAD = new Set(["rawdata", "calculator", "present2"]);
+// Pestañas que leen la escala MENSUAL sea cual sea la escala activa (la
+// Calculadora reparte sobre el último mes; Presentación arma los criterios
+// TukTuk con rawDataMensualTuktuk). Sin la precarga en idle, se piden acá.
+// Mismo conjunto que _NEED_MENSUAL de app.ts.
+export const _NEED_MENSUAL_LOAD = new Set(["calculator", "present2"]);
 
 export async function _renderActiveTabAfterLoad() {
     // Render solo el tab activo (mismo patron que applyFilters/switchMode).
@@ -1482,6 +1585,9 @@ export async function _renderActiveTabAfterLoad() {
       // y volviera. Mismo await que switchTab, solo para el tab activo.
       if (_NEED_FULL_COLS_LOAD.has(STATE.curTab) && typeof ensureFullRendColumns === "function") {
         try { await ensureFullRendColumns(); } catch (e) { /* nunca bloquear el render */ }
+      }
+      if (_NEED_MENSUAL_LOAD.has(STATE.curTab) && STATE.userRole !== "partner") {
+        try { await loadMensualIfNeeded(true); } catch (e) { /* nunca bloquear el render */ }
       }
       // Partner externo: su unica vista es el portal (Track C2).
       if (STATE.userRole === "partner" && typeof renderPartnerPortal === "function") {
@@ -1545,6 +1651,8 @@ async function _fetchFullRendColumns(mode, rows, getSelf) {
   // Solo la clave + lo que falta: quien abre estas pestañas NO re-descarga las
   // columnas que ya tiene.
   const cols = ["clid", "city", "db_id", dateCol, ...TX_DEFERRED_COLS].join(",");
+  // La versión, ANTES de cualquier descarga (ver _dataVersion).
+  const pDv = _dataVersion();
 
   try {
     // El "desde" se deriva de las filas YA cargadas, no de recalcular la ventana:
@@ -1556,37 +1664,63 @@ async function _fetchFullRendColumns(mode, rows, getSelf) {
     // Un reintento con espera antes de rendirse, igual que _pgFetchCritico: un
     // fallo acá no rompe la vista pero SÍ deforma números (ver el catch abajo),
     // así que conviene gastar un segundo en no llegar a ese estado.
-    let extra;
-    try {
-      extra = await fetchAllPages(tabla, dateCol, {
-        gte: desde ? { col: dateCol, value: desde } : null,
-        columns: cols
-      });
-    } catch (e1) {
-      await new Promise(r => setTimeout(r, 900));
-      extra = await fetchAllPages(tabla, dateCol, {
-        gte: desde ? { col: dateCol, value: desde } : null,
-        columns: cols
-      });
-    }
-    const byKey = new Map();
-    (extra || []).forEach(e => {
-      byKey.set(
-        (String(e.clid || "").trim()) + "|||" + normCity(e.city) + "|||" +
-        (e[dateCol] || "") + "|||" + (String(e.db_id || "").trim()),
-        e
-      );
-    });
-    let aplicadas = 0;
-    rows.forEach(r => {
-      const e = byKey.get(_rowKey(r));
-      if (!e) return;
-      for (const col of TX_DEFERRED_COLS) {
-        const v = e[col];
-        r[_snakeToCamel(col)] = (v === null || v === undefined || v === "") ? null : +v;
+    const traer = async () => {
+      try {
+        return await fetchAllPages(tabla, dateCol, { gte: desde ? { col: dateCol, value: desde } : null, columns: cols });
+      } catch (e1) {
+        await new Promise(r => setTimeout(r, 900));
+        return await fetchAllPages(tabla, dateCol, { gte: desde ? { col: dateCol, value: desde } : null, columns: cols });
       }
-      aplicadas++;
-    });
+    };
+    const fusionar = extra => {
+      const byKey = new Map();
+      (extra || []).forEach(e => {
+        byKey.set(
+          (String(e.clid || "").trim()) + "|||" + normCity(e.city) + "|||" +
+          (e[dateCol] || "") + "|||" + (String(e.db_id || "").trim()),
+          e
+        );
+      });
+      let n = 0;
+      rows.forEach(r => {
+        const e = byKey.get(_rowKey(r));
+        if (!e) return;
+        for (const col of TX_DEFERRED_COLS) {
+          const v = e[col];
+          r[_snakeToCamel(col)] = (v === null || v === undefined || v === "") ? null : +v;
+        }
+        n++;
+      });
+      return n;
+    };
+
+    // CACHÉ (sep-2026, egress): las mismas columnas de la misma VERSIÓN de la
+    // tabla (ver shared/versionDatos.ts) no se vuelven a bajar. Se exige además
+    // que el snapshot cubra la ventana (`desde`), que se haya pedido con la MISMA
+    // lista de columnas (una columna nueva en TX_DEFERRED_COLS quedaría en null) y
+    // que TODAS las filas cargadas encuentren su complemento; si no, a la red.
+    const colsClave = TX_DEFERRED_COLS.join(",");
+    const rol = STATE.userRole || null;
+    const parte = "cols-" + mode;
+    let aplicadas = 0, reutilizado = false, ver = null;
+    const snap = await snapshotLoad(parte);
+    if (snap && snap.ver && snap.cols === colsClave && Array.isArray(snap.rows) && snap.rows.length) {
+      ver = claveVersion(await pDv, mode, rol);
+      const cubre = !snap.desde || (!!desde && snap.desde <= desde);
+      if (ver && ver === snap.ver && cubre) {
+        aplicadas = fusionar(snap.rows);
+        reutilizado = aplicadas === rows.length;
+      }
+    }
+    perfNote("reuso:" + parte, { reutilizado, aplicadas, filas: rows.length });
+    if (reutilizado) {
+      snapshotTouch(parte, { ver });
+    } else {
+      const extra = await traer();
+      aplicadas = fusionar(extra);
+      if (ver === null) ver = claveVersion(await pDv, mode, rol);
+      snapshotSave({ rows: extra || [], ver, desde, cols: colsClave }, parte);
+    }
     if (DEBUG) console.log(`[cols] ${mode}: ${aplicadas}/${rows.length} filas completadas`);
   } catch (err) {
     // Si falla, se deja reintentar (la próxima llamada rehace el fetch) y NO se
@@ -1640,9 +1774,42 @@ const _ESCALAS_ALT = {
   mensual: { tabla: "rendimiento_mensual", col: "mes",  cols: () => REND_COLS_MENSUAL, desde: () => _monthsAgoYYYYMM(LOAD_WINDOW.mensual) },
   diario:  { tabla: "rendimiento_diario",  col: "date", cols: () => REND_COLS_DIARIO,  desde: () => _daysAgoISO(LOAD_WINDOW.diario) }
 };
-function _fetchEscalaRaw(esc) {
+function _fetchEscalaRaw(esc, desde = _ESCALAS_ALT[esc].desde()) {
   const c = _ESCALAS_ALT[esc];
-  return fetchAllPages(c.tabla, c.col, { columns: c.cols(), gte: { col: c.col, value: c.desde() } });
+  return fetchAllPages(c.tabla, c.col, { columns: c.cols(), gte: { col: c.col, value: desde } });
+}
+
+// Descarga CONDICIONAL genérica (ver shared/versionDatos.ts): las filas de
+// `tabla` con `col >= desde`, reutilizando las del snapshot `parte` si la versión
+// y el conteo coinciden. `pDv` = la versión ya pedida por quien llama, ANTES de
+// cualquier descarga; `verDe(dv)` arma la clave; `traer()` es la descarga normal.
+// Devuelve { rows, ver, desde, reutilizado, recortado }.
+async function _descargaCondicional({ parte, tabla, col, desde, pDv, verDe, traer }) {
+  const snap = await snapshotLoad(parte);
+  if (snap && snap.ver && Array.isArray(snap.rows) && snap.rows.length) {
+    const desdeSnap = snap.desde || null;
+    const [dv, n] = await Promise.all([pDv, _contarFilas(tabla, col, desdeSnap)]);
+    const ver = verDe(dv);
+    const rows = reusarFilas({ rows: snap.rows, ver: snap.ver, desde: desdeSnap }, ver, desde, col, n);
+    perfNote("reuso:" + parte, { reutilizado: !!rows, conteo: n, filas: snap.rows.length, igualVer: ver === snap.ver });
+    if (rows) return { rows, ver, desde, reutilizado: true, recortado: rows.length !== snap.rows.length };
+    return { rows: await traer(), ver, desde, reutilizado: false };
+  }
+  const rows = await traer();
+  return { rows, ver: verDe(await pDv), desde, reutilizado: false };
+}
+
+// Filas crudas de la escala (mensual/diario), reutilizando las del caché si no
+// cambiaron.
+function _obtenerEscala(esc, pDv) {
+  const c = _ESCALAS_ALT[esc];
+  const desde = c.desde();
+  const rol = STATE.userRole || null;
+  return _descargaCondicional({
+    parte: esc, tabla: c.tabla, col: c.col, desde, pDv,
+    verDe: dv => claveVersion(dv, esc, rol),
+    traer: () => _fetchEscalaRaw(esc, desde)
+  });
 }
 function _applyEscalaRows(esc, rows) {
   if (esc === "mensual") _applyMensualRows(rows);
@@ -1650,21 +1817,35 @@ function _applyEscalaRows(esc, rows) {
 }
 // Se guardan las filas CRUDAS: al pintarlas desde el caché pasan por el mismo
 // _applyEscalaRows con los mapas del núcleo vigente (nombre/KAM/tagging), así
-// que no quedan atadas a los mapas con los que se descargaron.
-function _guardarEscalaCache(esc, rows) {
-  if (!STATE.userId) return;
-  snapshotSave({ rows, fp: huellaDatos([rows]) }, esc);
+// que no quedan atadas a los mapas con los que se descargaron — por eso un
+// cambio de KAM o de tagging NO obliga a re-descargarlas.
+// `res` = lo que devolvió _obtenerEscala. Si se reutilizaron tal cual (o lo que
+// se pintó desde el caché es idéntico: `igual`), solo se renueva la marca de
+// verificación con la clave vigente; si la ventana avanzó y se recortaron, se
+// reescribe el snapshot ya recortado (escritura LOCAL, no es egress) para que la
+// próxima apertura no pinte primero días/meses que ya salieron de la ventana.
+function _guardarEscalaCache(esc, res, igual = false) {
+  if (!STATE.userId || !res) return;
+  if (igual || (res.reutilizado && !res.recortado)) snapshotTouch(esc, { ver: res.ver });
+  else snapshotSave({ rows: res.rows, fp: huellaDatos([res.rows]), ver: res.ver, desde: res.desde }, esc);
 }
 
 // ── LAZY LOAD MENSUAL / DIARIO ────────────────────────────────────────────────
-// LAS PROMESAS EN VUELO NO SON UN LUJO: la precarga en idle (app.ts) puede estar
-// a mitad del fetch cuando el usuario cambia de escala. Sin esto, el flag
+// SOLO BAJO DEMANDA (sep-2026, egress): al cambiar de escala o al abrir una
+// vista que las necesita (Calculadora/Presentación leen la mensual; Configuración
+// lista CLIDs/sub-flotas de las tres). Ya NO hay precarga en idle: bajaba
+// mensual + diario (+ sus columnas) en CADA apertura aunque el usuario nunca
+// saliera de la semanal — en producción, ~6,5 MB de 7 MB por apertura. Cada
+// escala cargada queda en IndexedDB y la siguiente visita solo pregunta si
+// cambió (ver _obtenerEscala).
+// LAS PROMESAS EN VUELO NO SON UN LUJO: dos llamadores (p.ej. switchMode y el
+// render de una pestaña) pueden pedir la misma escala a la vez. Sin esto, el flag
 // (_mensualLoaded / _diarioLoaded) recién se marca AL FINAL, así que el segundo
 // llamador arrancaba un fetch duplicado de la tabla entera y las dos respuestas
 // se pisaban al escribir STATE. Ahora el segundo espera al primero.
 //
-// `silent` apaga el spinner global: la precarga es invisible por diseño, no debe
-// tapar la pantalla que el usuario está leyendo.
+// `silent` apaga el spinner global: las cargas pedidas por una pestaña (que ya
+// muestra su propio "Cargando…") no deben tapar la pantalla entera.
 const _scaleInflight = { mensual: null, diario: null };
 
 export function loadMensualIfNeeded(silent) {
@@ -1687,13 +1868,13 @@ async function _loadMensual(silent) {
   if (!silent) showLoad(true, t("datos.cargandoMensual"));
   const epoca = STATE._authEpoch || 0;
   try {
-    const rendM = await _fetchEscalaRaw("mensual");
+    const res = await _obtenerEscala("mensual", _dataVersion());
     // La sesión cambió mientras llegaba (logout / sesión inválida, ver auth.ts):
     // estas filas son de otra sesión, no se aplican ni se guardan.
     if ((STATE._authEpoch || 0) !== epoca) return;
-    _applyMensualRows(rendM);
+    _applyMensualRows(res.rows);
     perfMark("net:mensual");
-    _guardarEscalaCache("mensual", rendM);
+    _guardarEscalaCache("mensual", res);
   } catch(err) {
     // Con la sesión ya descartada (época cambiada) el error es esperable y no
     // hay nada que avisar: la pantalla ya es la de login.
@@ -1770,10 +1951,10 @@ async function _loadDiario(silent) {
   if (!silent) showLoad(true, t("datos.cargandoDiario"));
   const epoca = STATE._authEpoch || 0;
   try {
-    const rendD = await _fetchEscalaRaw("diario");
+    const res = await _obtenerEscala("diario", _dataVersion());
     if ((STATE._authEpoch || 0) !== epoca) return;   // ver _loadMensual
-    _applyDiarioRows(rendD);
-    _guardarEscalaCache("diario", rendD);
+    _applyDiarioRows(res.rows);
+    _guardarEscalaCache("diario", res);
   } catch (err) {
     if ((STATE._authEpoch || 0) === epoca) showBanner(false, t("datos.errCargarDiario") + err.message);
   } finally {
@@ -1843,7 +2024,16 @@ function _applyDiarioRows(rendD) {
 export async function loadConversionIfNeeded() {
   if (STATE._conversionLoaded) return;
   try {
-    const rows = await fetchAllPages("conversion_pais", "mes");
+    // Tabla entera (no hay ventana), reutilizada del caché si no cambió.
+    const rol = STATE.userRole || null;
+    const res = await _descargaCondicional({
+      parte: "conversion", tabla: "conversion_pais", col: "mes", desde: null, pDv: _dataVersion(),
+      verDe: dv => claveVersionTabla(dv, "conversion_pais", rol),
+      traer: () => fetchAllPages("conversion_pais", "mes")
+    });
+    const rows = res.rows;
+    if (res.reutilizado) snapshotTouch("conversion", { ver: res.ver });
+    else snapshotSave({ rows, ver: res.ver, desde: null }, "conversion");
     STATE.conversionData = (rows || []).map(r => {
       const clid = (r.clid || "").trim();
       return {
@@ -2212,7 +2402,11 @@ export async function handleFile(file, type, inputEl) {
           // Refresca semanal y, además, invalida mensual/diario/conversión
           // (invalidarDerivados): un upload de partners/flotas cambia el KAM o el
           // tagging con el que se armaron esos datasets.
-          await refrescarTrasEscritura();
+          await refrescarTrasEscritura(
+            type === "rendimiento"        ? ["rendimiento"]
+            : type === "rendimientoMensual" ? ["rendimiento_mensual"]
+            : type === "rendimientoDiario"  ? ["rendimiento_diario"]
+            : type === "conversion"         ? ["conversion_pais"] : []);
         } catch(err) {
           showBanner(false, describeUploadError(type, err));
           // Cancelar o un archivo que no pasa la validación no son fallas del
@@ -2248,6 +2442,7 @@ export async function invalidarDerivados() {
   // y dejaría _mensualLoaded=true con los datos viejos.
   const enVuelo = [_scaleInflight.mensual, _scaleInflight.diario].filter(Boolean);
   if (enVuelo.length) await Promise.allSettled(enVuelo);
+  _dvOlvidar();   // viene de una escritura: la versión hay que volver a leerla
   STATE._mensualLoaded = false;
   STATE._diarioLoaded = false;
   STATE._conversionLoaded = false;
@@ -2266,6 +2461,8 @@ alCerrarSesion(() => {
   STATE._conversionLoaded = false;
   _colsFull.semanal = _colsFull.mensual = _colsFull.diario = null;
   _scaleInflight.mensual = _scaleInflight.diario = null;
+  _dvNoDisponible = false;
+  _dvOlvidar();
   STATE._allPeriods = null;
   STATE._loadedFrom = null;
   STATE._semanalData = null;
@@ -2280,7 +2477,17 @@ alCerrarSesion(() => {
 // semanal (loadFromSupabase) + derivados. Devuelve si el refresco de la BASE
 // quedó completo (el valor de loadFromSupabase): quien llama NO debe pintar un
 // banner verde si es false — el patrón de calcSaveMetas (I4).
-export async function refrescarTrasEscritura() {
+// `tablas`: las tablas de rendimiento que se acaban de escribir (subida de Excel,
+// borrado). Su snapshot de escala se descarta EXPLÍCITAMENTE: la versión
+// (data_version) ya cambia con cualquier escritura auditada, pero invalidar lo
+// que uno mismo acaba de escribir no debería depender de nada más.
+export async function refrescarTrasEscritura(tablas = []) {
+  for (const [esc, tabla] of Object.entries(TABLA_DE_ESCALA)) {
+    if (!tablas.includes(tabla)) continue;
+    if (esc !== "semanal") snapshotDrop(esc);   // la semanal la rehace loadFromSupabase
+    snapshotDrop("cols-" + esc);
+  }
+  if (tablas.includes("conversion_pais")) snapshotDrop("conversion");
   const ok = await loadFromSupabase();
   try { await invalidarDerivados(); } catch (e) { console.error("invalidarDerivados:", e); }
   return ok !== false;

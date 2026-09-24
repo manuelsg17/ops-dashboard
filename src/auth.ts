@@ -55,6 +55,19 @@ const _authLock = async (name, acquireTimeout, fn) => {
   }
 };
 
+// ── TELEMETRÍA "login" (sep-2026) ───────────────────────────────────────────
+// Se registraba un "login" en CADA evento SIGNED_IN, y supabase-js también lo
+// emite al recuperar la sesión (volver a la pestaña, refresco de fondo): en
+// producción, 90–212 "logins" por día de UNA persona. Ahora solo cuenta un
+// ingreso de verdad:
+//   1. el formulario (handleLogin marca `_loginPendiente` ANTES de llamar a
+//      signInWithPassword, que emite SIGNED_IN antes de resolver), o
+//   2. la llegada por un enlace de invitación/acceso (el token viene en el hash
+//      de la URL). Se lee ACÁ, antes de crear el cliente: al inicializarse,
+//      supabase-js consume el hash y lo borra de la barra.
+let _loginPendiente = false;
+let _llegoPorEnlace = /(^|[#&])access_token=/.test((typeof location !== "undefined" && location.hash) || "");
+
 export const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { lock: _authLock }
 });
@@ -309,8 +322,15 @@ export async function initAuth() {
   } else {
     showLoginScreen();
   }
+  if (_llegoPorEnlace && session) logAccess("login", null);   // ver _loginPendiente
+  _llegoPorEnlace = false;
   sb.auth.onAuthStateChange((event, session) => {
-    if (event === "SIGNED_IN")      { showApp(session.user); logAccess("login", null); }
+    if (event === "SIGNED_IN") {
+      showApp(session.user);
+      // Solo el SIGNED_IN del formulario es un ingreso; los que emite
+      // supabase-js al recuperar la sesión no (ver _loginPendiente).
+      if (_loginPendiente) { _loginPendiente = false; logAccess("login", null); }
+    }
     if (event === "TOKEN_REFRESHED") {
       // Sesión que no se pudo confirmar al abrir (sin red) y que supabase-js
       // logró refrescar después: se entra sin volver a pedir la contraseña.
@@ -354,8 +374,10 @@ export async function handleLogin() {
   }, 15000);
 
   try {
+    _loginPendiente = true;
     const { error } = await sb.auth.signInWithPassword({ email, password });
     if (error) {
+      _loginPendiente = false;
       errEl.textContent = t("login.errCred");
       btn.textContent   = t("login.submit");
       btn.disabled      = false;
@@ -363,6 +385,7 @@ export async function handleLogin() {
     // En exito NO se restaura el boton a proposito: el handler de SIGNED_IN
     // (showApp) oculta la pantalla de login entera.
   } catch (e) {
+    _loginPendiente = false;
     errEl.textContent = t("login.errOtro") + ((e && e.message) || e);
     btn.textContent   = t("login.submit");
     btn.disabled      = false;

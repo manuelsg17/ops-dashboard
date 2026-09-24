@@ -147,48 +147,23 @@ export function initApp() {
   // pesada la que casi nunca llegaba a tiempo — de ahi que "Presentacion 2.0"
   // se sintiera la mas lenta al entrar. Ahora va primera.
   //
-  // …PERO EL CHUNK NUNCA FUE LO MÁS CARO. Medido en ago-2026: abrir Presentación
-  // 2.0 en frío esperaba además a `ensureFullRendColumns()`, que switchTab AWAITEA
-  // antes de pintar — un fetch de las 26 columnas diferidas sobre la ventana
-  // entera. Por eso se sentía lenta "solo la primera vez" y rápida después: el
-  // chunk ya estaba precargado, la descarga de datos no. Lo mismo con mensual y
-  // diario, que hacen su propio lazy load al primer cambio de escala.
-  //
-  // Ahora la cadena de idle precarga DATOS, no solo módulos. El orden es por
-  // costo de espera percibido: primero lo que bloquea el render de una pestaña
-  // (columnas), después las escalas alternativas. Diario va último: es el dataset
-  // más grande y el que menos se abre.
-  // Si la sesión cambió mientras cargaba (logout, o la sesión provisional no se
-  // pudo validar — Ola 2, V1, ver auth.ts), no se precarga nada para ella.
+  // DATOS: YA NO SE PRECARGAN EN IDLE (sep-2026, egress). La cadena de idle
+  // bajaba, en CADA apertura, las columnas diferidas + la escala mensual + la
+  // diaria (+ las columnas de ambas) aunque el usuario nunca saliera de la
+  // semanal: medido en local, 11,5 de 11,8 MB por apertura; en producción el
+  // plan gratuito de Supabase (5 GB/ciclo) se pasó con UN usuario activo. Ahora
+  // cada dataset se pide cuando hace falta (switchMode, switchTab con
+  // _NEED_FULL_COLS/_NEED_MENSUAL, setRendLine/setMetasLine("fleet"), el portal)
+  // y queda en IndexedDB: la segunda visita solo pregunta si cambió (ver
+  // shared/versionDatos.ts). El costo es la espera de la PRIMERA vez que se abre
+  // una escala o una de esas pestañas en el navegador — con su "Cargando…".
   const _epoca = STATE._authEpoch || 0;
-  const _prefetchData = async () => {
-    const idle = window.requestIdleCallback || (cb => setTimeout(cb, 800));
-    // Cada paso vuelve a mirar la época: la cadena dura varios segundos y la
-    // sesión puede descartarse en el medio (V1, ver auth.ts).
-    const paso = fn => new Promise(res => idle(() => {
-      if ((STATE._authEpoch || 0) !== _epoca) return res();
-      Promise.resolve(fn()).then(res, res);
-    }));
-    // Fallo silencioso a propósito: es una optimización. Si algo no llega, la
-    // pestaña lo pide igual por el camino de siempre.
-    await paso(() => ensureFullRendColumns());
-    // Con la escala guardada en mensual/diaria (V3), el paso de arriba completa
-    // ESA escala y la semanal quedaba sin sus columnas diferidas: el portal
-    // (que no las pide al cambiar de línea) mostraba la aceptación Fleet en "—"
-    // al pasar a semanal. Ya pasaba antes de V3 (restoreFilters cambiaba de
-    // escala antes de esta precarga); no-op si ya estaban.
-    await paso(() => ensureFullRendColumns("semanal"));
-    await paso(() => loadMensualIfNeeded(true));
-    await paso(() => ensureFullRendColumns("mensual"));
-    await paso(() => loadDiarioIfNeeded(true));
-    await paso(() => ensureFullRendColumns("diario"));
-  };
   const _prefetch = () => {
     if ((STATE._authEpoch || 0) !== _epoca) return;
+    // Solo módulos JS (archivos estáticos del hosting, no egress de Supabase).
     if (typeof window.prefetchViewModules === "function") {
       window.prefetchViewModules(["present2", "calculator", "rawdata", "seguimiento"]);
     }
-    _prefetchData().catch(() => {});
   };
   Promise.resolve(loadFromSupabase()).then(_prefetch, _prefetch);
 
@@ -351,6 +326,10 @@ export async function switchMode(mode) {
   if (typeof destroyAllCharts === "function") destroyAllCharts();
 
   // Lazy load según escala; _semanalData es la referencia fija al dataset semanal filtrado
+  // (Calculadora/Presentación leen además la mensual en cualquier escala.)
+  if (mode !== "mensual" && _NEED_MENSUAL.has(STATE.curTab) && typeof loadMensualIfNeeded === "function") {
+    try { await loadMensualIfNeeded(true); } catch (e) { /* nunca bloquear el render */ }
+  }
   if (mode === "mensual") {
     await loadMensualIfNeeded();
     STATE.rawData = STATE.rawDataMensual;
@@ -412,6 +391,14 @@ export async function switchMode(mode) {
 // sobrevive al cambio de escala porque el panel no se desmonta. Ver el comentario
 // en switchMode.
 export const _NEED_FULL_COLS = new Set(["present2", "rawdata", "calculator"]);
+// Pestañas que leen la escala MENSUAL en cualquier escala (la Calculadora reparte
+// sobre el último mes; Presentación arma los criterios TukTuk con
+// rawDataMensualTuktuk). Antes llegaba sola por la precarga en idle; ahora se
+// pide al abrirlas. Mismo conjunto que _NEED_MENSUAL_LOAD de data.ts.
+export const _NEED_MENSUAL = new Set(["present2", "calculator"]);
+// Configuración lista los CLIDs y sub-flotas vistos en las TRES escalas
+// (configView._datosFilas/_subflotasPorClid).
+const _NEED_TODAS_ESCALAS = new Set(["config"]);
 const _PANELES_DE_ESCALA = ["present2Content", "calculatorContent", "rawdataContent"];
 export function invalidarPanelesDeEscala() {
   _PANELES_DE_ESCALA.forEach(id => {
@@ -572,6 +559,29 @@ export function switchTab(tab) {
       if (_NEED_FULL_COLS.has(tab) && typeof ensureFullRendColumns === "function") {
         try { await ensureFullRendColumns(); } catch (e) { /* nunca bloquear el render */ }
         if (STATE._tabRenderId !== tokenAtDispatch || STATE.curTab !== tab) return;
+      }
+      if (_NEED_MENSUAL.has(tab) && STATE.userRole !== "partner" && typeof loadMensualIfNeeded === "function") {
+        try { await loadMensualIfNeeded(true); } catch (e) { /* nunca bloquear el render */ }
+        if (STATE._tabRenderId !== tokenAtDispatch || STATE.curTab !== tab) return;
+      }
+      // Configuración NO espera (sus listas son útiles con la semanal sola): pide
+      // mensual y diaria por detrás y se repinta una vez si llegó algo nuevo.
+      if (_NEED_TODAS_ESCALAS.has(tab) && typeof loadMensualIfNeeded === "function") {
+        const faltaban = !STATE._mensualLoaded || !STATE._diarioLoaded;
+        if (faltaban) {
+          Promise.all([loadMensualIfNeeded(true), loadDiarioIfNeeded(true)]).then(() => {
+            if (STATE.curTab !== tab) return;
+            // Solo las dos secciones que leen las tres escalas (las otras —usuarios,
+            // monitoreo…— se re-pedirían enteras). Si hay un campo con el foco
+            // (alguien tipeando en el buscador), solo la lista, sin rehacer el form.
+            const sec = CONFIG_STATE.section;
+            if (sec !== "partners" && sec !== "clasificacion") return;
+            const a = document.activeElement, box = document.getElementById("configContent");
+            const tipeando = !!(a && box && box.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName));
+            if (!tipeando) renderConfig();
+            else if (sec === "partners" && typeof renderConfigResults === "function") renderConfigResults();
+          }).catch(() => {});
+        }
       }
 
       if (tab === "rend"        && STATE.rawData.length)                           renderRend();

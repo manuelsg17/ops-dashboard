@@ -1310,7 +1310,7 @@ export async function deleteDashboardData() {
     if (n === 0) { showBanner(false, msgSinFilas()); return; }
     monthInp.value = "";
     if (table === "metas") { STATE.metasMesSel = null; STATE.metasMesSelYear = null; }
-    const okR = await refrescarTrasEscritura();
+    const okR = await refrescarTrasEscritura([table]);
     const msg = t("cfg.eliminadoTabla", { t: labels[table], m: mes ? `(${etiquetaMes})` : t("cfg.todo") }) +
       " · " + t("cfg.nFilas", { n: n.toLocaleString("es-PE") }) +
       (n !== previstas ? " " + t("cfg.seEsperaban", { n: nTxt }) : "");
