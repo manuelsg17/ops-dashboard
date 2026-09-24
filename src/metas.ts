@@ -582,7 +582,7 @@ function _mtPartnersHTML(ctx) {
   ).join("");
   const vista = segmented({
     options: [{ value: "tabla", label: t("mt.vista.tabla"), icon: "table" },
-              { value: "tarjetas", label: t("mt.vista.tarjetas"), icon: "copy" }],
+              { value: "tarjetas", label: t("mt.vista.tarjetas"), icon: "chart-bar" }],
     value: _MT.vista, act: "metasSetVista", ariaLabel: t("mt.vista.aria")
   });
   const tools = `<div class="mt-ptools" data-html2canvas-ignore="true"><div class="mt-fchips" role="group" aria-label="${_E(t("mt.filtro.aria"))}">${chips}</div>${vista}</div>`;

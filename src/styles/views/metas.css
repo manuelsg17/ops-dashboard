@@ -56,7 +56,7 @@
 .mt-info:hover { color: var(--color-text-muted); }
 
 /* ── Tarjetas KPI del resumen ───────────────────────────────────────────── */
-.mt-kpis { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: var(--space-3); }
+.mt-kpis { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: var(--space-5); }
 .mt-kpi__sub { font-weight: var(--weight-regular); color: var(--color-text-subtle); }
 .mt-kpi__value--meta { color: var(--color-text-muted); }
 .mt-proj { color: var(--color-text-muted); }
@@ -82,10 +82,8 @@
 .mt-pct { font-variant-numeric: tabular-nums; }
 
 /* ── Tablas por ciudad / KAM ────────────────────────────────────────────── */
-.mt-gtable th, .mt-gtable td { padding: 6px var(--space-3); }
-.mt-gtable tbody tr.mt-grp-first > * { border-top: 1px solid var(--color-border-strong); }
+.mt-gtable tbody tr.mt-grp-first > * { border-top: 1px solid var(--color-border); }
 .mt-gtable tbody tr:first-child > * { border-top: 0; }
-.mt-gtable tbody td { border-bottom-color: transparent; }
 .mt-gtable th.mt-ent { vertical-align: top; }
 .mt-ent {
   width: 1%; min-width: 150px;
@@ -96,7 +94,7 @@
 .mt-kpiname { color: var(--color-text-muted); white-space: nowrap; }
 .mt-pctcell { min-width: 150px; }
 .mt-pctwrap { display: flex; align-items: center; gap: var(--space-2); }
-.mt-pctwrap .mt-bar { flex: 1 1 auto; min-width: 60px; max-width: 160px; }
+.mt-pctwrap .mt-bar { flex: 1 1 auto; min-width: 60px; max-width: 160px; height: 6px; }
 .mt-gtable tbody tr:hover td, .mt-gtable tbody tr:hover th { background: transparent; }
 
 /* ── Partners: herramientas ─────────────────────────────────────────────── */
@@ -122,14 +120,16 @@
 .mt-fchip--sin   .mt-fchip__dot { background: var(--color-border-input); }
 .mt-filtro-vacio {
   padding: var(--space-6); text-align: center; font-size: var(--text-md); color: var(--color-text-muted);
-  background: var(--color-surface); border: 1px dashed var(--color-border-strong); border-radius: var(--radius-md);
+  background: var(--color-surface); border: 1px dashed var(--color-border-strong); border-radius: var(--radius-card);
 }
 
 /* ── Partners: tabla ────────────────────────────────────────────────────── */
 .mt-ptable { font-size: var(--text-sm); }
-.mt-ptable th, .mt-ptable td { padding: 5px 6px; }
+.mt-ptable th, .mt-ptable td { padding: 7px var(--space-2); }
 .mt-ptable .ui-badge { padding: 1px 5px; }
 .mt-ptable thead th { vertical-align: bottom; }
+/* Partner/Ciudad/KAM (rowspan=2) arriba, a la altura de los grupos de KPI. */
+.mt-ptable thead th[rowspan] { vertical-align: top; }
 .mt-ptable thead th.mt-grp { text-align: center; color: var(--color-text); border-left: 1px solid var(--color-border); }
 .mt-ptable thead th.mt-grp-start,
 .mt-ptable tbody > tr > :nth-child(3n + 4) { border-left: 1px solid var(--color-border); }
@@ -143,8 +143,8 @@
 .mt-sortbtn:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
 .mt-ptable th.ui-num .mt-sortbtn { justify-content: flex-end; }
 th[aria-sort="ascending"] .mt-sortbtn, th[aria-sort="descending"] .mt-sortbtn { color: var(--color-text); }
-.mt-sticky { position: sticky; left: 0; z-index: 1; background: var(--color-surface); border-right: 1px solid var(--color-border); }
-.mt-ptable thead th.mt-sticky { z-index: 3; background: var(--color-surface-muted); }
+.mt-sticky { position: sticky; left: 0; z-index: 1; background: var(--color-surface); border-right: 1px solid var(--color-border-soft); }
+.mt-ptable thead th.mt-sticky { z-index: 3; background: var(--color-surface); }
 .mt-ptable tbody tr:hover .mt-sticky { background: var(--color-surface-muted); }
 .mt-pname { font-weight: var(--weight-semibold); white-space: nowrap; max-width: 260px; }
 .mt-pname__txt { display: inline-block; max-width: 170px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
@@ -152,19 +152,19 @@ th[aria-sort="ascending"] .mt-sortbtn, th[aria-sort="descending"] .mt-sortbtn { 
 .mt-row--sinmeta td, .mt-row--sinmeta th { color: var(--color-text-muted); }
 
 /* ── Partners: tarjetas (vista opcional) ────────────────────────────────── */
-.mt-pgrid { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.mt-pgrid { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 .mt-pcard {
   display: flex; flex-direction: column; gap: var(--space-2); min-width: 0;
-  padding: var(--space-3) var(--space-4);
-  background: var(--color-surface); border: 1px solid var(--color-border);
-  border-radius: var(--radius-md); box-shadow: var(--shadow-sm);
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-surface); border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-card); box-shadow: var(--shadow-card);
 }
 .mt-pcard .mt-pname { display: flex; align-items: center; max-width: none; font-size: var(--text-base); }
 .mt-pcard .mt-pname__txt { max-width: none; flex: 0 1 auto; min-width: 0; }
 .mt-pcard--sinmeta { background: var(--color-surface-muted); }
 .mt-pcard__sub { display: flex; align-items: center; font-size: var(--text-sm); color: var(--color-text-muted); }
 .mt-pcard__note { font-size: var(--text-xs); color: var(--color-text-subtle); }
-.mt-pk { display: flex; flex-direction: column; gap: 4px; padding-top: var(--space-2); border-top: 1px solid var(--color-border); }
+.mt-pk { display: flex; flex-direction: column; gap: 4px; padding-top: var(--space-2); border-top: 1px solid var(--color-border-soft); }
 .mt-pk__top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .mt-pk__label { font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--color-text-muted); }
 .mt-pk__val { font-size: var(--text-sm); font-variant-numeric: tabular-nums; color: var(--color-text); text-align: right; }
