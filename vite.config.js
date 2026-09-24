@@ -1,17 +1,12 @@
 import { defineConfig } from "vite";
 
-// Deploy: GitHub Pages sirve el repo bajo /ops-dashboard/ (sin dominio propio,
-// ver .github/workflows/static.yml) — sin ese base, los assets buildeados
-// apuntan a la raíz del dominio y 404ean en producción.
-//
-// OJO: `command` NO sirve para distinguir esto — `vite preview` reporta el
-// mismo command ("serve") que `vite dev`, así que un check por command deja
-// el preview local (que sirve el dist/ YA buildeado con rutas /ops-dashboard/
-// horneadas) sirviendo en "/" → 404 en cada asset. Se detecta el entorno real
-// de CI (GITHUB_ACTIONS, la única corrida que empuja a Pages) en su lugar.
+// Deploy: SOLO Vercel desde el 24-sep-2026 (se dejó GitHub Pages, que servía
+// bajo /ops-dashboard/ y obligaba a un `base` distinto en CI). Vercel sirve en
+// la raíz de su dominio, así que el base es "/" en todos lados: el build de CI,
+// el de Vercel y el local son idénticos.
 export default defineConfig(() => ({
   root: ".",
-  base: process.env.GITHUB_ACTIONS ? "/ops-dashboard/" : "/",
+  base: "/",
   server: { port: 8765, host: "127.0.0.1" },
   preview: { port: 4173, host: "127.0.0.1" },
   build: {

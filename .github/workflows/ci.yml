@@ -1,32 +1,23 @@
-# Simple workflow for deploying static content to GitHub Pages
-name: Deploy static content to Pages
+# CI — chequeos de calidad en cada push a main.
+#
+# DESDE EL 24-SEP-2026 EL DEPLOY ES SOLO VERCEL (decisión de Manuel): Vercel
+# construye y publica solo cada push a main (ver vercel.json). Este workflow
+# era el deploy a GitHub Pages; se quitó la parte de publicar y se conservaron
+# los chequeos, que Vercel no corre (Vercel solo hace `npm run build`). Si un
+# chequeo falla acá, Vercel IGUAL publica: mirar el estado de este workflow
+# después de cada push (gh run list).
+name: CI (chequeos)
 
 on:
-  # Runs on pushes targeting the default branch
   push:
     branches: ["main"]
-
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
   contents: read
-  pages: write
-  id-token: write
-
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
-# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
 
 jobs:
-  # Single deploy job since we're just deploying
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  checks:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -70,20 +61,8 @@ jobs:
         run: npm run check:drift
       - name: Tests del núcleo de cálculo
         # Los tests de src/domain fijan reglas de negocio (snapshot vs flujo,
-        # proyecciones, ponderados). Corrían solo a mano; acá el deploy se
-        # detiene si un cálculo cambia de significado sin querer.
+        # proyecciones, ponderados). Si un cálculo cambia de significado sin
+        # querer, este workflow queda en rojo (Vercel publica igual: revisarlo).
         run: npm test
       - name: Build
         run: npm run build
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          # index.html referencia módulos ES con imports "bare" (npm) — sin
-          # este build, GitHub Pages sirve el JS crudo y el navegador no puede
-          # resolverlos (la SPA nunca arranca: botones muertos, nada renderiza).
-          path: './dist'
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v5

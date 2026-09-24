@@ -10,7 +10,7 @@ Dashboard para KAMs (partner performance): modulos **TypeScript** bundleados con
 - XLSX para subir Excels — vive SOLO en `src/workers/excelWorker.ts` (Web Worker, parsea sin bloquear el hilo principal); html2canvas + jspdf para PDFs/imagenes — carga diferida via `src/shared/lazyLibs.ts` (`ensurePdfLibs()`/`ensureHtml2Canvas()`), nunca en el bundle eager
 - Las librerias vienen de **npm** (pineadas en `package-lock`), NO de CDN. Ya no se usa SRI
 - CSP estricta: `script-src 'self'` (sin `'unsafe-inline'`, sin dominios externos). Ver A2 abajo
-- **Deploy dual**: GitHub Pages (`manuelsg17.github.io/ops-dashboard`, workflow en `.github/workflows/static.yml`) + Vercel (`vercel.json`, headers HTTP que Pages no soporta — HSTS/X-Frame-Options/frame-ancestors/etc). Los dos conviven; `vite.config.js` detecta `GITHUB_ACTIONS` para el `base` de Pages, Vercel sirve en la raiz de su propio dominio sin config adicional.
+- **Deploy: SOLO Vercel** (decisión de Manuel, 24-sep-2026): `https://ops-dashboard-opsteam1.vercel.app`, publica solo cada push a `main` (`vercel.json`: build + headers HTTP HSTS/X-Frame-Options/frame-ancestors). GitHub Pages quedó retirado: el workflow pasó a `.github/workflows/ci.yml` y solo corre chequeos (lint, typecheck, check:drift, tests, build) — **Vercel publica aunque el CI esté en rojo**, así que después de cada push hay que mirar `gh run list`. `base` de Vite = "/" en todos lados.
 
 ## Estado actual
 
