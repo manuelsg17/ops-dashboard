@@ -14,7 +14,8 @@ import { segmented, btn, badge, alertBox, emptyState, progressRing } from "./sha
 import { iconSvg } from "./shared/icons";
 import { chartTokens, seriesColor } from "./shared/chartTheme";
 import { rendTopPartners, valorMetricaPartner, indiceBase100, ESTILO_SUAVE } from "./charts.js";
-import { metasResumenPais, _metasFechasDelMes, _metasFechasMesCompleto } from "./metas.js";
+import { metasResumenPais, _metasFechasDelMes, _metasFechasMesCompleto, etiquetaMesCompleto } from "./metas.js";
+import { variacionPct, mesAnterior } from "./domain/vsMesAnterior";
 import { reportYM, diasMesReporteDe } from "./shared/mesReporte.js";
 import { parseLocalDate } from "./core/dates";
 import { opcionesMesMeta, mesNumero } from "./domain/mesesMeta";
@@ -137,12 +138,23 @@ export function _rendPeriodLabel() {
        : STATE.curMode === "diario"  ? t("rend.per.ultimoDia")
        : t("rend.per.ultimaSemana");
 }
+// Escala MENSUAL con el último período = mes EN CURSO: mes (1-12) del mes
+// anterior, cuyo resultado FINAL es contra lo que se compara (decisión de
+// Manuel, 24-sep-2026: "tiene que compararse contra el resultado final del mes
+// anterior, así de simple"). La variación de un mes a medias contra uno completo
+// sale negativa por construcción, así que el rótulo lo dice en todas las
+// secciones: "vs agosto (mes completo)" — el mismo texto que Metas. 0 en
+// cualquier otro caso. Se fija al comienzo de cada render (_renderRendImpl).
+let _rdMesPrevCompleto = 0;
 function _rdCompLabel() {
+  if (_rdMesPrevCompleto && STATE.curMode === "mensual") return etiquetaMesCompleto(_rdMesPrevCompleto, false);
   return STATE.curMode === "mensual" ? t("rend.cmp.mesAnterior")
        : STATE.curMode === "diario"  ? t("rend.cmp.diaAnterior")
        : t("rend.cmp.semAnterior");
 }
-const _rdPrevLbl = () => t("rend.cmp.vs", { p: _rdCompLabel() });
+const _rdPrevLbl = () => _rdMesPrevCompleto && STATE.curMode === "mensual"
+  ? etiquetaMesCompleto(_rdMesPrevCompleto, true)
+  : t("rend.cmp.vs", { p: _rdCompLabel() });
 
 // ── Colores categóricos (tokens) ─────────────────────────────────────────────
 // Ciudad: posición fija en CITIES (Lima = cat-1). KAM: posición en la lista
@@ -184,7 +196,10 @@ function _rdDelta(c, p, o = {}) {
   if (p === 0)
     return c > 0 ? `<span class="ui-delta ui-delta--good" title="${escapeHTML(t("bdg.primero", { c: comp }))}">NEW</span>`
                  : `<span class="ui-delta ui-delta--flat" title="${escapeHTML(t("bdg.sinMov"))}">--</span>`;
-  const v  = ((c - p) / p) * 100;
+  // Misma cuenta que Metas (domain/vsMesAnterior).
+  const v  = variacionPct(c, p);
+  if (v == null)
+    return `<span class="ui-delta ui-delta--na" title="${escapeHTML(t("bdg.sinDato"))}">N/A</span>`;
   const up = v >= 0;
   const s  = up ? "+" : "";
   const tone = Math.abs(v) < 0.05 ? "flat" : (up !== !!o.invert ? "good" : "bad");
@@ -219,16 +234,12 @@ const RD_VIEW = "rd-view rd-view--suave";
 // No se usa ui.kpiCard() porque la cifra lleva su `data-num` y el delta sigue
 // la semántica de bdgMode (NEW, nada en diario).
 //
-// `sinDelta` (escala mensual con el mes EN CURSO): en vez del delta contra el
-// mes anterior COMPLETO — que con un mes parcial da siempre una caída que no es
-// real — un sello "Mes en curso". Mismo criterio que Metas (_metasPrevFechas).
+// Escala mensual con el mes EN CURSO: el delta es contra el resultado FINAL del
+// mes anterior y el rótulo lo dice ("vs agosto (mes completo)", _rdPrevLbl).
 // `extra`: HTML ya escapado de una línea secundaria (p.ej. el acumulado del
 // rango cuando el valor grande pasa a ser el del mes).
 function _rdKpi(o) {
-  const d = o.sinDelta ? "" : _rdDelta(o.cur, o.prev, { invert: o.invert });
-  const selloMes = o.sinDelta && STATE.curMode !== "diario"
-    ? `<div class="rd-tile__delta" title="${escapeHTML(t("rd.mesCurso.sinDelta"))}">${badge(t("rd.mesCurso.chip"), "neutral", { icon: "calendar" })}</div>`
-    : "";
+  const d = _rdDelta(o.cur, o.prev, { invert: o.invert });
   const g = o.goal;
   const conAnillo = !!g && g.pct != null && Number.isFinite(g.pct);
   const slot = conAnillo
@@ -238,7 +249,7 @@ function _rdKpi(o) {
     ${slot ? `<div class="rd-tile__slot">${slot}</div>` : ""}
     <div class="rd-tile__lbl">${escapeHTML(o.label)}</div>
     <div class="rd-tile__val"${o.numKey ? dn(o.numKey) : ""}>${escapeHTML(o.value)}</div>
-    ${d ? `<div class="rd-tile__delta">${d}<span class="rd-tile__prev">${escapeHTML(_rdPrevLbl())}</span></div>` : selloMes}
+    ${d ? `<div class="rd-tile__delta">${d}<span class="rd-tile__prev">${escapeHTML(_rdPrevLbl())}</span></div>` : ""}
     ${o.sub ? `<div class="rd-tile__sub">${escapeHTML(o.sub)}</div>` : ""}
     ${o.extra ? `<div class="rd-tile__extra">${o.extra}</div>` : ""}
     ${g ? `<div class="rd-tile__cap${conAnillo ? "" : " rd-tile__cap--none"}"${g.tip ? ` title="${escapeHTML(g.tip)}"` : ""}>${escapeHTML(g.caption)}</div>` : ""}
@@ -342,12 +353,17 @@ function _rdGoal(info, id) {
     return { pct: null, caption: t("rd.meta.soloMeta", { m: info.mesTxt, n: k.F(k.meta) }) };
   const tipo = _RD_META_TIPO[id] || "mes";
   const key = tipo === "nivel" ? "rd.meta.capNivel" : tipo === "tasa" ? "rd.meta.capTasa" : "rd.meta.capMes";
-  let caption = t(key, { m: info.mesCap, a: k.F(k.actual), n: k.F(k.meta), p: k.pct.toFixed(1) + "%" });
+  // Línea TukTuk: el % es el de las cuentas con cuota declarada (mismo cálculo
+  // que Metas, viene en k.cuota) y el caption dice sobre qué cifra se mide.
+  const cu = k.cuota;
+  let caption = cu
+    ? t("rd.meta.capCuota", { m: info.mesCap, a: k.F(cu.actual ?? 0), n: k.F(k.meta), p: k.pct.toFixed(1) + "%", c: cu.n, t: cu.total })
+    : t(key, { m: info.mesCap, a: k.F(k.actual), n: k.F(k.meta), p: k.pct.toFixed(1) + "%" });
   let projPct = null;
   // Decisión 4 de Manuel (domain/mesEnCurso): la proyección solo para el mes en
   // curso — ya viene en null si no corresponde.
-  if (k.proj != null && Number.isFinite(k.proj)) {
-    projPct = (k.proj / k.meta) * 100;
+  if (cu ? k.pctProj != null && Number.isFinite(k.pctProj) : k.proj != null && Number.isFinite(k.proj)) {
+    projPct = cu ? k.pctProj : (k.proj / k.meta) * 100;
     caption += " · " + t("rd.meta.proy", { p: projPct.toFixed(1) + "%" });
   }
   // Solo en los FLUJOS: la proyección de AD (máx × 1.4) no depende del corte.
@@ -514,6 +530,13 @@ export function _renderRendImpl() {
   const lastIdx  = allDates.indexOf(lastDate);
   const prevDate = lastIdx > 0 ? allDates[lastIdx - 1] : "";
 
+  // Mensual con el mes EN CURSO: los deltas son contra el mes anterior COMPLETO
+  // y lo dicen (ver _rdMesPrevCompleto). Antes del corte de Fleet: su vista
+  // también compara el mes a medias contra el anterior completo.
+  const ymUlt = lastDate ? reportYM(lastDate, STATE.curMode, parseLocalDate) : null;
+  const mesParcial = STATE.curMode === "mensual" && !!ymUlt && esMesEnCurso(ymUlt.m, ymUlt.y);
+  _rdMesPrevCompleto = mesParcial ? mesAnterior(ymUlt.y, ymUlt.m).m : 0;
+
   // prevRows: datos de prevDate fuera del rango filtrado
   const cityFilter = document.getElementById("cityFilter").value;
   const selSet     = new Set(getSel());
@@ -563,19 +586,18 @@ export function _renderRendImpl() {
   const metaInfo = _rendMetaMes(line, lastDate);
   const acum = t("rend.lbl.acumRango");
   // ── Escala MENSUAL con el último período = mes EN CURSO (24-sep-2026) ──────
-  // La fila del mes es el acumulado A LA FECHA. Tres cosas no cuadraban:
+  // La fila del mes es el acumulado A LA FECHA:
   //   1. N+R/Horas mostraban el ACUMULADO DEL RANGO (p.ej. mar–sep: 61,645)
   //      mientras el anillo habla solo de septiembre (6,371 de 8,758). Con meta,
   //      el valor grande pasa a ser el del mes (el MISMO actual del anillo, de
   //      metasResumenPais) y el del rango queda en una línea chica (conserva su
   //      data-num). AD ya era el nivel del último período = el del anillo.
-  //   2. El delta comparaba el mes parcial contra el anterior completo (−26%
-  //      siempre): se oculta, como en Metas.
-  //   3. La proyección de flujos quedaba igual al actual: ahora se prorratea por
-  //      días en metas.ts (_metasDiasProy), así Rendimiento y Metas dan la misma.
+  //   2. El delta compara el mes a la fecha contra el resultado FINAL del mes
+  //      anterior (decisión de Manuel: "así de simple") y el rótulo lo dice:
+  //      "vs agosto (mes completo)" (_rdPrevLbl), igual que en Metas.
+  //   3. La proyección de flujos se prorratea por días en metas.ts
+  //      (_metasDiasProy), así Rendimiento y Metas dan la misma.
   // Fuera de este caso (semanal, diario o mes cerrado) nada cambia.
-  const ymUlt = lastDate ? reportYM(lastDate, STATE.curMode, parseLocalDate) : null;
-  const mesParcial = STATE.curMode === "mensual" && !!ymUlt && esMesEnCurso(ymUlt.m, ymUlt.y);
   const flujoMes = (id, totalRango, numKey) => {
     const k = mesParcial && metaInfo ? metaInfo.kpis[id] : null;
     if (!k || !(k.meta > 0) || k.actual == null || !Number.isFinite(k.actual)) {
@@ -593,10 +615,10 @@ export function _renderRendImpl() {
   // su propia línea "última semana (14/09/2026)" / "acumulado del rango".
   html += `<h2 class="ui-sr-only">${escapeHTML(t("rd.kpis.titulo"))}</h2>`;
   html += `<div class="rd-kpis rd-kpis--tiles">
-    ${_rdKpi({ label: t("metric.ad.label"), value: fmt(tAD), numKey: "rend.pais.ad", cur: tAD, prev: pAD, sinDelta: mesParcial, sub: `${periodLabel} (${d2s(lastDate)})`, goal: _rdGoal(metaInfo, "ad"), icon: "users" })}
-    ${_rdKpi({ label: t("metric.nr.label"), ...vNR, cur: lNR, prev: pNR, sinDelta: mesParcial, goal: _rdGoal(metaInfo, "nr"), icon: "user" })}
-    ${_rdKpi({ label: t("metric.sh.label"), ...vSH, cur: lSH, prev: pSH, sinDelta: mesParcial, goal: _rdGoal(metaInfo, "sh"), icon: "clock" })}
-    ${_rdKpi({ label: t("metric.tr.label"), value: fmt(tTR), numKey: "rend.pais.tr", cur: lTR, prev: pTR, sinDelta: mesParcial, sub: acum, icon: "car",
+    ${_rdKpi({ label: t("metric.ad.label"), value: fmt(tAD), numKey: "rend.pais.ad", cur: tAD, prev: pAD, sub: `${periodLabel} (${d2s(lastDate)})`, goal: _rdGoal(metaInfo, "ad"), icon: "users" })}
+    ${_rdKpi({ label: t("metric.nr.label"), ...vNR, cur: lNR, prev: pNR, goal: _rdGoal(metaInfo, "nr"), icon: "user" })}
+    ${_rdKpi({ label: t("metric.sh.label"), ...vSH, cur: lSH, prev: pSH, goal: _rdGoal(metaInfo, "sh"), icon: "clock" })}
+    ${_rdKpi({ label: t("metric.tr.label"), value: fmt(tTR), numKey: "rend.pais.tr", cur: lTR, prev: pTR, sub: acum, icon: "car",
                goal: metaInfo ? { pct: null, caption: t("rd.meta.sinMetaMensual") } : undefined })}
   </div>`;
   html += _rdGoalNota(metaInfo);
@@ -638,7 +660,9 @@ export function _renderRendImpl() {
     byDate: citiesWithData.map(c => aggCityDatec(filteredByCity[c], c))
   };
   if (ciudades.length) {
-    html += _rdSec(t("rend.ciudad.titulo"), t("rd.ciudad.sub", { p: periodLabel }));
+    html += _rdSec(t("rend.ciudad.titulo"), mesParcial
+      ? t("rd.ciudad.subVs", { p: periodLabel, v: _rdPrevLbl() })
+      : t("rd.ciudad.sub", { p: periodLabel }));
     html += _rdCiudadTiles(ciudades, _rdCiudadData);
   }
 
@@ -725,7 +749,9 @@ export function _renderRendImpl() {
     return { shAd: ratio(sh, ad), trAd: ratio(tr, ad), trSh: ratio(tr, sh) };
   };
   const pNow = prodOf(lastRows), pPrev = prodOf(prevRows);
-  html += _rdSec(t("rend.prod.titulo"), t("rend.prod.sub", { d: d2s(lastDate) }));
+  html += _rdSec(t("rend.prod.titulo"), mesParcial
+    ? t("rd.prod.subVs", { d: d2s(lastDate), v: _rdPrevLbl() })
+    : t("rend.prod.sub", { d: d2s(lastDate) }));
   html += `<div class="rd-kpis rd-kpis--3 rd-kpis--tiles">
     ${_rdKpi({ label: t("rend.kpi.horasCond"),  value: fmt(pNow.shAd),        numKey: "rend.prod.shAd", icon: "clock", cur: pNow.shAd, prev: pPrev.shAd, sub: t("rend.snapshotUlt") })}
     ${_rdKpi({ label: t("rend.kpi.viajesCond"), value: fmt(pNow.trAd),        numKey: "rend.prod.trAd", icon: "car", cur: pNow.trAd, prev: pPrev.trAd, sub: t("rend.snapshotUlt") })}
@@ -908,7 +934,9 @@ function _rendKamSeccion(apd, lastRows, prevRows) {
   // Valor y variación en la MISMA celda (la variación va a la derecha de la
   // cifra): con 12 columnas la tabla no entraba al lado del panel de filtros.
   // El data-num va en el <span> de la cifra, no en la celda.
-  let h = _rdSec(t("rend.kam.titulo"), t("rd.kam.sub", { p: _rendPeriodLabel() }));
+  let h = _rdSec(t("rend.kam.titulo"), _rdMesPrevCompleto && STATE.curMode === "mensual"
+    ? t("rd.kam.subVs", { p: _rendPeriodLabel(), v: _rdPrevLbl() })
+    : t("rd.kam.sub", { p: _rendPeriodLabel() }));
   h += `<div class="ui-table-wrap rd-tabla-compacta"><table class="ui-table rd-table rd-table--kam">
     <thead>
       <tr class="rd-thgroup"><th></th><th colspan="4" scope="colgroup">${escapeHTML(_rendPeriodLabel())}</th><th colspan="3" scope="colgroup" class="rd-thgroup--acum">${escapeHTML(t("rd.kam.acum"))}</th></tr>
