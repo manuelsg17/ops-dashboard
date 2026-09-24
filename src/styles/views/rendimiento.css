@@ -214,32 +214,15 @@
 
 /* ═════════════════════════════════════════════════════════════════════════
    "B · Suave" (fase 8, 24-sep-2026) — la versión de Rendimiento que eligió
-   Manuel en el prototipo (?ui=proto&v=b&p=rend): superficies redondeadas con
-   tinte y sombra leve en vez de bordes, anillo de avance arriba de cada KPI
-   con meta, tiles por ciudad con minigráfico. Todo acotado a .rd-view--suave
-   (la raíz real de la vista) para no mover el prototipo "Elegida", que reusa
-   las clases rd-*. Solo tokens: en oscuro la sombra se apaga y queda el tinte.
+   Manuel en el prototipo (?ui=proto&v=b&p=rend): anillo de avance arriba de
+   cada KPI con meta, tiles por ciudad con minigráfico y superficies sin
+   bordes duros. Sobre la capa suave del sistema (tokens --radius-card /
+   --radius-table / --radius-control, --color-border-soft, --color-fill-soft,
+   --shadow-card — en oscuro sin sombra y con el borde del tema). Sin
+   color-mix(): html2canvas no lo entiende. Acotado a .rd-view--suave porque
+   el prototipo "Elegida" reusa las clases rd-*.
    ═════════════════════════════════════════════════════════════════════════ */
-.rd-view--suave {
-  --rd-r-card: 20px;
-  --rd-r-inner: 14px;
-  --rd-shadow: 0 1px 2px color-mix(in srgb, var(--color-text) 5%, transparent),
-               0 6px 20px color-mix(in srgb, var(--color-text) 5%, transparent);
-  gap: var(--space-5);
-}
-:root[data-theme="dark"] .rd-view--suave { --rd-shadow: none; }
-
-/* Selector de línea en píldora */
-.rd-view--suave .rd-toolbar .ui-segmented {
-  border: 0; border-radius: var(--radius-pill); padding: 4px;
-  background: color-mix(in srgb, var(--color-text) 7%, transparent);
-}
-.rd-view--suave .rd-toolbar .ui-segmented__btn { border-radius: var(--radius-pill); }
-.rd-view--suave .ui-segmented { border-radius: var(--radius-pill); }
-.rd-view--suave .ui-segmented__btn { border-radius: var(--radius-pill); }
-.rd-view--suave .ui-delta, .rd-view--suave .ui-badge { border-radius: var(--radius-pill); border-color: transparent; }
-.rd-view--suave .ui-delta { padding: 1px 8px; }
-.rd-view--suave .ui-alert { border-color: transparent; border-radius: var(--rd-r-inner); }
+.rd-view--suave { gap: var(--space-5); }
 
 /* Encabezados de sección: sin línea, subtítulo al lado del título */
 .rd-view--suave .rd-sec { border-bottom: 0; padding-bottom: 0; margin-top: var(--space-3); align-items: center; }
@@ -247,17 +230,10 @@
 .rd-view--suave .rd-sec__title { font-weight: var(--weight-bold); }
 .rd-view--suave .rd-sec__sub { color: var(--color-text-subtle); }
 
-/* Superficies: tarjetas, gráficos, tablas */
-.rd-view--suave .ui-card,
-.rd-view--suave .rd-tile,
-.rd-view--suave .ui-table-wrap {
-  background: var(--color-surface);
-  border: 1px solid transparent; border-radius: var(--rd-r-card);
-  box-shadow: var(--rd-shadow);
-}
-:root[data-theme="dark"] .rd-view--suave .ui-card,
-:root[data-theme="dark"] .rd-view--suave .rd-tile,
-:root[data-theme="dark"] .rd-view--suave .ui-table-wrap { border-color: var(--color-border); }
+/* Selector de línea: la píldora del segmentado, un poco más alta */
+.rd-view--suave .rd-toolbar .ui-segmented { padding: 4px; }
+.rd-view--suave .rd-toolbar .ui-segmented__btn { height: 32px; padding: 0 14px; }
+
 .rd-view--suave .rd-chart { padding: var(--space-4) var(--space-5); }
 
 /* ── Tiles KPI con anillo ─────────────────────────────────────────────── */
@@ -265,6 +241,9 @@
 .rd-tile {
   position: relative; display: flex; flex-direction: column; gap: 4px;
   min-width: 0; padding: var(--space-5);
+  background: var(--color-surface); color: var(--color-text);
+  border: 1px solid var(--color-border-soft); border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
 }
 .rd-tile__slot { position: absolute; top: var(--space-4); right: var(--space-4); }
 .rd-tile__ico {
@@ -303,14 +282,13 @@
 .rd-kpis--auto .rd-tile .ui-ring__txt--long { font-size: 11px; }
 .rd-kpis--auto.rd-kpis--tiles { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
 
-/* ── Tiles por ciudad ─────────────────────────────────────────────────── */
+/* ── Tiles por ciudad (tinte, sin sombra: se leen como un grupo) ──────── */
 .rd-cities { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
 .rd-city {
   display: flex; flex-direction: column; gap: var(--space-2); min-width: 0;
-  padding: var(--space-5); border-radius: var(--rd-r-card, 20px);
-  background: var(--color-surface-muted);
+  padding: var(--space-5); border-radius: var(--radius-card);
+  background: var(--color-surface-muted); border: 1px solid var(--color-border-soft);
 }
-:root[data-theme="dark"] .rd-city { background: var(--color-surface); border: 1px solid var(--color-border); }
 .rd-city__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-width: 0; }
 .rd-city__name { display: flex; align-items: center; min-width: 0; font-weight: var(--weight-bold); }
 .rd-spark { display: block; flex: none; }
@@ -329,28 +307,18 @@
 .rd-city .ui-delta { font-size: var(--text-xs); }
 
 /* ── Quién se movió: filas en tinte alterno, sin líneas ───────────────── */
-.rd-view--suave .rd-mov { padding: var(--space-5); }
-.rd-view--suave .rd-mov__row { border-bottom: 0; padding: 6px 10px; border-radius: 12px; }
-.rd-view--suave .rd-mov__row:nth-child(odd) { background: var(--color-surface-muted); }
+.rd-view--suave .rd-mov__row { border-bottom: 0; padding: 6px 10px; border-radius: var(--radius-control); }
+.rd-view--suave .rd-mov__row:nth-child(odd) { background: var(--color-fill-soft); }
 
-/* ── Tablas: sin filetes, tarjeta redondeada, hover en tinte ──────────── */
-.rd-view--suave .ui-table-wrap { padding: var(--space-2); }
-.rd-view--suave .ui-table th, .rd-view--suave .ui-table td { border-bottom-color: transparent; }
-.rd-view--suave .ui-table thead th { background: var(--color-surface); border-bottom-color: var(--color-border); }
+/* ── Tablas: sin filetes entre filas, aire alrededor ──────────────────── */
+.rd-view--suave .ui-table-wrap { padding: 0 var(--space-2) var(--space-2); }
+.rd-view--suave .ui-table tbody th, .rd-view--suave .ui-table tbody td { border-bottom-color: transparent; }
 .rd-view--suave .ui-table--sticky-first th:first-child,
-.rd-view--suave .ui-table--sticky-first td:first-child { border-right-color: transparent; background: var(--color-surface); }
-.rd-view--suave .ui-table tbody tr:hover > * { background: var(--color-surface-muted); }
-.rd-view--suave .rd-thgroup--acum, .rd-view--suave .rd-table .rd-acum { border-left-color: var(--color-border); }
-.rd-view--suave .ui-table tbody tr > * { border-radius: 0; }
-.rd-view--suave .ui-table tbody tr > *:first-child { border-top-left-radius: 10px; border-bottom-left-radius: 10px; }
-.rd-view--suave .ui-table tbody tr > *:last-child { border-top-right-radius: 10px; border-bottom-right-radius: 10px; }
+.rd-view--suave .ui-table--sticky-first td:first-child { border-right-color: transparent; }
 
 /* ── Tarjetas por partner ─────────────────────────────────────────────── */
 .rd-view--suave .rd-pcard { padding: var(--space-4) var(--space-5); }
-.rd-view--suave .rd-pcard__kpi, .rd-view--suave .rd-pcard__nr { border-color: transparent; border-radius: var(--rd-r-inner); }
-
-/* Barras de avance (adquisición TukTuk) en píldora */
-.rd-view--suave .ui-progress, .rd-view--suave .ui-progress__bar { border-radius: var(--radius-pill); }
+.rd-view--suave .rd-pcard__kpi, .rd-view--suave .rd-pcard__nr { border-color: transparent; border-radius: var(--radius-table); }
 
 @media (max-width: 720px) {
   .rd-kpis--tiles:has(.rd-tile--slot) .rd-tile__lbl { min-height: 0; }
