@@ -22,7 +22,7 @@ input[type="file"] { display: none; }
    bajo .sidebar (sección ESTRUCTURA, al final); esto es la base. */
 .sb-sel, .sb-inp {
   width: 100%;
-  border: 1px solid var(--color-border-input); border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-input); border-radius: var(--radius-control);
   padding: 6px 9px; font-size: var(--text-sm);
   outline: none; background: var(--color-surface); color: var(--color-text);
 }
@@ -530,7 +530,7 @@ input[type="file"] { display: none; }
   margin-bottom: var(--space-3);
   font-family: var(--font-sans); font-size: var(--text-base); color: var(--color-text);
   background: var(--color-surface);
-  border: 1px solid var(--color-border-input); border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-input); border-radius: var(--radius-control);
   outline: none;
 }
 .login-input::placeholder { color: var(--color-text-subtle); }
@@ -556,7 +556,7 @@ input[type="file"] { display: none; }
   height: var(--shell-topbar-h);
   display: flex; align-items: center; gap: var(--space-3);
   padding: 0 var(--space-4);
-  background: var(--color-surface); border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface); border-bottom: 1px solid var(--color-border-soft);
 }
 .shell-brand { display: flex; align-items: center; gap: var(--space-2); flex: 0 0 auto; }
 .logo {
@@ -586,12 +586,12 @@ body.role-partner .shell-partner-name:not(:empty) {
   display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
   width: 36px; height: 36px; padding: 0;
   color: var(--color-text-muted); background: transparent;
-  border: 1px solid transparent; border-radius: var(--radius-md); cursor: pointer;
+  border: 1px solid transparent; border-radius: var(--radius-control); cursor: pointer;
   transition: background-color var(--duration-fast), color var(--duration-fast);
 }
 .shell-icon-btn:hover { background: var(--color-surface-sunken); color: var(--color-text); }
 .shell-icon-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
-.shell-icon-btn--sm { width: 28px; height: 28px; border-radius: var(--radius-sm); }
+.shell-icon-btn--sm { width: 28px; height: 28px; border-radius: var(--radius-control-sm); }
 .shell-hamburger { display: none; }
 
 /* Atajo de cargas */
@@ -632,7 +632,7 @@ body.role-partner .shell-partner-name:not(:empty) {
   height: 32px; max-width: 140px; padding: 0 var(--space-2);
   font-family: var(--font-sans); font-size: var(--text-sm); font-weight: var(--weight-semibold);
   color: var(--color-text-muted); background: var(--color-surface);
-  border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); cursor: pointer;
+  border: 1px solid var(--color-border-strong); border-radius: var(--radius-control); cursor: pointer;
 }
 .lang-select:hover { color: var(--color-text); border-color: var(--color-border-input); }
 .lang-select:focus-visible { outline: none; box-shadow: var(--focus-ring); }
@@ -661,19 +661,19 @@ body.role-partner .shell-partner-name:not(:empty) {
   flex: 0 0 auto; width: var(--shell-nav-w);
   height: calc(100vh - var(--shell-top));
   display: flex; flex-direction: column;
-  background: var(--color-surface); border-right: 1px solid var(--color-border);
+  background: var(--color-surface); border-right: 1px solid var(--color-border-soft);
   overflow-y: auto; overflow-x: hidden;
   transition: width .18s ease;
 }
 .shell-nav .ui-sidenav { flex: 1 0 auto; width: auto; border-right: 0; background: transparent; }
 .shell-nav .ui-sidenav__item { white-space: nowrap; }
 .shell-nav .ui-sidenav__item .ui-icon { flex: 0 0 auto; }
-.shell-nav__foot { padding: var(--space-2) var(--space-3) var(--space-3); border-top: 1px solid var(--color-border); }
+.shell-nav__foot { padding: var(--space-2) var(--space-3) var(--space-3); border-top: 1px solid var(--color-border-soft); }
 .shell-nav__collapse {
   display: flex; align-items: center; gap: var(--space-3); width: 100%; height: 36px;
   padding: 0 var(--space-3);
   font-family: var(--font-sans); font-size: var(--text-sm); color: var(--color-text-muted);
-  background: transparent; border: 0; border-radius: var(--radius-md); cursor: pointer; white-space: nowrap;
+  background: transparent; border: 0; border-radius: var(--radius-control); cursor: pointer; white-space: nowrap;
 }
 .shell-nav__collapse:hover { background: var(--color-surface-sunken); color: var(--color-text); }
 .shell-nav__collapse:focus-visible { outline: none; box-shadow: var(--focus-ring); }
@@ -694,7 +694,7 @@ body.role-partner .shell-partner-name:not(:empty) {
   }
   /* Separador entre grupos en lugar del rótulo. */
   body.nav-rail .shell-nav .ui-sidenav__group + .ui-sidenav__group {
-    border-top: 1px solid var(--color-border); padding-top: var(--space-3);
+    border-top: 1px solid var(--color-border-soft); padding-top: var(--space-3);
   }
   /* Al EXPANDIR, el ancho se anima de 64 a 232 px pero los textos dejaban de
      estar ocultos en el acto: durante la animación se veían recortados
@@ -723,13 +723,13 @@ body.role-partner .shell-partner-name:not(:empty) {
   width: var(--shell-filters-w); height: 100%;
   padding: var(--space-4);
   overflow-y: auto;
-  background: var(--color-surface); border-right: 1px solid var(--color-border);
+  background: var(--color-surface); border-right: 1px solid var(--color-border-soft);
 }
 .sidebar.collapsed { display: none; }
 .fp-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-2); }
 .fp-title { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-md); font-weight: var(--weight-semibold); color: var(--color-text); }
 .fp-title .ui-icon { color: var(--color-text-muted); }
-.fp-group { padding: var(--space-3) 0; border-top: 1px solid var(--color-border); }
+.fp-group { padding: var(--space-3) 0; border-top: 1px solid var(--color-border-soft); }
 .fp-head + .fp-group { border-top: 0; }
 .sidebar .sb-label {
   display: block; margin: 0 0 var(--space-2);
@@ -739,20 +739,20 @@ body.role-partner .shell-partner-name:not(:empty) {
   height: 32px; padding: 0 var(--space-2);
   font-family: var(--font-sans); font-size: var(--text-md); color: var(--color-text);
   background: var(--color-surface);
-  border: 1px solid var(--color-border-input); border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-input); border-radius: var(--radius-control);
 }
 .sidebar .sb-inp::placeholder { color: var(--color-text-subtle); }
 .sidebar .sb-sel:focus, .sidebar .sb-inp:focus { border-color: var(--focus-ring-color); box-shadow: var(--focus-ring); }
 .sidebar .mode-toggle-row {
-  display: flex; flex-wrap: wrap; width: 100%; gap: 2px; padding: 2px; margin: 0;
-  background: var(--color-surface-sunken); border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  display: flex; flex-wrap: wrap; width: 100%; gap: 2px; padding: 3px; margin: 0;
+  background: var(--color-fill-soft); border: 1px solid transparent; border-radius: var(--radius-pill);
 }
 /* flex-basis auto + wrap: en ruso ("Ежедневно/Еженедельно/Ежемесячно") los
    tres no entran en una fila y se parten en dos en vez de encimarse. */
 .sidebar .mode-btn {
   flex: 1 1 auto; min-width: 0; height: 28px; padding: 0 var(--space-2); text-align: center; white-space: nowrap;
   font-family: var(--font-sans); font-size: var(--text-sm); font-weight: var(--weight-semibold);
-  color: var(--color-text-muted); background: transparent; border: 0; border-radius: calc(var(--radius-md) - 2px);
+  color: var(--color-text-muted); background: transparent; border: 0; border-radius: var(--radius-pill);
 }
 .sidebar .mode-btn:hover { color: var(--color-text); }
 .sidebar .mode-btn.active { background: var(--color-surface); color: var(--color-text); box-shadow: var(--shadow-sm); }
@@ -773,14 +773,14 @@ body.role-partner .shell-partner-name:not(:empty) {
   flex: 1; height: 26px;
   font-family: var(--font-sans); font-size: var(--text-xs); font-weight: var(--weight-semibold);
   color: var(--color-text); background: var(--color-surface);
-  border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); cursor: pointer;
+  border: 1px solid var(--color-border-strong); border-radius: var(--radius-control); cursor: pointer;
 }
 .sb-row button:hover { background: var(--color-surface-muted); border-color: var(--color-border-input); }
 .sb-row button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .plist {
   max-height: 260px; overflow-y: auto;
   padding: var(--space-1);
-  border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-soft); border-radius: var(--radius-control);
 }
 /* Lista VIRTUALIZADA: la altura de fila es fija (VIRT_ITEM_H en app.ts). El
    nombre largo se trunca; completo en el title. */
@@ -837,7 +837,7 @@ body.no-sidebar .sidebar-wrap { display: none !important; }
   flex: 1 1 100%;
   padding: var(--space-2) var(--space-3);
   color: var(--color-bad-fg); background: var(--color-bad-bg);
-  border: 1px solid var(--color-bad-border); border-radius: var(--radius-md);
+  border: 1px solid transparent; border-radius: var(--radius-table);
 }
 #dsBanner > span:last-child { font-size: inherit; color: inherit; flex: 1 1 auto; min-width: 0; }
 .ds-dot { width: 8px; height: 8px; flex-shrink: 0; border-radius: 50%; background: var(--color-ok-solid); }
@@ -877,6 +877,7 @@ body.role-partner #uploadDropdown { display: none !important; }
   }
   .sidebar.collapsed { display: block; transform: translateX(100%); visibility: hidden; }
   .fp-close .ui-icon { transform: scaleX(-1); }   /* el panel sale por la derecha */
+  .sidebar { border-left-color: var(--color-border-soft); }
   .sb-veil {
     display: block; position: fixed; inset: var(--shell-top) 0 0 0; z-index: 419;
     background: var(--color-overlay); border: 0; padding: 0; cursor: pointer;

@@ -178,6 +178,33 @@
   --shadow-sm: 0 1px 2px rgba(17, 24, 39, .06);
   --shadow-md: 0 2px 8px rgba(17, 24, 39, .08), 0 1px 2px rgba(17, 24, 39, .04);
   --shadow-lg: 0 12px 32px rgba(17, 24, 39, .18);
+
+  /* ── Capa SUAVE (Fase 8, sep-2026: la "Elegida" del prototipo ?ui=proto) ──
+     Menos bordes duros y más aire: las superficies se separan del fondo con
+     un filo casi invisible + una sombra suave, no con una línea gris.
+     · --color-border-soft: filo de tarjetas, tablas, paneles y separadores
+       internos (filas de tabla, grupos del panel de filtros). Es un objeto
+       DECORATIVO (WCAG 1.4.11 no lo exige: la tarjeta se reconoce por el
+       contraste de superficie + sombra). Donde el borde SÍ identifica un
+       control (input/select) sigue --color-border-input (3:1).
+     · --shadow-card: sombra de las superficies elevadas (tarjeta, KPI, tabla).
+     · --color-fill-soft: tinte neutro de "pista" (fondo de un segmentado, de
+       un grupo de opciones). Transparente: se compone sobre lo que haya
+       debajo, así sirve igual sobre el fondo o sobre una tarjeta.
+     CONTRASTES de los pares nuevos (WCAG 2.x, sobre el tinte compuesto):
+       claro  muted #4b5563 sobre fill-soft·surface 6.70 · ·bg 6.10
+              encabezado de tabla (muted sobre surface, ya sin gris) 7.56
+              chip: texto sobre surface-muted 16.98 · clave muted 7.23
+       oscuro muted #aab1bd sobre fill-soft·surface 6.84 · ·bg 7.57
+              encabezado de tabla 8.08 · chip: texto 13.16 · clave 7.48
+       NO poner --color-text-subtle sobre fill-soft·bg (3.90, no AA).
+     Van en rgba() y NO en color-mix(): html2canvas 1.4 (PDF/PNG) no entiende
+     color-mix ni el color(srgb …) al que Chrome lo resuelve, y aborta la
+     captura. Son los mismos valores: --neutral-200 al 55 %, --neutral-900 al
+     5–6 %. */
+  --color-border-soft: rgba(229, 231, 235, .55);
+  --color-fill-soft:   rgba(17, 24, 39, .06);
+  --shadow-card: 0 1px 2px rgba(17, 24, 39, .05), 0 6px 20px rgba(17, 24, 39, .05);
 }
 
 :root {
@@ -214,11 +241,20 @@
   --space-10: 40px;
   --space-12: 48px;
 
-  /* Radios: 3 */
-  --radius-sm: 4px;    /* badges, chips pequeños, inputs      */
-  --radius-md: 8px;    /* botones, tarjetas, tablas           */
-  --radius-lg: 12px;   /* diálogos, paneles grandes           */
+  /* Radios (Fase 8, capa suave): la escala sm/md/lg sube un escalón
+     (antes 4/8/12) y se suman los radios POR ROL, que son los que conviene
+     usar en código nuevo:
+       tarjeta/KPI/panel 16 · tabla/alerta 14 · control 10 · control chico 8.
+     Lo que es "una opción" o "un estado" (chip, badge, delta, segmentado,
+     barra de avance) va en píldora (--radius-pill). */
+  --radius-sm: 6px;    /* ítems de menú, casillas, bordes internos */
+  --radius-md: 10px;   /* botones, inputs, contenedores chicos     */
+  --radius-lg: 16px;   /* diálogos, paneles grandes                */
   --radius-pill: 999px;
+  --radius-card:       16px;  /* .ui-card, .ui-kpi, paneles y tarjetas de vista */
+  --radius-table:      14px;  /* .ui-table-wrap, .ui-alert                      */
+  --radius-control:    10px;  /* .ui-btn, .ui-input, .ui-select, nav            */
+  --radius-control-sm: 8px;   /* variantes --sm                                 */
 
   /* Layout */
   --layout-sidebar-w:   240px;
@@ -316,4 +352,11 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
   --shadow-md: 0 2px 8px rgba(0, 0, 0, .45), 0 1px 2px rgba(0, 0, 0, .3);
   --shadow-lg: 0 12px 32px rgba(0, 0, 0, .6);
+
+  /* Capa suave en oscuro: SIN sombra en las superficies (sobre un fondo
+     oscuro se lee como un halo) y el borde del tema, que es lo que separa la
+     tarjeta del fondo junto con la luminancia (#161a21 sobre #0e1116). */
+  --color-border-soft: var(--color-border);
+  --color-fill-soft:   rgba(230, 232, 236, .07);   /* --night-100 al 7 % */
+  --shadow-card: none;
 }
