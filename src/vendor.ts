@@ -209,6 +209,11 @@ if (config.IS_LOCAL_SUPABASE) {
 if (import.meta.env.DEV && new URLSearchParams(location.search).get("ui") === "kit") {
   import("./dev/uiKit").then(m => m.mountUiKit()).catch(err => console.error("[uiKit]", err));
 }
+// Prototipo navegable de las versiones de diseño (SOLO dev): ?ui=proto. Mismo
+// mecanismo que el kit: la rama se elimina del build de producción.
+if (import.meta.env.DEV && new URLSearchParams(location.search).get("ui") === "proto") {
+  import("./dev/proto/proto").then(m => m.mountProto()).catch(err => console.error("[proto]", err));
+}
 
 // Loader asíncrono para módulos de pantalla pesados (Lazy Loading)
 //

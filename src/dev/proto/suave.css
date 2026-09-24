@@ -1,0 +1,91 @@
+/* ═════════════════════════════════════════════════════════════════════════
+   dev/proto/suave.css — Capa "más suave" de la versión ELEGIDA (SOLO dev)
+   Manuel: "me gusta como está actualmente, tal vez un poco más suave".
+   Es el diseño de producción con cinco ajustes, todos acotados a
+   .pr-root.pr-v-elegida (no toca la app):
+     1. Radios más grandes: tarjetas 16 px, tablas 14 px, controles 10 px;
+        chips, badges, deltas, segmentados y barras de avance en píldora.
+     2. Menos bordes duros: un filo casi invisible + sombra suave en claro;
+        en oscuro, sin sombra (se vería como un halo) y el borde del tema.
+     3. Un poco más de aire (padding y separación entre bloques).
+     4. Menos cajas anidadas: títulos de sección sin línea, encabezados de
+        tabla sin fondo gris, alertas solo con tinte.
+     5. Barras de avance más gruesas y redondeadas.
+   Los colores semánticos NO cambian (morado ≥100 · verde 95–99 · ámbar 80–94
+   · rojo <80). Solo tokens: los valores nuevos se derivan con color-mix().
+   Si se adopta, estas reglas se mudan a tokens.css/components.css.
+   ═════════════════════════════════════════════════════════════════════════ */
+.pr-root.pr-v-elegida {
+  --pr-r-card: 16px;
+  --pr-r-table: 14px;
+  --pr-r-ctrl: 10px;
+  --pr-hair: color-mix(in srgb, var(--color-border) 55%, transparent);
+  --pr-shadow: 0 1px 2px color-mix(in srgb, var(--color-text) 5%, transparent),
+               0 6px 20px color-mix(in srgb, var(--color-text) 5%, transparent);
+}
+:root[data-theme="dark"] .pr-root.pr-v-elegida {
+  --pr-hair: var(--color-border);
+  --pr-shadow: none;
+}
+
+/* 1 · Superficies: tarjetas, KPIs, tablas, paneles */
+.pr-v-elegida .ui-card, .pr-v-elegida .ui-kpi, .pr-v-elegida .mt-pcard, .pr-v-elegida .rd-pcard,
+.pr-v-elegida .cfgx-panel, .pr-v-elegida .au6-card, .pr-v-elegida .cfgx-card {
+  border-radius: var(--pr-r-card); border-color: var(--pr-hair); box-shadow: var(--pr-shadow);
+}
+.pr-v-elegida .ui-kpi, .pr-v-elegida .ui-card { padding: var(--space-5); }
+.pr-v-elegida .rd-chart { padding: var(--space-4) var(--space-5); }
+.pr-v-elegida .ui-table-wrap { border-radius: var(--pr-r-table); border-color: var(--pr-hair); box-shadow: var(--pr-shadow); }
+.pr-v-elegida .ui-table th, .pr-v-elegida .ui-table td { border-bottom-color: var(--pr-hair); }
+.pr-v-elegida .ui-table thead th { background: var(--color-surface); border-bottom-color: var(--color-border); }
+.pr-v-elegida .ui-table--sticky-first th:first-child, .pr-v-elegida .ui-table--sticky-first td:first-child,
+.pr-v-elegida .mt-sticky { border-right-color: var(--pr-hair); }
+.pr-v-elegida .ui-table--sticky-first thead th:first-child, .pr-v-elegida .mt-ptable thead th.mt-sticky { background: var(--color-surface); }
+.pr-v-elegida .mt-gtable tbody tr.mt-grp-first > * { border-top-color: var(--color-border); }
+
+/* 2 · Controles: 10 px; lo que es "una opción" o "un estado" va en píldora */
+.pr-v-elegida .ui-btn, .pr-v-elegida .ui-input, .pr-v-elegida .ui-select,
+.pr-v-elegida .sidebar .sb-sel, .pr-v-elegida .sidebar .sb-inp, .pr-v-elegida .lang-select,
+.pr-v-elegida .shell-icon-btn, .pr-v-elegida .ui-sidenav__item, .pr-v-elegida .cfgx-subnav__item,
+.pr-v-elegida .sb-row button, .pr-v-elegida .plist, .pr-v-elegida .pr-radio { border-radius: var(--pr-r-ctrl); }
+.pr-v-elegida .ui-btn--sm, .pr-v-elegida .ui-input--sm, .pr-v-elegida .ui-select--sm { border-radius: 8px; }
+.pr-v-elegida .ui-segmented, .pr-v-elegida .sidebar .mode-toggle-row {
+  border-radius: var(--radius-pill); border-color: transparent;
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+}
+.pr-v-elegida .ui-segmented__btn, .pr-v-elegida .sidebar .mode-btn { border-radius: var(--radius-pill); }
+.pr-v-elegida .ui-badge, .pr-v-elegida .ui-delta, .pr-v-elegida .ui-chip, .pr-v-elegida .mt-fchip,
+.pr-v-elegida .sidebar .preset-btn, .pr-v-elegida .pr-qchip { border-radius: var(--radius-pill); }
+.pr-v-elegida .ui-badge { border-color: transparent; }
+.pr-v-elegida .ui-delta { padding: 1px 8px; }
+
+/* 3 · Aire */
+.pr-v-elegida .rd-view { gap: var(--space-5); }
+.pr-v-elegida .rd-kpis, .pr-v-elegida .rd-grid-2, .pr-v-elegida .mt-kpis { gap: var(--space-5); }
+.pr-v-elegida .ui-table th, .pr-v-elegida .ui-table td { padding-top: 10px; padding-bottom: 10px; }
+.pr-v-elegida .rd-tabla-compacta .ui-table th, .pr-v-elegida .rd-tabla-compacta .ui-table td { padding-top: 10px; padding-bottom: 10px; }
+.pr-v-elegida .mt-ptable th, .pr-v-elegida .mt-ptable td { padding: 7px 8px; }
+
+/* 4 · Menos cajas y líneas */
+.pr-v-elegida .rd-sec { border-bottom: 0; padding-bottom: 0; margin-top: var(--space-6); }
+.pr-v-elegida .ui-page-header { border-bottom-color: var(--pr-hair); }
+.pr-v-elegida .ui-alert { border-color: transparent; border-radius: var(--pr-r-table); }
+.pr-v-elegida .cfgx-pend { border-color: transparent; border-radius: var(--pr-r-card); }
+.pr-v-elegida .cfgx-pend__item { border-top-color: color-mix(in srgb, var(--color-warn-border) 60%, transparent); }
+.pr-v-elegida .ui-chip { border-color: var(--color-border); background: var(--color-surface-muted); }
+.pr-v-elegida .rd-mov__row { border-bottom-color: var(--pr-hair); }
+.pr-v-elegida .topbar, .pr-v-elegida .shell-nav, .pr-v-elegida .sidebar { border-color: var(--pr-hair); }
+.pr-v-elegida .fp-group, .pr-v-elegida .shell-nav__foot { border-top-color: var(--pr-hair); }
+.pr-v-elegida .plist { border-color: var(--pr-hair); }
+.pr-v-elegida .pr-adv { border-top-color: var(--pr-hair); }
+
+/* 5 · Barras de avance: más gruesas y redondeadas */
+.pr-v-elegida .ui-progress { height: 8px; }
+.pr-v-elegida .ui-progress__bar, .pr-v-elegida .ui-progress__proj { border-radius: var(--radius-pill); }
+.pr-v-elegida .mt-pctwrap .mt-bar { height: 6px; }
+
+/* Calculadora (C + atajos de B) con el mismo lenguaje */
+.pr-v-elegida .pr-calc__side { border-radius: var(--pr-r-card); }
+.pr-v-elegida .pr-cuadre { border-radius: var(--pr-r-ctrl); }
+.pr-v-elegida .pr-dist .pr-cell { border-radius: 8px; }
+.pr-v-elegida .cfgx-pend .ui-badge { background: var(--color-surface); }
