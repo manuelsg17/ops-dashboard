@@ -2413,6 +2413,8 @@ export const I18N: Record<string, Record<string, string>> = {
   "tema.claro":   { es: "Claro",   en: "Light",  ru: "Светлая" },
   "tema.oscuro":  { es: "Oscuro",  en: "Dark",   ru: "Тёмная" },
   "tema.sistema": { es: "Sistema", en: "System", ru: "Системная" },
+  "tema.aOscuro": { es: "Cambiar a modo oscuro", en: "Switch to dark mode", ru: "Включить тёмную тему" },
+  "tema.aClaro":  { es: "Cambiar a modo claro",  en: "Switch to light mode", ru: "Включить светлую тему" },
 };
 
 let _lang = "es";

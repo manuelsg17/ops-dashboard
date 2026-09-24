@@ -1070,7 +1070,7 @@ alCerrarSesion(() => {
 import { t, setLang, getLang, aplicarI18nEstatico, selectorIdiomaHTML, kamLabel } from "./core/i18n";
 import { SIN_KAM } from "./core/config.js";
 import { logAccess } from "./shared/accessLog.js";
-import { guardarPref, leerPref, instalarTema, EVENTO_TEMA } from "./shared/theme";
+import { guardarPref, leerPref, instalarTema, temaActual, EVENTO_TEMA } from "./shared/theme";
 import { iconSvg } from "./shared/icons";
 import { escapeHTML } from "./core/security";
 import { instalarShell, renderShellNav, renderPageHeader, schedulePageHeader, syncNavActive,
@@ -1100,7 +1100,24 @@ const _OPCIONES_TEMA = [
   { v: "dark",   icon: "moon",    k: "tema.oscuro" },
   { v: "system", icon: "monitor", k: "tema.sistema" }
 ];
+// Botón sol/luna de la barra superior: muestra el tema AL QUE se va a pasar
+// (luna estando en claro, sol estando en oscuro), como hacen la mayoría de apps.
+function _pintarBotonTema() {
+  const b = document.getElementById("themeToggle");
+  if (!b) return;
+  const oscuro = temaActual() === "dark";
+  const lbl = t(oscuro ? "tema.aClaro" : "tema.aOscuro");
+  b.innerHTML = iconSvg(oscuro ? "sun" : "moon", { size: 18 });
+  b.setAttribute("aria-label", lbl);
+  b.setAttribute("title", lbl);
+}
+
+export function toggleTheme() {
+  setTheme(temaActual() === "dark" ? "light" : "dark");
+}
+
 export function _pintarMenuTema() {
+  _pintarBotonTema();
   const el = document.getElementById("themeMenu");
   if (!el) return;
   const pref = leerPref();
@@ -1185,6 +1202,7 @@ registerActions({
   // usando; el del select lee el value.
   setUiLangSel: (d, el) => setUiLang(el.value),
   setTheme: d => setTheme(d.pref),
+  toggleTheme: () => toggleTheme(),
   // sidebar / filtros
   setDatePreset: d => setDatePreset(d.preset),
   onKAMChange, selectAll, deselectAll, toggleSidebar,

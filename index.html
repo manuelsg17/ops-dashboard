@@ -199,6 +199,9 @@
       <input type="file" id="fileFlotas"      accept=".xlsx,.xls"/>
       <input type="file" id="fileConversion"  accept=".xlsx,.xls"/>
 
+      <!-- Sol/luna: cambia claro <-> oscuro en un clic (pedido de Manuel, 24-sep).
+           El menú de sesión conserva Claro / Oscuro / Sistema. Lo pinta app.ts. -->
+      <button type="button" id="themeToggle" class="ui-btn ui-btn--ghost ui-btn--icon theme-toggle" data-act="toggleTheme"></button>
       <span id="langSwitch"></span>
       <!-- El email es el disparador del menú de sesión ("Salir" adentro). -->
       <div class="user-menu-wrap" id="userMenuWrap">
