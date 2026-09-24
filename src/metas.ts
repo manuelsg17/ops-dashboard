@@ -15,6 +15,7 @@ import { reportYM, diasMesReporte } from "./shared/mesReporte.js";
 import { SIN_KAM } from "./core/config.js";
 import { parseLocalDate } from "./core/dates";
 import { esMesEnCurso } from "./domain/mesEnCurso";
+import { diasMesEnCursoMensual } from "./domain/diasMesEnCurso";
 import { estadoMetaFila } from "./domain/estadoMeta";
 import { ordenarKams } from "./domain/desgloseKam";
 import { escalaLista, reintentarCuandoEscalaLista } from "./shared/escalaLista";
@@ -354,10 +355,34 @@ function _finishSeries(e, lastDate, snapDate) {
 // evitaría recalcularlo por cada partner, pero el costo es despreciable frente
 // a la claridad de no tener estado suelto).
 function _metasProjDays(lastDate) {
-  if (lastDate) return diasMesReporte(lastDate, STATE.curMode, parseLocalDate);
+  if (lastDate) return _metasDiasProy(lastDate);
   const to = document.getElementById("dateTo")?.value || "";
   const dates = (STATE.allDates || []).filter(d => !to || d <= to);
-  return diasMesReporte(dates[dates.length - 1] || to, STATE.curMode, parseLocalDate);
+  return _metasDiasProy(dates[dates.length - 1] || to);
+}
+
+// Días para proyectar un FLUJO al cierre del mes de reporte de `lastDate`.
+// Igual que diasMesReporte salvo UN caso: escala MENSUAL con el mes EN CURSO
+// (24-sep-2026). Ahí la fila es el acumulado a la fecha (MTD), no un mes
+// cerrado, y se prorratea por los días ya cerrados en Lima
+// (domain/diasMesEnCurso) — igual que semanal/diario. Antes la proyección de
+// N+R y horas quedaba igual al actual (72,7% → 72,7%). Un mes cerrado sigue
+// con el período completo (daysRemaining 0 → sin extrapolar).
+function _metasDiasProy(lastDate) {
+  if (STATE.curMode === "mensual" && lastDate) {
+    const ym = reportYM(lastDate, "mensual", parseLocalDate);
+    const mtd = diasMesEnCursoMensual(ym.m, ym.y);
+    if (mtd) return mtd;
+  }
+  return diasMesReporte(lastDate, STATE.curMode, parseLocalDate);
+}
+// Proyección de un flujo a partir de su serie (camino del agregador). projA
+// (data.ts) no extrapola NUNCA en mensual; acá la excepción es el mes en curso,
+// que es justo cuando _metasDiasProy devuelve días restantes (> 0) en mensual.
+function _metasProjFlujo(vals, daysElapsed, daysRemaining) {
+  if (STATE.curMode !== "mensual" || !(daysRemaining > 0)) return projA(vals, daysElapsed, daysRemaining);
+  const total = (vals || []).reduce((s, x) => s + (x > 0 ? x : 0), 0);
+  return projectFlow(total, daysElapsed, daysRemaining);
 }
 
 // ── PRESENTACIÓN (Ola 6, sep-2026) ───────────────────────────────────────────
@@ -1272,7 +1297,7 @@ function _metasAggCombos(metas, fechasX, desde, hasta, conDiag, selSet, cityFilt
   // Proyección al cierre: días transcurridos del MES DE LA META (no del mes
   // calendario de la última fecha — en semanal la del 29-jun reporta en julio).
   const maxDate = cpRows.length ? cpRows.map(r => r.date).sort().at(-1) : ([...fechasX].sort().at(-1) || hasta);
-  const { daysElapsed, daysRemaining } = diasMesReporte(maxDate, STATE.curMode, parseLocalDate);
+  const { daysElapsed, daysRemaining } = _metasDiasProy(maxDate);
 
   // Pre-indexar cpRows por partner y por partner+city UNA vez.
   // Antes getRPC hacia cpRows.filter() ~550 veces (O(n) por call).
@@ -1353,8 +1378,8 @@ function _metasAggCombos(metas, fechasX, desde, hasta, conDiag, selSet, cityFilt
         ad: r.lastAD, nr: r.nr, sh: r.sh,
         projAD: projADbyDate(r.adByDate),
         adByDate: r.adByDate,
-        projNR: projA(r.nrV, daysElapsed, daysRemaining),
-        projSH: projA(r.shV, daysElapsed, daysRemaining) });
+        projNR: _metasProjFlujo(r.nrV, daysElapsed, daysRemaining),
+        projSH: _metasProjFlujo(r.shV, daysElapsed, daysRemaining) });
     });
   } else {
     metas.filter(m => m.city === cityFilter).forEach(m => {
@@ -1364,8 +1389,8 @@ function _metasAggCombos(metas, fechasX, desde, hasta, conDiag, selSet, cityFilt
         ad: r.lastAD, nr: r.nr, sh: r.sh,
         projAD: projADbyDate(r.adByDate),
         adByDate: r.adByDate,
-        projNR: projA(r.nrV, daysElapsed, daysRemaining),
-        projSH: projA(r.shV, daysElapsed, daysRemaining) });
+        projNR: _metasProjFlujo(r.nrV, daysElapsed, daysRemaining),
+        projSH: _metasProjFlujo(r.shV, daysElapsed, daysRemaining) });
     });
   }
 
@@ -1389,8 +1414,8 @@ function _metasAggCombos(metas, fechasX, desde, hasta, conDiag, selSet, cityFilt
       ad: r.lastAD, nr: r.nr, sh: r.sh,
       projAD: projADbyDate(r.adByDate),
       adByDate: r.adByDate,
-      projNR: projA(r.nrV, daysElapsed, daysRemaining),
-      projSH: projA(r.shV, daysElapsed, daysRemaining),
+      projNR: _metasProjFlujo(r.nrV, daysElapsed, daysRemaining),
+      projSH: _metasProjFlujo(r.shV, daysElapsed, daysRemaining),
       noMeta: true
     });
   });
@@ -1661,8 +1686,8 @@ export function _renderMetasImpl() {
     const nrV = sorted.map(v => v.nr);
     const shV = sorted.map(v => v.sh);
     const cpAD = projAD(sorted.map(v => v.ad), cityDates[cityDates.length - 1]);
-    const cpNR = projA(nrV, daysElapsed, daysRemaining);
-    const cpSH = projA(shV, daysElapsed, daysRemaining);
+    const cpNR = _metasProjFlujo(nrV, daysElapsed, daysRemaining);
+    const cpSH = _metasProjFlujo(shV, daysElapsed, daysRemaining);
 
     const cmA  = cm.reduce((s, m) => s + m.mA,  0);
     const cmNR = cm.reduce((s, m) => s + m.mNR, 0);

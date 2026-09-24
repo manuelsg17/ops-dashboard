@@ -18,6 +18,7 @@ import { metasResumenPais, _metasFechasDelMes, _metasFechasMesCompleto } from ".
 import { reportYM } from "./shared/mesReporte.js";
 import { parseLocalDate } from "./core/dates";
 import { opcionesMesMeta, mesNumero } from "./domain/mesesMeta";
+import { esMesEnCurso } from "./domain/mesEnCurso";
 
 // ── LÍNEA DE NEGOCIO (Agregador / Fleet / TukTuk / Combinado) ─────────────────
 // Localizado a Rendimiento: NO muta STATE.rawData (el agregador queda intacto para
@@ -217,8 +218,17 @@ const RD_VIEW = "rd-view rd-view--suave";
 // (Viajes, productividad…) el hueco del anillo lleva un icono neutro, o nada.
 // No se usa ui.kpiCard() porque la cifra lleva su `data-num` y el delta sigue
 // la semántica de bdgMode (NEW, nada en diario).
+//
+// `sinDelta` (escala mensual con el mes EN CURSO): en vez del delta contra el
+// mes anterior COMPLETO — que con un mes parcial da siempre una caída que no es
+// real — un sello "Mes en curso". Mismo criterio que Metas (_metasPrevFechas).
+// `extra`: HTML ya escapado de una línea secundaria (p.ej. el acumulado del
+// rango cuando el valor grande pasa a ser el del mes).
 function _rdKpi(o) {
-  const d = _rdDelta(o.cur, o.prev, { invert: o.invert });
+  const d = o.sinDelta ? "" : _rdDelta(o.cur, o.prev, { invert: o.invert });
+  const selloMes = o.sinDelta && STATE.curMode !== "diario"
+    ? `<div class="rd-tile__delta" title="${escapeHTML(t("rd.mesCurso.sinDelta"))}">${badge(t("rd.mesCurso.chip"), "neutral", { icon: "calendar" })}</div>`
+    : "";
   const g = o.goal;
   const conAnillo = !!g && g.pct != null && Number.isFinite(g.pct);
   const slot = conAnillo
@@ -228,8 +238,9 @@ function _rdKpi(o) {
     ${slot ? `<div class="rd-tile__slot">${slot}</div>` : ""}
     <div class="rd-tile__lbl">${escapeHTML(o.label)}</div>
     <div class="rd-tile__val"${o.numKey ? dn(o.numKey) : ""}>${escapeHTML(o.value)}</div>
-    ${d ? `<div class="rd-tile__delta">${d}<span class="rd-tile__prev">${escapeHTML(_rdPrevLbl())}</span></div>` : ""}
+    ${d ? `<div class="rd-tile__delta">${d}<span class="rd-tile__prev">${escapeHTML(_rdPrevLbl())}</span></div>` : selloMes}
     ${o.sub ? `<div class="rd-tile__sub">${escapeHTML(o.sub)}</div>` : ""}
+    ${o.extra ? `<div class="rd-tile__extra">${o.extra}</div>` : ""}
     ${g ? `<div class="rd-tile__cap${conAnillo ? "" : " rd-tile__cap--none"}">${escapeHTML(g.caption)}</div>` : ""}
   </div>`;
 }
@@ -279,6 +290,8 @@ function _rdEmpty(title, text) {
 // RANGO (puede abarcar varios meses), mientras el avance compara el actual DEL
 // MES de la meta. Por eso el caption dice ese actual explícito ("Septiembre:
 // 6,371 de 8,758 · 72.7%"): sin él, los dos números no cuadran a simple vista.
+// Excepción: escala mensual con el mes EN CURSO — ahí el valor grande ES el del
+// mes y el acumulado del rango va en una línea chica (ver _renderRendImpl).
 export function _rendMetaMes(line, lastDate) {
   if (!lastDate || !(STATE.metasData || []).length) return null;
   const ym = reportYM(lastDate, STATE.curMode, parseLocalDate);
@@ -543,14 +556,41 @@ export function _renderRendImpl() {
   // es el de la pestaña Metas para el mes del último período (ver _rendMetaMes).
   const metaInfo = _rendMetaMes(line, lastDate);
   const acum = t("rend.lbl.acumRango");
+  // ── Escala MENSUAL con el último período = mes EN CURSO (24-sep-2026) ──────
+  // La fila del mes es el acumulado A LA FECHA. Tres cosas no cuadraban:
+  //   1. N+R/Horas mostraban el ACUMULADO DEL RANGO (p.ej. mar–sep: 61,645)
+  //      mientras el anillo habla solo de septiembre (6,371 de 8,758). Con meta,
+  //      el valor grande pasa a ser el del mes (el MISMO actual del anillo, de
+  //      metasResumenPais) y el del rango queda en una línea chica (conserva su
+  //      data-num). AD ya era el nivel del último período = el del anillo.
+  //   2. El delta comparaba el mes parcial contra el anterior completo (−26%
+  //      siempre): se oculta, como en Metas.
+  //   3. La proyección de flujos quedaba igual al actual: ahora se prorratea por
+  //      días en metas.ts (_metasDiasProy), así Rendimiento y Metas dan la misma.
+  // Fuera de este caso (semanal, diario o mes cerrado) nada cambia.
+  const ymUlt = lastDate ? reportYM(lastDate, STATE.curMode, parseLocalDate) : null;
+  const mesParcial = STATE.curMode === "mensual" && !!ymUlt && esMesEnCurso(ymUlt.m, ymUlt.y);
+  const flujoMes = (id, totalRango, numKey) => {
+    const k = mesParcial && metaInfo ? metaInfo.kpis[id] : null;
+    if (!k || !(k.meta > 0) || k.actual == null || !Number.isFinite(k.actual)) {
+      return { value: fmt(totalRango), numKey, sub: acum };
+    }
+    return {
+      value: fmt(k.actual), numKey: numKey + ".mes",
+      sub: t("rd.mesCurso.sub", { m: metaInfo.mesCap }),
+      extra: `<span>${escapeHTML(t("rd.mesCurso.rango"))}:</span> <strong${dn(numKey)}>${escapeHTML(fmt(totalRango))}</strong>`
+    };
+  };
+  const vNR = flujoMes("nr", tNR, "rend.pais.nr");
+  const vSH = flujoMes("sh", tSH, "rend.pais.sh");
   // Sin encabezado de sección (como el prototipo B): qué mide cada tile lo dice
   // su propia línea "última semana (14/09/2026)" / "acumulado del rango".
   html += `<h2 class="ui-sr-only">${escapeHTML(t("rd.kpis.titulo"))}</h2>`;
   html += `<div class="rd-kpis rd-kpis--tiles">
-    ${_rdKpi({ label: t("metric.ad.label"), value: fmt(tAD), numKey: "rend.pais.ad", cur: tAD, prev: pAD, sub: `${periodLabel} (${d2s(lastDate)})`, goal: _rdGoal(metaInfo, "ad"), icon: "users" })}
-    ${_rdKpi({ label: t("metric.nr.label"), value: fmt(tNR), numKey: "rend.pais.nr", cur: lNR, prev: pNR, sub: acum, goal: _rdGoal(metaInfo, "nr"), icon: "user" })}
-    ${_rdKpi({ label: t("metric.sh.label"), value: fmt(tSH), numKey: "rend.pais.sh", cur: lSH, prev: pSH, sub: acum, goal: _rdGoal(metaInfo, "sh"), icon: "clock" })}
-    ${_rdKpi({ label: t("metric.tr.label"), value: fmt(tTR), numKey: "rend.pais.tr", cur: lTR, prev: pTR, sub: acum, icon: "car",
+    ${_rdKpi({ label: t("metric.ad.label"), value: fmt(tAD), numKey: "rend.pais.ad", cur: tAD, prev: pAD, sinDelta: mesParcial, sub: `${periodLabel} (${d2s(lastDate)})`, goal: _rdGoal(metaInfo, "ad"), icon: "users" })}
+    ${_rdKpi({ label: t("metric.nr.label"), ...vNR, cur: lNR, prev: pNR, sinDelta: mesParcial, goal: _rdGoal(metaInfo, "nr"), icon: "user" })}
+    ${_rdKpi({ label: t("metric.sh.label"), ...vSH, cur: lSH, prev: pSH, sinDelta: mesParcial, goal: _rdGoal(metaInfo, "sh"), icon: "clock" })}
+    ${_rdKpi({ label: t("metric.tr.label"), value: fmt(tTR), numKey: "rend.pais.tr", cur: lTR, prev: pTR, sinDelta: mesParcial, sub: acum, icon: "car",
                goal: metaInfo ? { pct: null, caption: t("rd.meta.sinMetaMensual") } : undefined })}
   </div>`;
   html += _rdGoalNota(metaInfo);
