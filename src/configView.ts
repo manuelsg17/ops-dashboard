@@ -96,7 +96,9 @@ export function renderConfigView(content) {
   if (!visibles.includes(CONFIG_STATE.section)) CONFIG_STATE.section = "partners";
   const sec = CONFIG_STATE.section;
 
-  content.innerHTML = `<div class="cfgx">${_subnavHTML(sec)}<div class="cfgx-body" id="cfgBody"></div></div>`;
+  // .cfgx-wrap es el contenedor de la container query de la sub-navegación
+  // (config.css): un elemento no puede consultarse a sí mismo.
+  content.innerHTML = `<div class="cfgx-wrap"><div class="cfgx">${_subnavHTML(sec)}<div class="cfgx-body" id="cfgBody"></div></div></div>`;
   const body = document.getElementById("cfgBody");
 
   if (sec === "partners")           _renderPartners(body);
@@ -197,6 +199,9 @@ function _motivosBadges(f) {
   return b.join(" ");
 }
 
+// Fase 8 (B · Suave): aviso tintado "N partners necesitan tu atención" con cada
+// pendiente como una fila-tarjeta suave y un enlace que filtra la tabla a solo
+// los pendientes (o vuelve a todos si ya estaba filtrada).
 function _pendientesHTML(pend, puedeEsc) {
   if (!pend.length) return "";
   const MAX = 6;
@@ -208,16 +213,22 @@ function _pendientesHTML(pend, puedeEsc) {
       </div>
       <div class="cfgx-pend__why">${_motivosBadges(f)}</div>
       <div class="cfgx-pend__act">${puedeEsc
-        ? btn({ label: f.alta ? t("cfg6.p.completar") : t("cfg6.p.darAlta"), size: "sm", variant: f.alta ? "secondary" : "secondary",
+        ? btn({ label: f.alta ? t("cfg6.p.completar") : t("cfg6.p.darAlta"), size: "sm",
                 act: f.alta ? "cfgPanelEditar" : "cfgPanelAlta", data: { clid: f.clid } })
         : ""}</div>
     </li>`).join("");
-  const mas = pend.length > MAX
-    ? `<button type="button" class="ui-link-btn" data-act="cfgEstado" data-value="pendientes">${e(t("cfg6.p.verTodosPend", { n: pend.length }))}</button>` : "";
-  return `<section class="cfgx-pend" aria-label="${e(t("cfg6.p.pendTitulo"))}">
-    <div class="cfgx-pend__head">${icon("alert-triangle", { size: 16 })}<strong>${e(t("cfg6.p.pendTitulo"))}</strong>
-      <span class="cfgx-muted">${e(t("cfg6.p.pendSub", { n: pend.length }))}</span></div>
-    <ul class="cfgx-pend__list">${items}</ul>${mas}
+  const filtrada = CONFIG_STATE.estado === "pendientes";
+  const enlace = `<button type="button" class="ui-link-btn cfgx-pend__link" data-act="cfgEstado" data-value="${filtrada ? "todos" : "pendientes"}">${
+    e(filtrada ? t("cfg8.p.verTodos") : t("cfg6.p.verTodosPend", { n: pend.length }))}${icon("arrow-right", { size: 14 })}</button>`;
+  const titulo = t(pend.length === 1 ? "cfg8.p.atencion1" : "cfg8.p.atencionN", { n: fmt(pend.length) });
+  return `<section class="cfgx-pend" aria-label="${e(titulo)}">
+    <div class="cfgx-pend__head">
+      <span class="cfgx-pend__ico" aria-hidden="true">${icon("alert-triangle", { size: 16 })}</span>
+      <div class="cfgx-pend__txt"><strong class="cfgx-pend__title">${e(titulo)}</strong>
+        <span class="cfgx-pend__sub">${e(t("cfg6.p.pendSub", { n: pend.length }))}</span></div>
+      ${enlace}
+    </div>
+    <ul class="cfgx-pend__list">${items}</ul>
   </section>`;
 }
 
@@ -292,7 +303,7 @@ export function renderConfigResults() {
   const th = s => `<th scope="col">${e(s)}</th>`;
   const tabla = `
     <div class="ui-table-wrap">
-      <table class="ui-table cfgx-table" id="crudTable">
+      <table class="ui-table cfgx-table cfgx-plist" id="crudTable">
         <thead><tr>
           ${puedeEsc ? `<th scope="col" class="cfgx-td-cb"><input type="checkbox" class="cfgx-cb" data-act-change="cfgSelPagina" ${todosSel ? "checked" : ""} ${altasPag.length ? "" : "disabled"} aria-label="${e(t("cfg6.p.selPagina"))}"/></th>` : ""}
           ${th("CLID")}${th(t("calc.col.partner"))}${th(t("sidebar.kam"))}${th(t("cfg6.col.ciudades"))}
@@ -980,7 +991,7 @@ function _reconHTML() {
   const dOpts = sel => allDates.map(d => `<option value="${e(d)}"${d === sel ? " selected" : ""}>${e(d2s(d))}</option>`).join("");
   const cityOpts = allCities.map(c => `<option value="${e(c)}"${CLASIF_STATE.city === c ? " selected" : ""}>${e(cityLabel(c))}</option>`).join("");
   let html = `
-    <p class="cfgx-hint">${t("raw.reconResumen")}</p>
+    <p class="cfgx-hint">${t("cfg8.rc.resumen")}</p>
     ${CLASIF_STATE.dateFrom === CLASIF_STATE.dateTo ? "" : alertBox({ tone: "warn", text: t("cfg6.rc.aviso") })}
     <div class="cfgx-stats"><span>${e(t("cfg6.rc.stats", { n: fmt(clids.length), o: fmt(omitCount) }))}</span></div>
     <div class="cfgx-toolbar">
@@ -1202,7 +1213,7 @@ function _preferenciasHTML() {
             ${[2, 3, 4, 5].map(n => `<option value="${n}"${STATE.declineThreshold === n ? " selected" : ""}>${e(t("cfg.nSemanas", { n }))}</option>`).join("")}
           </select></label>
       </div>
-      <p class="cfgx-hint">${t("cfg.declineAviso", { b: '<span class="decline-badge">⚠</span>', n: STATE.declineThreshold, m: e(metricLabel[STATE.declineMetric]) })}</p>
+      <p class="cfgx-hint">${t("cfg.declineAviso", { b: `<span class="cfgx-decline-ico">${icon("alert-triangle", { size: 14 })}</span>`, n: STATE.declineThreshold, m: e(metricLabel[STATE.declineMetric]) })}</p>
     </section>`;
 }
 

@@ -143,6 +143,7 @@ export async function auInvite() {
   try {
     await _fn("invite", { email, role });
     const el = document.getElementById("auInviteEmail"); if (el) el.value = "";
+    AU_UI.invitar = false;
     await auLoadUsers();
     showBanner(true, t("au.invitacionEnviada", { e: email, r: role }));
   } catch (e) {
@@ -247,7 +248,7 @@ export async function auRemoveClid(mappingId) {
 // ── ESTADO DE UI ─────────────────────────────────────────────────────────────
 // Búsqueda y filtro por rol viven acá (no en el DOM) para que sobrevivan al
 // re-render: el panel se repinta entero tras cada acción.
-export const AU_UI = { q: "", rol: "todos", confirmDelete: null };
+export const AU_UI = { q: "", rol: "todos", confirmDelete: null, invitar: false };
 
 // Ola 6: sin emojis ni colores propios por rol — icono + etiqueta neutros. El
 // rol no es un estado bueno/malo, así que no lleva color semántico.
@@ -314,22 +315,20 @@ export function renderAdminUsers() {
 
   const { permsByUser, clidsByUser } = _auIndices();
   const conteo = r => S.users.filter(u => u.role === r).length;
+  // Fase 8 (B · Suave): filtro de rol en píldora con el conteo entre paréntesis
+  // y "Invitar usuario" como botón de la barra que despliega el formulario (antes
+  // un <details> plegado debajo). El formulario es el mismo: mismos ids.
   const filtro = segmented({
     ariaLabel: t("au6.filtroRolAria"), act: "auFilterRol", value: AU_UI.rol,
-    options: [{ value: "todos", label: `${t("au.todos")} ${S.users.length}` },
-      ...AU_ROLES.map(r => ({ value: r, label: `${_roleMeta(r).label} ${conteo(r)}`, icon: _roleMeta(r).icon }))]
+    options: [{ value: "todos", label: `${t("au.todos")} (${S.users.length})` },
+      ...AU_ROLES.map(r => ({ value: r, label: `${_roleMeta(r).label} (${conteo(r)})` }))]
   });
-
-  let html = `
-    <div class="au6-toolbar">
-      <input class="ui-input au6-search" type="search" placeholder="${_e(t("au.buscarPorEmail"))}" value="${_e(AU_UI.q)}"
-             data-act-input="auSearch" autocomplete="off" aria-label="${_e(t("au.buscarPorEmail"))}"/>
-      ${filtro}
-      <span class="au6-toolbar__end">${btn({ label: t("au.refrescar"), iconOnly: true, icon: "refresh", size: "sm", variant: "ghost", act: "auLoad" })}</span>
-    </div>
-
-    <details class="au6-invite">
-      <summary>${icon("plus", { size: 14 })}<span>${_e(t("au.invitarUsuario").replace("＋ ", ""))}</span></summary>
+  const invitar = AU_UI.invitar ? `
+    <section class="ui-card au6-invite" id="auInviteBox" aria-labelledby="auInviteT">
+      <div class="au6-invite__head">
+        <h3 class="au6-invite__title" id="auInviteT">${_e(t("cfg8.au.invitarTitulo"))}</h3>
+        ${btn({ label: t("cfg.cancelar"), iconOnly: true, icon: "x", size: "sm", variant: "ghost", act: "auToggleInvite" })}
+      </div>
       <div class="au6-invite__body">
         <label class="ui-field au6-invite__email"><span class="ui-field__label">${_e(t("au6.email"))}</span>
           <input class="ui-input" id="auInviteEmail" type="email" placeholder="${_e(t("au.emailDominio"))}"/></label>
@@ -340,7 +339,20 @@ export function renderAdminUsers() {
         <div class="au6-invite__btn">${btn({ label: t("au.enviarInvitacion"), variant: "primary", act: "auInvite" })}</div>
         <p class="ui-field__hint au6-invite__hint">${t("au.invitarHint")}</p>
       </div>
-    </details>`;
+    </section>` : "";
+
+  let html = `
+    <div class="au6-toolbar">
+      <input class="ui-input au6-search" type="search" placeholder="${_e(t("au.buscarPorEmail"))}" value="${_e(AU_UI.q)}"
+             data-act-input="auSearch" autocomplete="off" aria-label="${_e(t("au.buscarPorEmail"))}"/>
+      ${filtro}
+      <span class="au6-toolbar__end">
+        ${btn({ label: t("au.refrescar"), iconOnly: true, icon: "refresh", size: "sm", variant: "ghost", act: "auLoad" })}
+        ${btn({ label: t("cfg8.au.invitar"), icon: "plus", act: "auToggleInvite" })
+            .replace("<button ", `<button aria-expanded="${AU_UI.invitar ? "true" : "false"}" `)}
+      </span>
+    </div>
+    ${invitar}`;
 
   // La lista va en su propio contenedor: el buscador la repinta SOLA (I8) y así
   // el <input> no se destruye en cada tecla (antes perdía el foco al tipear).
@@ -552,6 +564,11 @@ registerActions({
   auCancelDelete:() => { AU_UI.confirmDelete = null; renderAdminUsers(); },
   auDelete:      d => auDeleteUser(d.uid),
   auInvite: () => auInvite(),
+  auToggleInvite: () => {
+    AU_UI.invitar = !AU_UI.invitar;
+    renderAdminUsers();
+    if (AU_UI.invitar) document.getElementById("auInviteEmail")?.focus();
+  },
   auSetRole:      (d, el) => auSetRole(d.uid, el.value),
   auSetKam:       (d, el) => auSetKam(d.uid, el.value),
   auTogglePerm:   (d, el) => auTogglePerm(d.uid, d.perm, el.checked),
