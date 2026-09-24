@@ -202,7 +202,14 @@ Navegación lateral por grupos y rol, encabezado de página con chips de alcance
 | 3 — diccionarios | Integrada (`1974389`) | Huella: 0 diferencias. Deck en ruso verificado en pantalla sin claves crudas. `check:drift` ampliado (placeholders, tríos, ternarios de idioma) con prueba de que dispara. 8 tablas de meses → 1; tuteo en toda la app |
 | 5 — shell y navegación | Integrada (`20b6a96`) | Huella: 0 diferencias. Revisado en pantalla: navegación lateral agrupada, encabezado con chips de alcance ("Ciudad: Arequipa ×", "Restablecer" vuelve todo a por defecto), panel de Filtros plegable. El agente verificó 4 roles × 8 pestañas × 1440/1024 sin errores ni desborde |
 | 6 — rediseño por vista | Integrada (`e26fa54`) | Calculadora, Metas, Configuración + Data Raw, Rendimiento, Presentación (+ retiro de Vista Partner), Seguimiento + Portal, y una pasada de integración (meta de Rendimiento y Metas desde una sola función `metasResumenPais`; cruce Rendimiento↔Metas en 73 comparaciones, 0 diferencias). **Huella completa vs Ola 3: 0 cifras cambiadas, 0 quitadas, 24 nuevas** (variaciones de Metas). 484 tests |
-| 7 — modo oscuro + limpieza de CSS | En curso | — |
+| 7 — modo oscuro + limpieza de CSS + decisiones de Manuel | Integrada (`55a60dc`) | Huella vs Ola 6: 0 diferencias. 48 pares de contraste AA en oscuro. Exportaciones generadas en claro y en oscuro: píxeles idénticos. CSS del build 148→136 kB. 510 tests |
+
+### Pasos para llevar a producción (cada uno con confirmación explícita de Manuel)
+1. Revisión de Manuel en local (`npm run dev` sobre la rama `mejora/integracion`, sesión con `npm run local:session <rol>`).
+2. Merge de `mejora/integracion` a `main` + push (deploy automático de Pages/Vercel).
+3. **En el mismo momento**: aplicar `migrations/2026-09-23_metas_unique_mes_year.sql` en producción (código y migración van juntos; si no, guardar metas da 42P10).
+4. Opcional: desplegar `admin-users` con `setKam` (`npx supabase functions deploy admin-users --project-ref oqakoinyzvdgqilxwjjv`).
+5. Verificar producción: CI verde, URL real, consola sin errores.
 
 Decisiones de Manuel sobre lo surgido en la Ola 6 (24-sep-2026):
 1. Metas → "Sobre meta" = **≥100%**. Filtros: Sobre = todos los KPIs ≥100%; Bajo = alguno <95%; En meta = el resto. Los colores (pColor 80/95/150) no cambian.
