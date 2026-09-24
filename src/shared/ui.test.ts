@@ -142,7 +142,8 @@ describe("avance contra la meta", () => {
     expect(goalTone(80)).toBe("warn");
     expect(goalTone(94.9)).toBe("warn");
     expect(goalTone(95)).toBe("ok");
-    expect(goalTone(150)).toBe("ok");
+    expect(goalTone(99.9)).toBe("ok");
+    expect(goalTone(100)).toBe("over");
     expect(goalTone(150.1)).toBe("over");
   });
 

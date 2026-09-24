@@ -168,10 +168,11 @@ export function delta(value: number | null | undefined, o: DeltaOptions = {}): H
 
 /** Mismos cortes que pColor()/pEstado() (core/format.ts), para que un % se
  *  lea igual en toda la app: <80 atrasado (bad) · 80–94 cerca (warn) ·
- *  95–150 cumplió (ok) · >150 meta desalineada (over). */
+ *  95–99 cumplió (ok) · ≥100 sobre meta (over, morado — decisión de Manuel
+ *  24-sep-2026; >150 sigue siendo "meta desalineada" como estado aparte). */
 export function goalTone(pct: number | null | undefined): Exclude<Tone, "neutral" | "info"> | null {
   if (pct == null || !Number.isFinite(pct)) return null;
-  if (pct > 150) return "over";
+  if (pct >= 100) return "over";
   if (pct >= 95) return "ok";
   if (pct >= 80) return "warn";
   return "bad";

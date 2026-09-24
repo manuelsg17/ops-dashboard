@@ -130,7 +130,7 @@ function kpis(): string {
       goal: { pct: 164, caption: "164% de la meta (665) · revisar la meta" } }) +
     `</div>`;
   return sec("Tarjetas KPI", main + estados,
-    "Dirección B: valor, delta vs período anterior y avance contra la meta del mes. Cortes del color = pColor(): <80 · 80–94 · 95–150 · >150.");
+    "Dirección B: valor, delta vs período anterior y avance contra la meta del mes. Cortes del color = pColor(): <80 · 80–94 · 95–99 · ≥100 (sobre meta).");
 }
 
 function badgesChips(): string {
@@ -166,7 +166,7 @@ function tabla(): string {
   const head = `<tr><th>Partner</th><th>Ciudad</th><th>KAM</th><th class="ui-num" aria-sort="descending">AD</th><th class="ui-num">Δ AD</th><th class="ui-num">N+R</th><th>Meta</th>` +
     extra.map(e => `<th class="ui-num">${e}</th>`).join("") + `</tr>`;
   const body = rows.map(([p, c, k, ad, d, nr, pct]) => {
-    const tone = pct == null ? "neutral" : pct > 150 ? "over" : pct >= 95 ? "ok" : pct >= 80 ? "warn" : "bad";
+    const tone = pct == null ? "neutral" : pct >= 100 ? "over" : pct >= 95 ? "ok" : pct >= 80 ? "warn" : "bad";
     return `<tr><td>${escapeHTML(p)}</td><td>${escapeHTML(c)}</td><td>${escapeHTML(k)}</td>` +
       `<td class="ui-num">${ad.toLocaleString("es-PE")}</td>` +
       `<td class="ui-num">${d == null ? "N/A" : (d > 0 ? "+" : d < 0 ? "−" : "") + Math.abs(d).toFixed(1) + "%"}</td>` +

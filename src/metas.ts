@@ -369,8 +369,8 @@ function _metasProjDays(lastDate) {
 // las cifras de lugar, nunca cambia cómo se formatean.
 //
 // Colores: solo tokens semánticos. El % de cumplimiento usa los MISMOS cortes
-// que pColor()/pEstado() vía ui.goalTone (<80 bad · 80–94 warn · 95–150 ok ·
-// >150 over). Ciudades y KAMs llevan la paleta categórica (--cat-N), nunca el
+// que pColor()/pEstado() vía ui.goalTone (<80 bad · 80–94 warn · 95–99 ok ·
+// ≥100 over = sobre meta). Ciudades y KAMs llevan la paleta categórica (--cat-N), nunca el
 // rojo de marca; el color de hash del partner queda solo como un puntito.
 
 // Estado de UI de la sección de partners (no se persiste: cada sesión arranca

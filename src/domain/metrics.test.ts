@@ -378,13 +378,19 @@ describe("escala de cumplimiento (pColor/pEstado)", () => {
     expect(pEstado(80)).toBe("cerca");
     expect(pEstado(94.9)).toBe("cerca");
     expect(pEstado(95)).toBe("cumplio");
-    expect(pEstado(100)).toBe("cumplio");
+    expect(pEstado(99.9)).toBe("cumplio");
+  });
+
+  it("desde 100% es SOBRE META (morado) — decisión de Manuel, 24-sep-2026", () => {
+    expect(pEstado(100)).toBe("sobre_meta");
+    expect(pColor(100)).toBe("#8b5cf6");
+    expect(pColor(99.9)).toBe("#10b981");
   });
 
   it("sobrecumplir por poco NO es lo mismo que duplicar la meta", () => {
     // 101% y 208% pintaban idénticos. Un 208% es una meta mal calibrada.
-    expect(pEstado(105)).toBe("cumplio");
-    expect(pEstado(150)).toBe("cumplio");
+    expect(pEstado(105)).toBe("sobre_meta");
+    expect(pEstado(150)).toBe("sobre_meta");
     expect(pEstado(208)).toBe("meta_desalineada");
   });
 
@@ -395,7 +401,7 @@ describe("escala de cumplimiento (pColor/pEstado)", () => {
 
   it("el color y la etiqueta usan el MISMO corte (no pueden contradecirse)", () => {
     const verde = "#10b981", ambar = "#f59e0b", rojo = "#FF0000", morado = "#8b5cf6";
-    const esperado = { cumplio: verde, cerca: ambar, atrasado: rojo, meta_desalineada: morado };
+    const esperado = { cumplio: verde, cerca: ambar, atrasado: rojo, sobre_meta: morado, meta_desalineada: morado };
     for (const p of [0, 50, 79.9, 80, 94.9, 95, 99.9, 100, 150, 150.1, 208, 400]) {
       expect(pColor(p)).toBe(esperado[pEstado(p)]);
     }

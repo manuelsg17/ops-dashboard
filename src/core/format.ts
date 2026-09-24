@@ -79,17 +79,24 @@ export function d2s(d) { return d ? d.split("-").reverse().join("/") : "--"; }
 //     es una meta mal calibrada, y el informe la celebraba en vez de
 //     señalarla. Ahora el morado empieza en 150% y significa "revisar meta".
 //
-// Cuatro estados con significado propio:
+// ACTUALIZACIÓN 24-sep-2026 (decisión de Manuel, textual: "si es sobre meta,
+// es decir alcanzó más de lo que se pidió debería ser morado"): el morado
+// vuelve a empezar en 100%. Sobre-cumplir se distingue de "cumplió" (95–99,
+// verde). Lo de "meta desalineada" (>150) NO se pierde: sigue siendo su propio
+// ESTADO (etiqueta y señal de la lectura del deck), aunque comparta el morado.
+//
+// Estados:
 //   morado >150  meta desalineada (revisar con el KAM)
-//   verde  >=95  cumplio (umbral de negocio de Manuel, no 100)
+//   morado >=100 sobre meta (alcanzó más de lo que se pidió)
+//   verde  >=95  cumplio (umbral de negocio de Manuel)
 //   ambar  >=80  cerca, falta poco
 //   rojo   <80   atrasado
-export function pColor(p) { return p > 150 ? "#8b5cf6" : p >= 95 ? "#10b981" : p >= 80 ? "#f59e0b" : "#FF0000"; }
+export function pColor(p) { return p >= 100 ? "#8b5cf6" : p >= 95 ? "#10b981" : p >= 80 ? "#f59e0b" : "#FF0000"; }
 
 // Etiqueta del estado de cumplimiento, en el MISMO corte que pColor — asi el
 // color y la palabra nunca pueden contradecirse.
 export function pEstado(p) {
-  return p > 150 ? "meta_desalineada" : p >= 95 ? "cumplio" : p >= 80 ? "cerca" : "atrasado";
+  return p > 150 ? "meta_desalineada" : p >= 100 ? "sobre_meta" : p >= 95 ? "cumplio" : p >= 80 ? "cerca" : "atrasado";
 }
 
 export function semCls(p) { return p >= 95 ? "sem-g" : p >= 80 ? "sem-y" : "sem-r"; }

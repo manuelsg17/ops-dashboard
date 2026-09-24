@@ -124,7 +124,7 @@ export let PRESENT2_STATE = {
   partner:  null,
   lang:     "es",       // es | en | ru
   slide:    0,          // 0=Matriz, 1=Data Raw #, 2=Data Raw %
-  cohort:   {},         // { t23, t45, t610, t5 } activados (sin "Top 1": ver P2_BANDS)
+  cohort:   {},         // { t610, t5 } activados (mínimo 3 partners: ver P2_BANDS)
   cmpCity:  true,       // mostrar tendencia de ciudad
   fleetMode: "auto",    // "auto" | "fleet" | "taxi" — auto = según is_fleet del partner
   dataset:  "taxi",     // "taxi" | "tuktuk" — qué slice de partners/datos se muestra
@@ -573,9 +573,14 @@ export function destroyPresent2Charts() {
 // Sin banda "Top 1" (decisión de Manuel, 24-sep-2026): era UN solo partner, así
 // que su "promedio" era el dato crudo de un competidor identificable. No volver
 // a agregar una banda de un solo miembro.
+// MÍNIMO 3 PARTNERS (decisión de Manuel, 24-sep-2026: "minimo 3 partners"): un
+// promedio de 1 o 2 competidores deja ver el dato de cada uno. Por eso tampoco
+// existen "Top 2-3" ni "Top 4-5" — tienen 2 miembros POR DEFINICIÓN, así que
+// nunca podrían mostrarse. Y aun las bandas anchas se ocultan en el momento si
+// en ese alcance (ciudad chica) quedan menos de P2_MIN_COHORTE partners
+// distintos del propio (ver p2CohortLines).
+export const P2_MIN_COHORTE = 3;
 export const P2_BANDS = [
-  { key: "t23",  range: [1, 3],  color: "#f59e0b", es: "Top 2-3",     en: "Top 2-3",   ru: "Топ 2-3" },
-  { key: "t45",  range: [3, 5],  color: "#0284c7", es: "Top 4-5",     en: "Top 4-5",   ru: "Топ 4-5" },
   { key: "t610", range: [5, 10], color: "#a855f7", es: "Top 6-10",    en: "Top 6-10",  ru: "Топ 6-10" },
   { key: "t5",   range: [0, 5],  color: "#10b981", es: "Prom. Top 5", en: "Avg Top 5", ru: "Средн. Топ 5" }
 ];
@@ -847,7 +852,9 @@ export function p2CohortLines(scope, dates, kpiKey) {
   P2_BANDS.forEach(b => {
     if (!tog[b.key]) return;
     const members = ranked.slice(b.range[0], b.range[1]);
-    if (!members.length) return;
+    // Privacidad: sin al menos P2_MIN_COHORTE competidores (sin contar al
+    // propio partner) la línea no se dibuja.
+    if (members.filter(p => p !== PRESENT2_STATE.partner).length < P2_MIN_COHORTE) return;
     out.push({ label: P2T(b.es, b.en, b.ru || b.en), data: p2CohortAvg(members, scope, dates, kpiKey), color: b.color });
   });
   return out;
