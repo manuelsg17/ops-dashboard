@@ -39,7 +39,7 @@
   min-height: 420px;
   overflow: auto; overscroll-behavior: contain; scrollbar-width: thin;
   padding: var(--space-5);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-card);
 }
 .calc-side__who { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: var(--space-2); align-items: end; }
 .calc-side__block { display: flex; flex-direction: column; gap: var(--space-3); }
@@ -53,8 +53,8 @@
 .calc-mes {
   display: flex; align-items: center; gap: 0 var(--space-2); flex-wrap: wrap;
   min-height: 36px; padding: 2px var(--space-3);
-  background: var(--color-surface-muted); border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm); color: var(--color-text-muted);
+  background: var(--color-fill-soft); border: 1px solid transparent;
+  border-radius: var(--radius-control); color: var(--color-text-muted);
 }
 .calc-mes__val { font-size: var(--text-base); font-weight: var(--weight-semibold); color: var(--color-text); }
 .calc-mes__sub { font-size: var(--text-xs); color: var(--color-text-muted); }
@@ -80,7 +80,7 @@
 .calc-goal__hint strong { color: var(--color-text); font-weight: var(--weight-semibold); }
 
 /* Ajustes avanzados (plegado) */
-.calc-adv { border-top: 1px solid var(--color-border); padding-top: var(--space-3); }
+.calc-adv { border-top: 1px solid var(--color-border-soft); padding-top: var(--space-3); }
 .calc-adv__sum {
   cursor: pointer; display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 var(--space-2);
   font-size: var(--text-md); font-weight: var(--weight-semibold); color: var(--color-text);
@@ -94,7 +94,7 @@
 .calc-adv__res:empty { display: none; }
 .calc-adv__body { display: flex; flex-direction: column; gap: var(--space-4); margin-top: var(--space-3); }
 .calc-adv__sec { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
-.calc-adv__sec--danger { padding-top: var(--space-3); border-top: 1px dashed var(--color-border-strong); }
+.calc-adv__sec--danger { padding-top: var(--space-3); border-top: 1px dashed var(--color-border); }
 .calc-adv__h { margin: 0; padding: 0; font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--color-text); }
 
 .calc-tkpct { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); }
@@ -127,7 +127,7 @@
   display: flex; align-items: flex-start; gap: var(--space-2);
   padding: var(--space-2) var(--space-3); cursor: pointer;
   background: var(--color-surface);
-  border: 1px solid var(--color-border-strong); border-radius: var(--radius-md);
+  border: 1px solid var(--color-border); border-radius: var(--radius-control);
 }
 .calc-mode:hover { border-color: var(--color-border-input); }
 .calc-mode.is-on { border-color: var(--color-info-solid); background: var(--color-info-bg); }
@@ -142,7 +142,7 @@
   display: flex; align-items: flex-start; gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   font-size: var(--text-sm); line-height: var(--leading-normal);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-control);
 }
 .calc-cuadre-box > .ui-icon { flex: 0 0 auto; margin-top: 2px; }
 .calc-cuadre-box--ok   { color: var(--color-ok-fg);   background: var(--color-ok-bg); }
@@ -162,7 +162,7 @@
   margin: 0 calc(-1 * var(--space-5)) calc(-1 * var(--space-5));
   padding: var(--space-3) var(--space-5) var(--space-5);
   display: flex; flex-direction: column; gap: var(--space-2);
-  background: var(--color-surface); border-top: 1px solid var(--color-border);
+  background: var(--color-surface); border-top: 1px solid var(--color-border-soft);
 }
 .calc-side__btns { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .calc-side__actions > .ui-alert { margin: 0; }
@@ -184,17 +184,18 @@
 
 /* Colapsables (referencia, metas % KAM) */
 .calc-details {
-  border: 1px solid var(--color-border); border-radius: var(--radius-md);
-  background: var(--color-surface);
+  border: 1px solid var(--color-border-soft); border-radius: var(--radius-table);
+  background: var(--color-surface); box-shadow: var(--shadow-card);
 }
+.calc-adv .calc-details { box-shadow: none; border-color: var(--color-border); }
 .calc-details > summary {
   cursor: pointer; list-style-position: inside;
   padding: var(--space-2) var(--space-3);
   font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--color-text-muted);
 }
 .calc-details > summary:hover { color: var(--color-text); }
-.calc-details > summary:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius-md); }
-.calc-details[open] > summary { border-bottom: 1px solid var(--color-border); }
+.calc-details > summary:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius-table); }
+.calc-details[open] > summary { border-bottom: 1px solid var(--color-border-soft); }
 .calc-details__body { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-3); }
 
 /* ── Tabla de reparto ────────────────────────────────────────────────────── */
@@ -217,7 +218,7 @@
 .calc-dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: var(--radius-pill); }
 .calc-soltar { font-size: var(--text-xs); }
 
-.calc-num--cell { width: 96px; height: 32px; text-align: right; font-variant-numeric: tabular-nums; }
+.calc-num--cell { width: 96px; height: 32px; text-align: right; font-variant-numeric: tabular-nums; border-radius: var(--radius-control-sm); }
 .calc-num--fleet { width: 88px; }
 /* Fijado a mano (no sigue el reparto): tinte info en la fila y en la celda. */
 .calc-row--fija > td, .calc-row--fija:hover > td { background: var(--color-info-bg); }
@@ -239,7 +240,7 @@
 .calc-ref-table tfoot th, .calc-ref-table tfoot td {
   position: sticky; bottom: 0; z-index: 1;
   background: var(--color-surface-muted);
-  border-top: 1px solid var(--color-border-strong);
+  border-top: 1px solid var(--color-border);
   border-bottom: 0;
   font-weight: var(--weight-bold);
   text-align: left;
@@ -257,6 +258,7 @@
 .calc-sub__text { margin: 0; font-size: var(--text-sm); color: var(--color-text-muted); }
 
 /* ── Tarjeta para el partner ─────────────────────────────────────────────── */
+.calc-share { display: flex; flex-direction: column; gap: var(--space-3); }
 .calc-share__controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-4); }
 .calc-share__btns { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .calc-combo { position: relative; width: 260px; max-width: 100%; }
@@ -264,7 +266,7 @@
   display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 20;
   margin-top: 2px; max-height: 280px; overflow-y: auto;
   background: var(--color-surface);
-  border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-strong); border-radius: var(--radius-control);
   box-shadow: var(--shadow-md);
 }
 .calc-combo__opt {
@@ -286,7 +288,7 @@
   max-width: 560px;
   padding: var(--space-5);
   background: var(--color-surface);
-  border: 1px solid var(--color-border-strong); border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border); border-radius: var(--radius-card);
   color: var(--color-text); font-family: var(--font-sans);
 }
 .calc-card__head { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-4); }
