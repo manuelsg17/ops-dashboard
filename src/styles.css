@@ -114,9 +114,4 @@
 .agy-style-429 { font-size:.9rem;line-height:1 }
 .agy-style-430 { flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:8px }
 .agy-style-443 { width:100%;aspect-ratio:16/9;background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.12);overflow:hidden;color:#111 }
-.agy-style-532 { display:flex;align-items:center;gap:10px;margin:18px 0 8px;padding:0 4px }
-.agy-style-533 { font-size:1.1rem }
-.agy-style-534 { flex:1 }
-.agy-style-535 { font-size:.92rem;font-weight:800;color:var(--color-text) }
-.agy-style-536 { font-size:.7rem;color:var(--color-text-muted) }
 

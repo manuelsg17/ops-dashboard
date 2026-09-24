@@ -2209,9 +2209,6 @@ export const I18N: Record<string, Record<string, string>> = {
   // ── Rendimiento (Ola 6, rediseño de la vista) ────────────────────────────
   "rd.linea.aria":        { es: "Línea de negocio", en: "Business line", ru: "Направление" },
   "rd.kpis.titulo":       { es: "Resumen del período", en: "Period summary", ru: "Итоги периода" },
-  "rd.kpis.sub":          { es: "Conductores activos: {p} ({d}) · N+R, horas y viajes: acumulado del rango",
-                            en: "Active drivers: {p} ({d}) · N+R, hours and trips: range total",
-                            ru: "Активные водители: {p} ({d}) · N+R, часы и поездки: сумма за период" },
   // Caption de la barra de avance: el actual DEL MES explícito (el valor grande
   // de la tarjeta puede ser el acumulado de un rango de varios meses).
   "rd.meta.capMes":       { es: "{m}: {a} de {n} · {p}", en: "{m}: {a} of {n} · {p}", ru: "{m}: {a} из {n} · {p}" },
@@ -2390,6 +2387,9 @@ export const I18N: Record<string, Record<string, string>> = {
   "tema.claro":   { es: "Claro",   en: "Light",  ru: "Светлая" },
   "tema.oscuro":  { es: "Oscuro",  en: "Dark",   ru: "Тёмная" },
   "tema.sistema": { es: "Sistema", en: "System", ru: "Системная" },
+  // ── Rendimiento "B · Suave" (fase 8): tiles por ciudad ──────────────────
+  "rd.ciudad.unidad":    { es: "conductores", en: "drivers", ru: "водителей" },
+  "rd.ciudad.sparkAria": { es: "Conductores activos por período en {c}", en: "Active drivers per period in {c}", ru: "Активные водители по периодам: {c}" },
 };
 
 let _lang = "es";
