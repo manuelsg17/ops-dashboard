@@ -201,3 +201,8 @@ th[aria-sort="ascending"] .mt-sortbtn, th[aria-sort="descending"] .mt-sortbtn { 
 }
 .mt-tksub span { color: var(--color-text); font-weight: var(--weight-semibold); }
 .mt-pk .mt-tksub { margin-top: var(--space-1); }
+
+/* ── Línea TukTuk: % sobre las cuentas con cuota declarada (24-sep-2026) ── */
+/* Bajo la barra del % en las tablas por ciudad/KAM: sobre qué cifra se mide. */
+.mt-cuota { margin-top: var(--space-1); font-variant-numeric: tabular-nums; line-height: 1.3; }
+.mt-cuota span { color: var(--color-text); font-weight: var(--weight-semibold); }

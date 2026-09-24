@@ -1,7 +1,7 @@
 //@ts-nocheck
 import { ensurePdfLibs } from "./shared/lazyLibs.js";
 import { opcionesCapturaClara } from "./shared/exportClaro";
-import { t, mesLabel, kamLabel } from "./core/i18n";
+import { t, mesLabel, kamLabel, getLang } from "./core/i18n";
 import { dn } from "./shared/huella";
 import { logAccess } from "./shared/accessLog.js";
 // Núcleo de cálculo compartido (snapshot vs flujo, proyecciones, ponderados).
@@ -18,6 +18,8 @@ import { esMesEnCurso } from "./domain/mesEnCurso";
 import { d2s } from "./core/format";
 import { estadoMetaFila } from "./domain/estadoMeta";
 import { tieneCuotaTk, coberturaCuotaTk, sumaCuotaTk } from "./domain/cuotaTk";
+import { avanceSobreCuota } from "./domain/avanceCuota";
+import { variacionPct, fechasMesAnteriorCompleto, mesEnFrase } from "./domain/vsMesAnterior";
 import { ordenarKams } from "./domain/desgloseKam";
 import { escalaLista, reintentarCuandoEscalaLista } from "./shared/escalaLista";
 import { partesAlcance } from "./shared/alcance";
@@ -461,7 +463,9 @@ function _mtAlerts(html) {
 // `tk` (opcional): suma de la cuota TukTuk GUARDADA del grupo (null = ninguna
 // fila la trae → no se pinta nada). `sinMetaTxt` (opcional): rótulo propio de
 // la línea para "sin meta" (TukTuk: "sin cuota TukTuk declarada").
-function _mtKpiTds(real, meta, proj, F, numKey, showProj, tk = null, sinMetaTxt = "") {
+// `cuota` (opcional, línea TukTuk): el % y el de la proyección salen de las
+// cuentas con cuota declarada (ver _metasAvanceCuota) y se dice cuántas son.
+function _mtKpiTds(real, meta, proj, F, numKey, showProj, tk = null, sinMetaTxt = "", cuota = null) {
   if (!_metasProyOn) proj = null;
   const dash = `<td class="ui-num mt-muted">—</td>`;
   const tkSub = tk != null
@@ -474,25 +478,32 @@ function _mtKpiTds(real, meta, proj, F, numKey, showProj, tk = null, sinMetaTxt 
     return `${dash}<td class="ui-num"><span${_dn(numKey, "meta")}>${F(meta || 0)}</span>${tkSub}</td>` +
       `<td class="mt-pctcell"><span class="mt-note">${_E(t("metas.metaSinActual"))}</span></td>${showProj ? dash : ""}`;
   }
-  const p  = meta > 0 ? (real / meta) * 100 : 0;
-  const pp = meta > 0 && proj != null ? (proj / meta) * 100 : 0;
+  const p  = cuota ? (cuota.pct ?? 0) : meta > 0 ? (real / meta) * 100 : 0;
+  const pp = cuota ? (cuota.pctProj ?? 0) : meta > 0 && proj != null ? (proj / meta) * 100 : 0;
   const projTd = !showProj ? "" : proj == null ? dash
-    : `<td class="ui-num"><span${_dn(numKey, "proj")}>${_mtProjTxt(F, proj)}</span> <span class="mt-sub">(${pp.toFixed(1)}%)</span></td>`;
+    : cuota
+      ? `<td class="ui-num"><span${_dn(numKey, "proj")}>${_mtProjTxt(F, proj)}</span>` +
+        (cuota.proj != null ? `<div class="mt-sub">${_E(t("mt.tk.proyCuotaCorta", { v: _mtProjTxt(F, cuota.proj), p: pp.toFixed(1) + "%" }))}</div>` : "") + `</td>`
+      : `<td class="ui-num"><span${_dn(numKey, "proj")}>${_mtProjTxt(F, proj)}</span> <span class="mt-sub">(${pp.toFixed(1)}%)</span></td>`;
+  const cuotaSub = cuota
+    ? `<div class="mt-sub mt-cuota" title="${_E(t("mt.tk.capCuotaTip"))}">${t("mt.tk.cuotaCorta", {
+        a: `<span${_dn(numKey, "cuota")}>${_E(F(cuota.actual ?? 0))}</span>`, n: _E(F(meta)), c: cuota.n, t: cuota.total })}</div>`
+    : "";
   return `<td class="ui-num"><span${_dn(numKey, "real")}>${F(real)}</span></td>` +
     `<td class="ui-num"><span${_dn(numKey, "meta")}>${F(meta)}</span>${tkSub}</td>` +
-    `<td class="mt-pctcell"><div class="mt-pctwrap">${_mtPctBadge(p, meta, numKey)}${_mtBar(p, proj == null ? null : pp, meta)}</div></td>` +
+    `<td class="mt-pctcell"><div class="mt-pctwrap">${_mtPctBadge(p, meta, numKey)}${_mtBar(p, proj == null ? null : pp, meta)}</div>${cuotaSub}</td>` +
     projTd;
 }
 
 // Tabla compacta por ciudad / por KAM: una fila por KPI, la entidad agrupada.
 // groups: [{ name, dot, count, extra, rows: [{ label, real, meta, proj, F, numKey }] }]
-function _mtGroupTable(entLabel, groups) {
+function _mtGroupTable(entLabel, groups, pctLabel = "") {
   // Columna de proyección solo si el mes está en curso Y algún KPI proyecta
   // (las tasas de Fleet no se proyectan: sería una columna de guiones).
   const showProj = _metasProyOn && groups.some(g => g.rows.some(r => r && r.proj != null));
   const head = `<tr><th scope="col">${_E(entLabel)}</th><th scope="col">${_E(t("mt.col.kpi"))}</th>` +
     `<th scope="col" class="ui-num">${_E(t("mt.col.actual"))}</th><th scope="col" class="ui-num">${_E(t("mt.col.meta"))}</th>` +
-    `<th scope="col">${_E(t("mt.col.pct"))}</th>` +
+    `<th scope="col">${_E(pctLabel || t("mt.col.pct"))}</th>` +
     (showProj ? `<th scope="col" class="ui-num">${_E(t("mt.col.proy"))}</th>` : "") + `</tr>`;
   let body = "";
   groups.forEach(g => {
@@ -505,7 +516,7 @@ function _mtGroupTable(entLabel, groups) {
             `<div class="mt-sub">${_E(_mtCuentas(g.count))}</div>${g.extra || ""}</th>`
           : "") +
         `<td class="mt-kpiname">${_E(r.label)}</td>` +
-        _mtKpiTds(r.real, r.meta, r.proj, r.F || fmt, r.numKey, showProj, r.tk, r.sinMetaTxt) + `</tr>`;
+        _mtKpiTds(r.real, r.meta, r.proj, r.F || fmt, r.numKey, showProj, r.tk, r.sinMetaTxt, r.cuota) + `</tr>`;
     });
   });
   if (!body) return "";
@@ -893,37 +904,34 @@ function _mtMesTxt(mesName) {
   return mesLabel(mesName) + (y != null ? " " + y : "");
 }
 
-// "Mismo punto del mes anterior" para el delta de las tarjetas del resumen: los
-// períodos del mes previo en las MISMAS posiciones que ocupan los del mes de la
-// meta dentro de su mes (semana 1-2-3 contra semana 1-2-3; en mensual, el mes
-// anterior entero). Si el mes previo no tiene esos períodos, o no están
-// CARGADOS en la ventana (antes de la primera fecha de STATE.rawData), no hay
-// delta: mejor no mostrarlo que compararlo contra ceros.
+// Delta de las tarjetas del resumen: contra el RESULTADO FINAL del mes anterior
+// (decisión de Manuel, 24-sep-2026: "tiene que compararse contra el resultado
+// final del mes anterior, así de simple"). En TODAS las escalas: el acumulado
+// del mes a la fecha (flujos) o el nivel actual (conductores activos) contra el
+// mes anterior COMPLETO — su total, o su último nivel. Antes se comparaba "al
+// mismo punto" (semanas 1-3 contra semanas 1-3) y en mensual con el mes en curso
+// el delta se escondía. La regla vive en domain/vsMesAnterior (la misma que usa
+// Rendimiento en mensual); el rótulo lo dice: "vs agosto (mes completo)", así
+// la caída de un mes a medias se entiende. Si el mes anterior no está CARGADO
+// entero en la ventana, no hay delta: mejor no mostrarlo que compararlo contra
+// un mes a medias.
 function _metasPrevFechas(mesDates) {
-  if (!mesDates || !mesDates.length) return null;
-  // En mensual el período ES el mes: con el mes en curso (parcial) contra el mes
-  // anterior completo no hay "mismo punto" — el delta de N+R/horas diría −25%
-  // por construcción. Solo se compara un mes cerrado contra el anterior.
-  const mensual = STATE.curMode === "mensual";
-  if (mensual && _metasProyOn) return null;
-  const ym = d => reportYM(d, STATE.curMode, parseLocalDate);
-  const r0 = ym(mesDates[0]);
-  const todas = [...(STATE.allDates || [])].sort();
-  const full = todas.filter(d => { const r = ym(d); return r.y === r0.y && r.m === r0.m; });
-  const pos = mesDates.map(d => full.indexOf(d));
-  if (pos.some(p => p < 0)) return null;
-  const pm = r0.m === 1 ? 12 : r0.m - 1, py = r0.m === 1 ? r0.y - 1 : r0.y;
-  const prevAll = todas.filter(d => { const r = ym(d); return r.y === py && r.m === pm; });
-  if (pos.some(p => p >= prevAll.length)) return null;
-  const prev = pos.map(p => prevAll[p]);
   let minCargada = "";
   for (const r of STATE.rawData || []) if (!minCargada || r.date < minCargada) minCargada = r.date;
-  if (!minCargada || prev[0] < minCargada) return null;
-  return { fechas: new Set(prev), label: t(mensual ? "mt.vsPrevMes" : "mt.vsPrev", { m: mesLabel(MES_NOMBRES[pm - 1]) }) };
+  const prev = fechasMesAnteriorCompleto(mesDates || [], STATE.allDates || [],
+    d => reportYM(d, STATE.curMode, parseLocalDate), minCargada);
+  if (!prev) return null;
+  return { fechas: new Set(prev.fechas), label: etiquetaMesCompleto(prev.m, true) };
+}
+// "vs agosto (mes completo)" (conVs) / "agosto (mes completo)" — el MISMO texto
+// en Metas y en Rendimiento (que lo importa de acá). m = mes 1-12.
+export function etiquetaMesCompleto(m, conVs = true) {
+  const mes = mesEnFrase(m, getLang()) || mesLabel(MES_NOMBRES[m - 1]);
+  return t(conVs ? "cmp.vsMesCompleto" : "cmp.mesCompleto", { m: mes });
 }
 function _mtDelta(actual, prev) {
-  if (actual == null || prev == null || !(prev > 0)) return null;
-  return ((actual - prev) / prev) * 100;
+  if (!(prev > 0)) return null;
+  return variacionPct(actual, prev);
 }
 
 // Barra de controles de Metas: línea · mes · PDF (acción principal) · menú ⋯
@@ -1074,13 +1082,13 @@ function _renderMetasLineView(cfg) {
   html += `<section class="mt-sec">${_mtH2(t("mt.resumen", { m: _mtMesTxt(mesName) }), cfg.info)}<div class="ui-kpi-grid mt-kpis">`;
   // Actual / meta / proyección: los de metasResumenPais (misma función que usa
   // Rendimiento para su barra de avance), no un cálculo propio.
-  const resumen = _metasResumenDeUnits(kpis, units, _metasProyOn);
+  const resumen = _metasResumenDeUnits(kpis, units, _metasProyOn, !!cfg.reglaCuota);
   kpis.forEach(k => {
     const g = resumen[k.id];
     if (g.meta == null && g.actual == null) return;
     const dlt = prevUnits ? _mtDelta(g.actual, _metasAggKpi(k, prevUnits).actual) : undefined;
     html += metaResCard(k.label, k.sub || "", g.actual, g.meta, g.proj, null, k.fmtFn, _nk("pais", k.id),
-      g.actual != null ? dlt : undefined, prev ? prev.label : "", mesTxt);
+      g.actual != null ? dlt : undefined, prev ? prev.label : "", mesTxt, g.cuota);
   });
   html += `</div></section>`;
 
@@ -1091,9 +1099,13 @@ function _renderMetasLineView(cfg) {
     // grupo tiene meta paraguas, que es de lo que es parte).
     const tk = k.tkMeta && g.meta != null
       ? sumaCuotaTk(us.map(u => (u.m && !u.m._sinMeta && k.meta(u.m) != null) ? k.tkMeta(u.m) : null)) : null;
+    const cuota = cfg.reglaCuota ? _metasCuotaInfo(_metasAvanceCuota(k, us), _metasProyOn) : null;
     return { label: k.label, real: g.actual, meta: g.meta, proj: g.proj, F: k.fmtFn, numKey: nk(k),
-             tk, sinMetaTxt: sinTxt ? sinTxt.nota : "" };
+             tk, cuota, sinMetaTxt: sinTxt ? sinTxt.nota : "" };
   });
+
+  // TukTuk: la columna del % dice sobre qué se calcula.
+  const pctCol = cfg.reglaCuota ? t("mt.tk.colPct") : "";
 
   // ── 2. Por Ciudad ─────────────────────────────────────────────────────────
   const byCity = new Map();
@@ -1114,7 +1126,7 @@ function _renderMetasLineView(cfg) {
       return { name: cityLabel(city), dot: _mtCatCity(city), count: us.length,
                rows: rowsDe(us, k => _nk("ciudad", k.id, city)) };
     });
-    html += `<section class="mt-sec">${_mtH2(t("mt.porCiudad"))}${_mtGroupTable(t("mt.col.ciudad"), groups)}</section>`;
+    html += `<section class="mt-sec">${_mtH2(t("mt.porCiudad"))}${_mtGroupTable(t("mt.col.ciudad"), groups, pctCol)}</section>`;
   }
 
   // ── 3. Por KAM ────────────────────────────────────────────────────────────
@@ -1130,7 +1142,7 @@ function _renderMetasLineView(cfg) {
       return { name: kamLabel(kam), dot: _mtCatKam(kam), count: us.length,
                rows: rowsDe(us, k => _nk("kam", k.id, kam)) };
     });
-    html += `<section class="mt-sec">${_mtH2(t("mt.porKam"))}${_mtGroupTable(t("mt.col.kam"), groups)}</section>`;
+    html += `<section class="mt-sec">${_mtH2(t("mt.porKam"))}${_mtGroupTable(t("mt.col.kam"), groups, pctCol)}</section>`;
   }
 
   // ── 4. Por Partner ────────────────────────────────────────────────────────
@@ -1196,6 +1208,8 @@ function _metasLineCfg(line, mesName, mesYearSel, fechas, selSet, cityFilter, ka
   // Vista Metas TukTuk: KPIs aditivos (AD/N+R/Brandeados/Horas).
   if (line === "tk") return {
     ...base, info: t("metas.tkSub"),
+    // % sobre las cuentas con cuota declarada (ver _metasAvanceCuota).
+    reglaCuota: true,
     act: _metasTkActuals(fechas, selSet, cityFilter),
     actFn: f => _metasTkActuals(f, selSet, cityFilter),
     metaRows: _metasLineRows(mesName, mesYearSel,
@@ -1531,13 +1545,43 @@ function _metasKpiResumen(actual, meta, proj, proyOn, F) {
     F: F || fmt
   };
 }
-function _metasResumenDeUnits(kpis, units, proyOn) {
+function _metasResumenDeUnits(kpis, units, proyOn, reglaCuota = false) {
   const out = {};
   kpis.forEach(k => {
+    if (reglaCuota) { out[k.id] = _metasKpiResumenCuota(_metasAvanceCuota(k, units), proyOn, k.fmtFn); return; }
     const g = _metasAggKpi(k, units);
     out[k.id] = _metasKpiResumen(g.actual, g.meta, g.proj, proyOn, k.fmtFn);
   });
   return out;
+}
+// Línea TukTuk (decisión de Manuel, 24-sep-2026 — ver domain/avanceCuota): el
+// actual es el de TODAS las cuentas, pero el % (y el de la proyección) se mide
+// solo sobre las cuentas con la cuota de ese KPI declarada. Antes el % era el
+// actual de todas contra la cuota de unas pocas (327%). La misma función arma
+// las tarjetas del resumen, las tablas por ciudad/KAM y el anillo de
+// Rendimiento (vía metasResumenPais): el % no puede diferir entre pantallas.
+function _metasAvanceCuota(k, units) {
+  return avanceSobreCuota(units, {
+    declarada: u => !!(u.m && !u.m._sinMeta && k.meta(u.m) != null),
+    conDato:   u => !!u.a && k.act(u.a) != null,
+    agregar:   us => _metasAggKpi(k, us)
+  });
+}
+// `cuota` viaja con el resumen para que quien lo pinte (Metas y Rendimiento)
+// diga sobre qué se calculó el %: actual y proyección de las cuentas con cuota,
+// y cuántas son de cuántas.
+function _metasKpiResumenCuota(r, proyOn, F) {
+  return {
+    actual: r.actual, meta: r.meta, pct: r.pct,
+    proj: proyOn ? (r.proj ?? null) : null,
+    pctProj: proyOn ? r.pctProj : null,
+    cuota: _metasCuotaInfo(r, proyOn),
+    F: F || fmt
+  };
+}
+function _metasCuotaInfo(r, proyOn) {
+  return { actual: r.actualCuota, proj: proyOn ? r.projCuota : null, pct: r.pct,
+           pctProj: proyOn ? r.pctProj : null, n: r.nCuota, total: r.nTotal };
 }
 function _metasAggResumen(metas, combos, proyOn) {
   const T = _metasAggTotales(metas, combos);
@@ -1584,7 +1628,7 @@ export function metasResumenPais({ line, mesName, anio, fechas, filtros = {} }) 
   }
   const cfg = _metasLineCfg(line, mesName, mesYearSel, fset, selSet, cityFilter, kamFilter);
   if (!cfg.metaRows.length) return { ...base, sinMetas: true, kpis: {} };
-  return { ...base, sinMetas: false, kpis: _metasResumenDeUnits(cfg.kpis, _metasLineUnits(cfg.metaRows, cfg.act), proyOn) };
+  return { ...base, sinMetas: false, kpis: _metasResumenDeUnits(cfg.kpis, _metasLineUnits(cfg.metaRows, cfg.act), proyOn, !!cfg.reglaCuota) };
 }
 
 // Guard de reentrancia: doble-click o filtros solapados no deben lanzar dos
@@ -1873,12 +1917,15 @@ export function _renderMetasImpl() {
 // numKey (opcional): clave de la huella de números (shared/huella.ts).
 //
 // Ola 6: tarjeta KPI del sistema de diseño (dirección B): valor · delta vs el
-// mismo punto del mes anterior · barra de avance contra la meta con el caption
+// resultado final del mes anterior · barra de avance contra la meta con el caption
 // "77.0% de la meta de Septiembre (37,248)" · proyección solo en el mes en curso.
 // `color` se conserva en la firma por compatibilidad y ya no se usa (sin
 // arcoíris: el color lo pone el estado del cumplimiento). Los tres últimos
 // parámetros son nuevos y opcionales.
-export function metaResCard(label, sub, real, meta, proj, color, fmtFn, numKey, dlt, prevLabel, mesTxt) {
+// `cuota` (opcional, línea TukTuk — ver _metasAvanceCuota): el valor grande sigue
+// siendo el de TODAS las cuentas, pero el %, la barra y el % de la proyección
+// son de las cuentas con cuota declarada, y el caption lo dice.
+export function metaResCard(label, sub, real, meta, proj, color, fmtFn, numKey, dlt, prevLabel, mesTxt, cuota = null) {
   const F   = fmtFn || fmt;
   if (!_metasProyOn) proj = null;   // mes cerrado: sin proyección (decisión 4)
   const lab = `<div class="ui-kpi__label">${_E(label)}${sub ? ` <span class="mt-kpi__sub">· ${_E(sub)}</span>` : ""}</div>`;
@@ -1893,7 +1940,7 @@ export function metaResCard(label, sub, real, meta, proj, color, fmtFn, numKey, 
   if (real != null && !(meta > 0)) {
     return `<div class="ui-kpi mt-kpi">${lab}
       <div class="ui-kpi__row"><span class="ui-kpi__value"${_dn(numKey, "real")}>${F(real || 0)}</span>${dHtml}</div>
-      <div class="ui-kpi__goal"><div class="ui-kpi__caption ui-kpi__caption--none">${_E(t("metas.sinMetaMes"))}</div>
+      <div class="ui-kpi__goal"><div class="ui-kpi__caption ui-kpi__caption--none">${_E(cuota ? t("mt.tk.sinCuota") : t("metas.sinMetaMes"))}</div>
       ${proj == null ? "" : `<div class="ui-kpi__caption mt-proj">${_E(t("metas.proyeccion"))}: <strong${_dn(numKey, "proj")}>${_mtProjTxt(F, proj)}</strong></div>`}</div>
     </div>`;
   }
@@ -1907,10 +1954,10 @@ export function metaResCard(label, sub, real, meta, proj, color, fmtFn, numKey, 
       <div class="ui-kpi__goal"><div class="ui-kpi__caption ui-kpi__caption--none">${_E(t("metas.metaSinActual"))}</div></div>
     </div>`;
   }
-  const p  = meta > 0 ? (real / meta) * 100 : 0;
-  const pp = meta > 0 && proj != null ? (proj / meta) * 100 : 0;
+  const p  = cuota ? (cuota.pct ?? 0) : meta > 0 ? (real / meta) * 100 : 0;
+  const pp = cuota ? (cuota.pctProj ?? 0) : meta > 0 && proj != null ? (proj / meta) * 100 : 0;
   const tone = _mtTone(p, meta);
-  const cumplTip = t("metas.cumplTip", { f: F(real), p: F(meta) });
+  const cumplTip = cuota ? t("mt.tk.capCuotaTip") : t("metas.cumplTip", { f: F(real), p: F(meta) });
   // Dos reglas distintas y a propósito: los FLUJOS (N+R, horas) se extrapolan
   // por ritmo del mes; los SNAPSHOTS (Active Drivers) proyectan máx del rango
   // × 1.4 (POTENCIAL — regla de negocio restaurada el 29-ago-2026, historial
@@ -1921,18 +1968,24 @@ export function metaResCard(label, sub, real, meta, proj, color, fmtFn, numKey, 
   const projTip = STATE.curMode === "mensual" && _metasCorteProy
     ? t("metas.projTipMensual", { c: d2s(_metasCorteProy) })
     : t("metas.projTip");
-  const caption = t("mt.captionMeta", {
-    p: `<span class="mt-tone mt-tone--${tone}"${_dn(numKey, "pct")}>${p.toFixed(1)}%</span>`,
-    m: _E(mesTxt || ""),
-    n: `<span${_dn(numKey, "meta")}>${F(meta)}</span>`
-  });
+  const pctHtml = `<span class="mt-tone mt-tone--${tone}"${_dn(numKey, "pct")}>${p.toFixed(1)}%</span>`;
+  const caption = cuota
+    ? t("mt.tk.capCuota", {
+        a: `<strong${_dn(numKey, "cuota")}>${_E(F(cuota.actual ?? 0))}</strong>`,
+        n: `<span${_dn(numKey, "meta")}>${F(meta)}</span>`,
+        p: pctHtml, m: _E(mesTxt || ""), c: cuota.n, t: cuota.total })
+    : t("mt.captionMeta", { p: pctHtml, m: _E(mesTxt || ""), n: `<span${_dn(numKey, "meta")}>${F(meta)}</span>` });
+  const projLinea = proj == null ? "" : cuota && cuota.proj != null
+    ? t("mt.tk.proyCuota", { v: `<strong${_dn(numKey, "proj")}>${_mtProjTxt(F, proj)}</strong>`,
+        vc: _E(_mtProjTxt(F, cuota.proj)), p: `<span class="mt-tone mt-tone--${_mtTone(pp, meta)}">${pp.toFixed(1)}%</span>` })
+    : t("mt.proyCierre", {
+        v: `<strong${_dn(numKey, "proj")}>${_mtProjTxt(F, proj)}</strong>`, p: `<span class="mt-tone mt-tone--${_mtTone(pp, meta)}">${pp.toFixed(1)}%</span>` });
   return `<div class="ui-kpi mt-kpi">${lab}
     <div class="ui-kpi__row"><span class="ui-kpi__value"${_dn(numKey, "real")}>${F(real)}</span>${dHtml}</div>
     <div class="ui-kpi__goal">
       ${_mtBar(p, proj == null ? null : pp, meta)}
       <div class="ui-kpi__caption" title="${_E(cumplTip)}">${caption}</div>
-      ${proj == null ? "" : `<div class="ui-kpi__caption mt-proj" title="${_E(projTip)}">${t("mt.proyCierre", {
-        v: `<strong${_dn(numKey, "proj")}>${_mtProjTxt(F, proj)}</strong>`, p: `<span class="mt-tone mt-tone--${_mtTone(pp, meta)}">${pp.toFixed(1)}%</span>` })}</div>`}
+      ${projLinea ? `<div class="ui-kpi__caption mt-proj" title="${_E(projTip)}">${projLinea}</div>` : ""}
     </div>
   </div>`;
 }

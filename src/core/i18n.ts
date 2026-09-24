@@ -1827,8 +1827,6 @@ export const I18N: Record<string, Record<string, string>> = {
   "mt.captionMeta":  { es: "{p} de la meta de {m} ({n})", en: "{p} of the {m} goal ({n})", ru: "{p} от цели за {m} ({n})" },
   "mt.proyCierre":   { es: "Proyección al cierre: {v} ({p})", en: "Month-end projection: {v} ({p})", ru: "Прогноз на конец месяца: {v} ({p})" },
   "mt.proyCorta":    { es: "proy. {v}", en: "proj. {v}", ru: "прогн. {v}" },
-  "mt.vsPrev":       { es: "vs {m} al mismo punto", en: "vs {m}, same point", ru: "к {m} на тот же момент" },
-  "mt.vsPrevMes":    { es: "vs {m}", en: "vs {m}", ru: "к {m}" },
   "mt.sinMeta":      { es: "Sin meta", en: "No goal", ru: "Без цели" },
   "mt.filtro.aria":  { es: "Filtrar por cumplimiento", en: "Filter by attainment", ru: "Фильтр по выполнению" },
   "mt.filtro.todos": { es: "Todos", en: "All", ru: "Все" },
@@ -2433,9 +2431,9 @@ export const I18N: Record<string, Record<string, string>> = {
                             ru: "Активные аккаунты ТукТук без указанной квоты: входят в факт, но не в квоту" },
   "mt.tk.aviso.titulo1":  { es: "{n} cuenta TukTuk operó sin cuota declarada en {m}", en: "{n} TukTuk account operated with no declared quota in {m}", ru: "{n} аккаунт ТукТук работал без указанной квоты в {m}" },
   "mt.tk.aviso.tituloN":  { es: "{n} cuentas TukTuk operaron sin cuota declarada en {m}", en: "{n} TukTuk accounts operated with no declared quota in {m}", ru: "Аккаунтов ТукТук без указанной квоты в {m}: {n}" },
-  "mt.tk.aviso.texto":    { es: "Su actual suma al total, pero no a la cuota: el % de cumplimiento queda más alto de lo real. Se completa cuando su KAM declara el % TukTuk en la Calculadora.",
-                            en: "Their actual adds to the total but not to the quota, so attainment % reads higher than it really is. It fills in once their KAM declares the TukTuk % in the Calculator.",
-                            ru: "Их факт входит в итог, но не в квоту, поэтому % выполнения выше реального. Он заполнится, когда KAM укажет % ТукТук в калькуляторе." },
+  "mt.tk.aviso.texto":    { es: "Su actual suma al total, pero el % se calcula solo sobre las cuentas con cuota declarada, así que no lo infla. Entran al % cuando su KAM declara el % TukTuk en la Calculadora.",
+                            en: "Their actual adds to the total, but the % is calculated only over the accounts with a declared quota, so it doesn't inflate it. They join the % once their KAM declares the TukTuk % in the Calculator.",
+                            ru: "Их факт входит в итог, но % считается только по аккаунтам с указанной квотой, поэтому не завышается. Они войдут в %, когда KAM укажет % ТукТук в калькуляторе." },
   "mt.tk.deEso":          { es: "de eso TukTuk {v}", en: "of which TukTuk {v}", ru: "из них ТукТук {v}" },
   "mt.tk.grupo":          { es: "TukTuk: {v}", en: "TukTuk: {v}", ru: "ТукТук: {v}" },
   "mt.tk.deEsoTip":       { es: "Cuota TukTuk declarada en la Calculadora: es parte de la meta del mes, no se suma aparte.",
@@ -2450,10 +2448,31 @@ export const I18N: Record<string, Record<string, string>> = {
   "rd.mesCurso.corte":    { es: "Proyección con datos hasta el {c} (mes en curso: acumulado a la fecha × días del mes / días con datos).",
                             en: "Projection with data through {c} (month in progress: month-to-date total × days in month / days with data).",
                             ru: "Прогноз по данным по {c} (текущий месяц: итог с начала месяца × дней в месяце / дней с данными)." },
-  "rd.mesCurso.chip":     { es: "Mes en curso", en: "Month in progress", ru: "Текущий месяц" },
-  "rd.mesCurso.sinDelta": { es: "El mes todavía no cerró: compararlo con el mes anterior completo daría una caída que no es real.",
-                            en: "The month hasn't closed yet: comparing it with the full previous month would show a drop that isn't real.",
-                            ru: "Месяц ещё не закрыт: сравнение с полным прошлым месяцем показало бы несуществующее падение." },
+  // ── Fase 9b (24-sep-2026): TukTuk % sobre cuentas con cuota + variación vs mes completo ──
+  // Metas/Rendimiento, línea TukTuk: el actual suma TODAS las cuentas; el % solo
+  // las cuentas con cuota declarada (domain/avanceCuota).
+  "mt.tk.colPct":         { es: "% sobre cuota declarada", en: "% of declared quota", ru: "% от указанной квоты" },
+  "mt.tk.capCuota":       { es: "% sobre las cuentas con cuota declarada de {m}: {a} de {n} ({p}) · {c} de {t} cuentas",
+                            en: "% over the accounts with a declared {m} quota: {a} of {n} ({p}) · {c} of {t} accounts",
+                            ru: "% по аккаунтам с указанной квотой за {m}: {a} из {n} ({p}) · {c} из {t} аккаунтов" },
+  "mt.tk.capCuotaTip":    { es: "El número grande suma todas las cuentas TukTuk. El % compara solo las cuentas con cuota declarada contra esa cuota, para que las cuentas sin cuota no lo inflen.",
+                            en: "The big number adds up every TukTuk account. The % compares only the accounts with a declared quota against that quota, so accounts without one don't inflate it.",
+                            ru: "Крупное число — сумма всех аккаунтов ТукТук. % сравнивает с квотой только аккаунты, у которых она указана, чтобы аккаунты без квоты его не завышали." },
+  "mt.tk.cuotaCorta":     { es: "con cuota: {a} de {n} · {c} de {t} cuentas", en: "with quota: {a} of {n} · {c} of {t} accounts", ru: "с квотой: {a} из {n} · {c} из {t} аккаунтов" },
+  "mt.tk.proyCuota":      { es: "Proyección al cierre: {v} · con cuota: {vc} ({p})", en: "Month-end projection: {v} · with quota: {vc} ({p})", ru: "Прогноз на конец месяца: {v} · с квотой: {vc} ({p})" },
+  "mt.tk.proyCuotaCorta": { es: "con cuota: {v} ({p})", en: "with quota: {v} ({p})", ru: "с квотой: {v} ({p})" },
+  "rd.meta.capCuota":     { es: "{m}, cuentas con cuota declarada: {a} de {n} · {p} ({c} de {t} cuentas)",
+                            en: "{m}, accounts with a declared quota: {a} of {n} · {p} ({c} of {t} accounts)",
+                            ru: "{m}, аккаунты с указанной квотой: {a} из {n} · {p} ({c} из {t} аккаунтов)" },
+  // Variación contra el resultado FINAL del mes anterior (domain/vsMesAnterior):
+  // Rendimiento en mensual con el mes en curso y Metas en todas las escalas.
+  "cmp.mesCompleto":      { es: "{m} (mes completo)", en: "{m} (full month)", ru: "{m} (полный месяц)" },
+  "cmp.vsMesCompleto":    { es: "vs {m} (mes completo)", en: "vs {m} (full month)", ru: "vs {m} (полный месяц)" },
+  "rd.ciudad.subVs":      { es: "{p} {v}, ordenado por conductores activos", en: "{p} {v}, sorted by active drivers", ru: "{p} {v}, по активным водителям" },
+  "rd.kam.subVs":         { es: "{p} con variación {v}, y acumulado del rango · ordenado por conductores activos",
+                            en: "{p} with change {v}, and range total · sorted by active drivers",
+                            ru: "{p} с изменением {v} и сумма за период · по активным водителям" },
+  "rd.prod.subVs":        { es: "Rendimiento por conductor y por hora · {d} {v}", en: "Performance per driver and per hour · {d} {v}", ru: "Показатели на водителя и в час · {d} {v}" },
 };
 
 let _lang = "es";
