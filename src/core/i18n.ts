@@ -2411,6 +2411,8 @@ export const I18N: Record<string, Record<string, string>> = {
   "tema.claro":   { es: "Claro",   en: "Light",  ru: "Светлая" },
   "tema.oscuro":  { es: "Oscuro",  en: "Dark",   ru: "Тёмная" },
   "tema.sistema": { es: "Sistema", en: "System", ru: "Системная" },
+  "ui.delta.sube": { es: "sube", en: "up", ru: "рост" },
+  "ui.delta.baja": { es: "baja", en: "down", ru: "снижение" },
   "tema.aOscuro": { es: "Cambiar a modo oscuro", en: "Switch to dark mode", ru: "Включить тёмную тему" },
   "tema.aClaro":  { es: "Cambiar a modo claro",  en: "Switch to light mode", ru: "Включить светлую тему" },
   // ── Rendimiento "B · Suave" (fase 8): tiles por ciudad ──────────────────

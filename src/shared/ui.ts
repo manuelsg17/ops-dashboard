@@ -22,6 +22,7 @@
 
 import { escapeHTML } from "../core/security";
 import { iconSvg, type IconName } from "./icons";
+import { t } from "../core/i18n";
 
 // ── Tipos base ────────────────────────────────────────────────────────────────
 
@@ -156,7 +157,8 @@ export function delta(value: number | null | undefined, o: DeltaOptions = {}): H
   }
   const good = (dir === "up") !== !!o.invert;
   const sign = dir === "up" ? "+" : "−";
-  const sr = dir === "up" ? "sube" : "baja";
+  // Texto para lectores de pantalla, en el idioma de la interfaz.
+  const sr = t(dir === "up" ? "ui.delta.sube" : "ui.delta.baja");
   return h(
     `<span class="ui-delta ui-delta--${good ? "good" : "bad"}">` +
     iconSvg(dir === "up" ? "arrow-up" : "arrow-down", { size: 12 }) +
