@@ -38,6 +38,10 @@ export const CALC_STATE = {
   // Utilización Fleet sembrada en 85 (default estándar) por key ya sembrada — así
   // el 85 visible en la pestaña Fleet llega a la tarjeta y al guardado; borrable.
   _utilSeeded: {},
+  // Claves de `edits` que vienen SEMBRADAS de lo guardado (no las tecleó nadie
+  // en esta sesión). Ver _calcEditVigente: con meta del KAM cargada para ese
+  // KPI se ignoran y manda el reparto.
+  _sembradas: {},
   // Metas KAM input manual (formato Yango con pesos) + metas TukTuk (Fase 7)
   kamGoals:   { ad: 0, sh: 0, nr: 0, otherProj: 0, fleetA2: 0 },
   // % DECLARADO de la meta que corresponde a TukTuk, por KPI (0-100).
@@ -460,9 +464,13 @@ export function _calcSeedGuardadas(mesName, mesYear) {
   if (CALC_STATE.savedKey === key) return;
   CALC_STATE.savedKey = key;
   CALC_STATE.saved = _calcMetasGuardadas(mesName, mesYear);
-  // Solo sembrar donde el usuario todavía no escribió nada en esta sesión.
+  // Solo sembrar donde el usuario todavía no escribió nada en esta sesión
+  // (una clave aún sembrada se re-siembra: tras guardar, lo guardado cambió).
   Object.keys(CALC_STATE.saved).forEach(k => {
-    if (CALC_STATE.edits[k] === undefined) CALC_STATE.edits[k] = CALC_STATE.saved[k];
+    if (CALC_STATE.edits[k] === undefined || CALC_STATE._sembradas[k]) {
+      CALC_STATE.edits[k] = CALC_STATE.saved[k];
+      CALC_STATE._sembradas[k] = true;
+    }
   });
 
   // MODO DE GUARDADO POR DEFECTO, según si el mes ya existe o se arma de cero.
@@ -490,10 +498,26 @@ export function _calcFilaGuardada(partner, city) {
   return ["ad", "sh", "nr"].some(mt => _calcYaGuardada(partner, city, mt));
 }
 
+// Edición VIGENTE de una celda de meta (ad/sh/nr, total o "@tk").
+//
+// BUG REAL (29-sep-2026, Manuel con Miguel): lo guardado se sembraba en
+// `edits` como si el KAM lo hubiera tecleado, así que en un mes que ya tenía
+// metas escribir la meta global no repartía nada — la suma seguía siendo la de
+// lo guardado ("No cuadra: Horas +19,441") sin ninguna celda marcada. Ahora un
+// valor SEMBRADO solo se muestra mientras no haya meta del KAM para ese KPI;
+// con meta, manda el reparto. Lo que el KAM teclea en la sesión manda siempre.
+export function _calcEditVigente(key, k) {
+  const v = CALC_STATE.edits[key];
+  if (v === undefined || v === "") return undefined;
+  if (CALC_STATE._sembradas[key] && +CALC_STATE.kamGoals[k] > 0) return undefined;
+  return v;
+}
+
 // Meta distribuida o edit manual para un partner+city+metric.
 export function _calcGoalFor(partner, city, metric, base) {
   const k = `${partner}|||${city}|||${metric}`;
-  if (CALC_STATE.edits[k] !== undefined) return +CALC_STATE.edits[k] || 0;
+  const ev = ["ad", "sh", "nr"].includes(metric) ? _calcEditVigente(k, metric) : CALC_STATE.edits[k];
+  if (ev !== undefined) return +ev || 0;
   return Math.round(base);
 }
 
@@ -506,8 +530,8 @@ export function _calcGoalFor(partner, city, metric, base) {
 // Taxi = total − TukTuk.
 export const _calcTkKey = (partner, city, k) => `${partner}|||${city}|||${k}@tk`;
 export function _calcTkDe(e, b, k) {
-  const ev = CALC_STATE.edits[_calcTkKey(e.partner, e.city, k)];
-  if (ev !== undefined && ev !== "") return Math.max(0, +ev || 0);
+  const ev = _calcEditVigente(_calcTkKey(e.partner, e.city, k), k);
+  if (ev !== undefined) return Math.max(0, +ev || 0);
   const pin = CALC_STATE.tkPin[`${e.partner}|||${e.city}|||${k}`];
   if (pin !== undefined) return pin;
   const tot = _calcGoalFor(e.partner, e.city, k, b[k]);
@@ -519,8 +543,7 @@ export function _calcTaxiDe(e, b, k) {
 // ¿El KAM escribió a mano la porción TukTuk de esta unidad? (fuerza a guardarla
 // aunque no haya % declarado).
 export function _calcTkExplicito(e, k) {
-  const ev = CALC_STATE.edits[_calcTkKey(e.partner, e.city, k)];
-  return ev !== undefined && ev !== "";
+  return _calcEditVigente(_calcTkKey(e.partner, e.city, k), k) !== undefined;
 }
 
 // ── Campos numéricos con formato ─────────────────────────────────────────────
@@ -1387,9 +1410,14 @@ function _calcCeldaPartner(e, b, est) {
 // Celda editable de una línea. El valor mostrado es el de la línea (Taxi o
 // TukTuk); la huella de números (shared/huella.ts) lee la cifra cruda del
 // <span hidden> de al lado.
-function _calcInputLinea(e, k, ln, val, est) {
+function _calcInputLinea(e, k, ln, val, est, v) {
   const ek = ln === "tk" ? est[k + "@tk"] : est[k];
-  const cls = (ek.fijada ? " calc-inp-fija" : "") + (ek.sobrescribe ? " calc-inp-dirty" : "");
+  const fija = ek.fijada && _calcEditVigente(_calcKeyLinea(e.partner, e.city, k, ln), k) !== undefined;
+  // Ámbar = lo que se va a escribir difiere de lo guardado (también cuando
+  // viene del reparto de una meta global nueva, no solo de una celda tecleada).
+  const sv = CALC_STATE.saved[_calcKeyLinea(e.partner, e.city, k, ln)];
+  const dif = sv !== undefined && v && +sv !== (ln === "tk" ? v[k].tk : v[k].tot);
+  const cls = (fija ? " calc-inp-fija" : "") + (ek.sobrescribe || dif ? " calc-inp-dirty" : "");
   const aria = `${t("calc.col.kpiMeta", { k: _CALC_KPI_LBL[k] })} ${ln === "tk" ? "TukTuk" : "Taxi"} · ${e.partner} · ${cityLabel(e.city)}`;
   return `<input type="text" inputmode="decimal" autocomplete="off" spellcheck="false"
       value="${escapeHTML(_calcFmtIn(val))}" data-raw="${escapeHTML(String(val))}" aria-label="${escapeHTML(aria)}"
@@ -1435,7 +1463,7 @@ export function _calcTablaLinea(m, ln) {
     if (!tiene) return "";
     if (b.noAct && ln === "taxi") nManual++;
     const real = _calcRealLinea(e, ln);
-    const celda = k => `<td class="ui-num calc-cell-input">${_calcInputLinea(e, k, ln, v[k][ln], est)}</td>`;
+    const celda = k => `<td class="ui-num calc-cell-input">${_calcInputLinea(e, k, ln, v[k][ln], est, v)}</td>`;
     const cls = [b.noAct && ln === "taxi" ? "calc-row--manual" : "", est.fija ? "calc-row--fija" : ""].filter(Boolean).join(" ");
     return `
       <tr${cls ? ` class="${cls}"` : ""}>
@@ -1541,11 +1569,15 @@ export function _calcTablaTotal(m) {
 function _calcLeyendaHTML() {
   let fija = false, sobre = false;
   for (const [k, v] of Object.entries(CALC_STATE.edits)) {
-    if (!/\|\|\|(ad|sh|nr)(@tk)?$/.test(k)) continue;
+    const mm = /\|\|\|(ad|sh|nr)(@tk)?$/.exec(k);
+    if (!mm) continue;
+    if (_calcEditVigente(k, mm[1]) === undefined) continue;
     const e = estadoCelda(v, CALC_STATE.saved[k]);
     if (e.fijada) fija = true;
     if (e.sobrescribe) sobre = true;
   }
+  // Meta global nueva sobre un mes con metas: el reparto reescribe lo guardado.
+  if (Object.keys(CALC_STATE.saved).length && _CALC_K3.some(k => +CALC_STATE.kamGoals[k] > 0)) sobre = true;
   const it = (cls, key) => `<span class="calc-legend__it"><span class="calc-legend__sw calc-legend__sw--${cls}" aria-hidden="true"></span>${escapeHTML(t(key))}</span>`;
   const ley = [fija ? it("fija", "calc.leyendaFija") : "", sobre ? it("dirty", "calc.leyendaDistinta") : ""].join("");
   return ley ? `<div class="calc-legend">${ley}<span class="calc-legend__it calc-legend__it--nota">${escapeHTML(t("calc.ln.leyendaSuma"))}</span></div>` : "";
@@ -1569,8 +1601,9 @@ function _calcActualizarFila(input) {
     const k = inp.dataset.metric;
     const ek = ln === "tk" ? est[k + "@tk"] : est[k];
     if (!ek) return;
-    inp.classList.toggle("calc-inp-fija", ek.fijada);
-    inp.classList.toggle("calc-inp-dirty", ek.sobrescribe);
+    const sv = CALC_STATE.saved[_calcKeyLinea(partner, city, k, ln)];
+    inp.classList.toggle("calc-inp-fija", ek.fijada && _calcEditVigente(_calcKeyLinea(partner, city, k, ln), k) !== undefined);
+    inp.classList.toggle("calc-inp-dirty", ek.sobrescribe || (sv !== undefined && +sv !== (ln === "tk" ? v[k].tk : v[k].tot)));
     // Otra celda de la fila pudo moverse (p. ej. Taxi al soltar TukTuk): se
     // refresca el valor salvo en el campo que tiene el foco.
     if (inp !== document.activeElement) inp.value = _calcFmtIn(v[k][ln]);
@@ -2175,6 +2208,7 @@ export function _calcResetParaNuevoKam() {
   CALC_STATE.tkAbs     = { ad: 0, sh: 0, nr: 0 };
   CALC_STATE.tkModo    = "pct";
   CALC_STATE.tkPin     = {};
+  CALC_STATE._sembradas = {};
   CALC_STATE.edits     = {};
   CALC_STATE._utilSeeded = {};
   CALC_STATE.saved     = {};
@@ -2249,6 +2283,7 @@ export function calcOnGoalEdit(input) {
   // ("3,851" pegado tal como se ve) y parseFloat leería 3.
   const val     = parseNumInput(input.value);
   const k = `${partner}|||${city}|||${metric}`;
+  delete CALC_STATE._sembradas[k];
   if (isNaN(val)) delete CALC_STATE.edits[k];
   else CALC_STATE.edits[k] = val;
   // Cifra cruda para el próximo foco + la copia que lee la huella de números.
@@ -2267,10 +2302,26 @@ export function calcOnGoalEdit(input) {
   _calcRefreshStatus();
 }
 
+// Escribir una meta global en un mes que ya tiene metas = re-repartir. En
+// "Solo lo que cambié" eso no escribiría nada (solo viajan celdas tecleadas),
+// así que se pasa a "Reparto completo" — con su confirmación, el freno de
+// metasGuard y el aviso de desglose TukTuk de siempre. El KAM puede volver.
+function _calcModoPorMetaGlobal() {
+  if (CALC_STATE.saveMode !== "edits" || !Object.keys(CALC_STATE.saved).length) return;
+  if (!_CALC_K3.some(k => +CALC_STATE.kamGoals[k] > 0)) return;
+  CALC_STATE.saveMode = "full";
+  document.querySelectorAll('#calculatorContent input[name="calcSaveMode"]').forEach(r => {
+    r.checked = r.value === "full";
+    const l = r.closest(".calc-mode");
+    if (l) l.classList.toggle("is-on", r.value === "full");
+  });
+}
+
 export function calcOnKamGoalChange(metric, val) {
   const v = parseNumInput(val);
   CALC_STATE.kamGoals[metric] = Number.isFinite(v) ? v : 0;
   _calcSyncTkPct();
+  _calcModoPorMetaGlobal();
   // Persistido en cada tecla, no solo al guardar: un F5 a mitad de tipear las
   // tres metas no debería obligar a escribirlas de nuevo.
   _calcGuardarDraft();
@@ -2308,6 +2359,7 @@ export function calcAtajo(metric, f) {
   if (v == null) return;
   CALC_STATE.kamGoals[metric] = v;
   _calcSyncTkPct();
+  _calcModoPorMetaGlobal();
   const inp = document.getElementById(`calcGoal_${metric}`);
   if (inp) {
     inp.dataset.raw = rawNumText(v);
@@ -2362,8 +2414,17 @@ export function calcOnLineEdit(input) {
   const kTot = `${partner}|||${city}|||${k}`, kTk = _calcTkKey(partner, city, k);
   const val = parseNumInput(input.value);
   const tkNow = _calcTkDe(e, b, k);
+  // Lo que el KAM teclea deja de ser "sembrado" (manda aunque haya meta global).
+  delete CALC_STATE._sembradas[kTot];
+  // Una porción TukTuk sembrada que el reparto ya estaba ignorando no puede
+  // "revivir" al editar: se descarta y la porción vigente (tkNow) se clava.
+  if (CALC_STATE._sembradas[kTk] && _calcEditVigente(kTk, k) === undefined) {
+    delete CALC_STATE.edits[kTk];
+    delete CALC_STATE._sembradas[kTk];
+  }
   const taxiNow = Math.max(0, _calcGoalFor(partner, city, k, b[k]) - tkNow);
   if (ln === "tk") {
+    delete CALC_STATE._sembradas[kTk];
     if (isNaN(val)) delete CALC_STATE.edits[kTk];
     else {
       const nuevo = Math.max(0, val);
@@ -2375,7 +2436,7 @@ export function calcOnLineEdit(input) {
     delete CALC_STATE.edits[kTot];
     delete CALC_STATE.tkPin[kTot];
   } else {
-    if (CALC_STATE.edits[kTk] === undefined && tkNow > 0) CALC_STATE.tkPin[kTot] = tkNow;
+    if (_calcEditVigente(kTk, k) === undefined && tkNow > 0) CALC_STATE.tkPin[kTot] = tkNow;
     CALC_STATE.edits[kTot] = Math.max(0, val) + tkNow;
   }
   const raw = isNaN(val) ? "" : rawNumText(Math.max(0, val));
@@ -2400,6 +2461,7 @@ export function calcVerTarjetas() {
 export function calcSoltarFila(partner, city) {
   const claves = ["ad", "sh", "nr"].flatMap(k => [`${partner}|||${city}|||${k}`, _calcTkKey(partner, city, k)]);
   CALC_STATE.edits = soltarCeldas(CALC_STATE.edits, CALC_STATE.saved, claves);
+  claves.forEach(c => { if (CALC_STATE.saved[c] !== undefined) CALC_STATE._sembradas[c] = true; });
   ["ad", "sh", "nr"].forEach(k => { delete CALC_STATE.tkPin[`${partner}|||${city}|||${k}`]; });
   _calcRepintarVivo();
 }
@@ -2448,6 +2510,8 @@ export async function calcResetEdits() {
     confirmLabel: t("calc.dlg.resetOk"), danger: true
   }))) return;
   CALC_STATE.edits = {};
+  CALC_STATE._sembradas = {};
+  CALC_STATE.savedKey = "";      // re-siembra lo guardado en el próximo render
   CALC_STATE.tkPin = {};
   CALC_STATE._utilSeeded = {};   // permite re-sembrar Utilización = 85
   renderCalculator();
