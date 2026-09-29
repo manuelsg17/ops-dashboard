@@ -163,3 +163,42 @@ export function splitPorFraccion(total: number, fraccion: number): SplitResultad
   const secundario = Math.round(t * f);
   return { principal: t - secundario, secundario };
 }
+
+/**
+ * Reparte `objetivo` (entero) en enteros proporcionales a `valores` por RESTO
+ * MAYOR: piso de cada uno y las unidades que faltan a los de mayor fracción.
+ * Σ resultado === objetivo exacto (si hay al menos un valor > 0). Empates por
+ * orden de aparición, así el resultado es estable entre repintados.
+ */
+export function restoMayor(valores: number[], objetivo: number): number[] {
+  const out = valores.map(v => Math.floor(Math.max(v, 0)));
+  let falta = Math.round(objetivo) - out.reduce((s, v) => s + v, 0);
+  const orden = valores
+    .map((v, i) => ({ i, f: Math.max(v, 0) - Math.floor(Math.max(v, 0)), ok: v > 0 }))
+    .filter(x => x.ok)
+    .sort((a, b) => b.f - a.f || a.i - b.i);
+  if (!orden.length) return out;
+  for (let j = 0; falta > 0; j = (j + 1) % orden.length, falta--) out[orden[j].i]++;
+  // Por redondeo del objetivo puede sobrar: se quita a los de menor fracción.
+  for (let j = orden.length - 1; falta < 0; j = (j - 1 + orden.length) % orden.length) {
+    if (out[orden[j].i] > 0) { out[orden[j].i]--; falta++; }
+  }
+  return out;
+}
+
+/**
+ * Cuotas del reparto en ENTEROS que suman EXACTO (29-sep-2026, Manuel: "la
+ * data debe ser precisa"). Redondear fila por fila dejaba el total ±1..±n de
+ * la meta (N+R 3.001 de 3.000). TukTuk y Taxi se redondean por separado, cada
+ * uno a su pozo: Σ tk = round(pozo TukTuk) y Σ total = round(meta).
+ */
+export function cuotasEnteras(cuotas: { key: string; tk: number; car: number }[], meta: number):
+  { key: string; total: number; tk: number; car: number }[] {
+  const totTk = cuotas.reduce((s, c) => s + c.tk, 0);
+  const objTk = Math.round(totTk);
+  const objCar = Math.max(Math.round(+meta || 0) - objTk, 0);
+  const hayCar = cuotas.some(c => c.car > 0);
+  const tk = restoMayor(cuotas.map(c => c.tk), hayCar ? objTk : Math.round(+meta || 0));
+  const car = hayCar ? restoMayor(cuotas.map(c => c.car), objCar) : cuotas.map(() => 0);
+  return cuotas.map((c, i) => ({ key: c.key, tk: tk[i], car: car[i], total: tk[i] + car[i] }));
+}

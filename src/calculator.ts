@@ -3,12 +3,12 @@ import { ensureHtml2Canvas } from "./shared/lazyLibs.js";
 import { opcionesCapturaClara, tokenClaro } from "./shared/exportClaro";
 import { t, mesLabel, kamLabel, getLang } from "./core/i18n";
 import { btn, badge, alertBox, emptyState, icon, segmented, infoTip } from "./shared/ui";
-import { confirmDialog, alertDialog } from "./shared/confirmDialog";
+import { confirmDialog, alertDialog, choiceDialog } from "./shared/confirmDialog";
 import { parseNumInput, rawNumText } from "./calcNumInput";
 import { MES_NOMBRES, mesNombre } from "./core/meses";
 import { EXPORT_STR, pick, fmtL, fmtSmartL, localeDe, ciudadL, exportLang } from "./core/i18nExport";
 import { validarMetas, mensajeMetasInvalidas } from "./domain/metasGuard";
-import { repartirPorLinea, pesoNaturalTk, splitPorFraccion } from "./domain/repartoLinea.js";
+import { repartirPorLinea, pesoNaturalTk, splitPorFraccion, cuotasEnteras } from "./domain/repartoLinea.js";
 import { hayProgresoSinGuardar, draftAplica, debePreseleccionarKam } from "./domain/calcDraft.js";
 import { detectarCambiosTk, hayCambiosTk, mensajeCambiosTk, claveFila, TK_PARAGUAS } from "./domain/desgloseTk.js";
 import { SIN_KAM } from "./core/config.js";
@@ -42,6 +42,12 @@ export const CALC_STATE = {
   // en esta sesión). Ver _calcEditVigente: con meta del KAM cargada para ese
   // KPI se ignoran y manda el reparto.
   _sembradas: {},
+  // KPIs cuya meta del KAM NO la tecleó nadie: se DERIVÓ de lo guardado (Σ de
+  // la base) al abrir el KAM. Mientras sea así, lo guardado se sigue viendo tal
+  // cual; tecleando la meta (o el % TukTuk) vuelve a mandar el reparto.
+  _metaDeBD: {},
+  // Mes+KAM para el que ya se derivó la meta de la base (una vez por siembra).
+  _bdKey: "",
   // Metas KAM input manual (formato Yango con pesos) + metas TukTuk (Fase 7)
   kamGoals:   { ad: 0, sh: 0, nr: 0, otherProj: 0, fleetA2: 0 },
   // % DECLARADO de la meta que corresponde a TukTuk, por KPI (0-100).
@@ -364,15 +370,27 @@ export function _calcTieneTkPct() {
 
 // Cuotas por unidad con carve-out de TukTuk. `null` = sin % declarado → los
 // llamadores usan la matemática histórica.
+// ¿Hay % (o número) TukTuk declarado para ESTE KPI?
+export function _calcTkDeclaradoK(k) { return +(CALC_STATE.tkPct || {})[k] > 0; }
+
+// Siempre devuelve el mapa de cuotas (antes null sin % declarado): sin
+// declarar, cada KPI usa el peso REAL de TukTuk, que da exactamente el reparto
+// histórico de un solo pozo — y así TODO pasa por el redondeo exacto
+// (cuotasEnteras): Σ de la tabla = meta del KAM, sin ±1.
 export function _calcRepartoDe(agg, g) {
-  if (!_calcTieneTkPct()) return null;
   const p = CALC_STATE.tkPct || {};
   const out = new Map();
   const avisos = [];
   ["ad", "sh", "nr"].forEach(kpi => {
-    const r = repartirPorLinea(+g[kpi] || 0, (+p[kpi] || 0) / 100, _calcUnidades(agg, kpi));
-    r.avisos.forEach(a => { if (!avisos.includes(a)) avisos.push(a); });
-    r.cuotas.forEach(c => {
+    // BUG REAL (29-sep, Miguel): con % declarado solo para algunos KPIs, el KPI
+    // en 0 repartía un pozo TukTuk de CERO — las unidades TukTuk quedaban sin
+    // meta de ese KPI. Sin declarar, ese KPI usa el peso REAL de TukTuk (lo
+    // mismo que el reparto de un solo pozo) y no se guarda desglose.
+    const unidades = _calcUnidades(agg, kpi);
+    const pct = _calcTkDeclaradoK(kpi) ? (+p[kpi] || 0) / 100 : (pesoNaturalTk(unidades) || 0);
+    const r = repartirPorLinea(+g[kpi] || 0, pct, unidades);
+    if (_calcTkDeclaradoK(kpi)) r.avisos.forEach(a => { if (!avisos.includes(a)) avisos.push(a); });
+    cuotasEnteras(r.cuotas, +g[kpi] || 0).forEach(c => {
       let o = out.get(c.key);
       if (!o) { o = {}; out.set(c.key, o); }
       o[kpi] = c.total;
@@ -489,6 +507,52 @@ export function _calcSeedGuardadas(mesName, mesYear) {
   CALC_STATE.saveMode = Object.keys(CALC_STATE.saved).length ? "edits" : "full";
 }
 
+// Al abrir un KAM cuyo mes YA tiene metas (y sin meta tecleada): la meta del
+// KAM y la parte TukTuk salen de la SUMA de lo guardado para su cartera.
+// Pedido de Manuel (29-sep): "cuando regrese al KAM donde cargué la data
+// aparezca la meta cargada en su base de datos". Así la tarjeta de arriba, las
+// de línea y la tabla cuentan lo mismo que la base. Se marca en _metaDeBD:
+// no dispara el reparto (lo guardado se sigue viendo tal cual) hasta que el
+// KAM teclee una meta o el % TukTuk.
+export function _calcMetaDesdeBD(m) {
+  if (CALC_STATE.kam === "all" || CALC_STATE._bdKey === CALC_STATE.savedKey) return;
+  CALC_STATE._bdKey = CALC_STATE.savedKey;
+  const g = CALC_STATE.kamGoals, bd = CALC_STATE._metaDeBD;
+  const derivado = _CALC_K3.some(k => bd[k]);
+  // Hay algo TECLEADO (meta o % TukTuk) → no se toca. Si todo lo que hay salió
+  // de la base, se vuelve a derivar (p. ej. tras guardar: la suma cambió).
+  if (_CALC_K3.some(k => +g[k] > 0 && !bd[k]) || (!derivado && _calcTieneTkPct())) return;
+  if (derivado) {
+    _CALC_K3.forEach(k => { if (bd[k]) g[k] = 0; });
+    CALC_STATE.tkAbs = { ad: 0, sh: 0, nr: 0 };
+    CALC_STATE.tkPct = { ad: 0, sh: 0, nr: 0 };
+    CALC_STATE._metaDeBD = {};
+  }
+  const S = CALC_STATE.saved;
+  const tot = { ad: 0, sh: 0, nr: 0 }, tk = { ad: 0, sh: 0, nr: 0 };
+  for (const e of m.aggLast1.values()) {
+    _CALC_K3.forEach(k => {
+      tot[k] += +S[`${e.partner}|||${e.city}|||${k}`] || 0;
+      tk[k]  += +S[_calcTkKey(e.partner, e.city, k)] || 0;
+    });
+  }
+  if (!_CALC_K3.some(k => tot[k] > 0)) return;
+  _CALC_K3.forEach(k => {
+    if (tot[k] > 0) { g[k] = tot[k]; CALC_STATE._metaDeBD[k] = true; }
+  });
+  // Parte TukTuk guardada → en NÚMERO (exacta, sin redondear un %).
+  if (_CALC_K3.some(k => tk[k] > 0)) {
+    CALC_STATE.tkModo = "abs";
+    _CALC_K3.forEach(k => { CALC_STATE.tkAbs[k] = tk[k]; });
+    _calcSyncTkPct();
+  }
+}
+// El KAM tecleó una meta o el % TukTuk: vuelve a mandar el reparto.
+function _calcMetaTecleada(k) {
+  if (k) CALC_STATE._metaDeBD[k] = false;
+  else CALC_STATE._metaDeBD = {};
+}
+
 // ¿Este (partner,ciudad,métrica) ya tiene meta guardada en BD para el mes?
 export function _calcYaGuardada(partner, city, metric) {
   return CALC_STATE.saved[`${partner}|||${city}|||${metric}`] !== undefined;
@@ -509,7 +573,7 @@ export function _calcFilaGuardada(partner, city) {
 export function _calcEditVigente(key, k) {
   const v = CALC_STATE.edits[key];
   if (v === undefined || v === "") return undefined;
-  if (CALC_STATE._sembradas[key] && +CALC_STATE.kamGoals[k] > 0) return undefined;
+  if (CALC_STATE._sembradas[key] && +CALC_STATE.kamGoals[k] > 0 && !CALC_STATE._metaDeBD[k]) return undefined;
   return v;
 }
 
@@ -653,8 +717,9 @@ export function _calcComputeStatus(m) {
   const lineas = { taxi: {}, tk: {} };
   _CALC_K3.forEach(k => {
     const goal = +g[k] || 0;
-    const tkMeta = declarado ? (_calcTkAbs(k) || 0) : tkSum[k];
-    lineas.tk[k] = declarado ? _calcMetricCuadre(tkSum[k], tkMeta) : { sum: tkSum[k], target: 0, gap: 0, ok: true, hasGoal: false };
+    const decK = _calcTkDeclaradoK(k);
+    const tkMeta = decK ? (_calcTkAbs(k) || 0) : tkSum[k];
+    lineas.tk[k] = decK ? _calcMetricCuadre(tkSum[k], tkMeta) : { sum: tkSum[k], target: 0, gap: 0, ok: true, hasGoal: false };
     lineas.taxi[k] = _calcMetricCuadre(agg[k].sum - tkSum[k], goal > 0 ? goal - tkMeta : 0);
   });
   return { agg, fleet, hasFleet: m.hasFleet, tk, lineas, declarado };
@@ -750,12 +815,6 @@ export function _calcRefreshStatus() {
   const foot = document.getElementById("calcLineaFoot");
   if (foot) foot.innerHTML = _calcLineaFootHTML(m, _calcVistaActual(m) === "tk" ? "tk" : "taxi");
 
-  const res = document.getElementById("calcAdvRes");
-  if (res) res.textContent = _calcResumenAvanzados();
-  const desc = document.getElementById("calcModoEditsDesc");
-  if (desc) desc.textContent = t("calc.modoEditsDesc2", { n: _calcContarCambios() });
-  const hueco = document.getElementById("calcHuecoTk");
-  if (hueco) hueco.innerHTML = STATE.canWrite ? _calcAvisoHuecoTk(m) : "";
 
   if (document.getElementById("calcAggSumAD")) {
     const a = { sumAD: status.agg.ad.sum, sumSH: status.agg.sh.sum, sumNR: status.agg.nr.sum };
@@ -850,6 +909,7 @@ export function renderCalculator() {
     // exactamente con el draft guardado, y solo la primera vez en esta carga
     // de página (ver _calcCargarDraftSiAplica).
     _calcCargarDraftSiAplica();
+    _calcMetaDesdeBD(m);
   }
 
   // Sembrar Utilización Fleet = 85 (default estándar) una vez por partner-ciudad fleet,
@@ -921,7 +981,7 @@ export function _calcLineCardsHTML(m, status) {
   const vals = ln => _CALC_K3.map(k => {
     const p = status.lineas[ln][k];
     // La meta de la línea si hay meta del KAM; si no, lo que suma la tabla.
-    const v = ln === "tk" ? (status.declarado ? p.target : p.sum) : (p.hasGoal ? p.target : p.sum);
+    const v = p.hasGoal ? p.target : p.sum;
     return `<span class="calc-lcard__v"><small>${escapeHTML(_calcCorto(k))}</small><b class="ui-num"${dn("calc.ln", ln, k)}>${v ? fmt(v) : "—"}</b></span>`;
   }).join("");
   const card = (ln, ico, nombre) => `
@@ -999,8 +1059,9 @@ export function _calcGoalHint(metric, m) {
     m: escapeHTML(_calcMesTxt(m.lastMonth || "")), kam: escapeHTML(kamTxt),
     v: `<strong class="ui-num">${fmt(Math.round(base))}</strong>`
   });
-  return v == null ? txt
-    : `${txt} <span class="calc-tone--${v >= 0 ? "ok" : "bad"} ui-num">(${textoVariacion(v)})</span>`;
+  const bd = CALC_STATE._metaDeBD[metric] ? `<span class="calc-goal__bd">${icon("database", { size: 12 })}${escapeHTML(t("calc.metaDeBD"))}</span>` : "";
+  return (v == null ? txt
+    : `${txt} <span class="calc-tone--${v >= 0 ? "ok" : "bad"} ui-num">(${textoVariacion(v)})</span>`) + bd;
 }
 
 // Campo de meta global: número con miles (ver _calcFmtIn / calcNumFocus), atajos
@@ -1038,14 +1099,13 @@ export function _kamGoalInput(metric, m) {
 // claro si llené su data o no") a su propia sección, siempre a la vista. El resumen
 // muestra el modo de guardado elegido: es lo único de acá que cambia qué se
 // escribe al apretar Guardar, así que tiene que verse sin abrir nada.
-export function _calcAvanzados(m) {
-  const canSave = !!STATE.canWrite;
+export function _calcAvanzados(_m) {
+  // Cómo guardar ya no vive acá: se elige al apretar Guardar (calcSaveMetas,
+  // "Solo las celdas que completé" / "Reemplazar todo el mes").
   return `
     <details class="calc-adv" id="calcAdv"${CALC_STATE.advOpen ? " open" : ""}>
-      <summary class="calc-adv__sum"><span class="calc-adv__t">${escapeHTML(t("calc.avanzados"))}</span><span class="calc-adv__res" id="calcAdvRes">${escapeHTML(_calcResumenAvanzados())}</span></summary>
+      <summary class="calc-adv__sum"><span class="calc-adv__t">${escapeHTML(t("calc.avanzados"))}</span></summary>
       <div class="calc-adv__body">
-        ${canSave ? `<section class="calc-adv__sec">${_calcModoHTML()}<div id="calcHuecoTk">${_calcAvisoHuecoTk(m)}</div>
-          <p class="calc-help">${escapeHTML(t("calc.actualizarHint2"))}</p></section>` : ""}
         <details class="calc-details" id="calcPctKam"${CALC_STATE.pctKamOpen ? " open" : ""}>
           <summary>${escapeHTML(t("calc.metasPctKam"))}</summary>
           <div class="calc-details__body">
@@ -1059,9 +1119,6 @@ export function _calcAvanzados(m) {
     </details>`;
 }
 
-function _calcResumenAvanzados() {
-  return STATE.canWrite ? t(CALC_STATE.saveMode === "full" ? "calc.modoFull" : "calc.modoEdits") : "";
-}
 
 // Metas % a nivel KAM (Otros proyectos, Fleet A2): referencia, no se reparten.
 function _kamPctInput(metric, label) {
@@ -1077,27 +1134,6 @@ function _kamPctInput(metric, label) {
         data-metric="${metric}" class="ui-input ui-input--sm calc-num"/>
       <span class="ui-field__hint">${escapeHTML(t("calc.peso", { w: KAM_WEIGHTS[metric] }))}</span>
     </div>`;
-}
-
-// ── Modo de guardado ─────────────────────────────────────────────────────────
-// "Solo lo que cambié": un ajuste puntual NO debe reescribir el reparto entero
-// del mes. "Reparto completo" es el comportamiento histórico y se elige a
-// conciencia cuando se arma el mes desde cero. El default depende de si el mes
-// ya tiene metas (ver _calcSeedGuardadas) — eso NO cambió.
-function _calcModoHTML() {
-  const modo = CALC_STATE.saveMode;
-  const _opt = (val, label, desc, descId) => `
-    <label class="calc-mode${modo === val ? " is-on" : ""}">
-      <input type="radio" name="calcSaveMode" value="${val}" ${modo === val ? "checked" : ""}
-             data-act-change="calcSetSaveMode" data-mode="${val}"/>
-      <span class="calc-mode__txt"><span class="calc-mode__label">${escapeHTML(label)}</span><span class="calc-mode__desc"${descId ? ` id="${descId}"` : ""}>${escapeHTML(desc)}</span></span>
-    </label>`;
-  return `
-    <fieldset class="calc-modes">
-      <legend class="calc-adv__h">${escapeHTML(t("calc.modoTitulo"))}</legend>
-      ${_opt("edits", t("calc.modoEdits"), t("calc.modoEditsDesc2", { n: _calcContarCambios() }), "calcModoEditsDesc")}
-      ${_opt("full",  t("calc.modoFull"),  t("calc.modoFullDesc2"))}
-    </fieldset>`;
 }
 
 // ── Eliminar las metas de ESTE KAM para el mes objetivo (admin) ──────────────
@@ -1511,7 +1547,7 @@ function _calcLineaFootHTML(m, ln) {
   for (const e of m.aggLast1.values()) realTot += _calcRealLinea(e, ln);
   const cel = k => {
     const p = st.lineas[ln][k];
-    const meta = ln === "tk" && !st.declarado ? null : (p.hasGoal ? p.target : null);
+    const meta = p.hasGoal ? p.target : null;
     const dif = meta != null && !p.ok ? `<span class="calc-foot__dif">${p.gap > 0 ? "+" : "−"}${fmt(Math.abs(p.gap))}</span>` : "";
     return `<td class="ui-num"><strong${dn("calc.ln.total", ln, k)}>${fmt(p.sum)}</strong>${meta != null ? `<span class="calc-foot__de">${escapeHTML(t("calc.ln.deMeta", { v: fmt(meta) }))}</span>` : ""}${dif}</td>`;
   };
@@ -1872,11 +1908,6 @@ export function _calcContarCambiosReales() {
   return n;
 }
 
-export function calcSetSaveMode(mode) {
-  if (mode !== "edits" && mode !== "full") return;
-  CALC_STATE.saveMode = mode;
-  renderCalculator();
-}
 
 // ── Vista compartible: i18n ES/EN/RU + crecimiento vs último mes ──────────────
 // Meses: tabla única de core/meses.ts. El ruso nunca se combina con otro idioma
@@ -2029,7 +2060,7 @@ export function _calcSec5_exportPartner(agg, totals, lastMonth) {
   // antes que un número que no está respaldado por ningún lado.
   // También cuando el KAM escribió a mano la parte TukTuk de este partner
   // (sep-2026): ese número SÍ se guarda, así que es fiel mostrarlo aparte.
-  const splitActivo = !!repartoExp || taxiItems.some(e => _CALC_K3.some(k => _calcTkExplicito(e, k)));
+  const splitActivo = _calcTieneTkPct() || taxiItems.some(e => _CALC_K3.some(k => _calcTkExplicito(e, k)));
 
   let taxiBlock = "", tkBlock = "";
   if (taxiItems.length && !splitActivo) {
@@ -2195,7 +2226,11 @@ export function calcSetExportLang(lang) {
 // en domain/calcDraft.ts (con tests); acá solo se le pasan los tres datos que
 // necesita de CALC_STATE.
 export function _calcTieneProgresoSinGuardar() {
-  return hayProgresoSinGuardar(CALC_STATE.kamGoals, CALC_STATE.tkPct, _calcContarCambiosReales());
+  // Lo derivado de la base no es progreso sin guardar: ya está guardado.
+  const g = {}, bd = CALC_STATE._metaDeBD;
+  Object.keys(CALC_STATE.kamGoals).forEach(k => { g[k] = bd[k] ? 0 : CALC_STATE.kamGoals[k]; });
+  const tk = _CALC_K3.some(k => bd[k]) ? {} : CALC_STATE.tkPct;
+  return hayProgresoSinGuardar(g, tk, _calcContarCambiosReales());
 }
 
 // Empezar de cero con el perfil del otro KAM (pedido explícito de Manuel, sep
@@ -2209,6 +2244,8 @@ export function _calcResetParaNuevoKam() {
   CALC_STATE.tkModo    = "pct";
   CALC_STATE.tkPin     = {};
   CALC_STATE._sembradas = {};
+  CALC_STATE._metaDeBD = {};
+  CALC_STATE._bdKey    = "";
   CALC_STATE.edits     = {};
   CALC_STATE._utilSeeded = {};
   CALC_STATE.saved     = {};
@@ -2302,26 +2339,11 @@ export function calcOnGoalEdit(input) {
   _calcRefreshStatus();
 }
 
-// Escribir una meta global en un mes que ya tiene metas = re-repartir. En
-// "Solo lo que cambié" eso no escribiría nada (solo viajan celdas tecleadas),
-// así que se pasa a "Reparto completo" — con su confirmación, el freno de
-// metasGuard y el aviso de desglose TukTuk de siempre. El KAM puede volver.
-function _calcModoPorMetaGlobal() {
-  if (CALC_STATE.saveMode !== "edits" || !Object.keys(CALC_STATE.saved).length) return;
-  if (!_CALC_K3.some(k => +CALC_STATE.kamGoals[k] > 0)) return;
-  CALC_STATE.saveMode = "full";
-  document.querySelectorAll('#calculatorContent input[name="calcSaveMode"]').forEach(r => {
-    r.checked = r.value === "full";
-    const l = r.closest(".calc-mode");
-    if (l) l.classList.toggle("is-on", r.value === "full");
-  });
-}
-
 export function calcOnKamGoalChange(metric, val) {
   const v = parseNumInput(val);
   CALC_STATE.kamGoals[metric] = Number.isFinite(v) ? v : 0;
+  _calcMetaTecleada(metric);
   _calcSyncTkPct();
-  _calcModoPorMetaGlobal();
   // Persistido en cada tecla, no solo al guardar: un F5 a mitad de tipear las
   // tres metas no debería obligar a escribirlas de nuevo.
   _calcGuardarDraft();
@@ -2333,6 +2355,7 @@ export function calcOnKamGoalChange(metric, val) {
 export function calcOnTkPctChange(metric, val) {
   // Se recorta acá además de en repartirPorLinea: el input tiene min/max pero el
   // atributo HTML no impide escribir cualquier cosa a mano ni pegar un valor.
+  _calcMetaTecleada();
   if (CALC_STATE.tkModo === "abs") {
     const a = parseNumInput(val);
     CALC_STATE.tkAbs[metric] = Number.isFinite(a) ? Math.max(0, a) : 0;
@@ -2358,8 +2381,8 @@ export function calcAtajo(metric, f) {
   const v = metaAtajo(+((m.cartTot1 || {})[metric]) || 0, +f);
   if (v == null) return;
   CALC_STATE.kamGoals[metric] = v;
+  _calcMetaTecleada(metric);
   _calcSyncTkPct();
-  _calcModoPorMetaGlobal();
   const inp = document.getElementById(`calcGoal_${metric}`);
   if (inp) {
     inp.dataset.raw = rawNumText(v);
@@ -2596,7 +2619,7 @@ export function _calcBuildMetaRows(m) {
     const por = _calcPorcionTk(e, b);
     const COL = { ad: "meta_tk_ad", nr: "meta_tk_nr", sh: "meta_tk_sh" };
     ["ad", "nr", "sh"].forEach(k => {
-      if ((repartoSave || _calcTkExplicito(e, k)) && por[k] > 0) r[COL[k]] = por[k];
+      if ((_calcTkDeclaradoK(k) || _calcTkExplicito(e, k)) && por[k] > 0) r[COL[k]] = por[k];
     });
   }
   // Fleet KPIs (solo partners fleet, solo si el KAM cargó algún valor).
@@ -2760,6 +2783,30 @@ export async function calcSaveMetas() {
   const m = _calcComputeModel();
   const built = _calcBuildMetaRows(m);
   const { mesName, mesYear } = built;
+  // CÓMO GUARDAR (pedido de Manuel, 29-sep): si el mes ya tiene metas se
+  // pregunta en el momento — "Solo las celdas que completé" (lo tecleado en
+  // esta sesión, nada más) o "Reemplazar todo el mes" (el reparto que se ve,
+  // para todos los partners). Antes era un radio escondido en Ajustes
+  // avanzados y un guardado en "Solo lo que cambié" dejó la base de Miguel a
+  // medias (3 filas de 30). Mes sin metas → reparto completo, sin preguntar.
+  if (Object.keys(CALC_STATE.saved).length) {
+    const nSolo = _calcFiltrarSoloCambios(built.rows).length;
+    const metaNueva = _CALC_K3.some(k => +CALC_STATE.kamGoals[k] > 0 && !CALC_STATE._metaDeBD[k]);
+    const op = await choiceDialog({
+      title: t("calc.guardar.titulo", { kam: kamLabel(CALC_STATE.kam), mes: `${mesLabel(mesName)} ${mesYear}` }),
+      body: t("calc.guardar.cuerpo"),
+      options: [
+        { value: "edits", label: t("calc.guardar.solo", { n: nSolo }), desc: t(nSolo ? "calc.guardar.soloDesc" : "calc.guardar.soloNada"),
+          disabled: !nSolo, primary: !!nSolo && !metaNueva },
+        { value: "full", label: t("calc.guardar.todo"), desc: t("calc.guardar.todoDesc", { n: built.rows.length }),
+          primary: metaNueva || !nSolo }
+      ]
+    });
+    if (!op) return;
+    CALC_STATE.saveMode = op;
+  } else {
+    CALC_STATE.saveMode = "full";
+  }
   const soloCambios = CALC_STATE.saveMode === "edits";
   const rows = soloCambios ? _calcFiltrarSoloCambios(built.rows) : built.rows;
   if (!rows.length) {
@@ -2786,11 +2833,12 @@ export async function calcSaveMetas() {
       // El desglose TukTuk también se escribe, así que también se confirma: es
       // lo que el KAM va a declarar en los Loyalty Programs y no debería
       // enterarse después de haber apretado guardar.
-      (_calcTieneTkPct()
+      // Lo que de verdad se escribe en meta_tk_* (Σ de las filas), no el %.
+      (rows.some(r => r.meta_tk_ad != null || r.meta_tk_sh != null || r.meta_tk_nr != null)
         ? t("calc.conf.completoTk", {
-            ad: fmt(Math.round(a.sumAD * (+CALC_STATE.tkPct.ad || 0) / 100)),
-            sh: fmt(Math.round(a.sumSH * (+CALC_STATE.tkPct.sh || 0) / 100)),
-            nr: fmt(Math.round(a.sumNR * (+CALC_STATE.tkPct.nr || 0) / 100)) }) + "\n"
+            ad: fmt(rows.reduce((x, r) => x + (+r.meta_tk_ad || 0), 0)),
+            sh: fmt(rows.reduce((x, r) => x + (+r.meta_tk_sh || 0), 0)),
+            nr: fmt(rows.reduce((x, r) => x + (+r.meta_tk_nr || 0), 0)) }) + "\n"
         : "") +
       (nFleet ? t("calc.conf.completoFleet", { n: nFleet }) + "\n" : "") +
       "\n" + t("calc.conf.completoTotal", { n: rows.length }) + "\n\n" +
@@ -3187,7 +3235,6 @@ registerActions({
   calcNumKeydown:    (d, el, e) => calcNumKeydown(e, el),
   calcApplyChanges, calcSaveMetas, calcExportExcel, calcResetEdits, calcDownloadPartnerImage,
   calcDownloadAllPartnerImages,
-  calcSetSaveMode:     d => calcSetSaveMode(d.mode),
   calcDeleteMetasKam,
   calcOnKamGoalChange: (d, el) => calcOnKamGoalChange(d.metric, el.value),
   calcOnTkPctChange:   (d, el) => calcOnTkPctChange(d.metric, el.value),

@@ -209,3 +209,24 @@ describe("splitPorFraccion — la mitad 'mostrar' del carve-out", () => {
     }
   });
 });
+
+describe("cuotas enteras (resto mayor)", () => {
+  it("restoMayor suma exacto el objetivo", async () => {
+    const { restoMayor } = await import("./repartoLinea");
+    const r = restoMayor([333.4, 333.3, 333.3], 1000);
+    expect(r.reduce((a, b) => a + b, 0)).toBe(1000);
+    expect(r).toEqual([334, 333, 333]);
+  });
+  it("Σ total = meta y Σ TukTuk = pozo TukTuk, en enteros", async () => {
+    const { repartirPorLinea, cuotasEnteras } = await import("./repartoLinea");
+    const us = [
+      { key: "a", valTotal: 1271, valTk: 39 }, { key: "b", valTotal: 507, valTk: 327 },
+      { key: "c", valTotal: 193, valTk: 0 }, { key: "d", valTotal: 101, valTk: 101 }, { key: "e", valTotal: 89, valTk: 0 }
+    ];
+    const r = repartirPorLinea(3000, 0.179, us);
+    const e = cuotasEnteras(r.cuotas, 3000);
+    expect(e.reduce((s, c) => s + c.total, 0)).toBe(3000);
+    expect(e.reduce((s, c) => s + c.tk, 0)).toBe(Math.round(3000 * 0.179));
+    e.forEach(c => { expect(Number.isInteger(c.total)).toBe(true); expect(c.tk).toBeLessThanOrEqual(c.total); });
+  });
+});

@@ -162,6 +162,63 @@ export function confirmDialog(o: ConfirmDialogOptions): Promise<boolean> {
   });
 }
 
+export interface ChoiceOption {
+  value: string;
+  label: string;
+  /** Una línea que explica qué pasa si se elige. */
+  desc?: string;
+  primary?: boolean;
+  disabled?: boolean;
+}
+export interface ChoiceDialogOptions {
+  title: string;
+  body?: string;
+  options: ChoiceOption[];
+  cancelLabel?: string;
+}
+
+/** Elegir entre varias acciones (p. ej. "solo lo que completé" / "reemplazar
+ *  todo"). Cada opción es un botón grande con su explicación. Resuelve el
+ *  `value` elegido o null (canceló, Esc, clic fuera). Nunca rechaza. */
+export function choiceDialog(o: ChoiceDialogOptions): Promise<string | null> {
+  return new Promise<string | null>(resolve => {
+    const prevFocus = document.activeElement as HTMLElement | null;
+    const { backdrop, dialog, actions, content } = _build("alertdialog", o.title, o.body, null);
+    const list = _el("div", "ui-dialog__choices");
+    const botones: HTMLButtonElement[] = [];
+    let done = false;
+    const close = (result: string | null): void => {
+      if (done) return;
+      done = true;
+      backdrop.remove();
+      if (prevFocus && typeof prevFocus.focus === "function" && document.contains(prevFocus)) prevFocus.focus();
+      resolve(result);
+    };
+    o.options.forEach(op => {
+      const b = _el("button", "ui-dialog__choice" + (op.primary ? " is-primary" : ""));
+      b.type = "button";
+      b.disabled = !!op.disabled;
+      b.appendChild(_el("span", "ui-dialog__choice-label", op.label));
+      if (op.desc) b.appendChild(_el("span", "ui-dialog__choice-desc", op.desc));
+      b.addEventListener("click", () => { if (!b.disabled) close(op.value); });
+      list.appendChild(b);
+      botones.push(b);
+    });
+    content.appendChild(list);
+    const cancel = _el("button", "ui-btn ui-btn--secondary", o.cancelLabel ?? t("dialogo.cancelar"));
+    cancel.type = "button";
+    cancel.addEventListener("click", () => close(null));
+    actions.append(cancel);
+    backdrop.addEventListener("mousedown", e => { if (e.target === backdrop) close(null); });
+    backdrop.addEventListener("keydown", (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.preventDefault(); close(null); return; }
+      if (e.key === "Tab") _trapTab(e, dialog);
+    });
+    document.body.appendChild(backdrop);
+    (botones.find(b => !b.disabled) ?? cancel).focus();
+  });
+}
+
 /** Aviso en la página (reemplazo de alert()). Resuelve al cerrar. */
 export function alertDialog(o: AlertDialogOptions): Promise<void> {
   return new Promise<void>(resolve => {
