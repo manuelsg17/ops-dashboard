@@ -45,6 +45,26 @@ Pedido de Manuel: revisar todo (UX/UI, diccionarios, velocidad, bugs, integraci�
       - 3 filas en 0 de Miguel (Taxigo, FENIX DRIVE, GIAL WAY) son restos de partners que ya no están en su cartera.
       - 11 cuentas sin KAM con actividad en agosto no tienen meta; la mayor es TRACKER MOBILITY, con 22 AD.
   - **Sigue igual a propósito**: una celda fijada NO redistribuye el resto. Con un solo partner TukTuk, editarlo deja la línea en "No cuadra".
+- **Verificación de Calculadora → Metas (29-sep, local):**
+  - La meta que muestra Metas por KAM y por línea coincide exacto con la base (`data-num` contra SQL): Combinado sept (Ana 8,487 · Dario 8,429 · Elena 4,591 · Fabio 3,762) y TukTuk sept (Dario 1,414 · 104,103 · 286, con cobertura "Declarada por: Dario").
+  - Diferencias ESPERADAS, no bugs:
+    - Una flota con `activo=false` no suma al plan (TAXI BELLAVISTA 171: por eso la meta país da 37,248 y no 37,419).
+    - Una fila de meta cuyo partner hoy no tiene KAM en `partners` se agrupa por la precedencia `partners → flotas → fila` (VIA RAPIDA y RUTA DEL SILLAR → "No KAM"; NORTE SEGURO → Carla por la fila).
+  - Los actuales de Metas y de Rendimiento coinciden (35,164 · 6,371 · 1,715,445).
+  - En producción, la meta país de Metas (55,730) = Σ de la base.
+- **Maqueta "Desempeño" = Rendimiento + Metas en una vista (29-sep, SOLO prototipo, `?ui=proto&p=perf`, `src/dev/proto/pPerf.ts` + `perf.css`).** Pedido de Manuel: "combinar la vista de performance y de Metas para tener una sola… tomar lo mejor de cada sección". Pendiente que elija.
+  - Tres propuestas:
+    - D1 "Tablero con meta": una página.
+    - D2 "Pestañas por nivel": Resumen · Ciudades · KAMs · Partners · Tendencias.
+    - D3 "Foco en la brecha": ¿llegamos?, cuánto falta y ritmo necesario por semana, "dónde está la brecha" por cuenta.
+  - De Rendimiento: anillos, delta vs semana anterior, ciudades con minigráfico, quién se movió, tendencias y productividad.
+  - De Metas: meta del mes, % con un decimal, proyección, estado por cuenta (bajo / en / sobre / sin meta), aviso de escala, cuota TukTuk y PDF.
+  - Nuevo:
+    - Tendencias con la meta dibujada: AD contra el nivel de meta; N+R y Horas acumulados contra el ritmo lineal a la meta.
+    - "Más lejos de su meta".
+    - Tabla única de partners por cuenta (partner + ciudad) con estado, Δ y minigráfico.
+  - Números siempre completos (sin "1.7M").
+  - D3 usa la MISMA proyección que Metas para decir si "llega" (un primer borrador daba "no llega" con proyección 107.8%: no mezclar criterios).
 - **Ajustes visuales (25-sep, `7a9a9af`)**: Metas muestra Horas con el número completo (`fmt`, no `fmtSmart`) y el delta SIEMPRE debajo del número en las 3 tarjetas. Los anillos de Rendimiento van con un decimal (`ui.progressRing`; 99.95–<100 → "99.9%"). Helpers nuevos: `ui.infoTip` (ayuda en ⓘ con burbuja CSS; dentro de tablas con scroll usar `title`) y `note` en las opciones de `ui.segmented`. Capa suave de la Calculadora: campos rellenos (`--color-fill-soft`, borde recién en hover/foco); Manuel rechazó los "marcos negros toscos".
 - **Egress de Supabase (24-sep, `666b1fe`)**: el plan gratuito se pasó de 5 GB de egress en el ciclo ago–sep (grace period hasta el 17-oct). Causa: cada apertura precargaba las 3 escalas (~33 MB estimado en prod; diario = 18k filas). Fix: sin precarga en idle (mensual/diaria/columnas diferidas bajo demanda, cacheadas por escala en IndexedDB) + revalidación condicional con la RPC `data_version()` (APLICADA en prod: por tabla `[count, max(at)]` desde `audit_log` + última ingesta OK; SECURITY DEFINER, solo `authenticated`, NULL para el rol partner) + `HEAD count`. Estimado: ~0,25 MB por apertura sin cambios, ~0,1–0,35 GB/mes. `access_log` "login" ya no se registra en cada refocus (SIGNED_IN de supabase-js). Si vuelve el aviso de cuota: revisar Usage → Egress en Supabase.
 - **Base de producción al día (24-sep, vía MCP con el conector en la org de ops_dashboard)**: migración `metas_unique_mes_year` APLICADA (vista previa en solo lectura antes: 249 filas sin año de ABRIL/MAYO/JUNIO → 2026, 0 duplicados; después: 536 filas, 0 NULL, UNIQUE (clid,city,mes,mes_year), trigger de auditoría con mes_year; guardado de prueba como KAM dentro de BEGIN…ROLLBACK: SEPTIEMBRE 2027 crea fila aparte y SEPTIEMBRE 2026 queda intacta). Edge Function `admin-users` v6 DESPLEGADA (setKam + list con kam, verify_jwt=true; sin token/anon → 401). `shared/upsertMetas.ts` conserva el respaldo a la clave vieja por si se restaura una base sin migrar.

@@ -4,7 +4,7 @@
 import { filtrosPorDefecto, type Filtros, type Linea } from "./model";
 
 export type Version = "elegida" | "a" | "b" | "c";
-export type Pagina = "rend" | "metas" | "calc" | "config";
+export type Pagina = "rend" | "metas" | "perf" | "calc" | "config";
 export type SeccionCfg = "partners" | "clasificacion" | "cargas" | "usuarios" | "monitoreo" | "preferencias" | "mantenimiento";
 
 export const VERSIONES: { id: Version; label: string; desc: string }[] = [
@@ -15,6 +15,13 @@ export const VERSIONES: { id: Version; label: string; desc: string }[] = [
 ];
 
 export type K3 = "ad" | "sh" | "nr";
+// "Desempeño" = Rendimiento + Metas en una vista (pPerf.ts): tres propuestas.
+export type PerfV = "d1" | "d2" | "d3";
+export const VERSIONES_PERF: { id: PerfV; label: string; desc: string }[] = [
+  { id: "d1", label: "1 · Tablero con meta", desc: "Una sola página: tarjetas con anillo, ciudades con avance, KAM, quién se movió, tendencias con la meta dibujada y la tabla de partners con estado" },
+  { id: "d2", label: "2 · Pestañas por nivel", desc: "Tarjetas arriba y pestañas Resumen · Ciudades · KAMs · Partners · Tendencias: menos scroll" },
+  { id: "d3", label: "3 · Foco en la brecha", desc: "Arranca por ¿llegamos?: cuánto falta, ritmo necesario por semana y qué cuentas explican la brecha" }
+];
 // Calculadora, segunda vuelta (pCalc2.ts): tres propuestas propias.
 export type CalcV = "p1" | "p2" | "p3";
 export const VERSIONES_CALC: { id: CalcV; label: string; desc: string }[] = [
@@ -74,6 +81,7 @@ export const PS = {
     kam: "Ana", goals: { ad: 10000, sh: 640000, nr: 2200 }, fijos: {}, tkPct: { ad: "", sh: "", nr: "" },
     modo: "full", vista: "agg", refAbierta: false, avanzados: false, paso: 1, sel: null
   } as CalcState,
+  perf: { v: "d1" as PerfV, line: "comb", filtro: "todos", sort: "pct", tab: "resumen" },
   c2: {
     v: "p1", kam: "Ana", total: { ad: 10000, sh: 640000, nr: 2200 }, tkModo: "pct",
     tkPct: { ad: 17, sh: 20.2, nr: 15.6 }, tkAbs: { ad: null, sh: null, nr: null },

@@ -18,15 +18,17 @@
 import "./proto.css";
 import "./suave.css";
 import "./calc2.css";
+import "./perf.css";
 import { registerActions } from "../../shared/actions";
 import { confirmDialog, alertDialog } from "../../shared/confirmDialog";
 import { destroyAllCharts, ensureApex } from "../../charts";
-import { PS, resetFiltros, type Version, type Pagina, type SeccionCfg, type CalcV, type K3 } from "./state";
+import { PS, resetFiltros, type Version, type Pagina, type SeccionCfg, type CalcV, type K3, type PerfV } from "./state";
 import { topbar, nav, filtros, encabezado, selector, PAGE_DE_NAV } from "./chrome";
 import { renderRend, chartsRend } from "./pRend";
 import { renderMetas, chartsMetas } from "./pMetas";
 import { refrescarCalc, dist } from "./pCalc";
 import { renderCalc2, totalesCalc2 } from "./pCalc2";
+import { renderPerf, chartsPerf } from "./pPerf";
 import { renderConfig } from "./pConfig";
 import { SEMANAS, PARTNERS, partnersDeKam, mesDeSemana, filtrosPorDefecto, unidadesCalc } from "./model";
 
@@ -40,6 +42,7 @@ function contenido(): string {
   switch (PS.page) {
     case "rend": return renderRend();
     case "metas": return renderMetas();
+    case "perf": return renderPerf();
     case "calc": return renderCalc2();   // segunda vuelta (29-sep); la anterior sigue en pCalc.ts
     case "config": return renderConfig();
   }
@@ -66,7 +69,7 @@ export function render(): void {
   destroyAllCharts();
   document.body.classList.toggle("nav-rail", PS.rail);
   document.documentElement.setAttribute("data-theme", PS.theme);
-  const conPanel = PS.page === "rend" || PS.page === "metas";
+  const conPanel = PS.page === "rend" || PS.page === "metas" || PS.page === "perf";
   root.className = `pr-root pr-v-${PS.v} pr-p-${PS.page}${_shot ? " pr-shot" : ""}`;
   root.innerHTML = topbar() +
     `<div class="layout">${nav()}${conPanel ? filtros() : ""}` +
@@ -84,6 +87,7 @@ export function render(): void {
   ensureApex().then(() => setTimeout(() => {
     if (PS.page === "rend") chartsRend();
     if (PS.page === "metas") chartsMetas();
+    if (PS.page === "perf") chartsPerf();
   }, 0));
 }
 
@@ -93,6 +97,7 @@ function _url(): void {
   u.searchParams.set("v", PS.v); u.searchParams.set("p", PS.page); u.searchParams.set("theme", PS.theme);
   if (PS.page === "config") u.searchParams.set("sec", PS.cfg.sec); else u.searchParams.delete("sec");
   if (PS.page === "calc") u.searchParams.set("cv", PS.c2.v); else u.searchParams.delete("cv");
+  if (PS.page === "perf") u.searchParams.set("pv", PS.perf.v); else u.searchParams.delete("pv");
   history.replaceState(null, "", u.toString());
 }
 
@@ -234,6 +239,13 @@ registerActions({
       body: `Se escribirán ${n} filas (${modo}): conductores activos, horas y N+R por partner-ciudad.\nReemplaza las metas de ese mes; no se acumulan.` });
     if (ok) await alertDialog({ title: "Prototipo", body: "No se guardó nada: esto es una maqueta con datos fijos." });
   },
+  // Desempeño (pPerf.ts)
+  pfVer: (d: DOMStringMap) => { PS.perf.v = d.value as PerfV; render(); },
+  pfLine: (d: DOMStringMap) => { PS.perf.line = d.value as any; render(); },
+  pfMes: (_d: DOMStringMap, el: HTMLSelectElement) => { PS.metasMes = el.value; render(); },
+  pfFiltro: (d: DOMStringMap) => { PS.perf.filtro = d.value as any; render(); },
+  pfSort: (d: DOMStringMap) => { PS.perf.sort = d.value as any; render(); },
+  pfTab: (d: DOMStringMap) => { PS.perf.tab = d.value as any; render(); },
   // Calculadora · segunda vuelta (pCalc2.ts)
   c2Ver: (d: DOMStringMap) => { PS.c2.v = d.value as CalcV; render(); },
   c2Kam: async (_d: DOMStringMap, el: HTMLSelectElement) => {
@@ -318,7 +330,7 @@ export function cerrarProto(): void {
   document.removeEventListener("keydown", _escape);
   document.body.style.overflow = "";
   const u = new URL(location.href);
-  ["ui", "v", "p", "theme", "sec", "paso", "shot", "cv"].forEach(k => u.searchParams.delete(k));
+  ["ui", "v", "p", "theme", "sec", "paso", "shot", "cv", "pv"].forEach(k => u.searchParams.delete(k));
   history.replaceState(null, "", u.toString());
 }
 
@@ -326,7 +338,8 @@ export function mountProto(): void {
   if (document.getElementById(ROOT)) return;
   const q = new URLSearchParams(location.search);
   const v = q.get("v"); if (v === "a" || v === "b" || v === "c" || v === "elegida") PS.v = v;
-  const p = q.get("p"); if (p === "rend" || p === "metas" || p === "calc" || p === "config") PS.page = p;
+  const p = q.get("p"); if (p === "rend" || p === "metas" || p === "perf" || p === "calc" || p === "config") PS.page = p;
+  const pv = q.get("pv"); if (pv === "d1" || pv === "d2" || pv === "d3") PS.perf.v = pv;
   PS.theme = q.get("theme") === "dark" ? "dark" : "light";
   const sec = q.get("sec"); if (sec) PS.cfg.sec = sec as SeccionCfg;
   const paso = q.get("paso"); if (paso != null) PS.calc.paso = +paso;

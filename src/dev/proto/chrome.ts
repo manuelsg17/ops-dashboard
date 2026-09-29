@@ -9,7 +9,7 @@ import { sideNav, pageHeader, rawHtml, segmented, type Html } from "../../shared
 import { iconSvg } from "../../shared/icons";
 import { escapeHTML as e } from "../../core/security";
 import { hashColor } from "../../core/format";
-import { PS, VERSIONES, VERSIONES_CALC, type Pagina } from "./state";
+import { PS, VERSIONES, VERSIONES_CALC, VERSIONES_PERF, type Pagina } from "./state";
 import { SEMANAS, PARTNERS, KAMS, SIN_KAM, CIUDADES, cityLabel, d2s, partnersDeKam, filtrosPorDefecto, semanasRango } from "./model";
 
 const NAV = [
@@ -25,7 +25,7 @@ const NAV = [
     { id: "rawdata", label: "Data Raw", icon: "table" as const },
     { id: "config", label: "Configuración", icon: "settings" as const }] }
 ];
-export const NAV_ID: Record<Pagina, string> = { rend: "rend", metas: "metas", calc: "calculator", config: "config" };
+export const NAV_ID: Record<Pagina, string> = { rend: "rend", metas: "metas", perf: "rend", calc: "calculator", config: "config" };
 export const PAGE_DE_NAV: Record<string, Pagina> = { rend: "rend", metas: "metas", calculator: "calc", config: "config" };
 
 const LOGO = `<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`;
@@ -115,6 +115,7 @@ export function filtros(): string {
 const TIT: Record<Pagina, [string, string]> = {
   rend: ["Rendimiento", "Conductores activos, N+R, horas y viajes del período"],
   metas: ["Metas", "Avance contra las metas mensuales"],
+  perf: ["Desempeño", "Resultados del período y avance contra la meta del mes, en una sola vista"],
   calc: ["Calculadora", "Reparte la meta del KAM entre sus partners"],
   config: ["Configuración", "Partners, usuarios, monitoreo y mantenimiento"]
 };
@@ -122,7 +123,7 @@ const LINEA_LBL = { comb: "Combinado", agg: "Agregador", fleet: "Fleet", tk: "Tu
 
 export function chipsAlcance() {
   const F = PS.F, D = filtrosPorDefecto();
-  const line = PS.page === "metas" ? PS.metasLine : PS.rendLine;
+  const line = PS.page === "metas" ? PS.metasLine : PS.page === "perf" ? PS.perf.line : PS.rendLine;
   const ws = semanasRango(F);
   const chips: { label?: string; value: string; removeAct?: string; removeData?: any }[] = [];
   const q = (k: string, cond: boolean) => cond ? { removeAct: "prQuitarChip", removeData: { k } } : {};
@@ -140,7 +141,7 @@ export function chipsAlcance() {
 
 export function encabezado(): Html {
   const [title, subtitle] = TIT[PS.page];
-  const conPanel = PS.page === "rend" || PS.page === "metas";
+  const conPanel = PS.page === "rend" || PS.page === "metas" || PS.page === "perf";
   const { chips, recorte } = conPanel ? chipsAlcance() : { chips: [], recorte: false };
   const acciones = conPanel
     ? rawHtml(`<button type="button" class="ui-btn ui-btn--secondary ui-btn--sm shell-filtros-btn" data-act="prFiltros" aria-expanded="${PS.filtros}" title="${PS.filtros ? "Ocultar filtros" : "Mostrar filtros"}">${iconSvg("filter", { size: 14 })}<span>Filtros</span></button>`)
@@ -156,19 +157,21 @@ export function encabezado(): Html {
 
 // ── Selector de versión (flotante, NO es parte de la app) ──────────────────
 export function selector(): string {
-  const pages: [Pagina, string][] = [["rend", "Rendimiento"], ["metas", "Metas"], ["calc", "Calculadora"], ["config", "Configuración"]];
+  const pages: [Pagina, string][] = [["perf", "Desempeño (nuevo)"], ["rend", "Rendimiento"], ["metas", "Metas"], ["calc", "Calculadora"], ["config", "Configuración"]];
   if (!PS.switchAbierto) {
-    return `<div class="pr-switch pr-switch--min"><button type="button" class="pr-switch__pill" data-act="prSwitch" title="Abrir el selector de versión">${iconSvg("eye", { size: 14 })}<span>${e(PS.page === "calc" ? VERSIONES_CALC.find(v => v.id === PS.c2.v)!.label : VERSIONES.find(v => v.id === PS.v)!.label)}</span></button></div>`;
+    return `<div class="pr-switch pr-switch--min"><button type="button" class="pr-switch__pill" data-act="prSwitch" title="Abrir el selector de versión">${iconSvg("eye", { size: 14 })}<span>${e(PS.page === "perf" ? VERSIONES_PERF.find(v => v.id === PS.perf.v)!.label : PS.page === "calc" ? VERSIONES_CALC.find(v => v.id === PS.c2.v)!.label : VERSIONES.find(v => v.id === PS.v)!.label)}</span></button></div>`;
   }
   return `<div class="pr-switch" role="region" aria-label="Selector del prototipo">
     <div class="pr-switch__head"><strong>Prototipo</strong><span class="pr-switch__hint">nada se guarda</span>
       <button type="button" class="pr-switch__x" data-act="prSwitch" title="Minimizar" aria-label="Minimizar">${iconSvg("minus", { size: 14 })}</button></div>
-    <div class="pr-switch__row">${PS.page === "calc"
+    <div class="pr-switch__row">${PS.page === "perf"
+      ? segmented({ ariaLabel: "Propuesta de Desempeño", act: "pfVer", value: PS.perf.v, options: VERSIONES_PERF.map(v => ({ value: v.id, label: v.label })) })
+      : PS.page === "calc"
       ? segmented({ ariaLabel: "Propuesta de Calculadora", act: "c2Ver", value: PS.c2.v, options: VERSIONES_CALC.map(v => ({ value: v.id, label: v.label })) })
       : segmented({ ariaLabel: "Versión", act: "prVer", value: PS.v, options: VERSIONES.map(v => ({ value: v.id, label: v.label })) })}</div>
     <div class="pr-switch__row">${segmented({ ariaLabel: "Página", act: "prPage", value: PS.page, options: pages.map(([v, l]) => ({ value: v, label: l })) })}
       ${segmented({ ariaLabel: "Tema", act: "prTheme", value: PS.theme, options: [{ value: "light", label: "Claro", icon: "sun" }, { value: "dark", label: "Oscuro", icon: "moon" }] })}
       <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-act="prCerrar">${iconSvg("x", { size: 14 })}<span>Cerrar</span></button></div>
-    <div class="pr-switch__desc">${e(PS.page === "calc" ? VERSIONES_CALC.find(v => v.id === PS.c2.v)!.desc : VERSIONES.find(v => v.id === PS.v)!.desc)}</div>
+    <div class="pr-switch__desc">${e(PS.page === "perf" ? VERSIONES_PERF.find(v => v.id === PS.perf.v)!.desc : PS.page === "calc" ? VERSIONES_CALC.find(v => v.id === PS.c2.v)!.desc : VERSIONES.find(v => v.id === PS.v)!.desc)}</div>
   </div>`;
 }
