@@ -553,6 +553,13 @@ function _calcMetaTecleada(k) {
   else CALC_STATE._metaDeBD = {};
 }
 
+// ¿La cartera de ESTE KAM ya tiene metas guardadas para el mes? (`saved` trae
+// las de TODOS los KAMs del mes: usarlo entero hacía que un KAM sin metas
+// viera "Este mes ya tiene metas guardadas".)
+export function _calcHayGuardadoKam(m) {
+  return [...m.aggLast1.values()].some(e => _calcFilaGuardada(e.partner, e.city));
+}
+
 // ¿Este (partner,ciudad,métrica) ya tiene meta guardada en BD para el mes?
 export function _calcYaGuardada(partner, city, metric) {
   return CALC_STATE.saved[`${partner}|||${city}|||${metric}`] !== undefined;
@@ -582,6 +589,10 @@ export function _calcGoalFor(partner, city, metric, base) {
   const k = `${partner}|||${city}|||${metric}`;
   const ev = ["ad", "sh", "nr"].includes(metric) ? _calcEditVigente(k, metric) : CALC_STATE.edits[k];
   if (ev !== undefined) return +ev || 0;
+  // Meta derivada de la base: la tabla ES la base. Un partner sin meta guardada
+  // queda en 0 (antes recibía una cuota de la Σ derivada y la tabla no cuadraba
+  // con lo guardado: "AD 529 / 300").
+  if (CALC_STATE._metaDeBD[metric]) return 0;
   return Math.round(base);
 }
 
@@ -598,6 +609,9 @@ export function _calcTkDe(e, b, k) {
   if (ev !== undefined) return Math.max(0, +ev || 0);
   const pin = CALC_STATE.tkPin[`${e.partner}|||${e.city}|||${k}`];
   if (pin !== undefined) return pin;
+  // Idem con la meta derivada de la base: sin desglose TukTuk guardado, TukTuk
+  // es 0 y Taxi el total (lo que dice la base), no una proporción estimada.
+  if (CALC_STATE._metaDeBD[k]) return 0;
   const tot = _calcGoalFor(e.partner, e.city, k, b[k]);
   return splitPorFraccion(tot, b[k] > 0 ? b[k + "Tk"] / b[k] : 0).secundario;
 }
@@ -892,6 +906,14 @@ export function renderCalculator() {
   // cambio confirmado vía calcOnKamChange) esto deja de correr para siempre. Sin
   // el freno, cada re-render revertiría al KAM del login apenas alguien mirara
   // la meta de otro. Un admin sin `myKam` sigue viendo "Todos los KAMs".
+  // F5 con un borrador de OTRO KAM (probando como KAM: cargué Beto, recargué
+  // y volvía a Ana, el del login — el borrador de Beto quedaba huérfano): el
+  // KAM del borrador gana, una sola vez por carga de página.
+  if (!CALC_STATE._draftIntentado && !CALC_STATE._kamTouched) {
+    let d = null;
+    try { d = JSON.parse(lsGet(CALC_DRAFT_KEY) || "null"); } catch { d = null; }
+    if (d && d.kam && allKAMs.includes(d.kam)) { CALC_STATE.kam = d.kam; CALC_STATE._kamTouched = true; }
+  }
   if (debePreseleccionarKam(CALC_STATE._kamTouched, STATE.myKam, CALC_STATE.kam, allKAMs)) {
     CALC_STATE.kam = STATE.myKam;
   }
@@ -982,7 +1004,9 @@ export function _calcLineCardsHTML(m, status) {
     const p = status.lineas[ln][k];
     // La meta de la línea si hay meta del KAM; si no, lo que suma la tabla.
     const v = p.hasGoal ? p.target : p.sum;
-    return `<span class="calc-lcard__v"><small>${escapeHTML(_calcCorto(k))}</small><b class="ui-num"${dn("calc.ln", ln, k)}>${v ? fmt(v) : "—"}</b></span>`;
+    // TukTuk de un KPI sin % declarado: es el peso real ("sug."), no una meta.
+    const sug = ln === "tk" && v && !_calcTkDeclaradoK(k) && +CALC_STATE.kamGoals[k] > 0 && !CALC_STATE._metaDeBD[k];
+    return `<span class="calc-lcard__v${sug ? " is-sug" : ""}"${sug ? ` title="${escapeHTML(t("calc.ln.sugTip"))}"` : ""}><small>${escapeHTML(_calcCorto(k))}${sug ? ` · ${escapeHTML(t("calc.ln.sugerido"))}` : ""}</small><b class="ui-num"${dn("calc.ln", ln, k)}>${v ? fmt(v) : "—"}</b></span>`;
   }).join("");
   const card = (ln, ico, nombre) => `
     <button type="button" class="calc-lcard${vista === ln ? " is-sel" : ""}" data-act="calcSetVista" data-value="${ln}" aria-pressed="${vista === ln}">
@@ -1455,8 +1479,11 @@ function _calcInputLinea(e, k, ln, val, est, v) {
   const dif = sv !== undefined && v && +sv !== (ln === "tk" ? v[k].tk : v[k].tot);
   const cls = (fija ? " calc-inp-fija" : "") + (ek.sobrescribe || dif ? " calc-inp-dirty" : "");
   const aria = `${t("calc.col.kpiMeta", { k: _CALC_KPI_LBL[k] })} ${ln === "tk" ? "TukTuk" : "Taxi"} · ${e.partner} · ${cityLabel(e.city)}`;
-  return `<input type="text" inputmode="decimal" autocomplete="off" spellcheck="false"
-      value="${escapeHTML(_calcFmtIn(val))}" data-raw="${escapeHTML(String(val))}" aria-label="${escapeHTML(aria)}"
+  // Sin meta del KAM ni nada guardado ni tecleado, la celda va vacía ("—"), no
+  // con un 0 que parece una meta de cero.
+  const vacia = !val && !ek.fijada && sv === undefined && !(+CALC_STATE.kamGoals[k] > 0);
+  return `<input type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="—"
+      value="${vacia ? "" : escapeHTML(_calcFmtIn(val))}" data-raw="${vacia ? "" : escapeHTML(String(val))}" aria-label="${escapeHTML(aria)}"
       data-pk="${escapeHTML(e.partner)}" data-city="${escapeHTML(e.city)}" data-metric="${k}" data-ln="${ln}"
       data-act-change="calcOnLineEdit" data-act-focus="calcNumFocus" data-act-blur="calcNumBlur" data-act-keydown="calcNumKeydown"
       class="ui-input ui-input--sm calc-num calc-num--cell${cls}"/><span hidden${dn("calc.ln.cell", ln, k, `${e.partner}@${e.city}`)}>${escapeHTML(String(val))}</span>`;
@@ -1613,7 +1640,7 @@ function _calcLeyendaHTML() {
     if (e.sobrescribe) sobre = true;
   }
   // Meta global nueva sobre un mes con metas: el reparto reescribe lo guardado.
-  if (Object.keys(CALC_STATE.saved).length && _CALC_K3.some(k => +CALC_STATE.kamGoals[k] > 0)) sobre = true;
+  if (_CALC_K3.some(k => +CALC_STATE.kamGoals[k] > 0 && !CALC_STATE._metaDeBD[k]) && _calcHayGuardadoKam(_calcComputeModel())) sobre = true;
   const it = (cls, key) => `<span class="calc-legend__it"><span class="calc-legend__sw calc-legend__sw--${cls}" aria-hidden="true"></span>${escapeHTML(t(key))}</span>`;
   const ley = [fija ? it("fija", "calc.leyendaFija") : "", sobre ? it("dirty", "calc.leyendaDistinta") : ""].join("");
   return ley ? `<div class="calc-legend">${ley}<span class="calc-legend__it calc-legend__it--nota">${escapeHTML(t("calc.ln.leyendaSuma"))}</span></div>` : "";
@@ -2742,6 +2769,8 @@ export function _calcFiltrarSoloCambios(rows) {
       // Con `edits` como fuente, un 0 solo se escribe si alguien lo tecleó.
       const ev = CALC_STATE.edits[k];
       if (ev === undefined || ev === "") return;
+      // La Utilización Fleet sembrada en 85 por defecto no la "completó" nadie.
+      if (CALC_STATE._utilSeeded[k]) return;
       const sv = CALC_STATE.saved[k];
       if (sv === undefined || +sv !== +ev) { keep[col] = +ev; hay = true; }
     });
@@ -2789,12 +2818,15 @@ export async function calcSaveMetas() {
   // para todos los partners). Antes era un radio escondido en Ajustes
   // avanzados y un guardado en "Solo lo que cambié" dejó la base de Miguel a
   // medias (3 filas de 30). Mes sin metas → reparto completo, sin preguntar.
-  if (Object.keys(CALC_STATE.saved).length) {
-    const nSolo = _calcFiltrarSoloCambios(built.rows).length;
+  const hayGuardado = _calcHayGuardadoKam(m);
+  const nSolo = _calcFiltrarSoloCambios(built.rows).length;
+  // También sin metas guardadas si hay celdas tecleadas: un KAM que solo carga
+  // unas celdas sin meta global chocaba con el freno de "metas en cero".
+  if (hayGuardado || nSolo) {
     const metaNueva = _CALC_K3.some(k => +CALC_STATE.kamGoals[k] > 0 && !CALC_STATE._metaDeBD[k]);
     const op = await choiceDialog({
       title: t("calc.guardar.titulo", { kam: kamLabel(CALC_STATE.kam), mes: `${mesLabel(mesName)} ${mesYear}` }),
-      body: t("calc.guardar.cuerpo"),
+      body: t(hayGuardado ? "calc.guardar.cuerpo" : "calc.guardar.cuerpoNuevo"),
       options: [
         { value: "edits", label: t("calc.guardar.solo", { n: nSolo }), desc: t(nSolo ? "calc.guardar.soloDesc" : "calc.guardar.soloNada"),
           disabled: !nSolo, primary: !!nSolo && !metaNueva },
@@ -2949,6 +2981,17 @@ export async function calcSaveMetas() {
     // Forzar la re-lectura de lo guardado: si no, `saved` queda con el estado
     // ANTERIOR y la próxima comparación "¿cambió?" daría cambios fantasma.
     CALC_STATE.savedKey = "";
+    // Guardado OK → la pantalla vuelve a leer TODO de la base (meta del KAM =
+    // Σ de lo guardado, parte TukTuk incluida). Así lo que se ve es lo que
+    // quedó escrito, y cambiar de KAM ya no avisa que "se va a borrar" algo que
+    // ya está guardado. Probando como KAM saltaba ese aviso tras guardar.
+    if (refrescoOk) {
+      CALC_STATE.edits = {}; CALC_STATE._utilSeeded = {}; CALC_STATE._sembradas = {};
+      CALC_STATE.tkPin = {}; CALC_STATE._metaDeBD = {}; CALC_STATE._bdKey = "";
+      CALC_STATE.kamGoals = { ...CALC_STATE.kamGoals, ad: 0, sh: 0, nr: 0 };
+      CALC_STATE.tkPct = { ad: 0, sh: 0, nr: 0 }; CALC_STATE.tkAbs = { ad: 0, sh: 0, nr: 0 };
+      _calcBorrarDraft();
+    }
     // El upsert YA se confirmó arriba, así que el guardado está bien pase lo que
     // pase acá. Si el refresco falló, decirlo en vez de pintar el verde de
     // siempre: con el banner verde sobre una pantalla que no muestra las metas,

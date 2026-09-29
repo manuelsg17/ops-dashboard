@@ -520,3 +520,4 @@
   .calc-lcards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 .calc-goal__bd { display: flex; align-items: center; gap: 4px; margin-top: 2px; color: var(--color-info-fg); }
+.calc-lcard__v.is-sug b { color: var(--color-text-muted); font-style: italic; font-weight: var(--weight-regular); }
