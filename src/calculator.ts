@@ -2,7 +2,7 @@
 import { ensureHtml2Canvas } from "./shared/lazyLibs.js";
 import { opcionesCapturaClara, tokenClaro } from "./shared/exportClaro";
 import { t, mesLabel, kamLabel, getLang } from "./core/i18n";
-import { btn, badge, alertBox, emptyState, icon, segmented } from "./shared/ui";
+import { btn, badge, alertBox, emptyState, icon, segmented, infoTip } from "./shared/ui";
 import { confirmDialog, alertDialog } from "./shared/confirmDialog";
 import { parseNumInput, rawNumText } from "./calcNumInput";
 import { MES_NOMBRES, mesNombre } from "./core/meses";
@@ -19,7 +19,7 @@ import { alCerrarSesion } from "./shared/sesion";
 import { upsertMetas } from "./shared/upsertMetas";
 import { cityLabel } from "./core/format";
 import { ATAJOS_META, metaAtajo, variacionPct, textoVariacion, estadoCelda, soltarCeldas, ordenarUnidades } from "./domain/calcPlanilla";
-import { absolutoTk, sumaPorcionesTk } from "./domain/tkResumen";
+import { absolutoTk } from "./domain/tkResumen";
 // calculator.ts — Calculadora de Metas (planilla viva, fase 8 sep-2026)
 // El KAM ingresa su meta TOTAL y se reparte (disgrega) a cada partner+ciudad
 // segun su % de representacion en el ULTIMO MES. La pantalla es UNA planilla
@@ -48,6 +48,17 @@ export const CALC_STATE = {
   // Manuel, sep 2026). La pantalla muestra los dos y la brecha entre ellos.
   // 0 en los tres = cartera sin TukTuk (caso Álvaro), reparto de un solo pozo.
   tkPct:      { ad: 0, sh: 0, nr: 0 },
+  // Cómo carga el KAM la parte TukTuk (sep-2026, "líneas arriba"): "pct" = el %
+  // de PnL; "abs" = el número. En "abs" el número manda y tkPct se DERIVA de él
+  // (tkAbs / meta total), así el reparto de siempre (repartirPorLinea) no cambia.
+  tkModo:     "pct",
+  tkAbs:      { ad: 0, sh: 0, nr: 0 },
+  // Porción TukTuk "clavada" al editar la celda TAXI de un partner: el total
+  // pasa a ser Taxi + esta porción, y sin el clavo la porción se recalcularía
+  // sobre el total nuevo y movería el Taxi recién escrito. NO cuenta como
+  // edición TukTuk explícita (no fuerza escribir meta_tk_*), por eso no vive en
+  // `edits`. Clave "partner|||city|||kpi".
+  tkPin:      {},
   // Idioma de la tarjeta compartible: "es" | "en" | "es-en" (bilingüe, default)
   exportLang: "es-en",
 
@@ -91,14 +102,10 @@ export const CALC_STATE = {
   // "fleet" = KPIs Fleet, "tarjetas" = tarjetas para partners) y qué
   // desplegables quedaron abiertos (se repinta entero tras varias acciones y
   // un <details> cerrándose solo desorienta).
-  vista:       "agg",
+  vista:       "taxi",
   advOpen:     false,
   refOpen:     false,
-  pctKamOpen:  false,
-  // Sección TukTuk: null = todavía no la tocó nadie → abierta si NO hay %
-  // declarado (ahí hay algo que hacer), cerrada si ya está declarado.
-  tkOpen:      null,
-  _tkOpenReset: false
+  pctKamOpen:  false
 };
 
 // I2: al cerrar sesión, CALC_STATE vuelve a su estado inicial. Sin esto, salir y
@@ -126,7 +133,8 @@ export function _calcGuardarDraft() {
   if (CALC_STATE.kam === "all" || !CALC_STATE._mesKey) return;   // nada que atar al draft
   lsSet(CALC_DRAFT_KEY, JSON.stringify({
     kam: CALC_STATE.kam, mesKey: CALC_STATE._mesKey,
-    kamGoals: CALC_STATE.kamGoals, tkPct: CALC_STATE.tkPct
+    kamGoals: CALC_STATE.kamGoals, tkPct: CALC_STATE.tkPct,
+    tkModo: CALC_STATE.tkModo, tkAbs: CALC_STATE.tkAbs
   }));
 }
 
@@ -149,6 +157,9 @@ export function _calcCargarDraftSiAplica() {
   if (hayProgresoSinGuardar(CALC_STATE.kamGoals, CALC_STATE.tkPct, 0)) return;
   if (d.kamGoals) CALC_STATE.kamGoals = { ...CALC_STATE.kamGoals, ...d.kamGoals };
   if (d.tkPct)    CALC_STATE.tkPct    = { ...CALC_STATE.tkPct,    ...d.tkPct };
+  if (d.tkModo === "abs" || d.tkModo === "pct") CALC_STATE.tkModo = d.tkModo;
+  if (d.tkAbs)    CALC_STATE.tkAbs    = { ...CALC_STATE.tkAbs,    ...d.tkAbs };
+  _calcSyncTkPct();
 }
 
 // Pesos Yango (formato KAM-level)
@@ -390,11 +401,15 @@ export function _calcAggMetaBases(e, g, cartTotals, reparto) {
       fleet, noAct
     };
   }
+  const ad = (+g.ad || 0) * _calcShare(e.ad, cartTotals.ad);
+  const sh = (+g.sh || 0) * _calcShare(e.sh, cartTotals.sh);
+  const nrB = (+g.nr || 0) * _calcShare(nr,  cartTotals.nr);
+  // Sin % declarado la porción TukTuk es la NATURAL de la unidad (su peso
+  // TukTuk real): es lo que muestra la pestaña TukTuk como "sugerido". No se
+  // guarda en meta_tk_* salvo que el KAM la escriba a mano (_calcBuildMetaRows).
   return {
-    ad: (+g.ad || 0) * _calcShare(e.ad, cartTotals.ad),
-    sh: (+g.sh || 0) * _calcShare(e.sh, cartTotals.sh),
-    nr: (+g.nr || 0) * _calcShare(nr,  cartTotals.nr),
-    adTk: 0, shTk: 0, nrTk: 0,
+    ad, sh, nr: nrB,
+    adTk: ad * _calcShare(e.adTk || 0, e.ad), shTk: sh * _calcShare(e.shTk || 0, e.sh), nrTk: nrB * _calcShare(e.nrTk || 0, nr),
     fleet, noAct
   };
 }
@@ -425,6 +440,11 @@ export function _calcMetasGuardadas(mesName, mesYear) {
     if (m.mA     > 0)     out[`${base}|||ad`]     = m.mA;
     if (m.mNR    > 0)     out[`${base}|||nr`]     = m.mNR;
     if (m.mH     > 0)     out[`${base}|||sh`]     = m.mH;
+    // Porción TukTuk guardada (meta_tk_*): se siembra como edición TukTuk para
+    // que Taxi = total − TukTuk salga exacto de lo que está en la base.
+    if (m.mtkAD  != null) out[`${base}|||ad@tk`]  = m.mtkAD;
+    if (m.mtkNR  != null) out[`${base}|||nr@tk`]  = m.mtkNR;
+    if (m.mtkSH  != null) out[`${base}|||sh@tk`]  = m.mtkSH;
     if (m.mSHcar != null) out[`${base}|||shcar`]  = m.mSHcar;
     if (m.mAcc   != null) out[`${base}|||accept`] = m.mAcc;
     if (m.mUtil  != null) out[`${base}|||util`]   = m.mUtil;
@@ -475,6 +495,32 @@ export function _calcGoalFor(partner, city, metric, base) {
   const k = `${partner}|||${city}|||${metric}`;
   if (CALC_STATE.edits[k] !== undefined) return +CALC_STATE.edits[k] || 0;
   return Math.round(base);
+}
+
+// ── Porción TukTuk y Taxi de UNA unidad (sep-2026, "líneas arriba") ────────
+// Regla de Manuel: cada línea se edita por separado y el total del partner =
+// Taxi + TukTuk. El TOTAL sigue viviendo en `edits["p|||c|||ad"]` (lo que ya
+// usaban el guardado, el cuadre, "Solo lo que cambié" y la tarjeta); la porción
+// TukTuk resuelve: edición TukTuk explícita → clavo por edición Taxi → la
+// proporción del reparto (splitPorFraccion, igual que el guardado de siempre).
+// Taxi = total − TukTuk.
+export const _calcTkKey = (partner, city, k) => `${partner}|||${city}|||${k}@tk`;
+export function _calcTkDe(e, b, k) {
+  const ev = CALC_STATE.edits[_calcTkKey(e.partner, e.city, k)];
+  if (ev !== undefined && ev !== "") return Math.max(0, +ev || 0);
+  const pin = CALC_STATE.tkPin[`${e.partner}|||${e.city}|||${k}`];
+  if (pin !== undefined) return pin;
+  const tot = _calcGoalFor(e.partner, e.city, k, b[k]);
+  return splitPorFraccion(tot, b[k] > 0 ? b[k + "Tk"] / b[k] : 0).secundario;
+}
+export function _calcTaxiDe(e, b, k) {
+  return Math.max(0, _calcGoalFor(e.partner, e.city, k, b[k]) - _calcTkDe(e, b, k));
+}
+// ¿El KAM escribió a mano la porción TukTuk de esta unidad? (fuerza a guardarla
+// aunque no haya % declarado).
+export function _calcTkExplicito(e, k) {
+  const ev = CALC_STATE.edits[_calcTkKey(e.partner, e.city, k)];
+  return ev !== undefined && ev !== "";
 }
 
 // ── Campos numéricos con formato ─────────────────────────────────────────────
@@ -575,8 +621,20 @@ export function _calcComputeStatus(m) {
   let fleet = null;
   if (m.hasFleet) fleet = _calcFleetMetaCount(m.aggLast3);
   // TukTuk: porción repartida (Σ de la tabla) vs el absoluto declarado.
-  const tk = _calcTieneTkPct() ? { sum: _calcTkTotales(m) || { ad: 0, sh: 0, nr: 0 } } : null;
-  return { agg, fleet, hasFleet: m.hasFleet, tk };
+  const tkSum = _calcTkTotales(m) || { ad: 0, sh: 0, nr: 0 };
+  const declarado = _calcTieneTkPct();
+  const tk = declarado ? { sum: tkSum } : null;
+  // Por LÍNEA (tarjetas de arriba): Taxi = total − TukTuk, a los dos lados.
+  // Sin % declarado la meta TukTuk del KAM no existe: su parte es el peso real
+  // ("sugerido") y Taxi se mide contra lo que queda.
+  const lineas = { taxi: {}, tk: {} };
+  _CALC_K3.forEach(k => {
+    const goal = +g[k] || 0;
+    const tkMeta = declarado ? (_calcTkAbs(k) || 0) : tkSum[k];
+    lineas.tk[k] = declarado ? _calcMetricCuadre(tkSum[k], tkMeta) : { sum: tkSum[k], target: 0, gap: 0, ok: true, hasGoal: false };
+    lineas.taxi[k] = _calcMetricCuadre(agg[k].sum - tkSum[k], goal > 0 ? goal - tkMeta : 0);
+  });
+  return { agg, fleet, hasFleet: m.hasFleet, tk, lineas, declarado };
 }
 
 // ── CUADRE (panel izquierdo) ─────────────────────────────────────────────────
@@ -615,35 +673,14 @@ export function _calcCuadreBox(status) {
   const items = cargadas.length
     ? `<span class="calc-cuadre-box__items">${P.map(item).join(`<span class="calc-cuadre-box__sep" aria-hidden="true">·</span>`)}</span>`
     : "";
-  let fleet = "";
-  if (status.hasFleet && status.fleet) {
-    const f = status.fleet;
-    const ft = f.total === 0 ? "neutral" : (f.filled >= f.total ? "ok" : "warn");
-    fleet = badge(`Fleet: ${f.filled}/${f.total} ${t("calc.conMeta")}`, ft, { icon: "car" });
-  }
-  // TukTuk: siempre una línea, para que el estado se vea también acá. No cambia
-  // el veredicto de arriba (la porción TukTuk es un DESGLOSE de la meta, no una
-  // meta aparte): solo muestra lo repartido vs lo declarado.
-  let tkLine;
-  const tkIco = icon("tuktuk", { size: 12 });
-  if (!status.tk) {
-    tkLine = `<span class="calc-cuadre-box__tk is-none">${tkIco}${escapeHTML(t("calc.tk.cuadreSin"))}</span>`;
-  } else {
-    const parts = _CALC_K3.filter(k => _calcTkAbs(k) != null).map(k => {
-      const q = _calcMetricCuadre(status.tk.sum[k], _calcTkAbs(k));
-      return `<span class="calc-cuadre-box__it">${escapeHTML(_calcCorto(k))} <strong class="ui-num">${fmt(q.sum)}</strong> / <span class="ui-num">${fmt(q.target)}</span>` +
-        (q.ok ? "" : ` <span class="ui-num calc-cuadre-box__gap">(${q.gap > 0 ? "+" : ""}${fmt(q.gap)})</span>`) + `</span>`;
-    });
-    tkLine = `<span class="calc-cuadre-box__tk">${tkIco}<strong>TukTuk</strong>` +
-      (parts.length ? parts.join(`<span class="calc-cuadre-box__sep" aria-hidden="true">·</span>`)
-                    : `<span>${escapeHTML(t("calc.tk.cuadreSinMeta"))}</span>`) + `</span>`;
-  }
+  // Taxi, TukTuk y Fleet tienen su estado en las tarjetas de línea
+  // (_calcLineCardsHTML). Este cuadre es solo el de la meta total.
   // Huella de números: el mismo texto que antes llevaba la fila de cuadre de la
   // tabla (meta + "Cuadra" o la diferencia), para que la huella no cambie.
   const huella = _CALC_K3.map(k =>
     `<span hidden${dn(`calc.dist.cuadre.${k}`)}>${_calcCuadre(status.agg[k].sum, +g[k] || 0)}</span>`).join("");
   return `<div class="calc-cuadre-box calc-cuadre-box--${tone}">${icon(ico, { size: 16 })}` +
-    `<div class="calc-cuadre-box__txt"><span class="calc-cuadre-box__top"><strong class="calc-cuadre-box__head">${escapeHTML(head)}</strong>${fleet}</span>${items}${tkLine}` +
+    `<div class="calc-cuadre-box__txt"><span class="calc-cuadre-box__top"><strong class="calc-cuadre-box__head">${escapeHTML(head)}</strong></span>${items}` +
     (extra ? `<span class="calc-cuadre-box__hint">${escapeHTML(extra)}</span>` : "") +
     `</div></div>${huella}`;
 }
@@ -674,21 +711,21 @@ export function _calcRefreshStatus() {
     if (h) h.innerHTML = _calcGoalHint(k, m);
   });
 
-  const g = CALC_STATE.kamGoals;
-  // "= 1,700" bajo cada % TukTuk: sigue a la meta y al % mientras se escriben.
+  // Equivalente bajo cada campo TukTuk ("= 1,700" o "= 17.0%"), en vivo.
   document.querySelectorAll("#calculatorContent [data-tkabs]").forEach(el => {
-    const k = el.getAttribute("data-tkabs");
-    const decl = +(CALC_STATE.tkPct || {})[k] || 0;
-    const goal = +g[k] || 0;
-    const on = decl > 0 && goal > 0;
-    el.hidden = !on;
-    el.textContent = on ? `= ${fmt(Math.round(goal * decl / 100))}` : "";
+    const txt = _calcTkEqTxt(el.getAttribute("data-tkabs"));
+    el.hidden = !txt;
+    el.textContent = txt;
   });
 
   const tkB = document.getElementById("calcTkBadge");
   if (tkB) tkB.innerHTML = _calcTkBadgeHTML();
-  const tkE = document.getElementById("calcTkEstado");
-  if (tkE) tkE.innerHTML = _calcTkEstadoHTML();
+  const ley = document.getElementById("calcLeyenda");
+  if (ley) ley.innerHTML = _calcLeyendaHTML();
+  const cards = document.getElementById("calcLCards");
+  if (cards) cards.innerHTML = _calcLineCardsHTML(m, status);
+  const foot = document.getElementById("calcLineaFoot");
+  if (foot) foot.innerHTML = _calcLineaFootHTML(m, _calcVistaActual(m) === "tk" ? "tk" : "taxi");
 
   const res = document.getElementById("calcAdvRes");
   if (res) res.textContent = _calcResumenAvanzados();
@@ -698,7 +735,7 @@ export function _calcRefreshStatus() {
   if (hueco) hueco.innerHTML = STATE.canWrite ? _calcAvisoHuecoTk(m) : "";
 
   if (document.getElementById("calcAggSumAD")) {
-    const a = _calcAggDistSums(m.aggLast1, m.distTot1, g);
+    const a = { sumAD: status.agg.ad.sum, sumSH: status.agg.sh.sum, sumNR: status.agg.nr.sum };
     document.getElementById("calcAggSumAD").textContent = fmt(a.sumAD);
     document.getElementById("calcAggSumSH").textContent = fmt(a.sumSH);
     document.getElementById("calcAggSumNR").textContent = fmt(a.sumNR);
@@ -724,9 +761,7 @@ export function _calcRepintarVivo() {
   if (dist && !(act && dist.contains(act))) {
     const wrap = dist.querySelector(".calc-dist-wrap");
     const top = wrap ? wrap.scrollTop : 0, left = wrap ? wrap.scrollLeft : 0;
-    dist.innerHTML = _calcVistaActual(m) === "fleet"
-      ? _calcSec4b_fleet(m.aggLast3)
-      : _calcSec4_distribucion(m.aggLast1, m.distTot1, m.lastMonth);
+    dist.innerHTML = _calcVistaCuerpo(m, _calcVistaActual(m));
     const w2 = dist.querySelector(".calc-dist-wrap");
     if (w2) { w2.scrollTop = top; w2.scrollLeft = left; }
   }
@@ -740,13 +775,13 @@ export function _calcRepintarVivo() {
 }
 
 // ── RENDER PRINCIPAL ──────────────────────────────────────────────────────────
-// UNA pantalla partida (fase 8, sep-2026; antes cinco pasos apilados):
-//   izquierda (fija al hacer scroll) → KAM y mes, las tres metas con atajos,
-//                "Ajustes avanzados" (% TukTuk, cómo guardar, metas % KAM,
-//                eliminar), el cuadre y las acciones (Guardar / Tarjetas).
-//   derecha → el reparto en vivo (Agregador | Fleet), la referencia plegada y,
-//                a pedido, las tarjetas para los partners.
-// Por debajo de 1100 px el panel pasa arriba de la tabla (CSS).
+// "LÍNEAS ARRIBA" (29-sep-2026, propuesta 3 del prototipo ?ui=proto&p=calc):
+//   arriba  → KAM, mes, acciones; meta total del KAM (con atajos) y la parte
+//             TukTuk (% de PnL o número); cuadre y "Ajustes avanzados".
+//   medio   → una tarjeta por línea (Taxi · TukTuk · Fleet; Delivery y Cargo
+//             "próximamente") con su meta y si cuadra; elige la tabla.
+//   abajo   → la tabla editable de esa línea a todo el ancho, el total por
+//             partner (solo lectura) o las tarjetas para partners.
 export function renderCalculator() {
   if (STATE.curTab !== "calculator") return;
   const el = document.getElementById("calculatorContent");
@@ -811,12 +846,15 @@ export function renderCalculator() {
   CALC_STATE._vivoT = null;
   const status = _calcComputeStatus(m);
 
+  // "LÍNEAS ARRIBA" (propuesta 3, elegida por Manuel el 29-sep-2026): sin
+  // panel lateral. Arriba una tarjeta con KAM, mes, acciones y las metas del
+  // KAM (total + parte TukTuk); debajo una tarjeta por línea con su meta y si
+  // cuadra; al elegir una línea, su tabla editable a todo el ancho.
   el.innerHTML = `
-    <div class="calc">
-      <div class="calc-planilla">
-        ${_calcPanel(m, allKAMs, status)}
-        <section class="calc-main" id="calcMain" aria-labelledby="calcMainT">${_calcMainHTML(m)}</section>
-      </div>
+    <div class="calc calc--lineas">
+      ${_calcTopCard(m, allKAMs, status)}
+      <div class="calc-lcards" id="calcLCards" role="group" aria-label="${escapeHTML(t("calc.vistaAria"))}">${_calcLineCardsHTML(m, status)}</div>
+      <section class="calc-main" id="calcMain" aria-labelledby="calcMainT">${_calcMainHTML(m)}</section>
     </div>`;
 }
 
@@ -825,53 +863,97 @@ export function renderCalculator() {
 function _calcLeerUiDelDom() {
   const leer = (id, campo) => { const d = document.getElementById(id); if (d) CALC_STATE[campo] = !!d.open; };
   leer("calcAdv", "advOpen");
-  // Tras cambiar de KAM (todo de cero) la sección TukTuk vuelve a su default.
-  if (CALC_STATE._tkOpenReset) CALC_STATE._tkOpenReset = false;
-  else leer("calcTk", "tkOpen");
   leer("calcRef", "refOpen");
   leer("calcPctKam", "pctKamOpen");
 }
 
-// Fleet solo existe si el KAM tiene partners Fleet; si no, vuelve al reparto.
+// Vista de abajo: una línea (taxi | tk), el total por partner, Fleet o las
+// tarjetas para partners. Fleet solo si el KAM tiene partners Fleet.
 export function _calcVistaActual(m) {
   const v = CALC_STATE.vista;
-  if (v === "fleet" && !m.hasFleet) return "agg";
-  return v === "fleet" || v === "tarjetas" ? v : "agg";
+  if (v === "fleet" && !m.hasFleet) return "taxi";
+  return ["taxi", "tk", "total", "fleet", "tarjetas"].includes(v) ? v : "taxi";
 }
 
-// ── PANEL IZQUIERDO ──────────────────────────────────────────────────────────
-export function _calcPanel(m, allKAMs, status) {
+// Estado de una línea para su tarjeta: "cuadra" / "no cuadra" / "sin meta" /
+// "sugerido" (TukTuk sin % declarado: su parte es el peso real).
+function _calcEstadoLinea(status, ln) {
+  const hayMetaKam = !!(+CALC_STATE.kamGoals.ad || +CALC_STATE.kamGoals.sh || +CALC_STATE.kamGoals.nr);
+  const haySuma = _CALC_K3.some(k => status.lineas[ln][k].sum > 0);
+  // Sin meta del KAM cargada pero con metas en la tabla (lo guardado en la
+  // base, o celdas escritas): se muestran sus sumas, no un "sin meta".
+  const sinMeta = haySuma ? { txt: t("calc.ln.enTabla"), tone: "neutral" } : { txt: t("calc.ln.sinMeta"), tone: "neutral" };
+  if (ln === "tk" && !status.declarado) return hayMetaKam ? { txt: t("calc.ln.sugerido"), tone: "neutral" } : sinMeta;
+  const P = _CALC_K3.map(k => status.lineas[ln][k]).filter(p => p && p.hasGoal);
+  if (!P.length) return sinMeta;
+  return P.every(p => p.ok) ? { txt: t("calc.cuadraCorto"), tone: "ok" } : { txt: t("calc.noCuadra"), tone: "warn" };
+}
+
+// Tarjetas de línea: Taxi · TukTuk · Fleet (+ Delivery y Cargo "próximamente",
+// para que se vea dónde entran cuando lleguen sus datos). Son botones: eligen
+// la tabla de abajo. "Total por partner" es un enlace aparte.
+export function _calcLineCardsHTML(m, status) {
+  const vista = _calcVistaActual(m);
+  const pill = st => `<span class="calc-pill calc-pill--${st.tone}">${st.tone === "ok" ? icon("check", { size: 11, strokeWidth: 2.5 }) : ""}${escapeHTML(st.txt)}</span>`;
+  const vals = ln => _CALC_K3.map(k => {
+    const p = status.lineas[ln][k];
+    // La meta de la línea si hay meta del KAM; si no, lo que suma la tabla.
+    const v = ln === "tk" ? (status.declarado ? p.target : p.sum) : (p.hasGoal ? p.target : p.sum);
+    return `<span class="calc-lcard__v"><small>${escapeHTML(_calcCorto(k))}</small><b class="ui-num"${dn("calc.ln", ln, k)}>${v ? fmt(v) : "—"}</b></span>`;
+  }).join("");
+  const card = (ln, ico, nombre) => `
+    <button type="button" class="calc-lcard${vista === ln ? " is-sel" : ""}" data-act="calcSetVista" data-value="${ln}" aria-pressed="${vista === ln}">
+      <span class="calc-lcard__h">${icon(ico, { size: 16 })}<span>${escapeHTML(nombre)}</span>${pill(_calcEstadoLinea(status, ln))}</span>
+      <span class="calc-lcard__vals">${vals(ln)}</span>
+    </button>`;
+  let fleet = "";
+  if (m.hasFleet) {
+    const f = status.fleet || _calcFleetMetaCount(m.aggLast3);
+    const tone = f.total === 0 ? "neutral" : (f.filled >= f.total ? "ok" : "warn");
+    fleet = `
+    <button type="button" class="calc-lcard${vista === "fleet" ? " is-sel" : ""}" data-act="calcSetVista" data-value="fleet" aria-pressed="${vista === "fleet"}">
+      <span class="calc-lcard__h">${icon("car", { size: 16 })}<span>Fleet</span>${pill({ txt: `${f.filled}/${f.total}`, tone })}</span>
+      <span class="calc-lcard__vals"><span class="calc-lcard__v"><small>${escapeHTML(t("calc.ln.fleetKpis"))}</small><b>${escapeHTML(t("calc.ln.fleetKpisV"))}</b></span></span>
+    </button>`;
+  }
+  const futura = (ico, nombre) => `
+    <div class="calc-lcard calc-lcard--futura" aria-disabled="true">
+      <span class="calc-lcard__h">${icon(ico, { size: 16 })}<span>${escapeHTML(nombre)}</span></span>
+      <span class="calc-lcard__vals"><small>${escapeHTML(t("calc.ln.pronto"))}</small></span>
+    </div>`;
+  return card("taxi", "taxi", "Taxi") + card("tk", "tuktuk", "TukTuk") + fleet + futura("package", "Delivery") + futura("truck", "Cargo");
+}
+
+// ── TARJETA DE ARRIBA: KAM, mes, acciones, metas del KAM ────────────────────
+export function _calcTopCard(m, allKAMs, status) {
   const nextM = _calcNextMonth(m.lastMonth || "");
   const kamAll = CALC_STATE.kam === "all";
   return `
-    <aside class="calc-side ui-card" aria-label="${escapeHTML(t("calc.panelAria"))}">
-      <div class="calc-side__who">
-        <div class="ui-field">
-          <label class="ui-field__label" for="calcKamSel">${escapeHTML(t("calc.kamLabel"))}</label>
-          <select id="calcKamSel" class="ui-select" data-act-change="calcOnKamChange">
+    <div class="calc-top ui-card" aria-label="${escapeHTML(t("calc.panelAria"))}">
+      <div class="calc-top__bar">
+        <span class="calc-top__kam">
+          <label class="ui-sr-only" for="calcKamSel">${escapeHTML(t("calc.kamLabel"))}</label>
+          <select id="calcKamSel" class="ui-select calc-top__sel" data-act-change="calcOnKamChange">
             <option value="all" ${kamAll ? "selected" : ""}>${escapeHTML(t("calc.todosKam"))}</option>
             ${allKAMs.map(k => `<option value="${escapeHTML(k)}" ${CALC_STATE.kam === k ? "selected" : ""}>${escapeHTML(kamLabel(k))}</option>`).join("")}
           </select>
-        </div>
-        <div class="ui-field">
-          <span class="ui-field__label">${escapeHTML(t("calc.mesObjetivo"))}</span>
-          <div class="calc-mes">
-            ${icon("calendar", { size: 16 })}
-            <span class="calc-mes__val">${escapeHTML(_calcMesTxt(nextM))}</span>
-            <span class="calc-mes__sub">${escapeHTML(t("calc.repartoSegun", { r: _calcMesTxt(m.lastMonth || "") }))}</span>
-          </div>
-        </div>
+          ${infoTip(t("calc.kamTodosAviso"))}
+        </span>
+        <span class="calc-mes">${icon("calendar", { size: 15 })}<span class="calc-mes__val">${escapeHTML(_calcMesTxt(nextM))}</span>${infoTip(t("calc.repartoSegun", { r: _calcMesTxt(m.lastMonth || "") }))}</span>
+        ${_calcBarAcciones()}
       </div>
-      ${kamAll ? alertBox({ tone: "info", text: t("calc.kamTodosAviso") }) : ""}
-      <div class="calc-side__block">
-        <div class="calc-side__h">${escapeHTML(t("calc.metasDelMes"))}</div>
-        <p class="calc-side__sub">${escapeHTML(t("calc.metasDelMesSub"))}</p>
-        <div class="calc-side__goals">${_CALC_K3.map(k => _kamGoalInput(k, m)).join("")}</div>
+      <div class="calc-top__grid">
+        <section class="calc-top__col" aria-labelledby="calcMetasT">
+          <div class="calc-side__h" id="calcMetasT">${escapeHTML(t("calc.metaTotalKam"))}${infoTip(t("calc.metasDelMesSub"))}</div>
+          <div class="calc-top__goals">${_CALC_K3.map(k => _kamGoalInput(k, m)).join("")}</div>
+        </section>
+        <section class="calc-top__col calc-top__col--tk" aria-labelledby="calcTkT">${_calcTkSeccion(m)}</section>
       </div>
-      ${_calcTkSeccion(m)}
-      ${_calcAvanzados(m)}
-      ${_calcAccionesPanel(status)}
-    </aside>`;
+      <div class="calc-top__foot">
+        <div id="calcCuadre" role="status">${_calcCuadreBox(status)}</div>
+        ${_calcAvanzados(m)}
+      </div>
+    </div>`;
 }
 
 // Nombre del mes base (el último con datos), para los atajos y las pistas.
@@ -1013,29 +1095,25 @@ function _calcBorrarHTML() {
     </section>`;
 }
 
-// ── Acciones del panel ───────────────────────────────────────────────────────
+// ── Acciones (barra de la tarjeta de arriba) ────────────────────────────────
 // Guardar es la ÚNICA acción primaria de la pantalla (rojo de marca). Las
-// tarjetas para partners son secundarias: cambian la columna derecha.
-// El cuadre va en el MISMO pie fijo que Guardar: mientras se escriben las
-// metas (o se baja por el panel) siempre se ve si el reparto cierra.
-export function _calcAccionesPanel(status) {
+// tarjetas para partners, CSV y descartar son secundarias.
+export function _calcBarAcciones() {
   const canSave = !!STATE.canWrite;
   const kamAll  = CALC_STATE.kam === "all";
   const saveBtn = canSave
     ? btn({ label: t("calc.btnGuardar2"), variant: "primary", icon: "save", act: "calcSaveMetas" })
     : btn({ label: t("calc.btnGuardar2"), variant: "primary", icon: "lock", disabled: true, title: t("calc.requiereKamAdmin") });
   const enTarjetas = CALC_STATE.vista === "tarjetas";
-  const tarjetas = btn({
-    label: enTarjetas ? t("calc.volverReparto") : t("calc.btnTarjetas"),
-    icon: enTarjetas ? "table" : "image", act: "calcVerTarjetas"
-  });
+  const nota = !canSave ? t("calc.requiereKamAdmin") : (kamAll ? t("calc.kamNote3") : "");
   return `
-    <div class="calc-side__actions">
-      <div id="calcCuadre" role="status">${_calcCuadreBox(status)}</div>
-      ${!canSave ? alertBox({ tone: "info", text: t("calc.requiereKamAdmin") }) : ""}
-      ${canSave && kamAll ? alertBox({ tone: "warn", text: t("calc.kamNote3") }) : ""}
-      <div class="calc-side__btns">${saveBtn}${tarjetas}</div>
-    </div>`;
+    <span class="calc-top__acts">
+      ${nota ? `<span class="calc-top__nota">${icon(!canSave ? "lock" : "alert-triangle", { size: 14 })}<span>${escapeHTML(nota)}</span></span>` : ""}
+      ${btn({ label: t("calc.btnCsvCorto"), icon: "download", variant: "ghost", size: "sm", act: "calcExportExcel", title: t("calc.btnDescargarCsv2") })}
+      ${btn({ label: t("calc.btnResetEdits2"), icon: "refresh", variant: "ghost", size: "sm", act: "calcResetEdits" })}
+      ${btn({ label: enTarjetas ? t("calc.volverReparto") : t("calc.btnTarjetas"), icon: enTarjetas ? "table" : "image", variant: "secondary", act: "calcVerTarjetas" })}
+      ${saveBtn}
+    </span>`;
 }
 
 // ── SECCIÓN TUKTUK (panel izquierdo, siempre a la vista) ────────────────────
@@ -1059,32 +1137,20 @@ function _calcTkBadgeHTML() {
     : badge(t("calc.tk.sinDeclarar"), "warn", { icon: "alert-triangle" });
 }
 
-// Una línea: sin declarar → qué pasa (peso natural, no se guarda desglose);
-// declarado → los tres % con su absoluto ("AD 17% = 1,700 · Horas 20.2% = …").
-function _calcTkEstadoHTML() {
-  if (!_calcTieneTkPct()) return escapeHTML(t("calc.tk.sinDeclararTxt"));
-  const p = CALC_STATE.tkPct || {};
-  return _CALC_K3.map(k => {
-    const abs = _calcTkAbs(k);
-    return `<span class="calc-tk__it">${escapeHTML(_calcCorto(k))} <strong class="ui-num">${escapeHTML(_calcPctTxt(p[k]))}%</strong>` +
-      (abs == null ? "" : ` = <strong class="ui-num"${dn("calc.tk.abs", k)}>${fmt(abs)}</strong>`) + `</span>`;
-  }).join(`<span class="calc-tk__sep" aria-hidden="true">·</span>`);
-}
-
+// Bloque compacto, siempre abierto (sep-2026, segunda vuelta: "me mareo"): el
+// estado va en el badge, la explicación en el ⓘ y el detalle por partner en la
+// pestaña TukTuk de la derecha.
 export function _calcTkSeccion(m) {
-  const activo = _calcTieneTkPct();
-  const open = CALC_STATE.tkOpen == null ? !activo : !!CALC_STATE.tkOpen;
+  const modo = segmented({ ariaLabel: t("calc.tk.modoAria"), act: "calcSetTkModo", value: CALC_STATE.tkModo,
+    options: [{ value: "pct", label: "%" }, { value: "abs", label: t("calc.tk.modoNum") }] });
   return `
-    <details class="calc-tk" id="calcTk"${open ? " open" : ""}>
-      <summary class="calc-tk__sum">
-        <span class="calc-tk__top">
-          <span class="calc-tk__t" id="calcTkT">${icon("tuktuk", { size: 14 })}${escapeHTML(t("calc.tk.titulo"))}</span>
-          <span id="calcTkBadge">${_calcTkBadgeHTML()}</span>
-        </span>
-        <span class="calc-tk__estado" id="calcTkEstado">${_calcTkEstadoHTML()}</span>
-      </summary>
-      <div class="calc-tk__body" role="group" aria-labelledby="calcTkT">${_calcTkPctBlock(m)}</div>
-    </details>`;
+    <div class="calc-tk">
+      <div class="calc-tk__top">
+        <span class="calc-side__h calc-tk__t" id="calcTkT">${icon("tuktuk", { size: 14 })}${escapeHTML(t("calc.tk.titulo2"))}${infoTip(t("calc.tkPctSub2"))}</span>
+        <span class="calc-tk__right"><span id="calcTkBadge">${_calcTkBadgeHTML()}</span>${modo}</span>
+      </div>
+      ${_calcTkPctBlock(m)}
+    </div>`;
 }
 
 // Totales de la porción TukTuk del reparto: la suma EXACTA de las sub-líneas
@@ -1093,8 +1159,20 @@ export function _calcTkSeccion(m) {
 export function _calcTkTotales(m) {
   const g = CALC_STATE.kamGoals;
   const reparto = _calcRepartoDe(m.aggLast1, g);
-  if (!reparto) return null;
-  return sumaPorcionesTk([...m.aggLast1.values()].map(e => _calcAggMetaBases(e, g, m.distTot1, reparto)));
+  const s = { ad: 0, sh: 0, nr: 0 };
+  for (const e of m.aggLast1.values()) {
+    const p = _calcPorcionTk(e, _calcAggMetaBases(e, g, m.distTot1, reparto));
+    _CALC_K3.forEach(k => { s[k] += p[k]; });
+  }
+  return s;
+}
+
+// Porción TukTuk de la meta de UNA unidad, tal como se GUARDA en meta_tk_*: se
+// parte la meta ya resuelta (con el edit manual si lo hay) por la proporción
+// que calculó el reparto. Un solo cálculo para la pestaña TukTuk, sus totales,
+// el cuadre y _calcBuildMetaRows — así lo que se ve es lo que se escribe.
+export function _calcPorcionTk(e, b) {
+  return { ad: _calcTkDe(e, b, "ad"), sh: _calcTkDe(e, b, "sh"), nr: _calcTkDe(e, b, "nr") };
 }
 
 // ── % TUKTUK DECLARADO POR PnL ───────────────────────────────────────────────
@@ -1111,46 +1189,64 @@ export function _calcTkTotales(m) {
 // TukTuk se lleva su peso natural. Así un KAM que todavía no cargó la tabla no ve
 // cambiar sus metas sin haber pedido nada.
 export function _calcTkPctBlock(m) {
-  const p = CALC_STATE.tkPct || {};
-  const g = CALC_STATE.kamGoals || {};
-  // MISMO ORDEN que las metas de arriba (AD, SH, N+R), no el de la tabla de
-  // PnL: dos grupos de tres campos con las mismas etiquetas en órdenes
-  // distintos se cruzan al copiar y no hay nada en pantalla que lo delate.
-  // fmt y NO fmtSmart: este número se copia al Loyalty Program, y "101.0K" no
-  // se puede declarar. Va exacto aunque ocupe más.
+  const abs = CALC_STATE.tkModo === "abs";
+  // MISMO ORDEN que las metas (AD, Horas, N+R): dos grupos de tres campos con
+  // las mismas etiquetas en órdenes distintos se cruzan al copiar.
   const fila = k => {
-    const nat = pesoNaturalTk(_calcUnidades(m.aggLast1, k));
-    const decl = +p[k] || 0;
-    // Sin base medible se muestra "—", no 0,0%: un cero acá invita a declarar un
-    // cero que nadie midió.
-    const natTxt = nat == null ? "—" : (nat * 100).toFixed(1) + "%";
-    const gap = (nat == null || !decl) ? null : decl - nat * 100;
-    const gapTxt = gap == null ? ""
-      : ` · <span title="${escapeHTML(t("calc.tkPctBrechaTip"))}">${gap >= 0 ? "+" : ""}${gap.toFixed(1)} pp</span>`;
-    // El ABSOLUTO que sale de ese %: el número que el KAM declara en el Loyalty
-    // Program, y además desambigua el campo ("17 % = 1.701": nadie escribe 1701
-    // donde va 17). Se actualiza en vivo (_calcRefreshStatus).
-    const on = decl > 0 && +g[k] > 0;
-    const abs = on ? `= ${fmt(Math.round(+g[k] * decl / 100))}` : "";
     const id = `calcTk_${k}`;
-    return `
-      <div class="ui-field calc-tkpct__f">
-        <label class="ui-field__label" for="${id}" title="${escapeHTML(t(`calc.goal.${k}`))}">${escapeHTML(_calcCorto(k))} (%)</label>
-        <div class="calc-suffix">
-          <input id="${id}" type="number" step="0.1" min="0" max="100" value="${decl || ""}"
+    const v = abs ? (+CALC_STATE.tkAbs[k] || 0) : (+CALC_STATE.tkPct[k] || 0);
+    const eq = _calcTkEqTxt(k);
+    const campo = abs
+      ? `<input id="${id}" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="${escapeHTML(v ? _calcFmtIn(v) : "")}" data-raw="${escapeHTML(v ? rawNumText(v) : "")}"
+          placeholder="0" aria-label="${escapeHTML(t(`calc.goal.${k}`))} · TukTuk"
+          data-act-change="calcOnTkPctChange" data-act-input="calcOnTkPctChange"
+          data-act-focus="calcNumFocus" data-act-blur="calcNumBlur" data-act-keydown="calcNumKeydown" data-metric="${k}"
+          class="ui-input ui-input--sm calc-num"/>`
+      : `<div class="calc-suffix">
+          <input id="${id}" type="number" step="0.1" min="0" max="100" value="${v || ""}"
             placeholder="0.0" inputmode="decimal" aria-label="${escapeHTML(t(`calc.goal.${k}`))} (%)"
             data-act-change="calcOnTkPctChange" data-act-input="calcOnTkPctChange" data-metric="${k}"
             class="ui-input ui-input--sm calc-suffix__input"/>
           <span class="calc-suffix__txt" aria-hidden="true">%</span>
-        </div>
-        <div class="calc-tkpct__abs ui-num" data-tkabs="${k}"${on ? "" : " hidden"}>${escapeHTML(abs)}</div>
-        <span class="ui-field__hint">${escapeHTML(t("calc.tkPctReal", { v: natTxt }))}${gapTxt}</span>
+        </div>`;
+    return `
+      <div class="ui-field calc-tkpct__f">
+        <label class="ui-field__label" for="${id}" title="${escapeHTML(t(`calc.goal.${k}`))}">${escapeHTML(_calcCorto(k))}</label>
+        ${campo}
+        <div class="calc-tkpct__abs ui-num" data-tkabs="${k}"${eq ? "" : " hidden"}>${escapeHTML(eq)}</div>
       </div>`;
   };
+  // Peso REAL de TukTuk en la cartera el mes base: la referencia para el % de
+  // PnL (una brecha grande suele ser un fleetroom sin taggear) y lo que se usa
+  // como "sugerido" mientras no se declare nada.
+  const nat = k => { const v = pesoNaturalTk(_calcUnidades(m.aggLast1, k)); return v == null ? "—" : (v * 100).toFixed(1) + "%"; };
+  const real = t("calc.tk.pesoReal", { m: _calcMesTxt(m.lastMonth || ""), ad: nat("ad"), sh: nat("sh"), nr: nat("nr") });
   return `
     <div class="calc-tkpct">${_CALC_K3.map(fila).join("")}</div>
-    <div id="calcTkAvisos">${_calcTkAvisosHTML(m)}</div>
-    <p class="calc-help">${escapeHTML(t("calc.tkPctSub"))}</p>`;
+    <p class="calc-tk__real" title="${escapeHTML(t("calc.tkPctBrechaTip"))}">${escapeHTML(real)}</p>
+    <div id="calcTkAvisos">${_calcTkAvisosHTML(m)}</div>`;
+}
+
+// Equivalente bajo cada campo TukTuk: con % → el número ("= 1,700", lo que va
+// al Loyalty Program); con número → el % de la meta total ("= 17.0%").
+function _calcTkEqTxt(k) {
+  const g = +CALC_STATE.kamGoals[k] || 0;
+  if (CALC_STATE.tkModo === "abs") {
+    const a = +CALC_STATE.tkAbs[k] || 0;
+    return a > 0 && g > 0 ? `= ${(a / g * 100).toFixed(1)}%` : "";
+  }
+  const abs = _calcTkAbs(k);
+  return abs == null ? "" : `= ${fmt(abs)}`;
+}
+
+// En modo número el % se DERIVA (tkAbs / meta total). Se recalcula cuando
+// cambia cualquiera de los dos, así el número tecleado se mantiene fijo.
+export function _calcSyncTkPct() {
+  if (CALC_STATE.tkModo !== "abs") return;
+  _CALC_K3.forEach(k => {
+    const g = +CALC_STATE.kamGoals[k] || 0, a = +CALC_STATE.tkAbs[k] || 0;
+    CALC_STATE.tkPct[k] = g > 0 && a > 0 ? Math.min(100, a / g * 100) : 0;
+  });
 }
 
 // Avisos del reparto (pozo TukTuk sin dónde caer, % fuera de rango), al lado
@@ -1178,34 +1274,45 @@ export function _calcMainHTML(m) {
       </div>
       <div id="calcShareWrap">${_calcSec5_exportPartner(m.aggLast1, m.distTot1, m.lastMonth)}</div>`;
   }
-  const titulo = vista === "fleet" ? t("calc.metasFleet")
-    : (kamAll ? t("calc.repartoTodos") : t("calc.repartoDe", { kam: kamTxt }));
-  const sub = vista === "fleet" ? t("calc.metasFleetSub")
-    : t("calc.repartoSub", { n: m.aggLast1.size, m: _calcMesTxt(m.lastMonth || "") });
-  const seg = m.hasFleet ? segmented({
-    ariaLabel: t("calc.vistaAria"), act: "calcSetVista", value: vista,
-    options: [{ value: "agg", label: t("calc.vistaAgg"), icon: "taxi" }, { value: "fleet", label: "Fleet", icon: "car" }]
-  }) : "";
-  const leyenda = vista === "agg" ? `
-      <div class="calc-legend">
-        <span class="calc-legend__it"><span class="calc-legend__sw calc-legend__sw--fija" aria-hidden="true"></span>${escapeHTML(t("calc.leyendaFija"))}</span>
-        <span class="calc-legend__it"><span class="calc-legend__sw calc-legend__sw--dirty" aria-hidden="true"></span>${escapeHTML(t("calc.leyendaDistinta"))}</span>
-      </div>` : "";
+  const mesBase = _calcMesTxt(m.lastMonth || "");
+  const quien = kamAll ? t("calc.todosKam") : kamTxt;
+  const TIT = {
+    taxi:  t("calc.ln.titTaxi", { kam: quien }),
+    tk:    t("calc.ln.titTk", { kam: quien }),
+    total: t("calc.ln.titTotal", { kam: quien }),
+    fleet: t("calc.metasFleet")
+  };
+  const SUB = {
+    taxi:  t("calc.ln.subLinea", { m: mesBase }),
+    tk:    t("calc.ln.subLinea", { m: mesBase }),
+    total: t("calc.ln.subTotal"),
+    fleet: t("calc.metasFleetSub2")
+  };
+  const TIP = {
+    taxi:  t("calc.ln.tipTaxi", { m: mesBase }),
+    tk:    t("calc.ln.tipTk", { m: mesBase }),
+    total: t("calc.ln.tipTotal"),
+    fleet: t("calc.utilPrellenada3")
+  };
+  const verTotal = vista === "total" ? ""
+    : `<button type="button" class="ui-link-btn calc-main__link" data-act="calcSetVista" data-value="total">${escapeHTML(t("calc.ln.verTotal"))} →</button>`;
   return `
     <div class="calc-main__head">
       <div class="calc-main__titles">
-        <h2 class="calc-main__title" id="calcMainT">${escapeHTML(titulo)}</h2>
-        <p class="calc-main__sub">${escapeHTML(sub)}</p>
+        <h2 class="calc-main__title" id="calcMainT">${escapeHTML(TIT[vista])}${infoTip(TIP[vista])}</h2>
+        <p class="calc-main__sub">${escapeHTML(SUB[vista])}</p>
       </div>
-      <div class="calc-main__tools">
-        ${seg}
-        ${btn({ label: t("calc.btnCsvCorto"), icon: "download", variant: "ghost", size: "sm", act: "calcExportExcel", title: t("calc.btnDescargarCsv2") })}
-        ${btn({ label: t("calc.btnResetEdits2"), icon: "refresh", variant: "ghost", size: "sm", act: "calcResetEdits" })}
-      </div>
+      <div class="calc-main__tools">${verTotal}</div>
     </div>
-    ${leyenda}
-    <div id="calcDist">${vista === "fleet" ? _calcSec4b_fleet(m.aggLast3) : _calcSec4_distribucion(m.aggLast1, m.distTot1, m.lastMonth)}</div>
-    ${_calcReferencia(m)}`;
+    <div id="calcDist">${_calcVistaCuerpo(m, vista)}</div>
+    ${vista === "taxi" || vista === "total" ? _calcReferencia(m) : ""}`;
+}
+
+// Cuerpo de la vista activa (también lo repinta _calcRepintarVivo).
+function _calcVistaCuerpo(m, vista) {
+  if (vista === "fleet") return _calcSec4b_fleet(m.aggLast3);
+  if (vista === "total") return _calcTablaTotal(m);
+  return _calcTablaLinea(m, vista === "tk" ? "tk" : "taxi");
 }
 
 // ── Distribución de metas AGREGADOR (editable) ────────────────────────────────
@@ -1217,10 +1324,6 @@ export function _calcMainHTML(m) {
 // resto: por eso se tiñe ("fijado a mano") y el cuadre del panel avisa si la
 // suma deja de cerrar. Eso es la matemática de siempre; la pantalla solo lo dice.
 const _CALC_KPI_LBL = { ad: "AD", sh: "SH", nr: "N+R" };
-// Rótulo de la porción TukTuk (sub-línea bajo cada meta, totales y nota).
-// "TukTuk" es nombre de producto: igual en los tres idiomas. Sin ícono a
-// propósito: con él la sub-línea pasa el ancho del campo y la tabla desborda.
-const _CALC_TK_TAG = `<span class="calc-tk-tag">TukTuk</span>`;
 
 // Punto de color del partner: paleta categórica por hash del nombre (nunca el
 // rojo de marca), estable entre repintados.
@@ -1237,161 +1340,247 @@ export function _calcCambioHTML(meta, base) {
   return `<span class="calc-cambio calc-tone--${v >= 0 ? "ok" : "bad"}">${textoVariacion(v)}</span>`;
 }
 
+// Clave de edición de una celda según la línea: Taxi edita el TOTAL de la
+// unidad (Taxi + TukTuk vigente); TukTuk edita su porción ("@tk").
+const _calcKeyLinea = (partner, city, k, ln) => ln === "tk" ? _calcTkKey(partner, city, k) : `${partner}|||${city}|||${k}`;
+
 function _calcEstadoFila(partner, city) {
   const est = {};
   _CALC_K3.forEach(k => {
-    const key = `${partner}|||${city}|||${k}`;
-    est[k] = estadoCelda(CALC_STATE.edits[key], CALC_STATE.saved[key]);
+    ["", "@tk"].forEach(suf => {
+      const key = `${partner}|||${city}|||${k}${suf}`;
+      est[k + suf] = estadoCelda(CALC_STATE.edits[key], CALC_STATE.saved[key]);
+    });
   });
-  est.fija = _CALC_K3.some(k => est[k].fijada);
+  est.fija = _CALC_K3.some(k => est[k].fijada || est[k + "@tk"].fijada);
   return est;
 }
 
-// Etiquetas de la fila: Fleet, "Fijar a mano" (sin actividad), "Ya tiene meta"
-// y "Soltar" si alguna celda está fijada a mano.
+// Marcas de la fila. Informativas (ya tiene meta, Fleet, tiene TukTuk) →
+// ícono chico con `title` al lado del nombre (dentro de la tabla con scroll la
+// burbuja de ui.infoTip quedaría tapada). Las que piden hacer algo ("Fijar a
+// mano", "soltar") van como texto debajo. Sin tabindex: en una planilla, Tab
+// tiene que ir de celda en celda.
+function _calcIcoFila(ico, tip, tone) {
+  return `<span class="calc-ico calc-ico--${tone}" role="img" aria-label="${escapeHTML(tip)}" title="${escapeHTML(tip)}">${icon(ico, { size: 13 })}</span>`;
+}
+function _calcIconosFila(e, b) {
+  let h = "";
+  if (_calcFilaGuardada(e.partner, e.city)) h += _calcIcoFila("check-circle", t("calc.yaTieneMetaTip"), "ok");
+  if (b.fleet) h += _calcIcoFila("car", t("calc.esFleetTip"), "muted");
+  if ((e.adTk || 0) > 0) h += _calcIcoFila("tuktuk", t("calc.tieneTkTip"), "muted");
+  return h;
+}
 function _calcTagsFila(e, b, fija) {
   const tags = [];
-  if (b.fleet) tags.push(badge("Fleet", "neutral", { icon: "car" }));
   if (b.noAct) tags.push(`<span title="${escapeHTML(t("calc.fijarManualTip"))}">${badge(t("calc.badgeFijar"), "warn")}</span>`);
-  // "Ya tiene meta": este partner-ciudad ya tiene metas cargadas en BD para el
-  // mes objetivo. Antes no había forma de saberlo sin ir a la pestaña Metas.
-  if (_calcFilaGuardada(e.partner, e.city)) tags.push(`<span title="${escapeHTML(t("calc.yaTieneMetaTip"))}">${badge(t("calc.badgeTieneMeta"), "info")}</span>`);
   if (fija) tags.push(`<button type="button" class="ui-link-btn calc-soltar" data-act="calcSoltarFila" data-pk="${escapeHTML(e.partner)}" data-city="${escapeHTML(e.city)}" title="${escapeHTML(t("calc.soltarTip"))}">${escapeHTML(t("calc.soltar"))}</button>`);
   return tags.join("");
 }
-
-// El campo muestra la meta con miles; la huella de números (shared/huella.ts)
-// lee la cifra CRUDA del <span hidden> de al lado — el mismo valor que antes
-// llevaba el value del <input type="number">, así la huella no cambia.
-function _calcInputMeta(partner, city, metric, base, est) {
-  const k = `${partner}|||${city}|||${metric}`;
-  const val = CALC_STATE.edits[k] !== undefined ? +CALC_STATE.edits[k] : Math.round(base);
-  // Ámbar = distinto de lo guardado: se sobrescribe al guardar.
-  const sv  = CALC_STATE.saved[k];
-  const cls = est.sobrescribe ? " calc-inp-dirty" : "";
-  const ttl = sv !== undefined
-    ? ` title="${escapeHTML(t("calc.guardadoEnBD", { v: fmt(+sv) }))}"`
-    : "";
-  const aria = `${t("calc.col.kpiMeta", { k: _CALC_KPI_LBL[metric] })} · ${partner} · ${cityLabel(city)}`;
-  return `<input type="text" inputmode="decimal" autocomplete="off" spellcheck="false"
-      value="${escapeHTML(_calcFmtIn(val))}" data-raw="${escapeHTML(String(val))}"${ttl} aria-label="${escapeHTML(aria)}"
-      data-pk="${escapeHTML(partner)}" data-city="${escapeHTML(city)}" data-metric="${metric}"
-      data-act-change="calcOnGoalEdit" data-act-focus="calcNumFocus" data-act-blur="calcNumBlur" data-act-keydown="calcNumKeydown"
-      class="ui-input ui-input--sm calc-num calc-num--cell${cls}"/><span hidden${dn("calc.dist", metric, `${partner}@${city}`)}>${escapeHTML(String(val))}</span>`;
+function _calcCeldaPartner(e, b, est) {
+  return `<th scope="row" class="calc-cell-partner"><div class="calc-partner">
+    <span class="calc-partner__name">${_calcDot(e.partner)}<span>${escapeHTML(e.partner)}</span><span class="calc-partner__icos">${_calcIconosFila(e, b)}</span></span>
+    <span class="calc-partner__sub"><span class="calc-partner__city">${escapeHTML(cityLabel(e.city))}</span><span class="calc-partner__tags">${_calcTagsFila(e, b, est.fija)}</span></span>
+  </div></th>`;
 }
 
-export function _calcSec4_distribucion(agg, distTotals, monthLabel) {
-  const g = CALC_STATE.kamGoals;
-  const items = ordenarUnidades([...agg.values()]);
+// Celda editable de una línea. El valor mostrado es el de la línea (Taxi o
+// TukTuk); la huella de números (shared/huella.ts) lee la cifra cruda del
+// <span hidden> de al lado.
+function _calcInputLinea(e, k, ln, val, est) {
+  const ek = ln === "tk" ? est[k + "@tk"] : est[k];
+  const cls = (ek.fijada ? " calc-inp-fija" : "") + (ek.sobrescribe ? " calc-inp-dirty" : "");
+  const aria = `${t("calc.col.kpiMeta", { k: _CALC_KPI_LBL[k] })} ${ln === "tk" ? "TukTuk" : "Taxi"} · ${e.partner} · ${cityLabel(e.city)}`;
+  return `<input type="text" inputmode="decimal" autocomplete="off" spellcheck="false"
+      value="${escapeHTML(_calcFmtIn(val))}" data-raw="${escapeHTML(String(val))}" aria-label="${escapeHTML(aria)}"
+      data-pk="${escapeHTML(e.partner)}" data-city="${escapeHTML(e.city)}" data-metric="${k}" data-ln="${ln}"
+      data-act-change="calcOnLineEdit" data-act-focus="calcNumFocus" data-act-blur="calcNumBlur" data-act-keydown="calcNumKeydown"
+      class="ui-input ui-input--sm calc-num calc-num--cell${cls}"/><span hidden${dn("calc.ln.cell", ln, k, `${e.partner}@${e.city}`)}>${escapeHTML(String(val))}</span>`;
+}
 
-  let sumAD = 0, sumSH = 0, sumNR = 0, nManual = 0, baseAD = 0;
-  // El reparto se calcula sobre `agg` (la cartera COMPLETA), no sobre `items`
-  // (que viene ordenado para la tabla): los pozos y los pesos tienen que salir
-  // del universo entero o las cuotas no suman la meta.
+// Valores de UNA unidad en las dos líneas + su total.
+function _calcValoresUnidad(e, b) {
+  const v = {};
+  _CALC_K3.forEach(k => {
+    const tot = _calcGoalFor(e.partner, e.city, k, b[k]);
+    const tk = _calcTkDe(e, b, k);
+    v[k] = { tot, tk, taxi: Math.max(0, tot - tk) };
+  });
+  return v;
+}
+// Real del mes base por línea (AD). Taxi = total − TukTuk.
+const _calcRealLinea = (e, ln, k = "ad") => {
+  const tot = k === "nr" ? e.np + e.ns + e.re : e[k];
+  const tk = +e[k + "Tk"] || 0;
+  return ln === "tk" ? tk : Math.max(0, tot - tk);
+};
+
+// ── Tabla de UNA línea (Taxi o TukTuk), editable ────────────────────────────
+// Solo las unidades que tienen esa línea (base o meta > 0, o una celda fijada):
+// un partner 100% TukTuk no ocupa una fila en cero en Taxi. Taxi incluye
+// además a los "Fijar a mano" (sin actividad el mes base).
+export function _calcTablaLinea(m, ln) {
+  const g = CALC_STATE.kamGoals;
+  const agg = m.aggLast1;
   const reparto = _calcRepartoDe(agg, g);
-  const tkTot = { ad: 0, sh: 0, nr: 0 };
-  const rowsHtml = items.map(e => {
-    const b = _calcAggMetaBases(e, g, distTotals, reparto);
-    const ad = _calcGoalFor(e.partner, e.city, "ad", b.ad);
-    const sh = _calcGoalFor(e.partner, e.city, "sh", b.sh);
-    const nrg = _calcGoalFor(e.partner, e.city, "nr", b.nr);
-    sumAD += ad; sumSH += sh; sumNR += nrg; baseAD += e.ad;
-    if (b.noAct) nManual++;
+  const items = ordenarUnidades([...agg.values()]);
+  const monthLabel = m.lastMonth || "";
+  let nManual = 0;
+  const filas = items.map(e => {
+    const b = _calcAggMetaBases(e, g, m.distTot1, reparto);
+    const v = _calcValoresUnidad(e, b);
     const est = _calcEstadoFila(e.partner, e.city);
-    const ent = `${e.partner}@${e.city}`;
-    // Cuánto de esta meta es TukTuk. Es EL número que el KAM carga en el Loyalty
-    // Program de ese partner. Solo con % declarado y en las unidades que tienen
-    // porción TukTuk — en las demás sería ruido.
-    const tkSub = k => (reparto && b[k + "Tk"] > 0)
-      ? `<div class="calc-tk-sub" title="${escapeHTML(t("calc.tkDeEsta"))}">${_CALC_TK_TAG}` +
-        `<span class="ui-num"${dn("calc.dist", k + "Tk", ent)}>${escapeHTML(fmt(Math.round(b[k + "Tk"])))}</span></div>`
-      : "";
-    if (reparto) _CALC_K3.forEach(k => { if (b[k + "Tk"] > 0) tkTot[k] += Math.round(b[k + "Tk"]); });
-    const celda = (k, base) => `<td class="ui-num calc-cell-input${est[k].fijada ? " calc-cell--fija" : ""}">${_calcInputMeta(e.partner, e.city, k, base, est[k])}${tkSub(k)}</td>`;
-    const cls = [b.noAct ? "calc-row--manual" : "", est.fija ? "calc-row--fija" : ""].filter(Boolean).join(" ");
+    const tiene = _CALC_K3.some(k => _calcRealLinea(e, ln, k) > 0 || v[k][ln] > 0
+      || (ln === "tk" ? est[k + "@tk"].fijada : false)) || (ln === "taxi" && b.noAct);
+    if (!tiene) return "";
+    if (b.noAct && ln === "taxi") nManual++;
+    const real = _calcRealLinea(e, ln);
+    const celda = k => `<td class="ui-num calc-cell-input">${_calcInputLinea(e, k, ln, v[k][ln], est)}</td>`;
+    const cls = [b.noAct && ln === "taxi" ? "calc-row--manual" : "", est.fija ? "calc-row--fija" : ""].filter(Boolean).join(" ");
     return `
       <tr${cls ? ` class="${cls}"` : ""}>
-        <td class="calc-cell-partner"><div class="calc-partner"><span class="calc-partner__name">${_calcDot(e.partner)}<span>${escapeHTML(e.partner)}</span></span><span class="calc-partner__tags">${_calcTagsFila(e, b, est.fija)}</span></div></td>
-        <td class="calc-cell-city">${escapeHTML(cityLabel(e.city))}</td>
-        ${celda("ad", b.ad)}
-        <td class="ui-num calc-cell-muted"${dn("calc.dist.realAd", ent)}>${fmt(e.ad)}</td>
-        <td class="ui-num calc-cell-cambio">${_calcCambioHTML(ad, e.ad)}</td>
-        ${celda("sh", b.sh)}
-        ${celda("nr", b.nr)}
+        ${_calcCeldaPartner(e, b, est)}
+        ${celda("ad")}
+        <td class="ui-num calc-cell-muted">${fmt(real)}</td>
+        <td class="ui-num calc-cell-cambio">${_calcCambioHTML(v.ad[ln], real)}</td>
+        ${celda("sh")}
+        ${celda("nr")}
       </tr>`;
   }).join("");
 
   const noGoals = !(+g.ad || +g.sh || +g.nr);
   const hint = noGoals
-    ? alertBox({ tone: "info", text: t("calc.hintSinMetas3") })
+    ? `<p class="calc-main__hint">${icon("chevron-left", { size: 14 })}<span>${escapeHTML(t("calc.hintSinMetasArriba"))}</span></p>`
     : (nManual ? alertBox({ tone: "warn", text: t("calc.hintManual2", { n: nManual }) }) : "");
-  const mesCorto = /^\d{4}-\d{2}$/.test(monthLabel || "") ? mesNombre(+monthLabel.slice(5, 7) - 1, getLang(), { corto: true }) : "";
-  const totalLbl = CALC_STATE.kam === "all" ? t("calc.totalGeneral") : t("calc.totalDe", { kam: kamLabel(CALC_STATE.kam) });
-  // Totales de la porción TukTuk bajo cada total (misma suma que el cuadre).
-  const tkTotSub = k => reparto
-    ? `<div class="calc-tk-sub">${_CALC_TK_TAG}<span class="ui-num"${dn("calc.dist.total", k + "Tk")}>${fmt(tkTot[k])}</span></div>`
-    : "";
-  // Qué es la sub-línea: una sola vez, arriba de la tabla (solo con % declarado).
-  const tkNota = reparto
-    ? `<p class="calc-tk-nota">${_CALC_TK_TAG}<span>${escapeHTML(t("calc.tk.notaTabla"))}</span></p>`
-    : "";
-
+  const mesCorto = /^\d{4}-\d{2}$/.test(monthLabel) ? mesNombre(+monthLabel.slice(5, 7) - 1, getLang(), { corto: true }) : "";
   return `
     ${hint}
-    ${tkNota}
+    <div id="calcLeyenda">${_calcLeyendaHTML()}</div>
     <div class="ui-table-wrap ui-table-wrap--scroll calc-dist-wrap">
       <table class="ui-table ui-table--sticky-first calc-dist">
-        <caption class="ui-sr-only">${escapeHTML(t("calc.distribPartner", { m: _calcMesTxt(monthLabel || "") }))}</caption>
+        <caption class="ui-sr-only">${escapeHTML(t("calc.distribPartner", { m: _calcMesTxt(monthLabel) }))}</caption>
         <thead>
           <tr>
-            <th scope="col">${escapeHTML(t("calc.col.partner"))}</th><th scope="col">${escapeHTML(t("calc.col.ciudad"))}</th>
+            <th scope="col">${escapeHTML(t("calc.col.partner"))}</th>
             <th scope="col" class="ui-num">${escapeHTML(t("calc.col.metaKpi", { k: "AD" }))}</th>
             <th scope="col" class="ui-num" title="${escapeHTML(t("calc.valorReal"))}">${escapeHTML(t("calc.col.real", { m: mesCorto }))}</th>
             <th scope="col" class="ui-num">${escapeHTML(t("calc.col.cambio"))}</th>
-            <th scope="col" class="ui-num">${escapeHTML(t("calc.col.metaKpi", { k: "SH" }))}</th>
+            <th scope="col" class="ui-num">${escapeHTML(t("calc.col.metaKpi", { k: t("calc.cortoHoras") }))}</th>
             <th scope="col" class="ui-num">${escapeHTML(t("calc.col.metaKpi", { k: "N+R" }))}</th>
           </tr>
         </thead>
-        <tbody>${rowsHtml || `<tr><td colspan="7" class="calc-empty-cell">${escapeHTML(t("calc.sinDatos"))}</td></tr>`}</tbody>
-        <tfoot>
-          <tr class="calc-total-row">
-            <th scope="row">${escapeHTML(totalLbl)}</th><td></td>
-            <td class="ui-num"><span id="calcAggSumAD"${dn("calc.dist.total.ad")}>${fmt(sumAD)}</span>${tkTotSub("ad")}</td>
-            <td class="ui-num"${dn("calc.dist.total.realAd")}>${fmt(baseAD)}</td>
-            <td class="ui-num" id="calcAggCambioAD">${_calcCambioHTML(sumAD, baseAD)}</td>
-            <td class="ui-num"><span id="calcAggSumSH"${dn("calc.dist.total.sh")}>${fmt(sumSH)}</span>${tkTotSub("sh")}</td>
-            <td class="ui-num"><span id="calcAggSumNR"${dn("calc.dist.total.nr")}>${fmt(sumNR)}</span>${tkTotSub("nr")}</td>
-          </tr>
-        </tfoot>
+        <tbody>${filas || `<tr><td colspan="6" class="calc-empty-cell">${escapeHTML(t(ln === "tk" ? "calc.tkv.sinUnidades" : "calc.sinDatos"))}</td></tr>`}</tbody>
+        <tfoot id="calcLineaFoot">${_calcLineaFootHTML(m, ln)}</tfoot>
       </table>
     </div>`;
 }
 
-// Actualiza EN EL LUGAR la fila de una celda recién editada (tinte, "Soltar",
-// cambio vs el mes base). No se repinta la fila: el `change` corre mientras el
-// foco todavía está en ese campo y rehacerla lo tiraría (Tab a la celda de al
-// lado incluida).
+// Pie de la tabla de una línea: Σ de la línea "de" la meta de la línea, con
+// la diferencia si no cuadra. Se recalcula en vivo (_calcRefreshStatus).
+function _calcLineaFootHTML(m, ln) {
+  const st = _calcComputeStatus(m);
+  let realTot = 0;
+  for (const e of m.aggLast1.values()) realTot += _calcRealLinea(e, ln);
+  const cel = k => {
+    const p = st.lineas[ln][k];
+    const meta = ln === "tk" && !st.declarado ? null : (p.hasGoal ? p.target : null);
+    const dif = meta != null && !p.ok ? `<span class="calc-foot__dif">${p.gap > 0 ? "+" : "−"}${fmt(Math.abs(p.gap))}</span>` : "";
+    return `<td class="ui-num"><strong${dn("calc.ln.total", ln, k)}>${fmt(p.sum)}</strong>${meta != null ? `<span class="calc-foot__de">${escapeHTML(t("calc.ln.deMeta", { v: fmt(meta) }))}</span>` : ""}${dif}</td>`;
+  };
+  const lbl = ln === "tk" ? t("calc.tkv.total") : t("calc.ln.totalTaxi");
+  const sumAd = st.lineas[ln].ad.sum;
+  return `<tr class="calc-total-row"><th scope="row">${escapeHTML(lbl)}</th>${cel("ad")}
+    <td class="ui-num calc-cell-muted">${fmt(realTot)}</td><td class="ui-num">${_calcCambioHTML(sumAd, realTot)}</td>${cel("sh")}${cel("nr")}</tr>`;
+}
+
+// ── Total por partner (solo lectura): Total = Taxi + TukTuk ─────────────────
+export function _calcTablaTotal(m) {
+  const g = CALC_STATE.kamGoals;
+  const agg = m.aggLast1;
+  const reparto = _calcRepartoDe(agg, g);
+  const items = ordenarUnidades([...agg.values()]);
+  let sumAD = 0, sumSH = 0, sumNR = 0, baseAD = 0;
+  const filas = items.map(e => {
+    const b = _calcAggMetaBases(e, g, m.distTot1, reparto);
+    const v = _calcValoresUnidad(e, b);
+    const est = _calcEstadoFila(e.partner, e.city);
+    const ent = `${e.partner}@${e.city}`;
+    sumAD += v.ad.tot; sumSH += v.sh.tot; sumNR += v.nr.tot; baseAD += e.ad;
+    const cel = k => `<td class="ui-num"><strong${dn("calc.dist", k, ent)}>${fmt(v[k].tot)}</strong>` +
+      `<span class="calc-split">${fmt(v[k].taxi)}${v[k].tk ? ` · <span class="calc-split__tk"${dn("calc.dist", k + "Tk", ent)}>${fmt(v[k].tk)}</span>` : ""}</span></td>`;
+    return `<tr>${_calcCeldaPartner(e, b, est)}${cel("ad")}<td class="ui-num calc-cell-muted">${fmt(e.ad)}</td><td class="ui-num">${_calcCambioHTML(v.ad.tot, e.ad)}</td>${cel("sh")}${cel("nr")}</tr>`;
+  }).join("");
+  const mesCorto = /^\d{4}-\d{2}$/.test(m.lastMonth || "") ? mesNombre(+m.lastMonth.slice(5, 7) - 1, getLang(), { corto: true }) : "";
+  const totalLbl = CALC_STATE.kam === "all" ? t("calc.totalGeneral") : t("calc.totalDe", { kam: kamLabel(CALC_STATE.kam) });
+  return `
+    <p class="calc-main__hint">${escapeHTML(t("calc.ln.leyendaTotal"))}</p>
+    <div class="ui-table-wrap ui-table-wrap--scroll calc-dist-wrap">
+      <table class="ui-table ui-table--sticky-first calc-dist">
+        <thead><tr>
+          <th scope="col">${escapeHTML(t("calc.col.partner"))}</th>
+          <th scope="col" class="ui-num">${escapeHTML(t("calc.col.metaKpi", { k: "AD" }))}</th>
+          <th scope="col" class="ui-num">${escapeHTML(t("calc.col.real", { m: mesCorto }))}</th>
+          <th scope="col" class="ui-num">${escapeHTML(t("calc.col.cambio"))}</th>
+          <th scope="col" class="ui-num">${escapeHTML(t("calc.col.metaKpi", { k: t("calc.cortoHoras") }))}</th>
+          <th scope="col" class="ui-num">${escapeHTML(t("calc.col.metaKpi", { k: "N+R" }))}</th>
+        </tr></thead>
+        <tbody>${filas || `<tr><td colspan="6" class="calc-empty-cell">${escapeHTML(t("calc.sinDatos"))}</td></tr>`}</tbody>
+        <tfoot><tr class="calc-total-row"><th scope="row">${escapeHTML(totalLbl)}</th>
+          <td class="ui-num"><span id="calcAggSumAD"${dn("calc.dist.total.ad")}>${fmt(sumAD)}</span></td>
+          <td class="ui-num"${dn("calc.dist.total.realAd")}>${fmt(baseAD)}</td>
+          <td class="ui-num" id="calcAggCambioAD">${_calcCambioHTML(sumAD, baseAD)}</td>
+          <td class="ui-num"><span id="calcAggSumSH"${dn("calc.dist.total.sh")}>${fmt(sumSH)}</span></td>
+          <td class="ui-num"><span id="calcAggSumNR"${dn("calc.dist.total.nr")}>${fmt(sumNR)}</span></td>
+        </tr></tfoot>
+      </table>
+    </div>`;
+}
+
+// Leyenda de colores, solo si hay algo que explicar (celdas fijadas o
+// distintas de lo guardado). Se recalcula en vivo (_calcRefreshStatus).
+function _calcLeyendaHTML() {
+  let fija = false, sobre = false;
+  for (const [k, v] of Object.entries(CALC_STATE.edits)) {
+    if (!/\|\|\|(ad|sh|nr)(@tk)?$/.test(k)) continue;
+    const e = estadoCelda(v, CALC_STATE.saved[k]);
+    if (e.fijada) fija = true;
+    if (e.sobrescribe) sobre = true;
+  }
+  const it = (cls, key) => `<span class="calc-legend__it"><span class="calc-legend__sw calc-legend__sw--${cls}" aria-hidden="true"></span>${escapeHTML(t(key))}</span>`;
+  const ley = [fija ? it("fija", "calc.leyendaFija") : "", sobre ? it("dirty", "calc.leyendaDistinta") : ""].join("");
+  return ley ? `<div class="calc-legend">${ley}<span class="calc-legend__it calc-legend__it--nota">${escapeHTML(t("calc.ln.leyendaSuma"))}</span></div>` : "";
+}
+
+// Actualiza EN EL LUGAR la fila de una celda recién editada (tinte, "soltar",
+// cambio). No se repinta la tabla: el `change` corre mientras el foco todavía
+// está en ese campo (o ya pasó al de al lado con Tab) y rehacerla lo tiraría.
 function _calcActualizarFila(input) {
   const tr = input.closest("tr");
   if (!tr) return;
-  const partner = input.dataset.pk, city = input.dataset.city;
+  const partner = input.dataset.pk, city = input.dataset.city, ln = input.dataset.ln || "taxi";
   const est = _calcEstadoFila(partner, city);
   tr.classList.toggle("calc-row--fija", est.fija);
-  tr.querySelectorAll("input[data-metric]").forEach(inp => {
-    const k = inp.dataset.metric;
-    if (!est[k]) return;
-    inp.classList.toggle("calc-inp-dirty", est[k].sobrescribe);
-    const td = inp.closest("td");
-    if (td) td.classList.toggle("calc-cell--fija", est[k].fijada);
-  });
   const m = _calcComputeModel();
   const e = m.aggLast1.get(`${partner}|||${city}`);
   if (!e) return;
   const b = _calcAggMetaBases(e, CALC_STATE.kamGoals, m.distTot1, _calcRepartoDe(m.aggLast1, CALC_STATE.kamGoals));
+  const v = _calcValoresUnidad(e, b);
+  tr.querySelectorAll("input[data-metric]").forEach(inp => {
+    const k = inp.dataset.metric;
+    const ek = ln === "tk" ? est[k + "@tk"] : est[k];
+    if (!ek) return;
+    inp.classList.toggle("calc-inp-fija", ek.fijada);
+    inp.classList.toggle("calc-inp-dirty", ek.sobrescribe);
+    // Otra celda de la fila pudo moverse (p. ej. Taxi al soltar TukTuk): se
+    // refresca el valor salvo en el campo que tiene el foco.
+    if (inp !== document.activeElement) inp.value = _calcFmtIn(v[k][ln]);
+    const h = inp.nextElementSibling;
+    if (h && h.hasAttribute("data-num")) h.textContent = String(v[k][ln]);
+  });
   const tags = tr.querySelector(".calc-partner__tags");
   if (tags) tags.innerHTML = _calcTagsFila(e, b, est.fija);
   const cam = tr.querySelector(".calc-cell-cambio");
-  if (cam) cam.innerHTML = _calcCambioHTML(_calcGoalFor(partner, city, "ad", b.ad), e.ad);
+  if (cam) cam.innerHTML = _calcCambioHTML(v.ad[ln], _calcRealLinea(e, ln));
 }
 
 // Compara la suma distribuida vs la meta KAM y devuelve el cuadre: la meta y
@@ -1456,7 +1645,7 @@ export function _calcSec4b_fleet(agg) {
         <tbody>${rowsHtml || `<tr><td colspan="7" class="calc-empty-cell">${escapeHTML(t("calc.sinFleet"))}</td></tr>`}</tbody>
       </table>
     </div>
-    <p class="calc-help">${escapeHTML(t("calc.utilPrellenada3"))}</p>`;
+`;
 }
 
 // ── REFERENCIA (plegada) ─────────────────────────────────────────────────────
@@ -1805,7 +1994,9 @@ export function _calcSec5_exportPartner(agg, totals, lastMonth) {
   // inventada para la tarjeta que ni siquiera coincide con lo que se guardaría
   // en `meta_tk_*` (NULL sin declarar) — mejor mostrar el combinado de siempre
   // antes que un número que no está respaldado por ningún lado.
-  const splitActivo = !!repartoExp;
+  // También cuando el KAM escribió a mano la parte TukTuk de este partner
+  // (sep-2026): ese número SÍ se guarda, así que es fiel mostrarlo aparte.
+  const splitActivo = !!repartoExp || taxiItems.some(e => _CALC_K3.some(k => _calcTkExplicito(e, k)));
 
   let taxiBlock = "", tkBlock = "";
   if (taxiItems.length && !splitActivo) {
@@ -1843,9 +2034,10 @@ export function _calcSec5_exportPartner(agg, totals, lastMonth) {
       // (TukTuk) primero y resta para el principal — nunca al revés, porque
       // redondear los dos lados por separado puede no sumar el total exacto
       // (así se vio, en pantalla, "2.414,64 conductores" en la fila partida).
-      const { principal: adTaxiGoal, secundario: adTkGoal } = splitPorFraccion(adGoal, b.ad > 0 ? b.adTk / b.ad : 0);
-      const { principal: shTaxiGoal, secundario: shTkGoal } = splitPorFraccion(shGoal, b.sh > 0 ? b.shTk / b.sh : 0);
-      const { principal: nrTaxiGoal, secundario: nrTkGoal } = splitPorFraccion(nrGoal, b.nr > 0 ? b.nrTk / b.nr : 0);
+      // La porción TukTuk sale de _calcTkDe: la escrita a mano, o la proporción
+      // del reparto (splitPorFraccion) — lo MISMO que se guarda en meta_tk_*.
+      const adTkGoal = _calcTkDe(e, b, "ad"), shTkGoal = _calcTkDe(e, b, "sh"), nrTkGoal = _calcTkDe(e, b, "nr");
+      const adTaxiGoal = Math.max(0, adGoal - adTkGoal), shTaxiGoal = Math.max(0, shGoal - shTkGoal), nrTaxiGoal = Math.max(0, nrGoal - nrTkGoal);
 
       const adTkAct = e.adTk || 0, shTkAct = e.shTk || 0, nrTkAct = e.nrTk || 0;
       const adTaxiAct = e.ad - adTkAct, shTaxiAct = e.sh - shTkAct, nrTaxiAct = nr - nrTkAct;
@@ -1980,13 +2172,14 @@ export function _calcTieneProgresoSinGuardar() {
 export function _calcResetParaNuevoKam() {
   CALC_STATE.kamGoals  = { ad: 0, sh: 0, nr: 0, otherProj: 0, fleetA2: 0 };
   CALC_STATE.tkPct     = { ad: 0, sh: 0, nr: 0 };
+  CALC_STATE.tkAbs     = { ad: 0, sh: 0, nr: 0 };
+  CALC_STATE.tkModo    = "pct";
+  CALC_STATE.tkPin     = {};
   CALC_STATE.edits     = {};
   CALC_STATE._utilSeeded = {};
   CALC_STATE.saved     = {};
   CALC_STATE.savedKey  = "";     // fuerza a _calcSeedGuardadas a releer la BD del KAM nuevo
   CALC_STATE.selPartnerExport = null;
-  CALC_STATE.tkOpen = null;
-  CALC_STATE._tkOpenReset = true;
   _calcBorrarDraft();
 }
 
@@ -2077,6 +2270,7 @@ export function calcOnGoalEdit(input) {
 export function calcOnKamGoalChange(metric, val) {
   const v = parseNumInput(val);
   CALC_STATE.kamGoals[metric] = Number.isFinite(v) ? v : 0;
+  _calcSyncTkPct();
   // Persistido en cada tecla, no solo al guardar: un F5 a mitad de tipear las
   // tres metas no debería obligar a escribirlas de nuevo.
   _calcGuardarDraft();
@@ -2088,6 +2282,14 @@ export function calcOnKamGoalChange(metric, val) {
 export function calcOnTkPctChange(metric, val) {
   // Se recorta acá además de en repartirPorLinea: el input tiene min/max pero el
   // atributo HTML no impide escribir cualquier cosa a mano ni pegar un valor.
+  if (CALC_STATE.tkModo === "abs") {
+    const a = parseNumInput(val);
+    CALC_STATE.tkAbs[metric] = Number.isFinite(a) ? Math.max(0, a) : 0;
+    _calcSyncTkPct();
+    _calcGuardarDraft();
+    _calcProgramarVivo();
+    return;
+  }
   const v = parseFloat(val);
   CALC_STATE.tkPct[metric] = Number.isFinite(v) ? Math.min(Math.max(v, 0), 100) : 0;
   _calcGuardarDraft();
@@ -2105,6 +2307,7 @@ export function calcAtajo(metric, f) {
   const v = metaAtajo(+((m.cartTot1 || {})[metric]) || 0, +f);
   if (v == null) return;
   CALC_STATE.kamGoals[metric] = v;
+  _calcSyncTkPct();
   const inp = document.getElementById(`calcGoal_${metric}`);
   if (inp) {
     inp.dataset.raw = rawNumText(v);
@@ -2114,22 +2317,80 @@ export function calcAtajo(metric, f) {
   _calcRepintarVivo();
 }
 
-// Columna derecha: reparto de Agregador o KPIs Fleet (segmentado).
+// Columna derecha: reparto Combinado, KPIs Fleet o porción TukTuk (segmentado).
 export function calcSetVista(v) {
-  if (v !== "agg" && v !== "fleet") return;
+  if (!["taxi", "tk", "total", "fleet"].includes(v)) return;
   CALC_STATE.vista = v;
   renderCalculator();
 }
 
+// Cómo se carga la parte TukTuk del KAM: "pct" (el % de PnL) o "abs" (número).
+// Al cambiar se conserva lo cargado, convertido al equivalente del otro modo.
+export function calcSetTkModo(v) {
+  if (v !== "pct" && v !== "abs") return;
+  if (v === CALC_STATE.tkModo) return;
+  _CALC_K3.forEach(k => {
+    const g = +CALC_STATE.kamGoals[k] || 0;
+    if (v === "abs") CALC_STATE.tkAbs[k] = _calcTkAbs(k) || 0;
+    else {
+      const a = +CALC_STATE.tkAbs[k] || 0;
+      CALC_STATE.tkPct[k] = g > 0 && a > 0 ? Math.round(a / g * 1000) / 10 : 0;
+    }
+  });
+  CALC_STATE.tkModo = v;
+  _calcSyncTkPct();
+  _calcGuardarDraft();
+  renderCalculator();
+}
+
+// Edición de una celda de la tabla de una línea (Taxi o TukTuk).
+// Regla de Manuel (29-sep): el total del partner = Taxi + TukTuk.
+//   · TukTuk: se guarda la porción ("@tk") y el total pasa a Taxi vigente +
+//     la porción nueva — Taxi no se mueve.
+//   · Taxi: el total pasa a Taxi nuevo + TukTuk vigente, y esa porción TukTuk
+//     se CLAVA (tkPin) para que no se recalcule sobre el total nuevo.
+// Vaciar la celda la devuelve al reparto. Una celda fijada NO redistribuye el
+// resto (decisión de Manuel, fase 8): el cuadre avisa si la línea no cierra.
+export function calcOnLineEdit(input) {
+  const partner = input.dataset.pk, city = input.dataset.city;
+  const k = input.dataset.metric, ln = input.dataset.ln === "tk" ? "tk" : "taxi";
+  if (!_CALC_K3.includes(k)) return;
+  const m = _calcComputeModel();
+  const e = m.aggLast1.get(`${partner}|||${city}`);
+  if (!e) return;
+  const b = _calcAggMetaBases(e, CALC_STATE.kamGoals, m.distTot1, _calcRepartoDe(m.aggLast1, CALC_STATE.kamGoals));
+  const kTot = `${partner}|||${city}|||${k}`, kTk = _calcTkKey(partner, city, k);
+  const val = parseNumInput(input.value);
+  const tkNow = _calcTkDe(e, b, k);
+  const taxiNow = Math.max(0, _calcGoalFor(partner, city, k, b[k]) - tkNow);
+  if (ln === "tk") {
+    if (isNaN(val)) delete CALC_STATE.edits[kTk];
+    else {
+      const nuevo = Math.max(0, val);
+      CALC_STATE.edits[kTk] = nuevo;
+      CALC_STATE.edits[kTot] = taxiNow + nuevo;
+    }
+    delete CALC_STATE.tkPin[kTot];
+  } else if (isNaN(val)) {
+    delete CALC_STATE.edits[kTot];
+    delete CALC_STATE.tkPin[kTot];
+  } else {
+    if (CALC_STATE.edits[kTk] === undefined && tkNow > 0) CALC_STATE.tkPin[kTot] = tkNow;
+    CALC_STATE.edits[kTot] = Math.max(0, val) + tkNow;
+  }
+  const raw = isNaN(val) ? "" : rawNumText(Math.max(0, val));
+  input.dataset.raw = raw;
+  _calcActualizarFila(input);
+  _calcRefreshStatus();
+}
+
 // "Tarjetas para partners" (panel) ↔ volver al reparto.
 export function calcVerTarjetas() {
-  CALC_STATE.vista = CALC_STATE.vista === "tarjetas" ? "agg" : "tarjetas";
+  CALC_STATE.vista = CALC_STATE.vista === "tarjetas" ? "taxi" : "tarjetas";
   renderCalculator();
-  // Con el panel apilado arriba (pantalla angosta) la columna derecha queda
-  // más abajo: llevarla a la vista.
+  // Las tarjetas quedan debajo de la franja de arriba: llevarlas a la vista.
   const main = document.getElementById("calcMain");
-  const side = document.querySelector(".calc-side");
-  if (main && side && side.getBoundingClientRect().bottom <= main.getBoundingClientRect().top + 1) {
+  if (main && main.getBoundingClientRect().top > window.innerHeight * 0.6) {
     main.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 }
@@ -2137,8 +2398,9 @@ export function calcVerTarjetas() {
 // "Soltar" una fila: sus celdas vuelven a lo que había antes de teclearlas —
 // lo guardado en la base, o el reparto automático (domain/calcPlanilla.ts).
 export function calcSoltarFila(partner, city) {
-  const claves = ["ad", "sh", "nr"].map(k => `${partner}|||${city}|||${k}`);
+  const claves = ["ad", "sh", "nr"].flatMap(k => [`${partner}|||${city}|||${k}`, _calcTkKey(partner, city, k)]);
   CALC_STATE.edits = soltarCeldas(CALC_STATE.edits, CALC_STATE.saved, claves);
+  ["ad", "sh", "nr"].forEach(k => { delete CALC_STATE.tkPin[`${partner}|||${city}|||${k}`]; });
   _calcRepintarVivo();
 }
 
@@ -2186,6 +2448,7 @@ export async function calcResetEdits() {
     confirmLabel: t("calc.dlg.resetOk"), danger: true
   }))) return;
   CALC_STATE.edits = {};
+  CALC_STATE.tkPin = {};
   CALC_STATE._utilSeeded = {};   // permite re-sembrar Utilización = 85
   renderCalculator();
 }
@@ -2264,14 +2527,13 @@ export function _calcBuildMetaRows(m) {
     // Solo se escribe si el KAM declaró un %: sin carve-out no hay una porción
     // TukTuk identificable, y escribir un 0 se leería como "la meta TukTuk es
     // cero" en vez de "no se declaró".
-    if (repartoSave) {
-      const { secundario: adTk } = splitPorFraccion(adGoal, b.ad > 0 ? b.adTk / b.ad : 0);
-      const { secundario: shTk } = splitPorFraccion(shGoal, b.sh > 0 ? b.shTk / b.sh : 0);
-      const { secundario: nrTk } = splitPorFraccion(nrGoal, b.nr > 0 ? b.nrTk / b.nr : 0);
-      if (adTk > 0) r.meta_tk_ad = adTk;
-      if (nrTk > 0) r.meta_tk_nr = nrTk;
-      if (shTk > 0) r.meta_tk_sh = shTk;
-    }
+    // Se escribe con % declarado (como siempre) o si el KAM escribió a mano la
+    // porción TukTuk de esta unidad (sep-2026: TukTuk editable por partner).
+    const por = _calcPorcionTk(e, b);
+    const COL = { ad: "meta_tk_ad", nr: "meta_tk_nr", sh: "meta_tk_sh" };
+    ["ad", "nr", "sh"].forEach(k => {
+      if ((repartoSave || _calcTkExplicito(e, k)) && por[k] > 0) r[COL[k]] = por[k];
+    });
   }
   // Fleet KPIs (solo partners fleet, solo si el KAM cargó algún valor).
   for (const e of m.aggLast3.values()) {
@@ -2531,14 +2793,15 @@ export async function calcSaveMetas() {
     // (_conReintento) y la clasificación de errores sin duplicarlos, y compara
     // contra la base lo más cerca posible del upsert (otro KAM/admin pudo haber
     // guardado mientras este tenía la pantalla abierta).
-    const tkPct = _calcTieneTkPct();
-    const cambiosTk = detectarCambiosTk(rows, exMap, tkPct);
+    // true: qué desglose escribir ya lo decidió _calcBuildMetaRows (con % declarado
+    // o porción escrita a mano); lo ausente en la fila queda NULL y se avisa.
+    const cambiosTk = detectarCambiosTk(rows, exMap, true);
     if (hayCambiosTk(cambiosTk)) {
       showLoad(false);
       if (!(await _calcConLista(confirmDialog({
         title: t("calc.dlg.tkTitulo"),
         body: mensajeCambiosTk(cambiosTk,
-          { kam: CALC_STATE.kam, mes: mesName, anio: mesYear, hayPctDeclarado: tkPct }, fmt),
+          { kam: CALC_STATE.kam, mes: mesName, anio: mesYear, hayPctDeclarado: _calcTieneTkPct() }, fmt),
         confirmLabel: t("calc.dlg.tkOk"), danger: true
       })))) return;
       showLoad(true, t("calc.guardandoMetas"));
@@ -2865,6 +3128,8 @@ registerActions({
   calcOnKamGoalChange: (d, el) => calcOnKamGoalChange(d.metric, el.value),
   calcOnTkPctChange:   (d, el) => calcOnTkPctChange(d.metric, el.value),
   calcOnGoalEdit:      (d, el) => calcOnGoalEdit(el),
+  calcOnLineEdit:      (d, el) => calcOnLineEdit(el),
+  calcSetTkModo:       d => calcSetTkModo(d.value),
   calcAtajo:           d => calcAtajo(d.metric, d.f),
   calcSetVista:        d => calcSetVista(d.value),
   calcVerTarjetas,
