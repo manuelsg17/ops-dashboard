@@ -1631,6 +1631,34 @@ export function metasResumenPais({ line, mesName, anio, fechas, filtros = {} }) 
   return { ...base, sinMetas: false, kpis: _metasResumenDeUnits(cfg.kpis, _metasLineUnits(cfg.metaRows, cfg.act), proyOn, !!cfg.reglaCuota) };
 }
 
+/**
+ * Cuentas (partner + ciudad) de una línea con su meta y su actual del mes, para
+ * Desempeño (29-sep-2026). MISMO universo y MISMO cálculo que la pestaña Metas
+ * (_metasLineCfg + _metasLineUnits + _metasResumenDeUnits), así el % de una
+ * ciudad, un KAM o un partner no puede diferir entre las dos pantallas.
+ * Solo Combinado y TukTuk (Agregador usa otra ruta: ver metasResumenPais).
+ *
+ * Devuelve { proyOn, cuentas: [{ partner, city, kam, sinMeta, u }], resumen(us) }
+ * — `resumen` recibe una lista de `u` y devuelve por KPI { actual, meta, pct, proj }.
+ */
+export function metasCuentasLinea({ line, mesName, anio, fechas, filtros = {} }) {
+  if (line !== "comb" && line !== "tk") return null;
+  if (!mesName || !(STATE.metasData || []).length) return null;
+  const mesDates = [...(fechas || [])].sort();
+  if (!mesDates.length) return null;
+  const mesYearSel = anio !== undefined ? anio : _metasMesActualYear(mesName);
+  const cfg = _metasLineCfg(line, mesName, mesYearSel, new Set(mesDates), new Set(filtros.selected || []),
+    filtros.city || "all", filtros.kam || "all");
+  if (!cfg.metaRows.length) return null;
+  const proyOn = _metasCalcProyOn(mesName, mesYearSel, mesDates);
+  const units = _metasLineUnits(cfg.metaRows, cfg.act);
+  return {
+    proyOn,
+    cuentas: units.map(u => ({ partner: u.m.partner, city: u.m.city, kam: _metasKamDe(u.m), sinMeta: !!u.m._sinMeta, u })),
+    resumen: us => _metasResumenDeUnits(cfg.kpis, us, proyOn, !!cfg.reglaCuota)
+  };
+}
+
 // Guard de reentrancia: doble-click o filtros solapados no deben lanzar dos
 // renders concurrentes (mismo patron que rendimiento.js).
 export let _renderMetasBusy = false;

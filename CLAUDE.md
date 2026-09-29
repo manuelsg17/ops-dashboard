@@ -45,6 +45,25 @@ Pedido de Manuel: revisar todo (UX/UI, diccionarios, velocidad, bugs, integraci�
       - 3 filas en 0 de Miguel (Taxigo, FENIX DRIVE, GIAL WAY) son restos de partners que ya no están en su cartera.
       - 11 cuentas sin KAM con actividad en agosto no tienen meta; la mayor es TRACKER MOBILITY, con 22 AD.
   - **Sigue igual a propósito**: una celda fijada NO redistribuye el resto. Con un solo partner TukTuk, editarlo deja la línea en "No cuadra".
+- **Fase 12 — "Desempeño" = Rendimiento + Metas (29-sep, rama `fase12`, EN LOCAL hasta que Manuel apruebe subir).** Manuel eligió la propuesta 1 de la maqueta (`?ui=proto&p=perf`) con la franja "¿Llegamos?" de la 3.
+  - La pestaña Rendimiento pasa a llamarse **Desempeño** (la clave `nav.rendimiento` y el id `rend` no cambian, así la navegación y la huella siguen iguales). **Metas SIGUE disponible** durante la transición (PDF, vista Fleet, cobertura TukTuk); se retira cuando los KAMs validen.
+  - Todo lo de meta sale de las MISMAS funciones que Metas: `_rendMetaMes(line, lastDate, over)` (ahora acepta filtros que pisan a los del panel) y `metasCuentasLinea` (nueva en `metas.ts`, cuentas partner+ciudad con meta y actual, solo Combinado/TukTuk). **Verificado: los 21 % por KAM coinciden exacto con la pestaña Metas.**
+    - **Trampa**: `metasResumenPais` filtra la META por `kam` pero el ACTUAL solo por `selected`. Por KAM hay que pasar `selected` = sus partners, o el % sale inflado (daba 340%).
+  - **Secciones nuevas:**
+    - **Franja "¿Llegamos a la meta de {mes}?"** (`domain/brechaMeta.ts`, 3 tests): cuánto falta, ritmo actual contra el necesario por semana (flujos) y veredicto con la MISMA proyección de Metas. Mes cerrado: "Cerró en X%". Con la franja, las tarjetas de arriba conservan el anillo pero no repiten el caption.
+    - **Flujo de conductores** (`domain/flujoConductores.ts`, 6 tests; pedido de Manuel: "cuántos drivers pierden y cuántos añaden"):
+      - Definiciones, **por cuenta y después sumado**: ganados = N+R; continúan = AD − N+R; perdidos = AD anterior − continúan (si > 0); **volvieron** = continúan − AD anterior (si > 0); neto = AD − AD anterior; retención = min(continúan, AD anterior) / AD anterior.
+      - Identidad exacta: **neto = ganados + volvieron − perdidos**. Sin "volvieron", en semanal no cuadraba: 2,158 − 2,889 ≠ +508, porque los que faltaron una semana no cuentan como reactivados.
+      - Mensual con el mes en curso usa el último mes CERRADO.
+      - En diario se muestra un aviso en vez del flujo (ruido diario).
+      - Se ve en tarjetas, en una tabla por KAM y en gráficos de ganados/volvieron/perdidos y de retención por período.
+    - **Por ciudad**: cada tarjeta suma barras de % meta (AD/N+R/Horas).
+    - **Por KAM**: 3 columnas "% meta".
+    - **Quién se movió**: elige la métrica (**N+R por defecto**, AD u Horas) y suma "Más atrasados a la fecha" (flujos contra el ritmo lineal de la meta; AD contra la meta).
+    - **Tendencias contra la meta**: AD contra el nivel de meta; N+R acumulado del mes contra el ritmo lineal.
+    - **Tabla de partners**: delta en TODAS las métricas (antes solo AD, en una columna aparte que se retiró); columnas "Meta del mes" (estado y peor %) y "Retención" (con perdidos); chips de filtro Bajo / En / Sobre / Sin meta.
+  - **Estado de un partner** = PROYECCIÓN al cierre contra la meta cuando el mes está en curso (el acumulado a mitad de mes contra la meta entera pintaba "bajo meta" a 50 de 59). Sin proyección (diario), el % se divide por la fracción del mes transcurrida en los flujos.
+  - Agregador no tiene la ruta por cuenta en Metas: sin estado por partner (queda "—").
 - **Verificación de Calculadora → Metas (29-sep, local):**
   - La meta que muestra Metas por KAM y por línea coincide exacto con la base (`data-num` contra SQL): Combinado sept (Ana 8,487 · Dario 8,429 · Elena 4,591 · Fabio 3,762) y TukTuk sept (Dario 1,414 · 104,103 · 286, con cobertura "Declarada por: Dario").
   - Diferencias ESPERADAS, no bugs:
