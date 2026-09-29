@@ -59,6 +59,10 @@
 .mt-kpis { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: var(--space-5); }
 .mt-kpi__sub { font-weight: var(--weight-regular); color: var(--color-text-subtle); }
 .mt-kpi__value--meta { color: var(--color-text-muted); }
+/* Delta SIEMPRE debajo del número (25-sep, Manuel): con cifras largas como
+   Horas (1,715,445) el wrap lo bajaba solo en esa tarjeta y las tres quedaban
+   desparejas. Debajo en todas = mismo alto y misma lectura. */
+.mt-kpi .ui-kpi__row { flex-direction: column; align-items: flex-start; gap: var(--space-1); }
 .mt-proj { color: var(--color-text-muted); }
 .mt-tone { font-weight: var(--weight-bold); }
 .mt-tone--ok   { color: var(--color-ok-fg); }

@@ -14,7 +14,7 @@ describe("progressRing", () => {
     const svg = parse(progressRing({ pct: 72.7, label: "Septiembre: 6,371 de 8,758 · 72.7%" }));
     expect(svg.getAttribute("role")).toBe("img");
     expect(svg.getAttribute("aria-label")).toBe("Septiembre: 6,371 de 8,758 · 72.7%");
-    expect(svg.querySelector("text")!.textContent).toBe("73%");
+    expect(svg.querySelector("text")!.textContent).toBe("72.7%");
   });
 
   it("usa los mismos cortes que la barra (goalTone)", () => {
@@ -26,9 +26,11 @@ describe("progressRing", () => {
     expect(tono(40)).toContain("ui-ring--bad");
   });
 
-  it("no muestra 100% si la meta no se cumplió", () => {
-    expect(parse(progressRing({ pct: 99.6, label: "x" })).querySelector("text")!.textContent).toBe("99%");
-    expect(parse(progressRing({ pct: 100, label: "x" })).querySelector("text")!.textContent).toBe("100%");
+  it("un decimal, y no muestra 100% si la meta no se cumplió", () => {
+    expect(parse(progressRing({ pct: 49.64, label: "x" })).querySelector("text")!.textContent).toBe("49.6%");
+    expect(parse(progressRing({ pct: 99.97, label: "x" })).querySelector("text")!.textContent).toBe("99.9%");
+    expect(parse(progressRing({ pct: 100, label: "x" })).querySelector("text")!.textContent).toBe("100.0%");
+    expect(parse(progressRing({ pct: 112.34, label: "x" })).querySelector("text")!.textContent).toBe("112.3%");
   });
 
   it("sin % no inventa un 0: guion y sin arco de avance", () => {

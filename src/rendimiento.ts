@@ -243,7 +243,7 @@ function _rdKpi(o) {
   const g = o.goal;
   const conAnillo = !!g && g.pct != null && Number.isFinite(g.pct);
   const slot = conAnillo
-    ? progressRing({ pct: g.pct, projPct: g.projPct, label: g.caption, size: 56, stroke: 7 })
+    ? progressRing({ pct: g.pct, projPct: g.projPct, label: g.caption, size: 64, stroke: 7 })
     : o.icon ? `<span class="rd-tile__ico">${iconSvg(o.icon, { size: 20 })}</span>` : "";
   return `<div class="rd-tile${slot ? " rd-tile--slot" : ""}">
     ${slot ? `<div class="rd-tile__slot">${slot}</div>` : ""}

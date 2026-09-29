@@ -226,9 +226,9 @@ export interface ProgressRingOptions {
 /** Anillo de avance contra la meta: mismo tono que progressBar (goalTone:
  *  morado ≥100 · verde 95–99 · ámbar 80–94 · rojo <80). Es un <svg role="img">
  *  con el caption como aria-label, así un lector de pantalla oye la frase
- *  entera y no solo "77%". El % del centro se redondea (igual que el caption),
- *  salvo entre 99,5 y 100: ahí queda en "99%", porque "100%" en verde se leería
- *  como meta cumplida.
+ *  entera y no solo "77%". El % del centro lleva un decimal (igual que el
+ *  caption y Metas), salvo entre 99,95 y 100: ahí queda en "99.9%", porque
+ *  "100.0%" en verde se leería como meta cumplida.
  *  Estilos: src/styles/ring.css (prefijo ui-ring). */
 export function progressRing(o: ProgressRingOptions): Html {
   const size = o.size ?? 64, sw = o.stroke ?? 7;
@@ -236,7 +236,9 @@ export function progressRing(o: ProgressRingOptions): Html {
   const tone = goalTone(o.pct) ?? "neutral";
   const ok = o.pct != null && Number.isFinite(o.pct);
   const pct = ok ? (o.pct as number) : 0;
-  const txt = ok ? `${pct < 100 ? Math.min(99, Math.round(pct)) : Math.round(pct)}%` : DASH;
+  // Un decimal, igual que Metas y el caption (pedido de Manuel, 25-sep).
+  const txt = ok ? `${(pct < 100 ? Math.min(99.9, Math.round(pct * 10) / 10) : Math.round(pct * 10) / 10).toFixed(1)}%` : DASH;
+  const largo = txt.length >= 6 ? " ui-ring__txt--xl" : txt.length >= 5 ? " ui-ring__txt--long" : "";
   const arco = (p: number, cls: string): string =>
     `<circle class="${cls}" cx="${mid}" cy="${mid}" r="${r.toFixed(2)}" fill="none" stroke-width="${sw}" stroke-linecap="round" ` +
     `stroke-dasharray="${(c * _clampPct(p) / 100).toFixed(2)} ${c.toFixed(2)}" transform="rotate(-90 ${mid} ${mid})"/>`;
@@ -247,7 +249,7 @@ export function progressRing(o: ProgressRingOptions): Html {
     `<title>${esc(o.label)}</title>` +
     `<circle class="ui-ring__track" cx="${mid}" cy="${mid}" r="${r.toFixed(2)}" fill="none" stroke-width="${sw}"/>` +
     proj + (ok && pct > 0 ? arco(pct, "ui-ring__bar") : "") +
-    `<text class="ui-ring__txt${txt.length > 3 ? " ui-ring__txt--long" : ""}" x="50%" y="50%" dominant-baseline="central" text-anchor="middle" aria-hidden="true">${txt}</text></svg>`
+    `<text class="ui-ring__txt${largo}" x="50%" y="50%" dominant-baseline="central" text-anchor="middle" aria-hidden="true">${txt}</text></svg>`
   );
 }
 
@@ -319,6 +321,9 @@ export interface SegmentOption {
   label: string;
   icon?: IconName;
   disabled?: boolean;
+  /** Estado corto al lado del rótulo ("3/41", "Sin declarar"). */
+  note?: string;
+  noteTone?: Tone;
 }
 
 export interface SegmentedOptions {
@@ -337,9 +342,20 @@ export function segmented(o: SegmentedOptions): Html {
     return `<button type="button" class="ui-segmented__btn" aria-pressed="${on}"` +
       (opt.disabled ? " disabled" : "") +
       dataAttrs({ act: o.act, ...o.data, value: opt.value }) + `>` +
-      (opt.icon ? iconSvg(opt.icon, { size: 14 }) : "") + `<span>${esc(opt.label)}</span></button>`;
+      (opt.icon ? iconSvg(opt.icon, { size: 14 }) : "") + `<span>${esc(opt.label)}</span>` +
+      (opt.note ? `<span class="ui-segmented__note ui-segmented__note--${opt.noteTone ?? "neutral"}">${esc(opt.note)}</span>` : "") +
+      `</button>`;
   }).join("");
   return h(`<div class="ui-segmented" role="group" aria-label="${esc(o.ariaLabel)}">${btns}</div>`);
+}
+
+// ── Ayuda en ícono (ⓘ) ──────────────────────────────────────────────────────
+// Para las explicaciones que se leen una vez y después estorban: el texto sale
+// al pasar el mouse o con foco de teclado (tabindex), y es el nombre accesible.
+// Burbuja por CSS (components.css, .ui-tip) — `title` aparece tarde y no con Tab.
+export function infoTip(text: string, opts: { size?: number } = {}): Html {
+  return h(`<span class="ui-tip" tabindex="0" role="img" aria-label="${esc(text)}" data-tip="${esc(text)}">` +
+    iconSvg("info", { size: opts.size ?? 14 }) + `</span>`);
 }
 
 // ── Alerta / banner ──────────────────────────────────────────────────────────

@@ -1227,7 +1227,7 @@ function _metasLineCfg(line, mesName, mesYearSel, fechas, selSet, cityFilter, ka
         // Active Drivers, no de cualquier snapshot.
         meta: m => m.mtkCars, act: a => a.cars, proj: a => a.cars, fmtFn: v => fmt(v) },
       { id: "sh", label: t("metas.horasConexion"), sub: t("metas.acumulado"),
-        meta: m => m.mtkSH, act: a => a.sh, proj: a => a.projSh, fmtFn: v => fmtSmart(v) }
+        meta: m => m.mtkSH, act: a => a.sh, proj: a => a.projSh, fmtFn: v => fmt(v) }
     ],
     emptyTitle: t("mt.vacio.tk", { m: mesLabel(mesName) })
   };
@@ -1263,7 +1263,7 @@ function _metasLineCfg(line, mesName, mesYearSel, fechas, selSet, cityFilter, ka
         tkMeta: m => m.mtkNR, fmtFn: v => fmt(v) },
       { id: "sh", label: t("metas.horasConexion"), sub: t("metas.acumulado"),
         meta: m => umbrella(m.mH), act: a => a.sh, proj: a => a.projSh,
-        tkMeta: m => m.mtkSH, fmtFn: v => fmtSmart(v) }
+        tkMeta: m => m.mtkSH, fmtFn: v => fmt(v) }
     ],
     // tkMeta: cuota TukTuk GUARDADA (meta_tk_*), un DESGLOSE de la meta paraguas
     // que se muestra como "de eso TukTuk X" bajo la meta (sep-2026, pedido de

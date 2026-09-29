@@ -17,5 +17,6 @@
   font-size: 15px; font-weight: var(--weight-bold, 700);
   font-variant-numeric: tabular-nums;
 }
-/* "100%" o más (3 cifras): letra más chica para que entre en el hueco. */
-.ui-ring__txt--long { font-size: 12px; letter-spacing: -.02em; }
+/* "49.6%" / "112.3%": letra más chica para que entre en el hueco. */
+.ui-ring__txt--long { font-size: 13px; letter-spacing: -.02em; }
+.ui-ring__txt--xl   { font-size: 11px; letter-spacing: -.03em; }
