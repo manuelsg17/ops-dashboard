@@ -9,7 +9,7 @@ import { sideNav, pageHeader, rawHtml, segmented, type Html } from "../../shared
 import { iconSvg } from "../../shared/icons";
 import { escapeHTML as e } from "../../core/security";
 import { hashColor } from "../../core/format";
-import { PS, VERSIONES, type Pagina } from "./state";
+import { PS, VERSIONES, VERSIONES_CALC, type Pagina } from "./state";
 import { SEMANAS, PARTNERS, KAMS, SIN_KAM, CIUDADES, cityLabel, d2s, partnersDeKam, filtrosPorDefecto, semanasRango } from "./model";
 
 const NAV = [
@@ -158,15 +158,17 @@ export function encabezado(): Html {
 export function selector(): string {
   const pages: [Pagina, string][] = [["rend", "Rendimiento"], ["metas", "Metas"], ["calc", "Calculadora"], ["config", "Configuración"]];
   if (!PS.switchAbierto) {
-    return `<div class="pr-switch pr-switch--min"><button type="button" class="pr-switch__pill" data-act="prSwitch" title="Abrir el selector de versión">${iconSvg("eye", { size: 14 })}<span>${e(VERSIONES.find(v => v.id === PS.v)!.label)}</span></button></div>`;
+    return `<div class="pr-switch pr-switch--min"><button type="button" class="pr-switch__pill" data-act="prSwitch" title="Abrir el selector de versión">${iconSvg("eye", { size: 14 })}<span>${e(PS.page === "calc" ? VERSIONES_CALC.find(v => v.id === PS.c2.v)!.label : VERSIONES.find(v => v.id === PS.v)!.label)}</span></button></div>`;
   }
   return `<div class="pr-switch" role="region" aria-label="Selector del prototipo">
     <div class="pr-switch__head"><strong>Prototipo</strong><span class="pr-switch__hint">nada se guarda</span>
       <button type="button" class="pr-switch__x" data-act="prSwitch" title="Minimizar" aria-label="Minimizar">${iconSvg("minus", { size: 14 })}</button></div>
-    <div class="pr-switch__row">${segmented({ ariaLabel: "Versión", act: "prVer", value: PS.v, options: VERSIONES.map(v => ({ value: v.id, label: v.label })) })}</div>
+    <div class="pr-switch__row">${PS.page === "calc"
+      ? segmented({ ariaLabel: "Propuesta de Calculadora", act: "c2Ver", value: PS.c2.v, options: VERSIONES_CALC.map(v => ({ value: v.id, label: v.label })) })
+      : segmented({ ariaLabel: "Versión", act: "prVer", value: PS.v, options: VERSIONES.map(v => ({ value: v.id, label: v.label })) })}</div>
     <div class="pr-switch__row">${segmented({ ariaLabel: "Página", act: "prPage", value: PS.page, options: pages.map(([v, l]) => ({ value: v, label: l })) })}
       ${segmented({ ariaLabel: "Tema", act: "prTheme", value: PS.theme, options: [{ value: "light", label: "Claro", icon: "sun" }, { value: "dark", label: "Oscuro", icon: "moon" }] })}
       <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-act="prCerrar">${iconSvg("x", { size: 14 })}<span>Cerrar</span></button></div>
-    <div class="pr-switch__desc">${e(VERSIONES.find(v => v.id === PS.v)!.desc)}</div>
+    <div class="pr-switch__desc">${e(PS.page === "calc" ? VERSIONES_CALC.find(v => v.id === PS.c2.v)!.desc : VERSIONES.find(v => v.id === PS.v)!.desc)}</div>
   </div>`;
 }

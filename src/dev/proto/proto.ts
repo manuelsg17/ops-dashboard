@@ -17,14 +17,16 @@
 
 import "./proto.css";
 import "./suave.css";
+import "./calc2.css";
 import { registerActions } from "../../shared/actions";
 import { confirmDialog, alertDialog } from "../../shared/confirmDialog";
 import { destroyAllCharts, ensureApex } from "../../charts";
-import { PS, resetFiltros, type Version, type Pagina, type SeccionCfg } from "./state";
+import { PS, resetFiltros, type Version, type Pagina, type SeccionCfg, type CalcV, type K3 } from "./state";
 import { topbar, nav, filtros, encabezado, selector, PAGE_DE_NAV } from "./chrome";
 import { renderRend, chartsRend } from "./pRend";
 import { renderMetas, chartsMetas } from "./pMetas";
-import { renderCalc, refrescarCalc, dist } from "./pCalc";
+import { refrescarCalc, dist } from "./pCalc";
+import { renderCalc2, totalesCalc2 } from "./pCalc2";
 import { renderConfig } from "./pConfig";
 import { SEMANAS, PARTNERS, partnersDeKam, mesDeSemana, filtrosPorDefecto, unidadesCalc } from "./model";
 
@@ -38,7 +40,7 @@ function contenido(): string {
   switch (PS.page) {
     case "rend": return renderRend();
     case "metas": return renderMetas();
-    case "calc": return renderCalc();
+    case "calc": return renderCalc2();   // segunda vuelta (29-sep); la anterior sigue en pCalc.ts
     case "config": return renderConfig();
   }
 }
@@ -90,6 +92,7 @@ function _url(): void {
   u.searchParams.set("ui", "proto");
   u.searchParams.set("v", PS.v); u.searchParams.set("p", PS.page); u.searchParams.set("theme", PS.theme);
   if (PS.page === "config") u.searchParams.set("sec", PS.cfg.sec); else u.searchParams.delete("sec");
+  if (PS.page === "calc") u.searchParams.set("cv", PS.c2.v); else u.searchParams.delete("cv");
   history.replaceState(null, "", u.toString());
 }
 
@@ -102,6 +105,7 @@ export function toast(msg: string): void {
   _toastT = setTimeout(() => { el.hidden = true; }, 2600);
 }
 
+const _dec = (s: string) => { const n = parseFloat(String(s || "").replace(",", ".").replace(/[^\d.]/g, "")); return Number.isFinite(n) ? n : null; };
 const _num = (s: string) => { const n = parseInt(String(s || "").replace(/[^\d]/g, ""), 10); return Number.isFinite(n) ? n : null; };
 const _calcHayCambios = () => Object.keys(PS.calc.fijos).length > 0;
 
@@ -230,6 +234,55 @@ registerActions({
       body: `Se escribirán ${n} filas (${modo}): conductores activos, horas y N+R por partner-ciudad.\nReemplaza las metas de ese mes; no se acumulan.` });
     if (ok) await alertDialog({ title: "Prototipo", body: "No se guardó nada: esto es una maqueta con datos fijos." });
   },
+  // Calculadora · segunda vuelta (pCalc2.ts)
+  c2Ver: (d: DOMStringMap) => { PS.c2.v = d.value as CalcV; render(); },
+  c2Kam: async (_d: DOMStringMap, el: HTMLSelectElement) => {
+    const nuevo = el.value, antes = PS.c2.kam;
+    if (Object.keys(PS.c2.fijos).length) {
+      const ok = await confirmDialog({ title: `¿Cambiar a ${nuevo}?`, confirmLabel: `Empezar con ${nuevo}`,
+        body: `Tienes celdas fijadas a mano para ${antes} sin guardar. Si cambias de KAM se descartan.` });
+      if (!ok) { el.value = antes; return; }
+    }
+    PS.c2.kam = nuevo; PS.c2.fijos = {}; PS.c2.fleet = {}; render();
+  },
+  c2Total: (d: DOMStringMap, el: HTMLInputElement) => { PS.c2.total[d.k as K3] = _num(el.value); render(); },
+  c2Atajo: (d: DOMStringMap) => {
+    const k = d.k as K3, D = totalesCalc2();
+    PS.c2.total[k] = Math.round((D.baseTot.taxi[k] + D.baseTot.tk[k]) * parseFloat(d.f || "1")); render();
+  },
+  c2Tk: (d: DOMStringMap, el: HTMLInputElement) => {
+    const k = d.k as K3;
+    if (PS.c2.tkModo === "pct") PS.c2.tkPct[k] = _dec(el.value); else PS.c2.tkAbs[k] = _num(el.value);
+    render();
+  },
+  c2TkModo: (d: DOMStringMap) => {
+    const D = totalesCalc2();
+    const modo = d.value === "abs" ? "abs" : "pct";
+    // Al cambiar de modo se conserva el valor equivalente, no se pierde lo cargado.
+    (["ad", "sh", "nr"] as K3[]).forEach(k => {
+      const g = D.tkSugerido[k] ? null : D.goal.tk[k], T = PS.c2.total[k];
+      if (modo === "abs") PS.c2.tkAbs[k] = g;
+      else PS.c2.tkPct[k] = g != null && T ? Math.round(g / T * 1000) / 10 : null;
+    });
+    PS.c2.tkModo = modo; render();
+  },
+  c2Tab: (d: DOMStringMap) => { PS.c2.tab = d.value as any; render(); },
+  c2Kpi: (d: DOMStringMap) => { if (d.value === "fleet") PS.c2.tab = "fleet"; else { PS.c2.kpi = d.value as K3; PS.c2.tab = "taxi"; } render(); },
+  c2Cell: (d: DOMStringMap, el: HTMLInputElement) => {
+    const key = `${d.key}|${d.ln}|${d.k}`, v = _num(el.value);
+    if (v == null) delete PS.c2.fijos[key]; else PS.c2.fijos[key] = v;
+    render();
+  },
+  c2Soltar: (d: DOMStringMap) => { Object.keys(PS.c2.fijos).filter(x => x.startsWith(d.key + "|")).forEach(x => delete PS.c2.fijos[x]); render(); },
+  c2Fleet: (d: DOMStringMap, el: HTMLInputElement) => { PS.c2.fleet[`${d.key}|${d.m}`] = _dec(el.value); render(); },
+  c2Guardar: async () => {
+    const D = totalesCalc2();
+    const sug = (["ad", "sh", "nr"] as K3[]).some(k => D.tkSugerido[k]);
+    const ok = await confirmDialog({ title: `Guardar metas de ${PS.c2.kam} · Septiembre 2026`, confirmLabel: "Guardar",
+      body: `Se escribirán ${D.us.length} filas. Por partner: meta total = Taxi + TukTuk, y la parte TukTuk aparte.` +
+        (sug ? `\n\nTukTuk no está declarado: se guardará el sugerido según el peso real de agosto.` : "") });
+    if (ok) await alertDialog({ title: "Prototipo", body: "No se guardó nada: esto es una maqueta con datos fijos." });
+  },
   // Configuración
   prCfgSec: (d: DOMStringMap) => { PS.cfg.sec = d.value as SeccionCfg; PS.cfg.panel = null; render(); },
   prCfgPanel: (d: DOMStringMap) => { PS.cfg.panel = d.clid ? (PS.cfg.panel === d.clid && PS.v !== "c" ? null : d.clid) : null; if (PS.cfg.sec !== "partners") PS.cfg.sec = "partners"; render(); },
@@ -265,7 +318,7 @@ export function cerrarProto(): void {
   document.removeEventListener("keydown", _escape);
   document.body.style.overflow = "";
   const u = new URL(location.href);
-  ["ui", "v", "p", "theme", "sec", "paso", "shot"].forEach(k => u.searchParams.delete(k));
+  ["ui", "v", "p", "theme", "sec", "paso", "shot", "cv"].forEach(k => u.searchParams.delete(k));
   history.replaceState(null, "", u.toString());
 }
 
@@ -277,6 +330,7 @@ export function mountProto(): void {
   PS.theme = q.get("theme") === "dark" ? "dark" : "light";
   const sec = q.get("sec"); if (sec) PS.cfg.sec = sec as SeccionCfg;
   const paso = q.get("paso"); if (paso != null) PS.calc.paso = +paso;
+  const cv = q.get("cv"); if (cv === "p1" || cv === "p2" || cv === "p3") PS.c2.v = cv;
   _shot = q.get("shot") === "1";
   // Mismo criterio que la app: barra de iconos en 1024–1279 px y filtros flotantes (cerrados) ≤ 1024.
   PS.rail = window.innerWidth < 1280;
