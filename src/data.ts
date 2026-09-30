@@ -900,7 +900,6 @@ function _applyMetasProyectosSeguimiento(metas, proyectos, seguimiento, opts = {
   // y no se pintó en el dispatch inmediato de loadFromSupabase (porque estos
   // datos todavía no habían llegado).
   if (STATE.userRole !== "partner") {          // el portal no usa nada de esto
-    if (STATE.curTab === "metas"       && STATE.rawData.length)                      renderMetas();
     if (STATE.curTab === "seguimiento" && typeof renderSeguimiento === "function")   renderSeguimiento();
     // Rendimiento también lee las metas (la barra de avance de sus tarjetas, vía
     // metas.metasResumenPais). Antes la vista se re-pintaba sola con un vigilante

@@ -3003,7 +3003,6 @@ export async function calcSaveMetas() {
         : t("calc.okGuardadas", { n: payload.length, kam: CALC_STATE.kam, mes: mesTxt }))
       : t("calc.okSinRefresco", { n: payload.length, mes: mesTxt }));
     renderCalculator();
-    if (STATE.curTab === "metas" && typeof renderMetas === "function") renderMetas();
   } catch (err) {
     const msg = (err && err.message) || String(err);
     // El "Guardando…" se quita ANTES del aviso: con el diálogo abierto encima
@@ -3090,7 +3089,6 @@ export async function calcDeleteMetasKam() {
       ? t("calc.okBorradas", { kam: CALC_STATE.kam, mes: mesTxt, n: nBorradas }) + parcial
       : t("calc.okBorradasSinRefresco", { mes: mesTxt, n: nBorradas }) + parcial);
     renderCalculator();
-    if (STATE.curTab === "metas" && typeof renderMetas === "function") renderMetas();
   } catch (err) {
     const msg = (err && err.message) || String(err);
     showLoad(false);

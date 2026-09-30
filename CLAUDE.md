@@ -46,7 +46,7 @@ Pedido de Manuel: revisar todo (UX/UI, diccionarios, velocidad, bugs, integraci�
       - 11 cuentas sin KAM con actividad en agosto no tienen meta; la mayor es TRACKER MOBILITY, con 22 AD.
   - **Sigue igual a propósito**: una celda fijada NO redistribuye el resto. Con un solo partner TukTuk, editarlo deja la línea en "No cuadra".
 - **Fase 12 — "Desempeño" = Rendimiento + Metas (29-sep, EN PRODUCCIÓN).** Manuel eligió la propuesta 1 de la maqueta (`?ui=proto&p=perf`) con la franja "¿Llegamos?" de la 3.
-  - La pestaña Rendimiento pasa a llamarse **Desempeño** (la clave `nav.rendimiento` y el id `rend` no cambian, así la navegación y la huella siguen iguales). **Metas SIGUE disponible** durante la transición (PDF, vista Fleet, cobertura TukTuk); se retira cuando los KAMs validen.
+  - La pestaña Rendimiento pasa a llamarse **Desempeño** (la clave `nav.rendimiento` y el id `rend` no cambian, así la navegación y la huella siguen iguales). ~~Metas SIGUE disponible durante la transición~~ **Pestaña Metas RETIRADA el 30-sep-2026** (ver "Fase 14").
   - Todo lo de meta sale de las MISMAS funciones que Metas: `_rendMetaMes(line, lastDate, over)` (ahora acepta filtros que pisan a los del panel) y `metasCuentasLinea` (nueva en `metas.ts`, cuentas partner+ciudad con meta y actual, solo Combinado/TukTuk). **Verificado: los 21 % por KAM coinciden exacto con la pestaña Metas.**
     - **Trampa**: `metasResumenPais` filtra la META por `kam` pero el ACTUAL solo por `selected`. Por KAM hay que pasar `selected` = sus partners, o el % sale inflado (daba 340%).
   - **Secciones nuevas:**
@@ -105,8 +105,16 @@ Pedido de Manuel: revisar todo (UX/UI, diccionarios, velocidad, bugs, integraci�
     - La gráfica pasa a "Proyección de conductores activos vs meta" (AD de cada semana × `AD_PROJECTION_FACTOR`).
     - La tarjeta KPI conserva el AD de la semana como número grande, con su delta: es el dato medido.
     - Mensual no cambia. `rendimiento_mensual` todavía no tiene septiembre (último mes cargado: agosto).
-    - **La pestaña Metas NO cambió** (sigue mostrando el % semanal con su aviso de escala). Se retira cuando los KAMs validen Desempeño.
+    - La pestaña Metas se retiró el mismo día (ver "Fase 14").
     - **Trampa**: con el panel del navegador oculto, cambiar de escala se "queda" en la anterior (rAF no dispara). Parchear `requestAnimationFrame` solo en la pestaña de prueba.
+- **Fase 14 — Pestaña Metas RETIRADA (30-sep-2026, pedido de Manuel: "retira la pestaña de metas y revisa que todo apunte a Desempeño").**
+  - **Se sacó**: el ítem del menú (`shell.NAV_GROUPS`), el panel `#tab-metas` de `index.html`, su entrada en el encabezado (`TAB_META`, `_TABS_CON_PANEL`, `_TABS_CON_FRESCURA`), los chips de línea/restablecer que apuntaban a `setMetasLine`, los `renderMetas()` de `app.ts`/`data.ts`/`calculator.ts` (tras guardar o borrar metas), `metasContent` de `auth._PANELES_CON_DATOS` y 4 claves i18n sin uso.
+  - **Se quedó a propósito — `metas.ts` es el MOTOR de metas**: Desempeño llama a `metasResumenPais`, `metasCuentasLinea`, `_metasFechasDelMes`, `_metasFechasMesCompleto` y `etiquetaMesCompleto`. Presentación, portal y Calculadora usan `_metasMatchMes`/`_metasMesOrden`, y `data.ts` usa `_metasFleetActuals`. Esas funciones dependen de muchos helpers internos del archivo, así que el código de la vista (`renderMetas`, PDF, selector de mes, vistas por partner, `metas.css`) quedó SIN punto de entrada pero no se borró. Limpiarlo es una tarea aparte, con la huella de números de por medio.
+    - El motor NO depende del estado de la pestaña: Desempeño pasa `mesName` y `anio` explícitos, así que `STATE.metasMesSel`/`metasLine` ya no influyen.
+  - **Se conserva en otros lados**: subir el Excel de metas (menú Subir y Configuración → Cargas), borrar metas de un mes (Configuración → Mantenimiento y Calculadora), la vista Fleet con sus metas y la cuota TukTuk (Desempeño, líneas Fleet y TukTuk).
+  - **Lo único que se pierde es el PDF de Metas**: `access_log` de producción, 60 días: **0 descargas**. La pestaña la usaban 2 personas (113 aperturas) contra 4 en Desempeño (453).
+  - Textos que mandaban a "Metas" ahora dicen Desempeño o "la proyección del mes" (`calc.borradoParcial`, `rd.meta.nota`, `ds.lleg.sub`, `ds.tend.adMetaProyPie`).
+  - **Verificado en local**: el menú sin Metas; las 6 pestañas (Desempeño, Calculadora, Seguimiento, Presentación, Data Raw, Configuración) abren sin errores de consola; el chip de línea del encabezado vuelve a Combinado; guardado real desde la Calculadora ("Metas de Ana guardadas… 12 filas", 11 filas actualizadas en la base local, restauradas después desde `audit_log`); 626 tests, lint, typecheck y drift en verde.
 - **Verificación de Calculadora → Metas (29-sep, local):**
   - La meta que muestra Metas por KAM y por línea coincide exacto con la base (`data-num` contra SQL): Combinado sept (Ana 8,487 · Dario 8,429 · Elena 4,591 · Fabio 3,762) y TukTuk sept (Dario 1,414 · 104,103 · 286, con cobertura "Declarada por: Dario").
   - Diferencias ESPERADAS, no bugs:

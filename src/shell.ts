@@ -26,8 +26,9 @@ import { registerActions } from "./shared/actions.js";
 // data-tab de siempre: switchTab() no cambió.
 export const NAV_GROUPS = [
   { label: "nav.analisis", items: [
-    { id: "rend",        label: "nav.rendimiento",  icon: "chart-line" },
-    { id: "metas",       label: "nav.metas",        icon: "target" }
+    // "Metas" se retiró el 30-sep-2026: Desempeño (rend) la reemplaza con las
+    // MISMAS cuentas (metas.ts sigue siendo el motor de metas, sin pestaña).
+    { id: "rend",        label: "nav.rendimiento",  icon: "chart-line" }
   ] },
   { label: "nav.grupo.planificacion", items: [
     { id: "calculator",  label: "nav.calculadora",  icon: "calculator" },
@@ -149,7 +150,6 @@ export function syncFiltrosAria() {
 const _CHIPS_FILTRO = ["escala", "rango", "ciudad", "kam", "linea", "partners"];
 const TAB_META = {
   rend:        { title: "nav.rendimiento",  sub: "shell.sub.rend",        chips: _CHIPS_FILTRO, line: () => STATE.rendLine || LINEA_DEF },
-  metas:       { title: "nav.metas",        sub: "shell.sub.metas",       chips: _CHIPS_FILTRO, line: () => STATE.metasLine || LINEA_DEF },
   calculator:  { title: "nav.calculadora",  sub: "shell.sub.calculator" },
   seguimiento: { title: "nav.seguimiento",  sub: "shell.sub.seguimiento" },
   rawdata:     { title: "nav.dataRaw",      sub: "shell.sub.rawdata" },
@@ -158,9 +158,9 @@ const TAB_META = {
 };
 // Pestañas que muestran el panel de filtros (las demás están en NO_SIDEBAR_TABS
 // de app.ts; Presentación va a pantalla completa y no lleva encabezado).
-const _TABS_CON_PANEL = new Set(["rend", "metas", "portal"]);
+const _TABS_CON_PANEL = new Set(["rend", "portal"]);
 
-const _TABS_CON_FRESCURA = new Set(["rend", "metas", "calculator", "rawdata"]);
+const _TABS_CON_FRESCURA = new Set(["rend", "calculator", "rawdata"]);
 
 const _LINEA_LBL = { comb: () => t("rend.linea.comb"), agg: () => t("rend.linea.agg"), fleet: () => "Fleet", tk: () => "TukTuk" };
 
@@ -343,7 +343,7 @@ export function quitarChipAlcance(k) {
       if ($("kamFilter")) { $("kamFilter").value = "all"; _disparar($("kamFilter")); }
       break;
     case "linea": {
-      const act = STATE.curTab === "metas" ? "setMetasLine" : "setRendLine";
+      const act = "setRendLine";
       const b = document.querySelector(`#tab-${STATE.curTab} [data-act="${act}"][data-line="${LINEA_DEF}"]`);
       if (b) b.click();
       else if (typeof w[act] === "function") w[act](LINEA_DEF);
@@ -365,7 +365,6 @@ export function restablecerAlcance() {
   const w = window;
   const $ = id => document.getElementById(id);
   if (STATE.curTab === "rend")  STATE.rendLine  = LINEA_DEF;
-  if (STATE.curTab === "metas") STATE.metasLine = LINEA_DEF;
   if ($("cityFilter")) $("cityFilter").value = "all";
   if ($("kamFilter"))  $("kamFilter").value  = "all";
   if ($("partnerSearch") && $("partnerSearch").value) {

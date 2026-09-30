@@ -404,7 +404,7 @@ export async function handleLogout() {
 
 // Vacía los paneles que muestran datos (quedan ocultos tras el login, pero no
 // hace falta que sigan ahí): lo usa el descarte de una sesión provisional.
-const _PANELES_CON_DATOS = ["rendContent", "metasContent", "portalContent", "present2Content",
+const _PANELES_CON_DATOS = ["rendContent", "portalContent", "present2Content",
   "calculatorContent", "rawdataContent", "configContent", "pList"];
 function _vaciarPaneles() {
   _PANELES_CON_DATOS.forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = ""; });

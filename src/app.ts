@@ -371,7 +371,6 @@ export async function switchMode(mode) {
 
   // Render unico del tab activo (restoreFilters no rendero por _suppressRestoreRender)
   if (STATE.curTab === "rend"        && STATE.rawData.length) renderRend();
-  if (STATE.curTab === "metas"       && STATE.metasData.length && STATE.rawData.length) renderMetas();
   // Estas cuatro leen las columnas DIFERIDAS, que son por escala: sin el await
   // se renderizaban con la escala nueva pero esas columnas en null (KPIs y
   // embudo en "—", sin ningun error). switchTab ya lo hacia; switchMode no.
@@ -443,7 +442,7 @@ export function switchTab(tab) {
     if (prevTab && prevTab !== tab) {
       if (prevTab === "calculator"  && typeof calcCancelPendingRender === "function") calcCancelPendingRender();
       if (prevTab === "present2"    && typeof destroyPresent2Charts === "function")   destroyPresent2Charts();
-      const apexConsumers = new Set(["rend","metas"]);
+      const apexConsumers = new Set(["rend"]);
       if (apexConsumers.has(prevTab) && !apexConsumers.has(tab) && typeof destroyAllCharts === "function") {
         destroyAllCharts();
       }
@@ -585,7 +584,6 @@ export function switchTab(tab) {
       }
 
       if (tab === "rend"        && STATE.rawData.length)                           renderRend();
-      if (tab === "metas"       && STATE.metasData.length && STATE.rawData.length) renderMetas();
       if (tab === "rawdata")                                                        renderRawData();
       if (tab === "seguimiento")                                                    renderSeguimiento();
       if (tab === "config")                                                         renderConfig();
@@ -878,7 +876,6 @@ export function onKAMChange() {
   // renderizaba ANTES, y luego switchMode renderizaba OTRA VEZ al final).
   if (STATE._suppressRestoreRender) return;
   if (STATE.curTab === "rend"        && STATE.rawData.length)                           renderRend();
-  if (STATE.curTab === "metas"       && STATE.metasData.length && STATE.rawData.length) renderMetas();
   if (STATE.curTab === "calculator"  && STATE.rawData.length)                           renderCalculator();
 }
 
@@ -912,7 +909,6 @@ export function applyFilters() {
     return;
   }
   if (STATE.curTab === "rend"        && STATE.rawData.length)                           renderRend();
-  if (STATE.curTab === "metas"       && STATE.metasData.length && STATE.rawData.length) renderMetas();
   if (STATE.curTab === "calculator"  && STATE.rawData.length)                           renderCalculator();
   // Data Raw NO va acá a propósito: está en NO_SIDEBAR_TABS y tiene sus propios
   // selectores de ciudad y fecha adentro, así que el sidebar no lo toca. Sí
@@ -1197,7 +1193,6 @@ export function setUiLang(code) {
   // en vuelo. Para un cambio de IDIOMA ese motivo no aplica —los datos ya estan—
   // y sin esto la pestana Metas se quedaba en el idioma anterior o directamente
   // vacia (se veia como "largo: 93" al probar la vista Combinado en ingles).
-  if (STATE.curTab === "metas" && STATE.metasData?.length && typeof renderMetas === "function") renderMetas();
   if (STATE.curTab === "seguimiento" && typeof renderSeguimiento === "function") renderSeguimiento();
   if (STATE.curTab === "config" && typeof renderConfig === "function") renderConfig();
   // Estructura (Ola 5): navegación y encabezado se generan desde JS.
