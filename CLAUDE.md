@@ -45,12 +45,13 @@ Pedido de Manuel: revisar todo (UX/UI, diccionarios, velocidad, bugs, integraci�
       - 3 filas en 0 de Miguel (Taxigo, FENIX DRIVE, GIAL WAY) son restos de partners que ya no están en su cartera.
       - 11 cuentas sin KAM con actividad en agosto no tienen meta; la mayor es TRACKER MOBILITY, con 22 AD.
   - **Sigue igual a propósito**: una celda fijada NO redistribuye el resto. Con un solo partner TukTuk, editarlo deja la línea en "No cuadra".
-- **Fase 12 — "Desempeño" = Rendimiento + Metas (29-sep, rama `fase12`, EN LOCAL hasta que Manuel apruebe subir).** Manuel eligió la propuesta 1 de la maqueta (`?ui=proto&p=perf`) con la franja "¿Llegamos?" de la 3.
+- **Fase 12 — "Desempeño" = Rendimiento + Metas (29-sep, EN PRODUCCIÓN).** Manuel eligió la propuesta 1 de la maqueta (`?ui=proto&p=perf`) con la franja "¿Llegamos?" de la 3.
   - La pestaña Rendimiento pasa a llamarse **Desempeño** (la clave `nav.rendimiento` y el id `rend` no cambian, así la navegación y la huella siguen iguales). **Metas SIGUE disponible** durante la transición (PDF, vista Fleet, cobertura TukTuk); se retira cuando los KAMs validen.
   - Todo lo de meta sale de las MISMAS funciones que Metas: `_rendMetaMes(line, lastDate, over)` (ahora acepta filtros que pisan a los del panel) y `metasCuentasLinea` (nueva en `metas.ts`, cuentas partner+ciudad con meta y actual, solo Combinado/TukTuk). **Verificado: los 21 % por KAM coinciden exacto con la pestaña Metas.**
     - **Trampa**: `metasResumenPais` filtra la META por `kam` pero el ACTUAL solo por `selected`. Por KAM hay que pasar `selected` = sus partners, o el % sale inflado (daba 340%).
   - **Secciones nuevas:**
-    - **Franja "¿Llegamos a la meta de {mes}?"** (`domain/brechaMeta.ts`, 3 tests): cuánto falta, ritmo actual contra el necesario por semana (flujos) y veredicto con la MISMA proyección de Metas. Mes cerrado: "Cerró en X%". Con la franja, las tarjetas de arriba conservan el anillo pero no repiten el caption.
+    - **Franja "¿Llegamos a la meta de {mes}?"** (`domain/brechaMeta.ts`, 3 tests): cuánto falta, ritmo actual contra el necesario por semana (flujos) y veredicto con la MISMA proyección de Metas. Mes cerrado: "Cerró en X%". Con la franja, las tarjetas conservan el anillo pero no repiten el caption.
+      - **Va DESPUÉS de las tarjetas KPI y compacta** (una sola tarjeta con los 3 KPIs en fila, ~150 px). Pedido de Manuel: "primero… las gráficas, y luego recién leo si llego o no… más pequeño".
     - **Flujo de conductores** (`domain/flujoConductores.ts`, 6 tests; pedido de Manuel: "cuántos drivers pierden y cuántos añaden"):
       - Definiciones, **por cuenta y después sumado**: ganados = N+R; continúan = AD − N+R; perdidos = AD anterior − continúan (si > 0); **volvieron** = continúan − AD anterior (si > 0); neto = AD − AD anterior; retención = min(continúan, AD anterior) / AD anterior.
       - Identidad exacta: **neto = ganados + volvieron − perdidos**. Sin "volvieron", en semanal no cuadraba: 2,158 − 2,889 ≠ +508, porque los que faltaron una semana no cuentan como reactivados.

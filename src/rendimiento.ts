@@ -618,8 +618,9 @@ export function _renderRendImpl() {
   // Sin encabezado de sección (como el prototipo B): qué mide cada tile lo dice
   // su propia línea "última semana (14/09/2026)" / "acumulado del rango".
   // Franja "¿Llegamos a la meta?" (Desempeño, 29-sep-2026).
+  // La franja va DESPUÉS de las tarjetas (pedido de Manuel: primero los
+  // números, después "¿llegamos?"), compacta.
   const franja = _dsLlegamos(metaInfo, lastDate);
-  html += franja;
   html += `<h2 class="ui-sr-only">${escapeHTML(t("rd.kpis.titulo"))}</h2>`;
   html += `<div class="rd-kpis rd-kpis--tiles">
     ${_rdKpi({ label: t("metric.ad.label"), value: fmt(tAD), numKey: "rend.pais.ad", cur: tAD, prev: pAD, sub: `${periodLabel} (${d2s(lastDate)})`, goal: _rdGoal(metaInfo, "ad"), icon: "users", sinCaption: !!franja })}
@@ -629,6 +630,7 @@ export function _renderRendImpl() {
                goal: metaInfo ? { pct: null, caption: t("rd.meta.sinMetaMensual") } : undefined })}
   </div>`;
   html += _rdGoalNota(metaInfo);
+  html += franja;
 
   // ── 1b. KPIs propios de TukTuk (Fleet tiene su vista dedicada arriba) ───────
   if (line === "tk") {
@@ -1702,14 +1704,14 @@ export function _dsLlegamos(info, lastDate) {
         `<span>${escapeHTML(t("ds.lleg.ritmoNec"))} <b class="${b.ritmoNecesario > b.ritmoActual ? "ds-bad" : ""}">${b.ritmoNecesario == null ? "—" : F(Math.round(b.ritmoNecesario))}</b>/${escapeHTML(t("ds.lleg.sem"))}</span></div>`
       : k === "ad" ? `<div class="ds-gap__ritmo"><span>${escapeHTML(t("ds.lleg.nivel", { a: F(x.actual), m: F(x.meta) }))}</span></div>` : "";
     return `<div class="ds-gap ds-gap--${tono}">
-      <div class="ds-gap__top"><span class="ds-gap__lbl">${escapeHTML(t(k === "ad" ? "metric.ad.label" : k === "nr" ? "metric.nr.label" : "metric.sh.label"))}</span>${_dsPct(b.pct)}</div>
+      <div class="ds-gap__top"><span class="ds-gap__lbl">${escapeHTML(_dsLblK(k))}</span>
+        <span class="ds-gap__verd">${iconSvg(tono === "ok" ? "check-circle" : "alert-triangle", { size: 13 })}<span>${escapeHTML(verd)}</span></span></div>
       ${cuerpo}${ritmo}
-      <div class="ds-gap__foot">${iconSvg(tono === "ok" ? "check-circle" : "alert-triangle", { size: 14 })}<span>${escapeHTML(verd)}</span></div>
     </div>`;
   }).join("");
   if (!cards) return "";
-  return _rdSec(t("ds.lleg.titulo", { m: info.mesTxt }), info.proyOn ? t("ds.lleg.sub") : t("ds.lleg.subCerrado")) +
-    `<div class="ds-gaps">${cards}</div>`;
+  return `<section class="ds-lleg" aria-labelledby="dsLlegT"><div class="ds-lleg__head"><h2 class="ds-lleg__t" id="dsLlegT">${escapeHTML(t("ds.lleg.titulo", { m: info.mesTxt }))}</h2>` +
+    `<span class="ds-lleg__sub">${escapeHTML(info.proyOn ? t("ds.lleg.sub") : t("ds.lleg.subCerrado"))}</span></div><div class="ds-gaps">${cards}</div></section>`;
 }
 
 // ── Flujo de conductores ─────────────────────────────────────────────────────
