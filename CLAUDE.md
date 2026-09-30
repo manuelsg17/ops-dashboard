@@ -15,7 +15,7 @@ Dashboard para KAMs (partner performance): modulos **TypeScript** bundleados con
 ## Estado actual
 
 ### Resumen vigente (30-sep-2026) — leer primero
-- **Producción = `main` = `dd0fd80`** (descarga de la cartera de un KAM). CI en verde y bundle de Vercel verificado contra el build local.
+- **Producción = `main` = `2137cf4`** (carátula nueva, N+R por origen y Embudo fuera del PDF por defecto, pantalla de carga de Presentación). CI en verde y bundle de Vercel (`index-BQ7spuaJ.js`) verificado contra el build local.
 - **Pestañas**: Desempeño (por defecto, id `rend`) · Calculadora · Seguimiento · Presentación (con "Qué descargar: Un partner / Cartera de un KAM") · Data Raw · Configuración. **Retiradas**: Metas (30-sep, su motor sigue en `metas.ts`), Vista Partner (sep) y "Rend + Metas" (jul).
 - **Reglas de cálculo vigentes** (detalle en cada fase de abajo):
   - Proyección de AD = máx del rango × 1.4. En semanal, AD contra la meta se lee SOLO por su proyección. En diario, AD no se compara con la meta mensual.
@@ -30,7 +30,6 @@ Dashboard para KAMs (partner performance): modulos **TypeScript** bundleados con
   - Delivery/Cargo en la Calculadora: necesitan columnas en `metas` cuando lleguen sus datos.
   - Hueco conocido del desglose TukTuk en "Solo lo que cambié" (ver "Aviso antes de borrar o reescribir el desglose TukTuk").
   - Accionables es EXPERIMENTAL: los umbrales (`UMBRAL` en `domain/accionables.ts`) esperan el feedback de Manuel.
-  - **Carátula nueva + hojas fuera por defecto + pantalla de carga de Presentación: listas en local, SIN subir** (ver "Presentación: carátula nueva…").
 
 ### Sesión Septiembre 2026 (23–24 sep) — Auditoría integral + rediseño por olas (EN PRODUCCIÓN desde el 24-sep, commit `6a70389`)
 
@@ -171,7 +170,7 @@ Pedido de Manuel: revisar todo (UX/UI, diccionarios, velocidad, bugs, integraci�
     - Lote de 8 cancelado tras el primero: 1 guardado, 7 "Cancelado", sin divs temporales colgados.
     - Tiempo real en local ~1.8-3.5 s por hoja; la estimación usa 1.8 s por hoja + 1.5 s por PDF.
   - **Sin probar**: el diálogo real de "Una carpeta" (lo abre el sistema operativo, no se puede automatizar). La escritura usa la API estándar (`getFileHandle` + `createWritable`).
-- **Presentación: carátula nueva, hojas fuera por defecto y pantalla de carga (30-sep-2026, verificado en local, SIN subir).** Pedido de Manuel con una pieza de campaña "Yango Ads × Santander" de referencia.
+- **Presentación: carátula nueva, hojas fuera por defecto y pantalla de carga (30-sep-2026, EN PRODUCCIÓN, `2137cf4`).** Pedido de Manuel con una pieza de campaña "Yango Ads × Santander" de referencia.
   - **Carátula** (`presentacion2.buildSlide2Cover` + `styles/views/caratula.css`, nuevo). Maquetas en `?ui=covers` (`src/dev/covers.ts`, solo dev): tres propuestas y la de hoy. Manuel eligió el FONDO de la A (paneles en diagonal con destello) con la INFORMACIÓN de la B, y sin la tarjeta inclinada ("lo mío no es de tarjetas").
     - Semanal y diario: degradado oscuro con rojo. Mensual: degradado con blanco como color principal (el panel arranca casi blanco y llega al rojo en el borde).
     - Contenido:
