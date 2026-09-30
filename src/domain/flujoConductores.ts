@@ -1,30 +1,33 @@
-// domain/flujoConductores.ts — ganados, perdidos, neto y retención (puro).
+// domain/flujoConductores.ts — entran, se pierden, neto y retención (puro).
 //
 // Pedido de Manuel (29-sep-2026): "saber cuántos drivers pierden y cuántos
 // están añadiendo… de acuerdo a la retención y cuántos pierden y cuántos
 // añaden es que puedo estimar si caen, suben o se mantienen".
 //
-// Misma base que la retención del deck (metrics.retentionSeries):
-//   continúan = AD(t) − N+R(t)          (activos que no son nuevos ni reactivados)
-//   ganados   = N+R(t)
-//   perdidos  = AD(t−1) − continúan, si es positivo (del período anterior que no siguieron)
-//   volvieron = continúan − AD(t−1), si es positivo — activos que NO estaban el
-//               período anterior pero tampoco cuentan como reactivados (en
-//               semanal: faltaron una semana y regresaron). Sin este término el
-//               neto no cuadraba: probando en local daba ganados 2,158 −
-//               perdidos 2,889 ≠ neto +508.
-//   neto      = AD(t) − AD(t−1) = ganados + volvieron − perdidos (exacto)
-//   retención = retenidos / AD(t−1), retenidos = min(continúan, AD(t−1))
+// MISMA FÓRMULA que la Presentación y la página de proyección (30-sep-2026,
+// pedido de Manuel: "que uses la misma"):
+//   retención = (AD − nuevos − reactivados) / AD anterior
+//               (metrics.retentionSeries y forecast.fcGrowthLevers)
+//   perdidos  = AD anterior + nuevos + reactivados − AD, si es positivo
+//               (el `churn` de fcGrowthLevers)
+// Sin recortes: la retención puede pasar de 100% o dar negativa, igual que en
+// el deck (recortarla escondería justo el caso a mirar).
 //
-// Ganados se parte en NUEVOS y REACTIVADOS (30-sep-2026): los partners crecen
-// sobre todo por reactivación (sem. 21-sep en producción: 1,045 nuevos vs 1,510
-// reactivados) y "ganados" a secas lo escondía. `volvieron` NO son los
-// reactivados: son intermitentes (faltaron un período, sin llegar a contar como
-// reactivados en el reporte) y en semanal suelen ser casi 0.
+// Se aplica al NIVEL QUE SE MUESTRA (país, KAM o partner) sobre los totales de
+// ese nivel — como el deck, que la calcula sobre la serie del partner. Hasta el
+// 30-sep se calculaba por cuenta con min(continúan, AD anterior) y se sumaba:
+// daba lo mismo ±0.2 pp (producción, semana 21-sep: 87.6% vs 87.7%; agosto:
+// 72.7% vs 72.8%), pero no era LA fórmula.
 //
-// Se calcula POR CUENTA y después se suma: una cuenta que crece con nuevos no
-// puede tapar las bajas de otra. En cada cuenta y en el total se cumple
-// neto = ganados + volvieron − perdidos.
+// Descomposición del neto (exacta): neto = AD − AD anterior
+//   = nuevos + reactivados + intermitentes − perdidos
+// donde intermitentes = AD − N+R − AD anterior, si es positivo: activos que no
+// estaban el período anterior y no cuentan como reactivados (en semanal, los
+// que faltaron una semana). Perdidos e intermitentes nunca son ambos > 0.
+//
+// OJO con la escala: en semanal la retención es de UNA semana a la siguiente
+// (~88% en producción) y no se compara con la mensual (~73%) de la
+// Presentación. La vista lo dice y ofrece la mensual como referencia.
 
 export interface CuentaFlujo {
   /** AD del período anterior (base). */
@@ -37,44 +40,39 @@ export interface CuentaFlujo {
   re?: number;
 }
 export interface Flujo {
+  /** nuevos + reactivados. */
   ganados: number;
-  /** ganados = nuevos + reactivados. */
   nuevos: number;
   reactivados: number;
-  /** Activos que no estaban el período anterior y no cuentan como N+R. */
+  /** Intermitentes: activos que no estaban el período anterior y no son N+R. */
   volvieron: number;
   perdidos: number;
+  /** AD − N+R: los que ya estaban (numerador de la retención). */
   retenidos: number;
   neto: number;
   base: number;
-  /** 0..1, o null sin base (primer período / cuenta nueva). */
+  /** (AD − N+R) / AD anterior; null sin base (primer período / cuenta nueva). */
   retencion: number | null;
 }
 
 const n = (v: unknown) => Math.max(Number(v) || 0, 0);
 
 export function flujoCuenta(c: CuentaFlujo): Flujo {
-  const adPrev = n(c.adPrev), ad = n(c.ad);
-  // N+R no puede superar a los activos del período (dato ruidoso): se acota
-  // para que la identidad del neto se mantenga.
-  const ganados = Math.min(n(c.nr), ad);
+  const adPrev = n(c.adPrev), ad = n(c.ad), ganados = n(c.nr);
   const reactivados = Math.min(n(c.re), ganados);
-  const nuevos = ganados - reactivados;
-  const continuan = ad - ganados;
-  const retenidos = Math.min(continuan, adPrev);
-  const perdidos = Math.max(adPrev - continuan, 0);
-  const volvieron = Math.max(continuan - adPrev, 0);
-  return { ganados, nuevos, reactivados, volvieron, perdidos, retenidos, neto: ad - adPrev, base: adPrev, retencion: adPrev > 0 ? retenidos / adPrev : null };
+  const retenidos = ad - ganados;
+  return {
+    ganados, nuevos: ganados - reactivados, reactivados,
+    volvieron: Math.max(retenidos - adPrev, 0),
+    perdidos: Math.max(adPrev - retenidos, 0),
+    retenidos, neto: ad - adPrev, base: adPrev,
+    retencion: adPrev > 0 ? retenidos / adPrev : null
+  };
 }
 
-/** Suma de cuentas; la retención agregada es Σretenidos / Σbase (no un promedio de %). */
+/** Flujo del NIVEL: suma las cuentas y aplica la fórmula sobre los totales. */
 export function flujoTotal(cuentas: Iterable<CuentaFlujo>): Flujo {
-  const t: Flujo = { ganados: 0, nuevos: 0, reactivados: 0, volvieron: 0, perdidos: 0, retenidos: 0, neto: 0, base: 0, retencion: null };
-  for (const c of cuentas) {
-    const f = flujoCuenta(c);
-    t.ganados += f.ganados; t.nuevos += f.nuevos; t.reactivados += f.reactivados; t.volvieron += f.volvieron; t.perdidos += f.perdidos; t.retenidos += f.retenidos;
-    t.neto += f.neto; t.base += f.base;
-  }
-  t.retencion = t.base > 0 ? t.retenidos / t.base : null;
-  return t;
+  const t = { adPrev: 0, ad: 0, nr: 0, re: 0 };
+  for (const c of cuentas) { t.adPrev += n(c.adPrev); t.ad += n(c.ad); t.nr += n(c.nr); t.re += Math.min(n(c.re), n(c.nr)); }
+  return flujoCuenta(t);
 }

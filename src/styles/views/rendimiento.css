@@ -488,3 +488,12 @@
 .rd-pcell__tend { display: inline-flex; margin-left: 6px; }
 .rd-pcell__tend .rd-trend { transform: scale(.85); }
 .ds-metarow__k small, .ds-kc__k small { font-weight: var(--weight-regular); color: var(--color-text-subtle); }
+.ds-ret-nota { flex-wrap: wrap; row-gap: 4px; }
+.ds-ret-ref { margin-left: 8px; color: var(--color-text); }
+.ds-ret-ref b { font-variant-numeric: tabular-nums; }
+.ds-ret-btn {
+  height: 24px; padding: 0 10px; border: 0; border-radius: var(--radius-pill); cursor: pointer;
+  font: inherit; font-size: var(--text-xs); font-weight: var(--weight-semibold);
+  color: var(--color-info-fg); background: var(--color-info-bg);
+}
+.ds-ret-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }

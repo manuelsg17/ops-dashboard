@@ -20,7 +20,7 @@ import { reportYM, diasMesReporteDe } from "./shared/mesReporte.js";
 import { parseLocalDate } from "./core/dates";
 import { opcionesMesMeta, mesNumero } from "./domain/mesesMeta";
 import { esMesEnCurso } from "./domain/mesEnCurso";
-import { flujoTotal } from "./domain/flujoConductores";
+import { flujoTotal, flujoCuenta } from "./domain/flujoConductores";
 import { calcularBrecha } from "./domain/brechaMeta";
 import { generarAccionables } from "./domain/accionables";
 
@@ -1122,7 +1122,7 @@ export function buildTable(apd, lastDate, prevDate, sel) {
         const e = _dsTablaCtx.estados.get(p);
         const f = flujoTotal([{ ad: sumR(l, r => r.activeDrivers), adPrev: sumR(pr, r => r.activeDrivers), nr: sumR(l, r => r.newPartner + r.newService + r.reactivated) }]);
         return { estado: e ? e.estado : "", pctPeor: e && e.peor != null ? e.peor : 9999, metaPct: e ? e.eva : null,
-                 ret: f.retencion == null ? -1 : f.retencion, perdidos: f.perdidos };
+                 ret: f.retencion == null ? _DS_SIN_RET : f.retencion, perdidos: f.perdidos };
       })(),
       adSerie:      rows.map(r => r.activeDrivers),
       declineAlert: hasConsecutiveDecline(apdFullByPartner, p)
@@ -1181,7 +1181,7 @@ export function renderTable() {
       <td class="ui-num"${dn("rend", "tabla", "co", r.partner)}>${fmtK(r.co)}</td>
       <td class="ui-num"${dn("rend", "tabla", "ns", r.partner)}>${nsCell}</td>
       <td class="ui-num">${_dsEstadoCelda(r)}</td>
-      <td class="ui-num"${r.ret >= 0 ? dn("ds", "tabla", "ret", r.partner) : ""}>${r.ret >= 0 ? `${(r.ret * 100).toFixed(1)}%<small class="ds-perd">−${fmt(r.perdidos)}</small>` : `<span class="rd-muted">—</span>`}</td>
+      <td class="ui-num"${r.ret > _DS_SIN_RET ? dn("ds", "tabla", "ret", r.partner) : ""}>${r.ret > _DS_SIN_RET ? `${(r.ret * 100).toFixed(1)}%<small class="ds-perd">−${fmt(r.perdidos)}</small>` : `<span class="rd-muted">—</span>`}</td>
     </tr>`;
   });
   h += `</tbody></table>`;
@@ -1677,7 +1677,8 @@ registerActions({
   dlChart:           d => dlChart(d.chart, d.name),
   dsSetEstado:       d => dsSetEstado(d.value),
   dsSetMovMetric:    d => dsSetMovMetric(d.value),
-  dsSetAccTab:       d => dsSetAccTab(d.value)
+  dsSetAccTab:       d => dsSetAccTab(d.value),
+  dsRetMensual:      () => dsRetMensual()
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1700,6 +1701,9 @@ let _dsMovMetric = "nr";
 // partner); se fija en _renderRendImpl antes de buildTable.
 let _dsTablaCtx = { estados: new Map(), flujo: null };          // N+R por defecto: la que más le importa a Manuel
 let _dsFiltroEstado = "todos";
+// "Sin retención" en la tabla (sin base previa). No es −1: con la fórmula de la
+// Presentación la retención puede ser negativa y tiene que verse.
+const _DS_SIN_RET = -1e9;
 
 const _DS_K3 = ["ad", "nr", "sh"];
 const _dsLblK = k => t(k === "ad" ? "metric.ad.short" : k === "nr" ? "metric.nr.short" : "metric.sh.short");
@@ -1888,7 +1892,7 @@ function _dsPintarAccionables({ flujo, estados, metaInfo, metaCiudad }) {
     return {
       partner: r.partner, kam: r.kam, ad: r.ad, pad: r.pad, nr: r.nr, pnr: r.pnr, re: r.re || 0, pre: r.pre || 0,
       sh: r.sh, psh: r.psh, ns: r.ns, perdidos: diario ? 0 : r.perdidos || 0,
-      retencion: diario || !(r.ret >= 0) ? null : r.ret,
+      retencion: diario || !(r.ret > _DS_SIN_RET) ? null : r.ret,
       eva: e && e.eva ? e.eva : null, declive: !!r.declineAlert,
       nrMeta: e && e.res && e.res.nr && e.res.nr.meta > 0 ? { meta: e.res.nr.meta, actual: e.res.nr.actual || 0 } : null
     };
@@ -2028,6 +2032,7 @@ function _dsFlujoTile(label, valor, cur, prev, sub, numKey, opts = {}) {
     <div class="rd-tile__sub">${escapeHTML(sub)}</div></div>`;
 }
 export function _dsFlujoHTML(F) {
+  _dsRetLastDate = F ? F.dNow : "";
   // En diario el flujo no se lee: un conductor que no maneja todos los días
   // aparece como "perdido" y "vuelve" al día siguiente.
   if (STATE.curMode === "diario") {
@@ -2044,8 +2049,15 @@ export function _dsFlujoHTML(F) {
     ${_dsFlujoTile(t("ds.flujo.reactivados"), "+" + fmt(a.reactivados), a.reactivados, p && p.reactivados, pctRe == null ? "" : t("ds.flujo.reactivadosSub", { p: pctRe }), "ds.flujo.reactivados")}
     ${_dsFlujoTile(t("ds.flujo.perdidos"), "−" + fmt(a.perdidos), a.perdidos, p && p.perdidos, t("ds.flujo.perdidosSub"), "ds.flujo.perdidos", { invert: true })}
     ${_dsFlujoTile(t("ds.flujo.neto"), (a.neto >= 0 ? "+" : "−") + fmt(Math.abs(a.neto)), a.neto, null, t(a.neto > 0 ? "ds.flujo.crece" : a.neto < 0 ? "ds.flujo.cae" : "ds.flujo.estable") + (a.volvieron > 0 ? " · " + t("ds.flujo.intermit", { n: fmt(a.volvieron) }) : ""), "ds.flujo.neto", { cls: a.neto >= 0 ? "ds-neto--up" : "ds-neto--down" })}
-    ${_dsFlujoTile(t("ds.flujo.retencion"), ret(a.retencion), a.retencion, p && p.retencion, t("ds.flujo.retSub", { r: fmt(a.retenidos), b: fmt(a.base) }), "ds.flujo.ret")}
+    ${_dsFlujoTile(t(STATE.curMode === "mensual" ? "ds.flujo.retMes" : "ds.flujo.retSem"), ret(a.retencion), a.retencion, p && p.retencion, t("ds.flujo.retSub", { r: fmt(a.retenidos), b: fmt(a.base) }), "ds.flujo.ret")}
   </div>`;
+  // Fórmula a la vista (la misma de la Presentación) y, en semanal, la
+  // retención MENSUAL como referencia: la semanal (~88%) no se compara con la
+  // mensual (~73%) del deck. La mensual se calcula si ya está en memoria (la
+  // cargan Presentación y Calculadora); si no, un botón la trae — no se
+  // precarga para no volver a subir el egress (ver "Egress de Supabase").
+  h += `<p class="rd-note ds-ret-nota">${iconSvg("info", { size: 14 })}<span>${escapeHTML(t("ds.flujo.formula"))}${STATE.curMode === "semanal" ? " " + escapeHTML(t("ds.flujo.escalaSem")) : ""}</span>` +
+    (STATE.curMode === "semanal" ? `<span id="dsRetRef" class="ds-ret-ref">${_dsRetMensualRefHTML()}</span>` : "") + `</p>`;
   // Por KAM: dónde se ganan y dónde se pierden conductores.
   const kNow = particionarPorKam(F.rNow, _lineKamOf), kPrev = particionarPorKam(F.rPrev, _lineKamOf);
   const kams = ordenarKams([...kNow.keys(), ...kPrev.keys()], SIN_KAM);
@@ -2081,6 +2093,49 @@ export function _dsPintarFlujo(F) {
   if (document.getElementById("dsCh_ret"))
     buildLineChart("dsCh_ret", cats, [{ name: t("ds.flujo.retencion"), data: F.serie.map(x => x.retencion == null ? null : Math.round(x.retencion * 1000) / 10) }],
       [seriesColor(0, tk)], { ...ESTILO_SUAVE, yaxis: { labels: { formatter: v => v == null ? "" : v.toFixed(0) + "%" } } });
+}
+
+// Retención MENSUAL de referencia (último mes cerrado antes del período
+// mostrado) con el mismo alcance que la vista: línea, ciudad, KAM y partners.
+let _dsRetLastDate = "";
+function _dsRetMensualRef(lastDate) {
+  if (!STATE._mensualLoaded) return null;
+  const line = _rendLine();
+  const aggM = STATE.rawDataMensual || [], tkM = sliceEscala(STATE, "Tuktuk", "mensual");
+  const base = line === "tk" ? tkM : line === "comb" ? aggM.concat(tkM) : line === "agg" ? aggM : [];
+  if (!base.length) return null;
+  const f = getCurrentFilters();
+  const selSet = new Set(f.selected), sidebar = new Set(STATE.sidebarPartners || STATE.allPartners);
+  const rows = base.filter(r => (f.city === "all" || r.city === f.city) &&
+    (f.kam === "all" || _lineKamOf(r) === f.kam) && _lineSelHas(selSet, sidebar, r.partner));
+  const ym = String(lastDate || "").slice(0, 7);
+  const meses = [...new Set(rows.map(r => String(r.date).slice(0, 7)))].sort().filter(m => m < ym);
+  if (meses.length < 2) return null;
+  const m1 = meses[meses.length - 1], m0 = meses[meses.length - 2];
+  const tot = m => rows.filter(r => String(r.date).slice(0, 7) === m).reduce((o, r) => {
+    o.ad += r.activeDrivers || 0; o.nr += (r.newPartner || 0) + (r.newService || 0) + (r.reactivated || 0); o.re += r.reactivated || 0; return o;
+  }, { ad: 0, nr: 0, re: 0 });
+  const a = tot(m1), b = tot(m0);
+  const fl = flujoCuenta({ ad: a.ad, adPrev: b.ad, nr: a.nr, re: a.re });
+  return fl.retencion == null ? null : { ret: fl.retencion, m1, m0 };
+}
+function _dsRetMensualRefHTML() {
+  const r = _dsRetMensualRef(_dsRetLastDate);
+  if (r) {
+    const mes = m => {
+      try { return new Intl.DateTimeFormat(getLang(), { month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(2000, +m.slice(5, 7) - 1, 15))); }
+      catch (e) { return m; }
+    };
+    return `${escapeHTML(t("ds.flujo.refMensual", { a: mes(r.m1), b: mes(r.m0) }))} <b${dn("ds", "flujo", "retMensual")}>${(r.ret * 100).toFixed(1)}%</b>`;
+  }
+  return STATE._mensualLoaded ? "" : `<button type="button" class="ds-ret-btn" data-act="dsRetMensual">${escapeHTML(t("ds.flujo.verMensual"))}</button>`;
+}
+export async function dsRetMensual() {
+  const el = document.getElementById("dsRetRef");
+  if (el) el.innerHTML = `<span class="rd-muted">${escapeHTML(t("ds.flujo.cargandoMensual"))}</span>`;
+  try { if (typeof loadMensualIfNeeded === "function") await loadMensualIfNeeded(true); } catch (e) { /* el aviso lo da la carga */ }
+  const el2 = document.getElementById("dsRetRef");
+  if (el2) el2.innerHTML = _dsRetMensualRefHTML() || `<span class="rd-muted">${escapeHTML(t("ds.flujo.sinMensual"))}</span>`;
 }
 
 // ── Meta por grupo (ciudad / KAM), con la MISMA función que el total ──────────
