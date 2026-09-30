@@ -12,7 +12,7 @@ import {
   weightedAvg, ratio, sumKpis, tasaAcum, sumarTasa, leerTasa
 } from "./domain/metrics.js";
 import { reportYM, diasMesReporteDe } from "./shared/mesReporte.js";
-import { SIN_KAM } from "./core/config.js";
+import { SIN_KAM, normKamValor } from "./core/config.js";
 import { parseLocalDate } from "./core/dates";
 import { esMesEnCurso } from "./domain/mesEnCurso";
 import { d2s } from "./core/format";
@@ -38,7 +38,7 @@ import { MES_NOMBRES } from "./core/meses";
 // (_lineKamOf / _buildPartnerKAM): partners → flotas/filas → la propia meta.
 export function _metasKamDe(m) {
   const k = (m && typeof getKAMForPartner === "function" && getKAMForPartner(m.partner)) || "";
-  return k || ((m && m.kam) || "").trim() || SIN_KAM;
+  return k || normKamValor(m && m.kam) || SIN_KAM;
 }
 
 // ── PROYECCIÓN SOLO PARA EL MES EN CURSO (decisión 4 de Manuel, 23-sep-2026) ──

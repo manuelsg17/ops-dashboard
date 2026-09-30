@@ -171,11 +171,20 @@ export const STATE = {
 // clase de bug que este archivo ya arrastró con las escalas.
 export const SIN_KAM = "No KAM";
 
+// Valores que en la BD significan "sin KAM" escritos a mano ("SIN KAM", "No
+// KAM", "-"): se tratan como vacío. En producción GIAL WAY tenía
+// `partners.kam = "SIN KAM"` y Desempeño mostraba DOS grupos ("SIN KAM" y
+// "Sin KAM") con los huérfanos repartidos entre ambos (30-sep-2026).
+export function normKamValor(kam) {
+  const k = String(kam || "").trim();
+  return /^(sin|no)[\s_-]*kam$|^-+$/i.test(k) ? "" : k;
+}
+
 export function rebuildKAMPartners() {
   STATE.KAM_PARTNERS = {};
   const agregar = (kam, partner) => {
     if (!partner) return;
-    const k = (kam || "").trim() || SIN_KAM;
+    const k = normKamValor(kam) || SIN_KAM;
     if (!STATE.KAM_PARTNERS[k]) STATE.KAM_PARTNERS[k] = new Set();
     STATE.KAM_PARTNERS[k].add(partner);
   };
@@ -202,7 +211,7 @@ export function rebuildKAMPartners() {
       // los mismos números aparecían en dos grupos distintos según la pantalla.
       // En producción 15 de los 16 CLIDs sueltos tienen la fila vacía y caen en
       // "No KAM" igual; el escalón importa para el que sí trae KAM.
-      agregar(f.kam || STATE._partnerKAM?.get(f.nombre_asignado), f.nombre_asignado);
+      agregar(normKamValor(f.kam) || STATE._partnerKAM?.get(f.nombre_asignado), f.nombre_asignado);
     });
   }
 }

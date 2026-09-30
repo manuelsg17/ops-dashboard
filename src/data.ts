@@ -24,7 +24,7 @@ import { projectFlow, projectSnapshot, dropDuplicatePeriods } from "./domain/met
 import { sliceEscala, normEscala } from "./shared/escala.js";
 import { evaluarFrescura } from "./shared/frescura.js";
 import { LOAD_WINDOW, computeWindowStart, inicioVentanaSemanalCalendario, planVentanaSemanal } from "./shared/ventanaCarga.js";
-import { SIN_KAM } from "./core/config.js";
+import { SIN_KAM, normKamValor } from "./core/config.js";
 import { mesCanonico, anioParaFilaMeta, limaYM } from "./domain/mesesMeta";
 import { ErrorSubida, describirErrorSubida, etiquetaTipoSubida } from "./domain/erroresSubida";
 import { filasComoObjetos } from "./workers/excelParse";
@@ -1388,7 +1388,7 @@ function _applyCoreData(partners, rend, frooms, flotas, opts = {}) {
         // (evita KAMs duplicados visualmente identicos pero distintos por whitespace)
         const clidT    = (r.clid    || "").trim();
         const partnerT = (r.partner || "").trim();
-        const kamT     = (r.kam     || "").trim();
+        const kamT     = normKamValor(r.kam);
         STATE.CLID_MAP[clidT] = partnerT;
         STATE.KAM_MAP[clidT]  = kamT;
         STATE.CLID_IS_FLEET[clidT]  = r.is_fleet === true;
@@ -3017,7 +3017,8 @@ export function _buildPartnerKAM(kamDeFilas) {
   // Fallback SOLO para partners que no están en `partners` (los 16 CLIDs sueltos
   // de producción): ahí el kam de la fila es la única información que hay.
   (kamDeFilas || new Map()).forEach((kam, partner) => {
-    if (!map.has(partner) && kam) map.set(partner, kam);
+    const kn = normKamValor(kam);
+    if (!map.has(partner) && kn) map.set(partner, kn);
   });
   return map;
 }

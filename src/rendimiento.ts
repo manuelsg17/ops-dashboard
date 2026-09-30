@@ -4,7 +4,7 @@
 // Núcleo de cálculo compartido (ver domain/metrics.ts).
 import { ratio, tasaAcum, sumarTasa, leerTasa } from "./domain/metrics.js";
 import { sliceEscala, datasetLinea } from "./shared/escala.js";
-import { SIN_KAM } from "./core/config.js";
+import { SIN_KAM, normKamValor } from "./core/config.js";
 import { t, kamLabel, mesLabel, getLang } from "./core/i18n";
 import { dn } from "./shared/huella";
 import { particionarPorKam, ordenarKams } from "./domain/desgloseKam";
@@ -22,6 +22,7 @@ import { opcionesMesMeta, mesNumero } from "./domain/mesesMeta";
 import { esMesEnCurso } from "./domain/mesEnCurso";
 import { flujoTotal } from "./domain/flujoConductores";
 import { calcularBrecha } from "./domain/brechaMeta";
+import { generarAccionables } from "./domain/accionables";
 
 // ── LÍNEA DE NEGOCIO (Agregador / Fleet / TukTuk / Combinado) ─────────────────
 // Localizado a Rendimiento: NO muta STATE.rawData (el agregador queda intacto para
@@ -77,7 +78,7 @@ export function _lineSelHas(selSet, sidebarSet, partner) {
 // aparecían en el total del país sin pertenecer a nadie.
 export function _lineKamOf(row) {
   const k = (typeof getKAMForPartner === "function" && getKAMForPartner(row.partner)) || "";
-  return k || (row.kam || "").trim() || SIN_KAM;
+  return k || normKamValor(row.kam) || SIN_KAM;
 }
 
 // Filas de la línea filtradas por ciudad/fecha/partner/KAM (espeja getFiltered()).
@@ -179,6 +180,10 @@ function _rdKamVar(kam) {
   return i >= 0 ? `var(--cat-${i + 1})` : "var(--cat-other)";
 }
 // Punto de color (dato, no decoración): el color viene de datos/tokens.
+// Horas de conexión siempre enteras: fmt() conserva 2 decimales debajo de
+// 10,000 (pensado para tasas) y en diario o cuentas chicas salía "7,473.47".
+const _fmtH = v => fmt(Math.round(v || 0));
+
 function _rdDot(color) {
   return `<span class="rd-dot" style="background:${escapeHTML(color)}" aria-hidden="true"></span>`;
 }
@@ -326,8 +331,12 @@ export function _rendMetaMes(line, lastDate, over = null) {
     return null;
   }
   if (!res || res.sinMetas) return null;
-  const kpis = res.kpis || {};
+  let kpis = res.kpis || {};
   if (!Object.values(kpis).some(k => k && k.meta != null && k.meta > 0)) return null;
+  // Diario: el AD de UN día contra la meta MENSUAL (conductores del mes) no se
+  // compara — daba "no llega · faltan 24,788" (30-sep-2026). N+R y Horas sí
+  // acumulan dentro del mes, así que siguen.
+  if (STATE.curMode === "diario" && kpis.ad) kpis = { ...kpis, ad: { ...kpis.ad, actual: null, pct: null, proj: null, pctProj: null, noComparable: true } };
   // Nombre del mes con la mayúscula natural de cada idioma dentro de una frase
   // ("septiembre" / "September" / "сентябрь"); sin Intl, el de mesLabel.
   let mesTxt = mesLabel(op.mes);
@@ -354,6 +363,7 @@ function _rdGoal(info, id) {
   if (!info) return undefined;
   const k = info.kpis[id];
   if (!k || !(k.meta > 0)) return { pct: null, caption: t("rd.meta.sinMetaDe", { m: info.mesTxt }) };
+  if (k.noComparable) return { pct: null, caption: t("ds.ad.diario", { n: k.F(k.meta) }) };
   if (k.actual == null || k.pct == null || !Number.isFinite(k.pct))
     return { pct: null, caption: t("rd.meta.soloMeta", { m: info.mesTxt, n: k.F(k.meta) }) };
   const tipo = _RD_META_TIPO[id] || "mes";
@@ -682,11 +692,11 @@ export function _renderRendImpl() {
     cities: citiesWithData,
     byDate: citiesWithData.map(c => aggCityDatec(filteredByCity[c], c))
   };
+  const metaCiudad = {};
   if (ciudades.length) {
     html += _rdSec(t("rend.ciudad.titulo"), mesParcial
       ? t("rd.ciudad.subVs", { p: periodLabel, v: _rdPrevLbl() })
       : t("rd.ciudad.sub", { p: periodLabel }));
-    const metaCiudad = {};
     if (metaInfo) ciudades.forEach(c => { metaCiudad[c.city] = _dsMetaGrupo(line, lastDate, { city: c.city }); });
     html += _rdCiudadTiles(ciudades, _rdCiudadData, metaCiudad);
   }
@@ -699,40 +709,8 @@ export function _renderRendImpl() {
   // Métrica elegible (N+R por defecto — la que más le dice a Manuel si un
   // partner va a crecer; AD en semanal/diario casi no se mueve de un período a
   // otro porque es un nivel, no un acumulado).
-  const movM = _dsGetMovMetric();
-  const movV = r => movM === "nr" ? _dsNR(r) : movM === "sh" ? (r.supplyHours || 0) : (r.activeDrivers || 0);
-  const prevByPartner = new Map();
-  prevRows.forEach(r => prevByPartner.set(r.partner, (prevByPartner.get(r.partner) || 0) + movV(r)));
-  const nowByPartner = new Map();
-  lastRows.forEach(r => nowByPartner.set(r.partner, (nowByPartner.get(r.partner) || 0) + movV(r)));
-  // Unión actual ∪ previo: un partner con base previa y SIN fila esta semana
-  // (churn total, el caso más urgente de llamar) entra a "bajan" con −100% —
-  // antes se iteraba solo lastRows y desaparecer del export lo hacía invisible.
-  const movers = [...new Set([...nowByPartner.keys(), ...prevByPartner.keys()])].map(p => {
-    const now  = nowByPartner.get(p)  || 0;
-    const prev = prevByPartner.get(p) || 0;
-    return { partner: p, now, prev, delta: now - prev,
-             pct: prev > 0 ? ((now - prev) / prev) * 100 : null };
-  }).filter(m => m.pct != null);
-  const suben = movers.slice().sort((a, b) => b.delta - a.delta).filter(m => m.delta > 0).slice(0, 5);
-  const bajan = movers.slice().sort((a, b) => a.delta - b.delta).filter(m => m.delta < 0).slice(0, 5);
-  // "Más lejos de su meta" en la métrica elegida (Combinado/TukTuk).
-  const lejos = [...estados.entries()]
-    .map(([p, e]) => ({ partner: p, falta: e.falta ? e.falta[movM] || 0 : 0, pct: e.eva ? e.eva[movM] : null }))
-    .filter(x => x.falta > 0 && x.pct != null).sort((a, b) => b.falta - a.falta).slice(0, 5);
-  if (suben.length || bajan.length || lejos.length) {
-    const selM = String(segmented({ ariaLabel: t("ds.mov.metricaAria"), act: "dsSetMovMetric", value: movM,
-      options: [{ value: "nr", label: t("metric.nr.short") }, { value: "ad", label: t("metric.ad.short") }, { value: "sh", label: t("metric.sh.short") }] }));
-    html += _rdSec(t("rend.mov.titulo"),
-      t("ds.mov.sub", { m: _dsLblK(movM), d: prevDate ? d2s(prevDate) : t("rend.per.periodoAnterior") }), `<div class="rd-sec__right">${selM}</div>`);
-    html += `<div class="${lejos.length ? "ds-grid-3" : "rd-grid-2"}">
-      ${_rdMovers(t("rd.mov.suben"), "trending-up", "good", suben, "+")}
-      ${_rdMovers(t("rd.mov.bajan"), "trending-down", "bad", bajan, "−")}
-      ${lejos.length ? `<div class="ui-card rd-mov"><div class="rd-mov__head rd-mov__head--warn">${iconSvg("target", { size: 16 })}<span>${escapeHTML(t("ds.mov.lejos", { m: _dsLblK(movM) }))}</span></div>
-        <ul class="rd-mov__list">${lejos.map(x => `<li class="rd-mov__row"><span class="rd-mov__name">${_rdDot(STATE.partnerColors[x.partner] || "var(--cat-other)")}<span>${escapeHTML(x.partner)}</span></span>
-          <span class="rd-mov__abs rd-mov__abs--bad">${escapeHTML(t("ds.mov.faltan", { n: fmt(Math.round(x.falta)) }))}</span><span class="rd-mov__pct">${x.pct.toFixed(1)}%</span></li>`).join("")}</ul></div>` : ""}
-    </div>`;
-  }
+  _dsMovCtx = { lastRows, prevRows, estados, prevDate };
+  html += `<div id="dsMovers">${_dsMoversHTML()}</div>`;
 
   const _m3 = html.length;
   // ── 4. Tendencias ─────────────────────────────────────────────────────────
@@ -750,10 +728,12 @@ export function _renderRendImpl() {
   };
   // Tendencia con la meta DIBUJADA (Desempeño): AD contra el nivel de meta del
   // mes; N+R acumulado del mes contra el ritmo lineal que llega a la meta.
-  const conMetaChart = metaInfo && metaInfo.kpis.ad && metaInfo.kpis.ad.meta > 0;
+  const adMetaOk = !!(metaInfo && metaInfo.kpis.ad && metaInfo.kpis.ad.meta > 0 && !metaInfo.kpis.ad.noComparable);
+  const nrMetaOk = !!(metaInfo && metaInfo.kpis.nr && metaInfo.kpis.nr.meta > 0);
+  const conMetaChart = adMetaOk || nrMetaOk;
   if (conMetaChart) {
     html += _rdSec(t("ds.tend.meta.titulo", { m: metaInfo.mesTxt }), t("ds.tend.meta.sub"));
-    html += `<div class="rd-grid-2">${_rdChart("dsCh_adMeta", t("ds.tend.adMeta"), "AD_vs_meta", t("ds.tend.adMetaPie"))}${_rdChart("dsCh_nrMeta", t("ds.tend.nrMeta"), "NR_vs_meta", t("ds.tend.nrMetaPie"))}</div>`;
+    html += `<div class="rd-grid-2">${adMetaOk ? _rdChart("dsCh_adMeta", t("ds.tend.adMeta"), "AD_vs_meta", t("ds.tend.adMetaPie")) : ""}${nrMetaOk ? _rdChart("dsCh_nrMeta", t("ds.tend.nrMeta"), "NR_vs_meta", t("ds.tend.nrMetaPie")) : ""}</div>`;
   }
   const _m4 = html.length;
   html += _rdSec(t("rend.tend.titulo"), t("rd.tend.sub"));
@@ -797,7 +777,18 @@ export function _renderRendImpl() {
     const suyos = new Set(STATE.KAM_PARTNERS[k] || []);
     metaKam[k] = _dsMetaGrupo(line, lastDate, { kam: k, selected: (metaInfo.filtros.selected || []).filter(p => suyos.has(p)) });
   });
-  html += _rendKamSeccion(apd, lastRows, prevRows, metaInfo ? metaKam : null);
+  if (metaInfo) {
+    // Avance de cada KAM en tarjetas con barras (Manuel, 30-sep: "más visual y
+    // que entienda rápido cuánto va de avance de su meta"); la tabla de
+    // último período y acumulado queda plegada debajo.
+    html += _dsKamAvanceHTML(metaInfo, metaKam, lastRows, estados);
+    html += `<details class="ds-kam-det"><summary>${iconSvg("chevron-down", { size: 14 })}<span>${escapeHTML(t("ds.kamc.detalle"))}</span></summary>${_rendKamSeccion(apd, lastRows, prevRows, null, true)}</details>`;
+  } else {
+    html += _rendKamSeccion(apd, lastRows, prevRows, null);
+  }
+  // Accionables (experimental): se llenan después de buildTable, que arma el
+  // resumen por partner con su historia (declive) y su estado contra la meta.
+  html += `<div id="dsAcc"></div>`;
   {
     const _m7 = html.length;
     const parte = (a, b) => html.slice(a, b);
@@ -832,7 +823,7 @@ export function _renderRendImpl() {
     : "";
   html += _rdSec(t("rend.tabla.titulo"), t("ds.tabla.sub"), leadsNote);
   html += `<div id="dsChips"></div>`;
-  html += `<div class="ui-table-wrap ui-table-wrap--scroll rd-tabla-wrap"><div id="tblContainer"></div></div>`;
+  html += `<div class="ui-table-wrap ui-table-wrap--scroll rd-tabla-wrap rd-tabla-compacta"><div id="tblContainer"></div></div>`;
 
   // ── 9. Tarjetas por Partner ────────────────────────────────────────────────
   html += _rdSec(t("rend.cards.titulo"), t("rend.cards.sub"));
@@ -846,6 +837,8 @@ export function _renderRendImpl() {
   const _chips = document.getElementById("dsChips");
   if (_chips) _chips.innerHTML = _dsChipsEstado();
   buildPartnerCards(apd, lastDate, prevDate, partners, partners);
+  try { _dsPintarAccionables({ flujo, estados, metaInfo, metaCiudad }); }
+  catch (e) { console.warn("[desempeño] accionables", e); }
 
   // ── DIFERIR CHARTS con RAF ─────────────────────────────────────────────────
   // Cada ApexCharts.render() bloquea 30-80ms. Construir 8 en serie congela
@@ -926,7 +919,7 @@ function _rdCiudadTiles(ciudades, serie, metas = null) {
   const rows = ciudades.slice().sort((a, b) => b.ad - a.ad);
   const filas = [
     { k: "nr", l: t("metric.nr.short"), f: fmt,      p: "pnr" },
-    { k: "sh", l: t("metric.sh.short"), f: fmt,      p: "psh" },
+    { k: "sh", l: t("metric.sh.short"), f: _fmtH,    p: "psh" },
     { k: "tr", l: t("metric.tr.short"), f: fmtSmart, p: "ptr" }
   ];
   return `<div class="rd-cities">${rows.map(r => {
@@ -948,7 +941,7 @@ function _rdMovers(titulo, ico, tono, items, signo) {
   const filas = items.length
     ? items.map(m => `<li class="rd-mov__row">
         <span class="rd-mov__name">${_rdDot(STATE.partnerColors[m.partner] || "var(--cat-other)")}<span>${escapeHTML(m.partner)}</span></span>
-        <span class="rd-mov__abs rd-mov__abs--${tono}">${signo}${fmt(Math.abs(m.delta))}</span>
+        <span class="rd-mov__abs rd-mov__abs--${tono}">${signo}${_fmtH(Math.abs(m.delta))}</span>
         <span class="rd-mov__pct">${m.pct >= 0 ? "+" : ""}${m.pct.toFixed(1)}%</span>
       </li>`).join("")
     : `<li class="rd-mov__vacio">${escapeHTML(t("rend.mov.sinMov"))}</li>`;
@@ -970,7 +963,7 @@ function _rdMovers(titulo, ico, tono, items, signo) {
 // el filtro de KAM); rend.pais-kam.<m> cuando el valor o su previo no es cero.
 // El AD del último período es la misma cifra en las dos familias: la celda lleva
 // las dos claves anidadas.
-function _rendKamSeccion(apd, lastRows, prevRows, metaKam = null) {
+function _rendKamSeccion(apd, lastRows, prevRows, metaKam = null, sinTitulo = false) {
   const kamFilterVal = document.getElementById("kamFilter")?.value || "all";
   const kLastBy = particionarPorKam(lastRows, _lineKamOf);
   const kPrevBy = particionarPorKam(prevRows, _lineKamOf);
@@ -1006,9 +999,12 @@ function _rendKamSeccion(apd, lastRows, prevRows, metaKam = null) {
   // Valor y variación en la MISMA celda (la variación va a la derecha de la
   // cifra): con 12 columnas la tabla no entraba al lado del panel de filtros.
   // El data-num va en el <span> de la cifra, no en la celda.
-  let h = _rdSec(t("rend.kam.titulo"), _rdMesPrevCompleto && STATE.curMode === "mensual"
+  let h = sinTitulo ? "" : _rdSec(t("rend.kam.titulo"), _rdMesPrevCompleto && STATE.curMode === "mensual"
     ? t("rd.kam.subVs", { p: _rendPeriodLabel(), v: _rdPrevLbl() })
     : t("rd.kam.sub", { p: _rendPeriodLabel() }));
+  if (sinTitulo) h += `<p class="rd-note ds-kam-det__sub">${escapeHTML(_rdMesPrevCompleto && STATE.curMode === "mensual"
+    ? t("rd.kam.subVs", { p: _rendPeriodLabel(), v: _rdPrevLbl() })
+    : t("rd.kam.sub", { p: _rendPeriodLabel() }))}</p>`;
   h += `<div class="ui-table-wrap rd-tabla-compacta"><table class="ui-table rd-table rd-table--kam">
     <thead>
       <tr class="rd-thgroup"><th></th><th colspan="4" scope="colgroup">${escapeHTML(_rendPeriodLabel())}</th><th colspan="3" scope="colgroup" class="rd-thgroup--acum">${escapeHTML(t("rd.kam.acum"))}</th>${metaKam ? `<th colspan="3" scope="colgroup" class="rd-thgroup--acum">${escapeHTML(t("ds.meta.delMes"))}</th>` : ""}</tr>
@@ -1034,11 +1030,11 @@ function _rendKamSeccion(apd, lastRows, prevRows, metaKam = null) {
       return `<td class="ui-num"><span class="rd-vd">${html}${d ? `<span class="rd-vd__d">${d}</span>` : ""}</span></td>`;
     };
     const ult = (m, f) => r.enSeccion ? `<span${dn("rend", "kam", m, k)}>${f(r[m])}</span>` : f(r[m]);
-    const acu = (m, v, extra = "") => `<td class="ui-num${extra}"${r.pais[m] ? dn("rend", "pais-kam", m, k) : ""}>${fmt(v)}</td>`;
+    const acu = (m, v, extra = "") => `<td class="ui-num${extra}"${r.pais[m] ? dn("rend", "pais-kam", m, k) : ""}>${m === "sh" ? _fmtH(v) : fmt(v)}</td>`;
     h += `<tr><th scope="row" class="rd-rowhead">${_rdDot(_rdKamVar(k))}${escapeHTML(kamLabel(k))}</th>
       ${conD(adCell, "ad", "pad")}
       ${conD(ult("nr", fmt), "nr", "pnr")}
-      ${conD(ult("sh", fmt), "sh", "psh")}
+      ${conD(ult("sh", _fmtH), "sh", "psh")}
       ${conD(ult("tr", fmtSmart), "tr", "ptr")}
       ${acu("nr", r.anr, " rd-acum")}${acu("sh", r.ash)}${acu("tr", r.atr)}
       ${metaKam ? _DS_K3.map((m, i) => { const x = metaKam[k] && metaKam[k][m];
@@ -1090,7 +1086,9 @@ export function buildTable(apd, lastDate, prevDate, sel) {
     const rows = (apdByPartner.get(p) || []).slice().sort((a, b) => a.date.localeCompare(b.date));
     return {
       partner:      p,
-      kam:          (l[0] || {}).kam || "",
+      kam:          _lineKamOf(l[0] || { partner: p }),
+      re:           sumR(l,  r => r.reactivated),
+      pre:          sumR(pr, r => r.reactivated),
       ad:           sumR(l,  r => r.activeDrivers),
       nr:           sumR(l,  r => r.newPartner + r.newService + r.reactivated),
       sh:           sumR(l,  r => r.supplyHours),
@@ -1118,10 +1116,10 @@ export function buildTable(apd, lastDate, prevDate, sel) {
 // Columnas ordenables de la tabla de partners. sortTbl mapea por ÍNDICE de <th>
 // (colKeys): tiene que seguir este mismo orden.
 const _RD_TBL_COLS = [
-  { k: "partner", l: () => t("rend.col.partner") },   { k: "kam", l: () => t("sidebar.kam") },
-  { k: "ad", l: () => t("metric.ad.short"), num: 1 },  { k: "nr", l: () => t("metric.nr.short"), num: 1 },
-  { k: "sh", l: () => t("metric.sh.short"), num: 1 },  { k: "tr", l: () => t("metric.tr.short"), num: 1 },
-  { k: "co", l: () => t("rend.col.comision"), num: 1 },{ k: "ns", l: () => t("rend.col.leads"), num: 1 },
+  { k: "partner", l: () => t("rend.col.partner") },
+  { k: "ad", l: () => t("ds.col.ad"), tip: () => t("metric.ad.label"), num: 1 },  { k: "nr", l: () => t("ds.col.nr"), tip: () => t("metric.nr.label"), num: 1 },
+  { k: "sh", l: () => t("ds.col.sh"), tip: () => t("metric.sh.label"), num: 1 },  { k: "tr", l: () => t("metric.tr.short"), num: 1 },
+  { k: "co", l: () => t("rend.col.comision"), num: 1 },{ k: "ns", l: () => t("ds.col.leads"), num: 1 },
   { k: "pctPeor", l: () => t("ds.col.meta"), num: 1 }, { k: "ret", l: () => t("ds.col.ret"), num: 1 }
 ];
 function _rdSortAttrs(k) {
@@ -1138,13 +1136,16 @@ export function renderTable() {
     return STATE.tblSort.dir === "asc" ? va - vb : vb - va;
   });
 
-  let h = `<table class="ui-table ui-table--sticky-first rd-table rd-table--partners"><thead><tr>`;
+  // Todo a la vista sin scroll horizontal (Manuel, 30-sep: "un head no va a
+  // scrollear a la derecha"): el KAM va debajo del nombre y la variación debajo
+  // de cada cifra, en vez de columnas propias.
+  let h = `<table class="ui-table rd-table rd-table--partners"><thead><tr>`;
   _RD_TBL_COLS.forEach(c => {
     const s = _rdSortAttrs(c.k);
-    h += `<th scope="col" class="rd-sortable${c.num ? " ui-num" : ""}${s.cls ? " " + s.cls : ""}" aria-sort="${s.aria}" data-act="sortTbl" data-act-keydown="sortTblKey" data-col="${escapeHTML(c.k)}" tabindex="0">` +
+    h += `<th scope="col" class="rd-sortable${c.num ? " ui-num" : ""}${s.cls ? " " + s.cls : ""}"${c.tip ? ` title="${escapeHTML(c.tip())}"` : ""} aria-sort="${s.aria}" data-act="sortTbl" data-act-keydown="sortTblKey" data-col="${escapeHTML(c.k)}" tabindex="0">` +
       `<span class="rd-th">${escapeHTML(c.l())}${iconSvg("chevron-down", { size: 12, className: "rd-sort-ico" })}</span></th>`;
   });
-  h += `<th scope="col" class="rd-center">${escapeHTML(t("rd.col.tend"))}</th></tr></thead><tbody>`;
+  h += `</tr></thead><tbody>`;
 
   sorted.forEach(r => {
     const alertBd = r.declineAlert
@@ -1154,17 +1155,15 @@ export function renderTable() {
       ? `<span class="ui-badge ui-badge--info rd-leads-badge" title="${escapeHTML(t("rend.recibeLeads"))}">★ ${fmt(r.ns)}</span>`
       : `<span class="rd-muted">${fmt(r.ns)}</span>`;
     h += `<tr data-partner="${escapeHTML(r.partner)}">
-      <th scope="row" class="rd-rowhead">${_rdDot(STATE.partnerColors[r.partner] || "var(--cat-other)")}${alertBd}<span>${escapeHTML(r.partner)}</span></th>
-      <td class="rd-kamcell">${_rdDot(_rdKamVar(r.kam))}${escapeHTML(kamLabel(r.kam))}</td>
-      <td class="ui-num"><span class="rd-vd"><span${dn("rend", "tabla", "ad", r.partner)}>${fmt(r.ad)}</span><span class="rd-vd__d">${_rdDelta(r.ad, r.pad)}</span></span></td>
-      <td class="ui-num"><span class="rd-vd"><span${dn("rend", "tabla", "nr", r.partner)}>${fmt(r.nr)}</span><span class="rd-vd__d">${_rdDelta(r.nr, r.pnr)}</span></span></td>
-      <td class="ui-num"><span class="rd-vd"><span${dn("rend", "tabla", "sh", r.partner)}>${fmt(r.sh)}</span><span class="rd-vd__d">${_rdDelta(r.sh, r.psh)}</span></span></td>
-      <td class="ui-num"><span class="rd-vd"><span${dn("rend", "tabla", "tr", r.partner)}>${fmtSmart(r.tr)}</span><span class="rd-vd__d">${_rdDelta(r.tr, r.ptr)}</span></span></td>
+      <th scope="row" class="rd-rowhead rd-pcell"><span class="rd-pcell__n">${_rdDot(STATE.partnerColors[r.partner] || "var(--cat-other)")}${alertBd}<span>${escapeHTML(r.partner)}</span></span><span class="rd-pcell__kam">${_rdDot(_rdKamVar(r.kam))}${escapeHTML(kamLabel(r.kam))}<span class="rd-pcell__tend">${_rdTrend(r.adSerie || [])}</span></span></th>
+      <td class="ui-num"><span class="rd-vd rd-vd--stack"><span${dn("rend", "tabla", "ad", r.partner)}>${fmt(r.ad)}</span><span class="rd-vd__d">${_rdDelta(r.ad, r.pad)}</span></span></td>
+      <td class="ui-num"><span class="rd-vd rd-vd--stack"><span${dn("rend", "tabla", "nr", r.partner)}>${fmt(r.nr)}</span><span class="rd-vd__d">${_rdDelta(r.nr, r.pnr)}</span></span></td>
+      <td class="ui-num"><span class="rd-vd rd-vd--stack"><span${dn("rend", "tabla", "sh", r.partner)}>${_fmtH(r.sh)}</span><span class="rd-vd__d">${_rdDelta(r.sh, r.psh)}</span></span></td>
+      <td class="ui-num"><span class="rd-vd rd-vd--stack"><span${dn("rend", "tabla", "tr", r.partner)}>${fmtSmart(r.tr)}</span><span class="rd-vd__d">${_rdDelta(r.tr, r.ptr)}</span></span></td>
       <td class="ui-num"${dn("rend", "tabla", "co", r.partner)}>${fmtK(r.co)}</td>
       <td class="ui-num"${dn("rend", "tabla", "ns", r.partner)}>${nsCell}</td>
       <td class="ui-num">${_dsEstadoCelda(r)}</td>
       <td class="ui-num"${r.ret >= 0 ? dn("ds", "tabla", "ret", r.partner) : ""}>${r.ret >= 0 ? `${(r.ret * 100).toFixed(1)}%<small class="ds-perd">−${fmt(r.perdidos)}</small>` : `<span class="rd-muted">—</span>`}</td>
-      <td class="rd-center">${_rdTrend(r.adSerie || [])}</td>
     </tr>`;
   });
   h += `</tbody></table>`;
@@ -1247,7 +1246,7 @@ export function buildPartnerCards(apd, lastDate, prevDate, partners, sel) {
     // KAM efectivo (misma precedencia que el resto de la vista), no el que
     // traía la fila del Excel.
     const kam     = _lineKamOf(rows[rows.length - 1]);
-    const v       = k => last ? fmt(last[k]) : "—";
+    const v       = k => last ? (k === "supplyHours" ? _fmtH(last[k]) : fmt(last[k])) : "—";
     const cur     = k => last ? last[k] : null;
 
     const lastNR = last ? last.newPartner + last.newService + last.reactivated : null;
@@ -1659,7 +1658,8 @@ registerActions({
   sortTblKey:        (d, _el, e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); sortTbl(d.col); } },
   dlChart:           d => dlChart(d.chart, d.name),
   dsSetEstado:       d => dsSetEstado(d.value),
-  dsSetMovMetric:    d => dsSetMovMetric(d.value)
+  dsSetMovMetric:    d => dsSetMovMetric(d.value),
+  dsSetAccTab:       d => dsSetAccTab(d.value)
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1697,6 +1697,220 @@ function _dsBar(p, pp) {
     `<div class="ui-progress__bar" style="width:${w(p)}%"></div></div>`;
 }
 
+// ── Quién se movió (se repinta EN SU LUGAR al cambiar la métrica) ───────────
+// Antes el selector llamaba a renderRend(): se destruía y rearmaba toda la vista
+// (gráficos incluidos), la página se achicaba un instante y el navegador
+// saltaba hacia arriba (Manuel, 30-sep). Ahora solo cambia este bloque.
+let _dsMovCtx = null;
+function _dsMoversHTML() {
+  const c = _dsMovCtx;
+  if (!c) return "";
+  const { lastRows, prevRows, estados, prevDate } = c;
+  const movM = _dsMovMetric;
+  const movV = r => movM === "nr" ? _dsNR(r) : movM === "sh" ? (r.supplyHours || 0) : (r.activeDrivers || 0);
+  const prevByPartner = new Map();
+  prevRows.forEach(r => prevByPartner.set(r.partner, (prevByPartner.get(r.partner) || 0) + movV(r)));
+  const nowByPartner = new Map();
+  lastRows.forEach(r => nowByPartner.set(r.partner, (nowByPartner.get(r.partner) || 0) + movV(r)));
+  // Unión actual ∪ previo: un partner con base previa y SIN fila esta semana
+  // (churn total, el caso más urgente de llamar) entra a "bajan" con −100%.
+  const movers = [...new Set([...nowByPartner.keys(), ...prevByPartner.keys()])].map(p => {
+    const now  = nowByPartner.get(p)  || 0;
+    const prev = prevByPartner.get(p) || 0;
+    return { partner: p, now, prev, delta: now - prev, pct: prev > 0 ? ((now - prev) / prev) * 100 : null };
+  }).filter(m => m.pct != null);
+  const suben = movers.slice().sort((a, b) => b.delta - a.delta).filter(m => m.delta > 0).slice(0, 5);
+  const bajan = movers.slice().sort((a, b) => a.delta - b.delta).filter(m => m.delta < 0).slice(0, 5);
+  // "Más atrasados a la fecha" en la métrica elegida (Combinado/TukTuk).
+  const lejos = [...estados.entries()]
+    .map(([p, e]) => ({ partner: p, falta: e.falta ? e.falta[movM] || 0 : 0, pct: e.eva ? e.eva[movM] : null }))
+    .filter(x => x.falta > 0 && x.pct != null).sort((a, b) => b.falta - a.falta).slice(0, 5);
+  if (!suben.length && !bajan.length && !lejos.length) return "";
+  const selM = String(segmented({ ariaLabel: t("ds.mov.metricaAria"), act: "dsSetMovMetric", value: movM,
+    options: [{ value: "nr", label: t("metric.nr.short") }, { value: "ad", label: t("metric.ad.short") }, { value: "sh", label: t("metric.sh.short") }] }));
+  return _rdSec(t("rend.mov.titulo"),
+    t("ds.mov.sub", { m: _dsLblK(movM), d: prevDate ? d2s(prevDate) : t("rend.per.periodoAnterior") }), `<div class="rd-sec__right">${selM}</div>`) +
+    `<div class="${lejos.length ? "ds-grid-3" : "rd-grid-2"}">
+      ${_rdMovers(t("rd.mov.suben"), "trending-up", "good", suben, "+")}
+      ${_rdMovers(t("rd.mov.bajan"), "trending-down", "bad", bajan, "−")}
+      ${lejos.length ? `<div class="ui-card rd-mov"><div class="rd-mov__head rd-mov__head--warn">${iconSvg("target", { size: 16 })}<span>${escapeHTML(t("ds.mov.lejos", { m: _dsLblK(movM) }))}</span></div>
+        <ul class="rd-mov__list">${lejos.map(x => `<li class="rd-mov__row"><span class="rd-mov__name">${_rdDot(STATE.partnerColors[x.partner] || "var(--cat-other)")}<span>${escapeHTML(x.partner)}</span></span>
+          <span class="rd-mov__abs rd-mov__abs--bad">${escapeHTML(t("ds.mov.faltan", { n: _fmtH(x.falta) }))}</span><span class="rd-mov__pct">${x.pct.toFixed(1)}%</span></li>`).join("")}</ul></div>` : ""}
+    </div>`;
+}
+
+// ── Avance por KAM: una tarjeta con barras por KPI ──────────────────────────
+// Barra = avance del mes (actual / meta). Sombra = proyección al cierre (la
+// MISMA de Metas). Marca = dónde debería ir hoy si avanzara parejo (solo flujos;
+// AD es un nivel). El COLOR sale de lo que se espera al cierre (proyección, o
+// el ritmo lineal sin proyección): a mitad de mes el acumulado contra la meta
+// entera pintaba todo de rojo aunque el KAM fuera en camino.
+function _dsEvalKpi(x, k, frac, proyOn) {
+  if (!x || x.pct == null || !Number.isFinite(x.pct)) return null;
+  if (proyOn && x.projPct != null && Number.isFinite(x.projPct)) return x.projPct;
+  return k !== "ad" && frac > 0 && frac < 1 ? x.pct / frac : x.pct;
+}
+const _dsEstadoDe = v => v == null ? null : v >= 100 ? "sobre" : v >= 95 ? "camino" : v >= 80 ? "riesgo" : "atrasado";
+const _DS_KC_TONO = { sobre: "over", camino: "ok", riesgo: "warn", atrasado: "bad" };
+const _DS_KC_EST = { sobre: "ds.kamc.est.sobre", camino: "ds.kamc.est.camino", riesgo: "ds.kamc.est.riesgo", atrasado: "ds.kamc.est.atrasado" };
+function _dsKamAvanceHTML(info, metaKam, lastRows, estados) {
+  const dm = diasMesReporteDe(STATE, info.mesDates[info.mesDates.length - 1], parseLocalDate);
+  const frac = dm.daysInMonth ? Math.min(dm.daysElapsed / dm.daysInMonth, 1) : 1;
+  const enCurso = info.proyOn && frac < 1;
+  const kamF = document.getElementById("kamFilter")?.value || "all";
+  const conFilas = new Set(lastRows.map(r => _lineKamOf(r)));
+  // Partners con meta y cuántos van bajo meta, por KAM.
+  const porKam = new Map();
+  estados.forEach((e, p) => {
+    if (!e || e.estado === "sin") return;
+    const k = _lineKamOf({ partner: p });
+    const o = porKam.get(k) || { n: 0, bajo: 0 };
+    o.n++; if (e.estado === "bajo") o.bajo++;
+    porKam.set(k, o);
+  });
+  const cards = Object.keys(metaKam).filter(k => metaKam[k] && conFilas.has(k) && (kamF === "all" || kamF === k)).map(k => {
+    const m = metaKam[k];
+    const ev = {};
+    _DS_K3.forEach(id => { ev[id] = m[id] && m[id].noComparable ? null : _dsEvalKpi(m[id], id, frac, info.proyOn); });
+    const vals = _DS_K3.map(id => ev[id]).filter(v => v != null);
+    const peor = vals.length ? Math.min(...vals) : null;
+    return { k, m, ev, peor, est: _dsEstadoDe(peor) };
+  });
+  if (!cards.length) return "";
+  cards.sort((a, b) => (a.k === SIN_KAM) - (b.k === SIN_KAM) || (a.peor ?? 1e9) - (b.peor ?? 1e9) || a.k.localeCompare(b.k));
+  const w = v => Math.max(0, Math.min(100, v || 0)).toFixed(1);
+  const fila = (k, id, x, ev) => {
+    if (!x || x.noComparable) return `<div class="ds-kc__row ds-kc__row--vacia"><span class="ds-kc__k">${escapeHTML(_dsLblK(id))}</span><span class="rd-muted">${escapeHTML(t(x ? "ds.ad.diarioCorto" : "ds.kamc.sinMeta"))}</span></div>`;
+    const tono = _DS_KC_TONO[_dsEstadoDe(ev)] || "neutral";
+    const marca = enCurso && id !== "ad" ? `<span class="ds-kc__tick" style="left:${w(frac * 100)}%" title="${escapeHTML(t("ds.kamc.hoy", { p: (frac * 100).toFixed(0) }))}"></span>` : "";
+    const proj = x.projPct != null && Number.isFinite(x.projPct) && info.proyOn
+      ? `<span class="ds-kc__proj" style="width:${w(x.projPct)}%"></span>` : "";
+    // El % grande es el avance real (neutro); el color va en lo que se espera
+    // al cierre, que es el veredicto — un 70% morado se leía como "sobre meta".
+    const projTxt = x.projPct != null && Number.isFinite(x.projPct) && info.proyOn
+      ? `<small class="ds-pct--${tono}">${escapeHTML(t("ds.kamc.proy", { p: x.projPct.toFixed(0) + "%" }))}</small>` : "";
+    return `<div class="ds-kc__row" title="${escapeHTML(t("ds.meta.tip", { a: x.F(x.actual), m: x.F(x.meta) }))}">
+      <div class="ds-kc__lbl"><span class="ds-kc__k">${escapeHTML(_dsLblK(id))}</span><span class="ds-kc__nums">${escapeHTML(x.F(x.actual))} <span>/ ${escapeHTML(x.F(x.meta))}</span></span></div>
+      <div class="ds-kc__track ds-kc__track--${tono}">${proj}<span class="ds-kc__fill" style="width:${w(x.pct)}%"></span>${marca}</div>
+      <div class="ds-kc__pct"><span class="ds-pct"${dn("ds", "kam", k, id, "pct")}>${x.pct.toFixed(1)}%</span>${projTxt}</div>
+    </div>`;
+  };
+  const leyenda = t(info.proyOn ? "ds.kamc.leyenda" : "ds.kamc.leyendaSinProy");
+  let h = _rdSec(t("rend.kam.titulo"), t("ds.kamc.sub", { m: info.mesTxt }));
+  h += `<p class="rd-note ds-kc-leyenda"><span class="ds-kc-ley ds-kc-ley--fill"></span>${escapeHTML(t("ds.kamc.ley.avance"))}` +
+    (info.proyOn ? `<span class="ds-kc-ley ds-kc-ley--proj"></span>${escapeHTML(t("ds.kamc.ley.proy"))}` : "") +
+    (enCurso ? `<span class="ds-kc-ley ds-kc-ley--tick"></span>${escapeHTML(t("ds.kamc.ley.hoy", { p: (frac * 100).toFixed(0) }))}` : "") +
+    `<span class="ds-kc-leyenda__txt">${escapeHTML(leyenda)}</span></p>`;
+  h += `<div class="ds-kcs">${cards.map(c => {
+    const pk = porKam.get(c.k);
+    const tono = _DS_KC_TONO[c.est] || "neutral";
+    return `<div class="ds-kc ds-kc--${tono}">
+      <div class="ds-kc__head"><span class="ds-kc__name">${_rdDot(_rdKamVar(c.k))}${escapeHTML(kamLabel(c.k))}</span>
+        ${c.est ? `<span class="ds-estado ds-estado--${tono}">${escapeHTML(t(_DS_KC_EST[c.est]))}</span>` : ""}</div>
+      ${pk ? `<div class="ds-kc__sub">${escapeHTML(t(pk.bajo ? "ds.kamc.partnersBajo" : "ds.kamc.partners", { n: pk.n, b: pk.bajo }))}</div>` : ""}
+      <div class="ds-kc__rows">${_DS_K3.map(id => fila(c.k, id, c.m[id], c.ev[id])).join("")}</div>
+    </div>`;
+  }).join("")}</div>`;
+  return h;
+}
+
+// ── Accionables (EXPERIMENTAL) ──────────────────────────────────────────────
+// Reglas de domain/accionables.ts sobre lo que ya calculó la vista: resumen por
+// partner (buildTable), estado contra la meta, flujo y metas por ciudad.
+let _dsAccTab = "mercado";
+const _DS_ACC_TXT = {
+  brecha_nr: ["ds.acc.brecha_nr.t", "ds.acc.brecha_nr.a"],
+  fuga: ["ds.acc.fuga.t", "ds.acc.fuga.a"],
+  reactivar: ["ds.acc.reactivar.t", "ds.acc.reactivar.a"],
+  sin_leads: ["ds.acc.sin_leads.t", "ds.acc.sin_leads.a"],
+  declive: ["ds.acc.declive.t", "ds.acc.declive.a"],
+  horas: ["ds.acc.horas.t", "ds.acc.horas.a"],
+  replicar: ["ds.acc.replicar.t", "ds.acc.replicar.a"],
+  kam_concentracion: ["ds.acc.kam_concentracion.t", "ds.acc.kam_concentracion.a"],
+  kam_brecha: ["ds.acc.kam_brecha.t", "ds.acc.kam_brecha.a"],
+  kam_retencion: ["ds.acc.kam_retencion.t", "ds.acc.kam_retencion.a"],
+  kam_reactivar: ["ds.acc.kam_reactivar.t", "ds.acc.kam_reactivar.a"],
+  re_cae: ["ds.acc.re_cae.t", "ds.acc.re_cae.a"],
+  base_cae: ["ds.acc.base_cae.t", "ds.acc.base_cae.a"],
+  ret_cae: ["ds.acc.ret_cae.t", "ds.acc.ret_cae.a"],
+  ciudad_brecha: ["ds.acc.ciudad_brecha.t", "ds.acc.ciudad_brecha.a"],
+  depende_react: ["ds.acc.depende_react.t", "ds.acc.depende_react.a"],
+};
+const _DS_ACC_PRIO = { alta: "ds.acc.prio.alta", media: "ds.acc.prio.media" };
+function _dsAccTexto(a) {
+  const pr = { ...a.params, sujeto: a.nivel === "mercado" && a.tipo === "ciudad_brecha" ? cityLabel(a.sujeto) : a.sujeto };
+  Object.keys(pr).forEach(k => { if (typeof pr[k] === "number" && !["pct", "ret", "retPais", "retPrev", "tasa", "tasaPais", "caida", "crec", "hNow", "hPrev", "share"].includes(k)) pr[k] = fmt(pr[k]); });
+  const k = _DS_ACC_TXT[a.tipo];
+  return k ? { tit: t(k[0], pr), acc: t(k[1], pr) } : { tit: a.tipo, acc: "" };
+}
+function _dsAccLista(items, conSujeto) {
+  if (!items.length) return `<p class="ds-acc__vacio">${escapeHTML(t("ds.acc.vacio"))}</p>`;
+  return `<ul class="ds-acc__list">${items.map(a => {
+    const x = _dsAccTexto(a);
+    const suj = conSujeto && a.sujeto ? `<span class="ds-acc__suj">${a.nivel === "partner" ? _rdDot(STATE.partnerColors[a.sujeto] || "var(--cat-other)") : _rdDot(_rdKamVar(a.sujeto))}${escapeHTML(a.nivel === "kam" ? kamLabel(a.sujeto) : a.sujeto)}${a.nivel === "partner" && a.kam ? `<small>${escapeHTML(kamLabel(a.kam))}</small>` : ""}</span>` : "";
+    return `<li class="ds-acc__it ds-acc__it--${a.prioridad}">
+      <span class="ds-acc__prio" title="${escapeHTML(t(_DS_ACC_PRIO[a.prioridad] || "ds.acc.prio.media"))}"></span>
+      <div class="ds-acc__body">${suj}<div class="ds-acc__t">${escapeHTML(x.tit)}</div><div class="ds-acc__a">${iconSvg("chevron-right", { size: 13 })}<span>${escapeHTML(x.acc)}</span></div></div>
+    </li>`;
+  }).join("")}</ul>`;
+}
+function _dsPintarAccionables({ flujo, estados, metaInfo, metaCiudad }) {
+  const el = document.getElementById("dsAcc");
+  if (!el) return;
+  const diario = STATE.curMode === "diario";
+  let frac = 1, semRest = 1, semTrans = 1;
+  if (metaInfo) {
+    const dm = diasMesReporteDe(STATE, metaInfo.mesDates[metaInfo.mesDates.length - 1], parseLocalDate);
+    frac = dm.daysInMonth ? Math.min(dm.daysElapsed / dm.daysInMonth, 1) : 1;
+    semRest = Math.max((dm.daysRemaining || 0) / 7, 1);
+    semTrans = Math.max((dm.daysElapsed || 0) / 7, 1);
+  }
+  const partnersIn = (STATE.curSummaries || []).map(r => {
+    const e = estados.get(r.partner);
+    return {
+      partner: r.partner, kam: r.kam, ad: r.ad, pad: r.pad, nr: r.nr, pnr: r.pnr, re: r.re || 0, pre: r.pre || 0,
+      sh: r.sh, psh: r.psh, ns: r.ns, perdidos: diario ? 0 : r.perdidos || 0,
+      retencion: diario || !(r.ret >= 0) ? null : r.ret,
+      eva: e && e.eva ? e.eva : null, declive: !!r.declineAlert,
+      nrMeta: e && e.res && e.res.nr && e.res.nr.meta > 0 ? { meta: e.res.nr.meta, actual: e.res.nr.actual || 0 } : null
+    };
+  });
+  const F = flujo && flujo.actual;
+  const ciudades = Object.entries(metaCiudad || {}).map(([city, m]) => {
+    const x = m && m.nr;
+    if (!x) return { city, evaNr: null, faltaNr: null };
+    return { city, evaNr: _dsEvalKpi(x, "nr", frac, metaInfo && metaInfo.proyOn),
+      faltaNr: Math.max(x.meta * (metaInfo && metaInfo.proyOn && frac < 1 ? frac : 1) - (x.actual || 0), 0) };
+  });
+  const r = generarAccionables({
+    partners: partnersIn, semanasRestantes: semRest, semanasTranscurridas: semTrans,
+    mercado: {
+      retencion: diario || !F ? null : F.retencion,
+      retencionPrev: diario || !flujo.anterior ? null : flujo.anterior.retencion,
+      entran: diario || !F ? 0 : F.ganados + F.volvieron, perdidos: diario || !F ? 0 : F.perdidos,
+      serieRe: diario || !flujo ? [] : flujo.serie.map(x => x.reactivados), ciudades
+    }
+  });
+  const listas = { mercado: r.mercado.slice(0, 6), kam: r.kam.slice(0, 6), partner: r.partner.slice(0, 10) };
+  if (!listas.mercado.length && !listas.kam.length && !listas.partner.length) { el.innerHTML = ""; return; }
+  if (!listas[_dsAccTab].length) _dsAccTab = ["mercado", "kam", "partner"].find(k => listas[k].length);
+  const tabs = String(segmented({ ariaLabel: t("ds.acc.aria"), act: "dsSetAccTab", value: _dsAccTab,
+    options: [["mercado", "ds.acc.tab.mercado"], ["kam", "ds.acc.tab.kam"], ["partner", "ds.acc.tab.partner"]]
+      .map(([v, k]) => ({ value: v, label: `${t(k)} · ${listas[v].length}` })) }));
+  el.innerHTML = _rdSec(t("ds.acc.titulo"), t("ds.acc.sub"),
+      `<div class="rd-sec__right ds-acc__right"><span class="ds-acc__badge">${iconSvg("lightbulb", { size: 12 })}${escapeHTML(t("ds.acc.exp"))}</span>${tabs}</div>`) +
+    `<div class="ui-card ds-acc">` +
+    ["mercado", "kam", "partner"].map(k => `<div class="ds-acc__panel" data-acc="${k}"${k === _dsAccTab ? "" : " hidden"}>${_dsAccLista(listas[k], k !== "mercado")}</div>`).join("") +
+    (diario ? `<p class="rd-note">${iconSvg("info", { size: 14 })}<span>${escapeHTML(t("ds.acc.diario"))}</span></p>` : "") +
+    `</div>`;
+}
+export function dsSetAccTab(v) {
+  if (!["mercado", "kam", "partner"].includes(v)) return;
+  _dsAccTab = v;
+  document.querySelectorAll('#dsAcc [data-act="dsSetAccTab"]').forEach(b => b.setAttribute("aria-pressed", String(b.getAttribute("data-value") === v)));
+  document.querySelectorAll("#dsAcc .ds-acc__panel").forEach(p => { p.hidden = p.getAttribute("data-acc") !== v; });
+}
+
 // ── Franja "¿Llegamos a la meta?" ────────────────────────────────────────────
 export function _dsLlegamos(info, lastDate) {
   if (!info) return "";
@@ -1708,6 +1922,10 @@ export function _dsLlegamos(info, lastDate) {
   const out = {};
   _DS_K3.forEach(k => {
     const x = info.kpis[k];
+    if (x && x.noComparable) {
+      out[k] = `<div class="ds-gap ds-gap--neutral"><div class="ds-gap__big">${escapeHTML(t("ds.ad.diario", { n: (x.F || fmt)(x.meta) }))}</div></div>`;
+      return;
+    }
     if (!x || !(x.meta > 0) || x.actual == null) return;
     const b = calcularBrecha({ tipo: k === "ad" ? "nivel" : "flujo", actual: x.actual, meta: x.meta,
       proj: info.proyOn ? x.proj : null, diasTranscurridos: dias.daysElapsed, diasRestantes: dias.daysRemaining });
@@ -1736,8 +1954,8 @@ export function _dsLlegamos(info, lastDate) {
 // Cuentas = partners del alcance (filas de aggPD: una por partner y fecha).
 function _dsCuentas(rowsNow, rowsPrev) {
   const m = new Map();
-  const g = p => { let o = m.get(p); if (!o) { o = { ad: 0, adPrev: 0, nr: 0 }; m.set(p, o); } return o; };
-  rowsNow.forEach(r => { const o = g(r.partner); o.ad += r.activeDrivers || 0; o.nr += _dsNR(r); });
+  const g = p => { let o = m.get(p); if (!o) { o = { ad: 0, adPrev: 0, nr: 0, re: 0 }; m.set(p, o); } return o; };
+  rowsNow.forEach(r => { const o = g(r.partner); o.ad += r.activeDrivers || 0; o.nr += _dsNR(r); o.re += r.reactivated || 0; });
   rowsPrev.forEach(r => { g(r.partner).adPrev += r.activeDrivers || 0; });
   return m;
 }
@@ -1789,11 +2007,12 @@ export function _dsFlujoHTML(F) {
   const ret = v => v == null ? "—" : (v * 100).toFixed(1) + "%";
   const sub = t("ds.flujo.sub", { a: d2s(F.dNow), b: d2s(F.dPrev) });
   let h = _rdSec(t("ds.flujo.titulo"), sub);
+  const pctRe = a.ganados > 0 ? Math.round(a.reactivados / a.ganados * 100) : null;
   h += `<div class="rd-kpis rd-kpis--tiles ds-flujo">
-    ${_dsFlujoTile(t("ds.flujo.ganados"), "+" + fmt(a.ganados), a.ganados, p && p.ganados, t("ds.flujo.ganadosSub"), "ds.flujo.ganados")}
-    ${_dsFlujoTile(t("ds.flujo.volvieron"), "+" + fmt(a.volvieron), a.volvieron, p && p.volvieron, t("ds.flujo.volvieronSub"), "ds.flujo.volvieron")}
+    ${_dsFlujoTile(t("ds.flujo.nuevos"), "+" + fmt(a.nuevos), a.nuevos, p && p.nuevos, t("ds.flujo.nuevosSub"), "ds.flujo.nuevos")}
+    ${_dsFlujoTile(t("ds.flujo.reactivados"), "+" + fmt(a.reactivados), a.reactivados, p && p.reactivados, pctRe == null ? "" : t("ds.flujo.reactivadosSub", { p: pctRe }), "ds.flujo.reactivados")}
     ${_dsFlujoTile(t("ds.flujo.perdidos"), "−" + fmt(a.perdidos), a.perdidos, p && p.perdidos, t("ds.flujo.perdidosSub"), "ds.flujo.perdidos", { invert: true })}
-    ${_dsFlujoTile(t("ds.flujo.neto"), (a.neto >= 0 ? "+" : "−") + fmt(Math.abs(a.neto)), a.neto, null, t(a.neto > 0 ? "ds.flujo.crece" : a.neto < 0 ? "ds.flujo.cae" : "ds.flujo.estable") + " · " + t("ds.flujo.identidad"), "ds.flujo.neto", { cls: a.neto >= 0 ? "ds-neto--up" : "ds-neto--down" })}
+    ${_dsFlujoTile(t("ds.flujo.neto"), (a.neto >= 0 ? "+" : "−") + fmt(Math.abs(a.neto)), a.neto, null, t(a.neto > 0 ? "ds.flujo.crece" : a.neto < 0 ? "ds.flujo.cae" : "ds.flujo.estable") + (a.volvieron > 0 ? " · " + t("ds.flujo.intermit", { n: fmt(a.volvieron) }) : ""), "ds.flujo.neto", { cls: a.neto >= 0 ? "ds-neto--up" : "ds-neto--down" })}
     ${_dsFlujoTile(t("ds.flujo.retencion"), ret(a.retencion), a.retencion, p && p.retencion, t("ds.flujo.retSub", { r: fmt(a.retenidos), b: fmt(a.base) }), "ds.flujo.ret")}
   </div>`;
   // Por KAM: dónde se ganan y dónde se pierden conductores.
@@ -1803,11 +2022,12 @@ export function _dsFlujoHTML(F) {
     .filter(x => x.f.base > 0 || x.f.ganados > 0);
   if (filas.length > 1) {
     h += `<div class="ui-table-wrap rd-tabla-compacta ds-flujo__kam"><table class="ui-table rd-table"><thead><tr>
-      <th scope="col">KAM</th><th scope="col" class="ui-num">${escapeHTML(t("ds.flujo.ganados"))}</th><th scope="col" class="ui-num">${escapeHTML(t("ds.flujo.volvieron"))}</th><th scope="col" class="ui-num">${escapeHTML(t("ds.flujo.perdidos"))}</th>
+      <th scope="col">KAM</th><th scope="col" class="ui-num">${escapeHTML(t("ds.flujo.nuevos"))}</th><th scope="col" class="ui-num">${escapeHTML(t("ds.flujo.reactivados"))}</th><th scope="col" class="ui-num" title="${escapeHTML(t("ds.flujo.volvieronSub"))}">${escapeHTML(t("ds.flujo.volvieron"))}</th><th scope="col" class="ui-num">${escapeHTML(t("ds.flujo.perdidos"))}</th>
       <th scope="col" class="ui-num">${escapeHTML(t("ds.flujo.neto"))}</th><th scope="col" class="ui-num">${escapeHTML(t("ds.flujo.retencion"))}</th></tr></thead><tbody>` +
       filas.map(({ k, f }) => `<tr><th scope="row" class="rd-rowhead">${_rdDot(_rdKamVar(k))}${escapeHTML(kamLabel(k))}</th>
-        <td class="ui-num ds-pos"${dn("ds", "flujo", "kam", "ganados", k)}>+${fmt(f.ganados)}</td>
-        <td class="ui-num ds-pos">+${fmt(f.volvieron)}</td>
+        <td class="ui-num ds-pos"${dn("ds", "flujo", "kam", "nuevos", k)}>+${fmt(f.nuevos)}</td>
+        <td class="ui-num ds-pos"${dn("ds", "flujo", "kam", "reactivados", k)}>+${fmt(f.reactivados)}</td>
+        <td class="ui-num rd-muted">+${fmt(f.volvieron)}</td>
         <td class="ui-num ds-neg"${dn("ds", "flujo", "kam", "perdidos", k)}>−${fmt(f.perdidos)}</td>
         <td class="ui-num ${f.neto >= 0 ? "ds-pos" : "ds-neg"}">${f.neto >= 0 ? "+" : "−"}${fmt(Math.abs(f.neto))}</td>
         <td class="ui-num"${dn("ds", "flujo", "kam", "ret", k)}>${ret(f.retencion)}</td></tr>`).join("") + `</tbody></table></div>`;
@@ -1823,8 +2043,8 @@ export function _dsPintarFlujo(F) {
   const cats = F.serie.map(x => x.date);
   if (document.getElementById("dsCh_flujo"))
     buildLineChart("dsCh_flujo", cats, [
-      { name: t("ds.flujo.ganados"), data: F.serie.map(x => x.ganados) },
-      { name: t("ds.flujo.volvieron"), data: F.serie.map(x => x.volvieron) },
+      { name: t("ds.flujo.nuevos"), data: F.serie.map(x => x.nuevos) },
+      { name: t("ds.flujo.reactivados"), data: F.serie.map(x => x.reactivados) },
       { name: t("ds.flujo.perdidos"), data: F.serie.map(x => x.perdidos) }
     ], [seriesColor(2, tk), seriesColor(4, tk), seriesColor(3, tk)], ESTILO_SUAVE);
   if (document.getElementById("dsCh_ret"))
@@ -1839,6 +2059,7 @@ export function _dsMetaGrupo(line, lastDate, over) {
   const out = {};
   _DS_K3.forEach(k => {
     const x = r.kpis[k];
+    if (x && x.noComparable) { out[k] = { noComparable: true }; return; }
     out[k] = x && x.meta > 0 && x.pct != null ? { pct: x.pct, projPct: x.proj != null && r.proyOn ? x.proj / x.meta * 100 : null, actual: x.actual, meta: x.meta, F: x.F || fmt } : null;
   });
   return out;
@@ -1846,8 +2067,8 @@ export function _dsMetaGrupo(line, lastDate, over) {
 export function _dsMetaFilas(m, numKeyBase) {
   if (!m) return "";
   return `<div class="ds-metarows">${_DS_K3.map(k => {
-    const x = m[k];
-    return `<div class="ds-metarow" title="${x ? escapeHTML(t("ds.meta.tip", { a: x.F(x.actual), m: x.F(x.meta) })) : ""}">
+    const x = m[k] && m[k].noComparable ? null : m[k];
+    return `<div class="ds-metarow" title="${x ? escapeHTML(t("ds.meta.tip", { a: x.F(x.actual), m: x.F(x.meta) })) : m[k] && m[k].noComparable ? escapeHTML(t("ds.ad.diarioCorto")) : ""}">
       <span class="ds-metarow__k">${escapeHTML(_dsLblK(k))}</span>${_dsBar(x ? x.pct : null, x ? x.projPct : null)}${_dsPct(x ? x.pct : null, x ? [numKeyBase, k, "pct"].join(".") : null)}</div>`;
   }).join("")}</div>`;
 }
@@ -1873,8 +2094,9 @@ export function _dsEstadoPorPartner(line, info) {
     // misma de la franja y de Metas): el acumulado a mitad de mes contra la
     // meta del mes entero pintaba "bajo meta" a casi todos. Mes cerrado: el %.
     const pct = {}, eva = {};
+    const diario = STATE.curMode === "diario";
     _DS_K3.forEach(k => {
-      const x = res[k];
+      const x = diario && k === "ad" ? null : res[k];
       pct[k] = x && x.meta > 0 ? x.pct : null;
       // Sin proyección con el mes en curso (Metas no proyecta en diario): el %
       // se lee contra lo esperado a la fecha (ritmo lineal) en los flujos.
@@ -1887,7 +2109,7 @@ export function _dsEstadoPorPartner(line, info) {
     // contra la meta directa.
     const falta = {};
     _DS_K3.forEach(k => {
-      const x = res[k];
+      const x = diario && k === "ad" ? null : res[k];
       if (!x || !(x.meta > 0)) { falta[k] = 0; return; }
       const esperado = k === "ad" || !c.proyOn ? x.meta : x.meta * frac;
       falta[k] = Math.max(esperado - (x.actual || 0), 0);
@@ -1912,8 +2134,11 @@ export function dsSetEstado(v) {
 }
 export function dsSetMovMetric(v) {
   if (!["nr", "ad", "sh"].includes(v)) return;
+  if (_dsMovMetric === v) return;
   _dsMovMetric = v;
-  renderRend();
+  const el = document.getElementById("dsMovers");
+  if (el && _dsMovCtx) el.innerHTML = _dsMoversHTML();
+  else renderRend();
 }
 export const _dsGetFiltroEstado = () => _dsFiltroEstado;
 export const _dsGetMovMetric = () => _dsMovMetric;
@@ -1950,5 +2175,8 @@ function _dsEstadoCelda(r) {
   if (!r.estado) return `<span class="rd-muted">—</span>`;
   const lbl = t({ bajo: "ds.est.bajo", en: "ds.est.en", sobre: "ds.est.sobre", sin: "ds.est.sin" }[r.estado]);
   const tip = r.metaPct ? t("ds.est.tip") + " " + _DS_K3.map(k => `${_dsLblK(k)} ${r.metaPct[k] == null ? "—" : r.metaPct[k].toFixed(1) + "%"}`).join(" · ") : "";
-  return `<span class="ds-estado ds-estado--${_DS_EST_CLS[r.estado]}"${tip ? ` title="${escapeHTML(tip)}"` : ""}>${escapeHTML(lbl)}${r.pctPeor < 9999 ? ` <b${dn("ds", "tabla", "peor", r.partner)}>${r.pctPeor.toFixed(1)}%</b>` : ""}</span>`;
+  // Compacto (la tabla entra sin scroll horizontal): solo el % coloreado; el
+  // estado en palabras va en el tooltip y en los chips de filtro de arriba.
+  const tit = lbl + (tip ? " · " + tip : "");
+  return `<span class="ds-estado ds-estado--${_DS_EST_CLS[r.estado]}" title="${escapeHTML(tit)}">${r.pctPeor < 9999 ? `<b${dn("ds", "tabla", "peor", r.partner)}>${r.pctPeor.toFixed(1)}%</b>` : escapeHTML(lbl)}</span>`;
 }

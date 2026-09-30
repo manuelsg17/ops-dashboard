@@ -66,6 +66,32 @@ Pedido de Manuel: revisar todo (UX/UI, diccionarios, velocidad, bugs, integraci�
     - **Tabla de partners**: delta en TODAS las métricas (antes solo AD, en una columna aparte que se retiró); columnas "Meta del mes" (estado y peor %) y "Retención" (con perdidos); chips de filtro Bajo / En / Sobre / Sin meta.
   - **Estado de un partner** = PROYECCIÓN al cierre contra la meta cuando el mes está en curso (el acumulado a mitad de mes contra la meta entera pintaba "bajo meta" a 50 de 59). Sin proyección (diario), el % se divide por la fracción del mes transcurrida en los flujos.
   - Agregador no tiene la ruta por cuenta en Metas: sin estado por partner (queda "—").
+- **Fase 13 — Desempeño, segunda vuelta (30-sep, EN PRODUCCIÓN, rama `fase13`).** Pedidos de Manuel con capturas de producción.
+  - **Avance por KAM en tarjetas** (`_dsKamAvanceHTML`): pidió "más visual, que entienda rápido cuánto va de avance de su meta". Una tarjeta por KAM con una barra por KPI:
+    - Barra = avance del mes; sombra = proyección al cierre (la MISMA de Metas); marca vertical = dónde debería ir hoy a ritmo parejo (solo flujos, AD es nivel).
+    - El % grande va en color neutro. El color (barra y "→ X% al cierre") sale de lo esperado al cierre (`_dsEvalKpi`: proyección o, sin ella, % ÷ fracción del mes). Antes el acumulado a mitad de mes contra la meta entera pintaba TODO de rojo.
+    - Chip por KAM: Sobre meta (≥100) · En camino (≥95) · En riesgo (≥80) · Atrasado. Se ordenan del más atrasado al mejor, con "No KAM" al final. Muestran "N partners con meta · M bajo meta".
+    - La tabla vieja (último período y acumulado) queda plegada en "Ver detalle por KAM" (`<details>`), sin las columnas de % meta, que ahora están en las tarjetas (mismas claves de huella `ds.kam.<k>.<m>.pct`).
+    - Grilla `auto-fill minmax(320px)`: 2 columnas con el panel de filtros abierto, 3 sin él.
+  - **Accionables (EXPERIMENTAL)**, debajo de Por KAM. Reglas puras en `domain/accionables.ts` (8 tests), con umbrales a la vista en `UMBRAL`. Se ordenan por impacto en conductores. Tres pestañas que alternan en el lugar: Mercado · KAMs · Partners.
+    - Partner: brecha de N+R al cierre (con cuánto falta en el mes, N+R/semana necesarios contra el ritmo actual); fuga (retención ≥3 pp bajo el mercado); reactivación < ½ de la del mercado; sin leads Yango con ≥300 AD; declive (se omite si ya salió por fuga); horas por conductor −8%; "replicar" (N+R +20% sin perder retención). Máximo 2 por partner.
+    - KAM: brecha concentrada (3 partners ≥60% de su brecha al cierre) o dispersa; retención de la cartera; reactivación de la cartera.
+    - Mercado: reactivados cayendo 3 períodos; base que se achica (perdidos > entran); retención que cae; ciudad bajo meta de N+R; dependencia de reactivados (≥55% de lo que entra).
+    - En diario se omiten las reglas de retención y bajas.
+    - Se pintan después de `buildTable` (necesitan `STATE.curSummaries` con declive). Resúmenes por partner suman `re`/`pre` (reactivados).
+  - **Flujo de conductores: "Ganados" se parte en Nuevos + Reactivados.** Manuel: "no me hace sentido no tener reactivados… mis partners crecen gracias a los reactivados". Producción sem. 21-sep: 1,045 nuevos vs 1,510 reactivados (59%).
+    - La columna vieja "Volvieron" NO eran reactivados: son **intermitentes** (faltaron un período sin llegar a contar como reactivados). Se renombró, va en la tabla por KAM y en el pie de "Neto".
+    - `flujoCuenta` acepta `re` y devuelve `nuevos`/`reactivados` (acotados a ganados). La identidad del neto no cambia.
+  - **"Quién se movió" ya no hace saltar la página**: el selector de métrica llamaba a `renderRend()` (se rearmaba toda la vista, se achicaba y el navegador subía). Ahora `_dsMoversHTML()` repinta solo `#dsMovers` con el contexto guardado en `_dsMovCtx`. Verificado: `scrollY` igual antes y después.
+  - **Tabla de partners sin scroll horizontal** ("un head no va a scrollear a la derecha"):
+    - El KAM va debajo del nombre, con la tendencia al lado; la variación va debajo de cada cifra (`rd-vd--stack`).
+    - Encabezados cortos (Activos · N+R · Horas · Leads · % meta) con el nombre largo en `title`. "% meta" muestra solo el % coloreado y el estado en el tooltip.
+    - Mínimo medido: 836 px (entra en 894 px con el panel de filtros abierto a 1440). Se sacaron las columnas KAM y Tendencia (sortTbl mapea por índice: `_RD_TBL_COLS` actualizado).
+  - **Diario**: el AD de UN día contra la meta MENSUAL (conductores del mes) ya no se compara. Daba "no llega · faltan 24,788". `_rendMetaMes` marca `kpis.ad.noComparable` y el ring, "¿llegamos?", las barras por ciudad y KAM, el estado por partner y la gráfica AD contra meta lo respetan ("no se compara en diario"). N+R y Horas siguen (acumulan). Verificado en las 3 escalas sin errores de consola.
+  - **Horas enteras** en Desempeño (`_fmtH`): `fmt` deja 2 decimales debajo de 10,000 ("7,473.47" en diario, "2,175.29" en la captura de Manuel).
+  - **"SIN KAM" literal = sin KAM** (`normKamValor` en `core/config.ts`, 2 tests). La captura mostraba dos grupos, "SIN KAM" (GIAL WAY con `partners.kam = "SIN KAM"`) y "Sin KAM". Se normaliza al cargar `partners` y en todos los fallbacks (`rebuildKAMPartners`, `_buildPartnerKAM`, `_lineKamOf`, `_metasKamDe`). **Cambia cifras visibles**: esos partners pasan al grupo "No KAM".
+  - **Trampa de verificación (nueva)**: mover `.env.local` para el build de producción hace que `vite dev` se reinicie apuntando a PRODUCCIÓN. Una pestaña que recarga en ese hueco muestra el login de producción; ahí un `setSession` con token local falla con "unrecognized JWT kid" (sin efecto, pero confunde). Restaurar el archivo y recargar.
+  - **Ojo, sin tocar**: en SEMANAL el AD del último período (snapshot semanal) también se compara contra una meta MENSUAL (conductores únicos del mes; producción agosto: 47,816 mensual vs ~27,500 semanal). Por eso la tarjeta de Miguel daba 44%. El veredicto de color usa la proyección máx × 1.4 (regla de Manuel), pero el % en sí no es comparable. `rendimiento_mensual` todavía no tiene septiembre (último mes cargado: agosto). Decidir con Manuel si en semanal AD se muestra solo la proyección.
 - **Verificación de Calculadora → Metas (29-sep, local):**
   - La meta que muestra Metas por KAM y por línea coincide exacto con la base (`data-num` contra SQL): Combinado sept (Ana 8,487 · Dario 8,429 · Elena 4,591 · Fabio 3,762) y TukTuk sept (Dario 1,414 · 104,103 · 286, con cobertura "Declarada por: Dario").
   - Diferencias ESPERADAS, no bugs:

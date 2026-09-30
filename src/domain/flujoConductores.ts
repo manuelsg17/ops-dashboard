@@ -16,6 +16,12 @@
 //   neto      = AD(t) − AD(t−1) = ganados + volvieron − perdidos (exacto)
 //   retención = retenidos / AD(t−1), retenidos = min(continúan, AD(t−1))
 //
+// Ganados se parte en NUEVOS y REACTIVADOS (30-sep-2026): los partners crecen
+// sobre todo por reactivación (sem. 21-sep en producción: 1,045 nuevos vs 1,510
+// reactivados) y "ganados" a secas lo escondía. `volvieron` NO son los
+// reactivados: son intermitentes (faltaron un período, sin llegar a contar como
+// reactivados en el reporte) y en semanal suelen ser casi 0.
+//
 // Se calcula POR CUENTA y después se suma: una cuenta que crece con nuevos no
 // puede tapar las bajas de otra. En cada cuenta y en el total se cumple
 // neto = ganados + volvieron − perdidos.
@@ -27,9 +33,14 @@ export interface CuentaFlujo {
   ad: number;
   /** Nuevos + reactivados del período. */
   nr: number;
+  /** Reactivados del período (parte de nr). Sin dato: 0. */
+  re?: number;
 }
 export interface Flujo {
   ganados: number;
+  /** ganados = nuevos + reactivados. */
+  nuevos: number;
+  reactivados: number;
   /** Activos que no estaban el período anterior y no cuentan como N+R. */
   volvieron: number;
   perdidos: number;
@@ -47,19 +58,21 @@ export function flujoCuenta(c: CuentaFlujo): Flujo {
   // N+R no puede superar a los activos del período (dato ruidoso): se acota
   // para que la identidad del neto se mantenga.
   const ganados = Math.min(n(c.nr), ad);
+  const reactivados = Math.min(n(c.re), ganados);
+  const nuevos = ganados - reactivados;
   const continuan = ad - ganados;
   const retenidos = Math.min(continuan, adPrev);
   const perdidos = Math.max(adPrev - continuan, 0);
   const volvieron = Math.max(continuan - adPrev, 0);
-  return { ganados, volvieron, perdidos, retenidos, neto: ad - adPrev, base: adPrev, retencion: adPrev > 0 ? retenidos / adPrev : null };
+  return { ganados, nuevos, reactivados, volvieron, perdidos, retenidos, neto: ad - adPrev, base: adPrev, retencion: adPrev > 0 ? retenidos / adPrev : null };
 }
 
 /** Suma de cuentas; la retención agregada es Σretenidos / Σbase (no un promedio de %). */
 export function flujoTotal(cuentas: Iterable<CuentaFlujo>): Flujo {
-  const t: Flujo = { ganados: 0, volvieron: 0, perdidos: 0, retenidos: 0, neto: 0, base: 0, retencion: null };
+  const t: Flujo = { ganados: 0, nuevos: 0, reactivados: 0, volvieron: 0, perdidos: 0, retenidos: 0, neto: 0, base: 0, retencion: null };
   for (const c of cuentas) {
     const f = flujoCuenta(c);
-    t.ganados += f.ganados; t.volvieron += f.volvieron; t.perdidos += f.perdidos; t.retenidos += f.retenidos;
+    t.ganados += f.ganados; t.nuevos += f.nuevos; t.reactivados += f.reactivados; t.volvieron += f.volvieron; t.perdidos += f.perdidos; t.retenidos += f.retenidos;
     t.neto += f.neto; t.base += f.base;
   }
   t.retencion = t.base > 0 ? t.retenidos / t.base : null;

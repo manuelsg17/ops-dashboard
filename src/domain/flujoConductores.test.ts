@@ -39,4 +39,13 @@ describe("flujo de conductores", () => {
     expect(t.ganados + t.volvieron - t.perdidos).toBe(t.neto);
     expect(t.retencion).toBeCloseTo(150 / 200);
   });
+  it("ganados se parte en nuevos + reactivados, acotado a lo ganado", () => {
+    const f = flujoCuenta({ adPrev: 100, ad: 110, nr: 30, re: 18 });
+    expect(f).toMatchObject({ ganados: 30, nuevos: 12, reactivados: 18 });
+    const g = flujoCuenta({ adPrev: 10, ad: 5, nr: 30, re: 30 });   // N+R > AD
+    expect(g.nuevos + g.reactivados).toBe(g.ganados);
+    expect(flujoCuenta({ adPrev: 1, ad: 5, nr: 3 }).reactivados).toBe(0);  // sin dato
+    const t = flujoTotal([{ adPrev: 100, ad: 110, nr: 30, re: 18 }, { adPrev: 50, ad: 40, nr: 10, re: 2 }]);
+    expect(t).toMatchObject({ nuevos: 20, reactivados: 20, ganados: 40 });
+  });
 });
