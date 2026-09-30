@@ -6,13 +6,30 @@ Dashboard para KAMs (partner performance): modulos **TypeScript** bundleados con
 - Modulos TS (`src/`), bundleados por Vite. Sin framework de UI, sin JSX — TODA la app (46 archivos) sigue el mismo patron: funciones que devuelven strings de HTML + event delegation via `data-act` (`src/shared/actions.ts`). `index.html` carga UN solo `<script type="module">`.
 - **Preact se probo y se descarto** (jul 2026): la migracion a TS de Gemini sumo Preact en un unico componente (`AdminUsers.tsx`, el panel de Usuarios), dejandolo como la UNICA pantalla con un paradigma distinto (JSX + `onClick` nativo) al resto de la app. Revertido a proposito por uniformidad de arquitectura — un panel CRUD simple no justificaba sumar un framework ni la inconsistencia. Si en el futuro se evalua un framework de UI, que sea una decision consciente para TODA la app, no para una pantalla suelta.
 - **`strict: false` / `noImplicitAny: false` / la mayoria de los archivos tienen `//@ts-nocheck`** — la migracion de JS a TS (jul 2026, ver abajo) fue mecanica (renombrar + ajustar lo que rompia el build), NO agrego chequeo de tipos real en la mayoria del codigo. Los unicos archivos SIN `@ts-nocheck` (chequeados de verdad): `core/config.ts`, `core/dates.ts`, `core/format.ts`, `core/security.ts`, `domain/types.ts`, `shared/actions.ts`, `shared/pdfmeta.ts`. Tipar en serio el resto se evaluo y se descarto (jul 2026): el costo de modelar `STATE` (objeto global de 40+ campos mutado desde ~39 archivos) no compensa frente al beneficio para un equipo chico — los bugs reales de este proyecto nunca fueron de tipos. Correr `npx tsc --noEmit` de vez en cuando — no esta en ningun script de `package.json` ni en CI, hay que acordarse de correrlo a mano.
-- Charts: ApexCharts (Vista Partner + Rendimiento, **eager** — es el tab por defecto) + Chart.js (Presentacion 2.0, **lazy**, importado dentro de `presentacion2.ts` a proposito — ver `vite.config.js`)
+- Charts: ApexCharts (Desempeño y portal; **diferido** con `charts.ensureApex()`, arranca en paralelo con el fetch desde `app.ts`; `buildLineChart`/`buildDonutChart` se re-encolan solos si la lib no llegó) + Chart.js (Presentación, **lazy**, importado dentro de `presentacion2.ts` a propósito — ver `vite.config.js`)
 - XLSX para subir Excels — vive SOLO en `src/workers/excelWorker.ts` (Web Worker, parsea sin bloquear el hilo principal); html2canvas + jspdf para PDFs/imagenes — carga diferida via `src/shared/lazyLibs.ts` (`ensurePdfLibs()`/`ensureHtml2Canvas()`), nunca en el bundle eager
 - Las librerias vienen de **npm** (pineadas en `package-lock`), NO de CDN. Ya no se usa SRI
 - CSP estricta: `script-src 'self'` (sin `'unsafe-inline'`, sin dominios externos). Ver A2 abajo
 - **Deploy: SOLO Vercel** (decisión de Manuel, 24-sep-2026): `https://ops-dashboard-opsteam1.vercel.app`, publica solo cada push a `main` (`vercel.json`: build + headers HTTP HSTS/X-Frame-Options/frame-ancestors). GitHub Pages quedó retirado: el workflow pasó a `.github/workflows/ci.yml` y solo corre chequeos (lint, typecheck, check:drift, tests, build) — **Vercel publica aunque el CI esté en rojo**, así que después de cada push hay que mirar `gh run list`. `base` de Vite = "/" en todos lados.
 
 ## Estado actual
+
+### Resumen vigente (30-sep-2026) — leer primero
+- **Producción = `main` = `dd0fd80`** (descarga de la cartera de un KAM). CI en verde y bundle de Vercel verificado contra el build local.
+- **Pestañas**: Desempeño (por defecto, id `rend`) · Calculadora · Seguimiento · Presentación (con "Qué descargar: Un partner / Cartera de un KAM") · Data Raw · Configuración. **Retiradas**: Metas (30-sep, su motor sigue en `metas.ts`), Vista Partner (sep) y "Rend + Metas" (jul).
+- **Reglas de cálculo vigentes** (detalle en cada fase de abajo):
+  - Proyección de AD = máx del rango × 1.4. En semanal, AD contra la meta se lee SOLO por su proyección. En diario, AD no se compara con la meta mensual.
+  - Retención = (AD − nuevos − reactivados) / AD anterior, sobre los totales del nivel que se muestra (la fórmula de la Presentación).
+  - Estado de un partner = proyección al cierre contra la meta (mes en curso).
+  - Calculadora: reparto por resto mayor y cuadre EXACTO (`domain/cuadre.ts`).
+  - "SIN KAM" literal en `partners.kam` = sin KAM (`normKamValor`).
+- **Pendientes abiertos** (nada bloqueante):
+  - Probar el diálogo real de "Una carpeta" en la descarga de la cartera (lo abre el sistema operativo).
+  - Confirmar con Manuel su N+R TukTuk de septiembre (16.6% guardado contra 15.6% anotado).
+  - Datos maestros sucios: 5 metas de Rodolfo sin KAM en `partners`, restos de Miguel (Taxigo, FENIX DRIVE, GIAL WAY) y 11 cuentas sin KAM sin meta.
+  - Delivery/Cargo en la Calculadora: necesitan columnas en `metas` cuando lleguen sus datos.
+  - Hueco conocido del desglose TukTuk en "Solo lo que cambié" (ver "Aviso antes de borrar o reescribir el desglose TukTuk").
+  - Accionables es EXPERIMENTAL: los umbrales (`UMBRAL` en `domain/accionables.ts`) esperan el feedback de Manuel.
 
 ### Sesión Septiembre 2026 (23–24 sep) — Auditoría integral + rediseño por olas (EN PRODUCCIÓN desde el 24-sep, commit `6a70389`)
 
@@ -52,9 +69,9 @@ Pedido de Manuel: revisar todo (UX/UI, diccionarios, velocidad, bugs, integraci�
   - **Secciones nuevas:**
     - **Franja "¿Llegamos a la meta de {mes}?"** (`domain/brechaMeta.ts`, 3 tests): cuánto falta, ritmo actual contra el necesario por semana (flujos) y veredicto con la MISMA proyección de Metas. Mes cerrado: "Cerró en X%". Con la franja, las tarjetas conservan el anillo pero no repiten el caption.
       - **Es una mini-tarjeta sutil AL PIE de cada tarjeta KPI** (AD, N+R, Horas), no una franja aparte. Manuel pidió "algo sutil… debajo de los principales KPIs". Va dentro del tile para quedar debajo de su número en cualquier ancho: con 2 columnas, una fila aparte se desalinea. Hubo dos pasos intermedios, ya descartados: la franja arriba de todo y la franja compacta después de las tarjetas.
-  - **ORDEN DE LECTURA de Desempeño (Manuel, 30-sep, "imagina que eres el Head de Partners"):** KPIs → **Por ciudad** → **Por KAM** → Tendencias (gráficas de partners) → Quién se movió → Flujo de conductores → Tendencias contra la meta → Comparativa por ciudad → Productividad → Tabla de partners → tarjetas por partner. Cada bloque se arma donde tiene sus datos y se reordena con marcas de posición (`_m0`…`_m7`) al final de la sección de KAM. **No cambiar el orden sin pedirlo.**
+  - **ORDEN DE LECTURA de Desempeño (Manuel, 30-sep, "imagina que eres el Head de Partners"):** KPIs → **Por ciudad** → **Por KAM** → **Accionables** (experimental, Fase 13) → Tendencias (gráficas de partners) → Quién se movió → Flujo de conductores → Tendencias contra la meta → Comparativa por ciudad → Productividad → Tabla de partners → tarjetas por partner. Cada bloque se arma donde tiene sus datos y se reordena con marcas de posición (`_m0`…`_m7`) al final de la sección de KAM. **No cambiar el orden sin pedirlo.**
     - **Flujo de conductores** (`domain/flujoConductores.ts`, 6 tests; pedido de Manuel: "cuántos drivers pierden y cuántos añaden"):
-      - Definiciones, **por cuenta y después sumado**: ganados = N+R; continúan = AD − N+R; perdidos = AD anterior − continúan (si > 0); **volvieron** = continúan − AD anterior (si > 0); neto = AD − AD anterior; retención = min(continúan, AD anterior) / AD anterior.
+      - Definiciones, **por cuenta y después sumado**: ganados = N+R; continúan = AD − N+R; perdidos = AD anterior − continúan (si > 0); **volvieron** = continúan − AD anterior (si > 0); neto = AD − AD anterior; retención = min(continúan, AD anterior) / AD anterior. **SUPERADO en la Fase 13**: ganados se parte en nuevos + reactivados, "volvieron" pasó a llamarse **intermitentes** y la retención usa la fórmula de la Presentación sobre los totales del nivel.
       - Identidad exacta: **neto = ganados + volvieron − perdidos**. Sin "volvieron", en semanal no cuadraba: 2,158 − 2,889 ≠ +508, porque los que faltaron una semana no cuentan como reactivados.
       - Mensual con el mes en curso usa el último mes CERRADO.
       - En diario se muestra un aviso en vez del flujo (ruido diario).
@@ -156,7 +173,7 @@ Pedido de Manuel: revisar todo (UX/UI, diccionarios, velocidad, bugs, integraci�
 - **Calculadora: CSV y tarjetas probados (30-sep, local, sin bajar archivos)**: se interceptó `URL.createObjectURL` y `a.click()` para inspeccionar lo que la app genera.
   - **CSV** (Ana, octubre): 12 filas, AD 12,345 · N+R 3,269 · Horas 701,234 y TukTuk 1,988 / 538, igual que la pantalla y la base. Lleva BOM UTF-8 (EF BB BF) y 14 encabezados, todos reconocidos por `uploadMetas`. La ida y vuelta por el lector de la subida (`leerLibro`, string binario como `FileReader.readAsBinaryString`) conserva "AÑO", CLID y las columnas TukTuk/Fleet. Quedó como test: `src/workers/csvCalculadora.test.ts`.
   - **Tarjetas**: PNG de 1120 px de ancho (escala 2×) en ES, EN, ES/EN y RU, con cifras que cuadran con el CSV (ANDINA Lima: total 4,795 − TukTuk 148 = Taxi 4,647). "Descargar todas" dio 8 PNG distintos (los 8 partners de Ana), sin errores, y restaura la tarjeta elegida al terminar.
-- **Maqueta: descarga MASIVA de presentaciones por KAM (30-sep, SOLO prototipo, `?ui=proto&p=pres&bv=b1|b2|b3`, `src/dev/proto/pPres.ts` + `pres.css`).** Pedido de Manuel: elegir el KAM, que cada partner venga en automático (Fleet/Agregador), poder cambiarlo y quitar o agregar hojas, "muy fácil de usar", dentro de Presentación. Pendiente que elija.
+- **Maqueta: descarga MASIVA de presentaciones por KAM (30-sep, SOLO prototipo, `?ui=proto&p=pres&bv=b1|b2|b3`, `src/dev/proto/pPres.ts` + `pres.css`).** Pedido de Manuel: elegir el KAM, que cada partner venga en automático (Fleet/Agregador), poder cambiarlo y quitar o agregar hojas, "muy fácil de usar", dentro de Presentación. **Manuel eligió la b3 y está EN PRODUCCIÓN** (ver "Presentación: descarga de la CARTERA de un KAM"). En la implementación se descartó el .zip (cada PDF pesa 15-20 MB) y se arregló el parpadeo que tenía la maqueta.
   - Hojas por partner con la MISMA regla que `presentacion2.p2Deck`: por vertical que opera, N+R por origen solo en Taxi, Proyección nunca va al PDF. Vista automática = Fleet si el partner es Fleet.
   - Plantillas: "Deck completo", "Resumen ejecutivo", "Sin anexos".
   - Reglas en tres niveles: tipo de hoja para todos, hoja suelta para todos (misma clave entre partners) y excepción por partner, con "Volver a lo general".
@@ -173,7 +190,7 @@ Pedido de Manuel: revisar todo (UX/UI, diccionarios, velocidad, bugs, integraci�
     - Una fila de meta cuyo partner hoy no tiene KAM en `partners` se agrupa por la precedencia `partners → flotas → fila` (VIA RAPIDA y RUTA DEL SILLAR → "No KAM"; NORTE SEGURO → Carla por la fila).
   - Los actuales de Metas y de Rendimiento coinciden (35,164 · 6,371 · 1,715,445).
   - En producción, la meta país de Metas (55,730) = Σ de la base.
-- **Maqueta "Desempeño" = Rendimiento + Metas en una vista (29-sep, SOLO prototipo, `?ui=proto&p=perf`, `src/dev/proto/pPerf.ts` + `perf.css`).** Pedido de Manuel: "combinar la vista de performance y de Metas para tener una sola… tomar lo mejor de cada sección". Pendiente que elija.
+- **Maqueta "Desempeño" = Rendimiento + Metas en una vista (29-sep, SOLO prototipo, `?ui=proto&p=perf`, `src/dev/proto/pPerf.ts` + `perf.css`).** Pedido de Manuel: "combinar la vista de performance y de Metas para tener una sola… tomar lo mejor de cada sección". **Manuel eligió la D1 con la franja de la D3** → Fase 12, EN PRODUCCIÓN.
   - Tres propuestas:
     - D1 "Tablero con meta": una página.
     - D2 "Pestañas por nivel": Resumen · Ciudades · KAMs · Partners · Tendencias.
@@ -192,13 +209,13 @@ Pedido de Manuel: revisar todo (UX/UI, diccionarios, velocidad, bugs, integraci�
 
 - **Dirección visual elegida** (tras ver 3 mockups): estructura clara "A" (navegación lateral agrupada, superficies neutras, rojo de marca `#E1251B` SOLO para marca y la acción principal, chips de filtros activos en el encabezado) + tarjetas KPI "B" (valor, delta, barra de avance contra la meta con caption "Septiembre: 6,371 de 8,758 · 72.7% · proyección…"). Nada de la alternativa densa "C". Modo oscuro (Claro/Oscuro/Sistema en el menú de usuario).
 - **Sistema de diseño** (usar SIEMPRE en código nuevo): `src/styles/tokens.css` (solo tokens semánticos; el oscuro es un bloque `[data-theme="dark"]`), `src/styles/components.css` (clases `ui-`), `src/shared/ui.ts` (helpers que devuelven string), `icons.ts` (lucide, sin emojis), `confirmDialog.ts` (reemplaza `confirm/alert/prompt` nativos), `chartTheme.ts`, CSS por vista en `src/styles/views/<vista>.css`. Kit en dev: `?ui=kit`. Sin hex ni `agy-style-N` en código nuevo.
-- **Exportaciones siempre en claro** aunque la UI esté en oscuro (`shared/exportClaro.ts`): PDF de Metas/portal/deck, tarjeta PNG, PNG de gráficos. Verificado píxel a píxel.
+- **Exportaciones siempre en claro** aunque la UI esté en oscuro (`shared/exportClaro.ts`): PDF del portal y del deck (el de Metas se retiró el 30-sep), tarjeta PNG, PNG de gráficos. Verificado píxel a píxel.
 - **Huella de números** (`scripts/huella/`, ver `docs/local-dev.md`): cada cifra clave lleva `data-num`; se compara antes/después de cada cambio. Resultado del rediseño completo: **0 cifras cambiadas** salvo las correcciones de bugs documentadas (fila "No KAM" nueva en Rendimiento; VIA RAPIDA y RUTA DEL SILLAR pasan a "No KAM" en Metas, que ahora cuadra con Rendimiento por KAM). Preservar los `data-num` al tocar markup.
 - **Vista Partner RETIRADA** (decisión de Manuel): su embudo de conversión, adquisición por canal, N+R por origen y 5 reglas ejecutivas se mudaron a Presentación (`domain/conversionCohorte.ts`, `domain/lectura.ts#p2SenalesEjecutivas`). En el deck se quitó la banda "Top 1" (un solo competidor identificable); cohortes de embudo con <3 miembros no se muestran.
-- **Bugs de fondo arreglados** (detalle en el plan, §2): metas entre años (**migración `migrations/2026-09-23_metas_unique_mes_year.sql` aplicada SOLO en local — en producción va JUNTO con el código y con confirmación de Manuel**; si uno llega sin el otro, guardar metas falla con 42P10), pestaña de canales del Excel de Conversión que se descartaba, borrado de metas de Mantenimiento que no borraba, desglose por KAM sin "No KAM", cambios de Configuración que no llegaban a mensual/diario, escrituras bloqueadas por RLS reportadas como éxito, listeners duplicados al re-loguear, XSS vía `showBanner`, Enter en buscadores, gráficos que desbordaban, CSV con inyección de fórmulas, fechas de archivo UTC.
+- **Bugs de fondo arreglados** (detalle en el plan, §2): metas entre años (migración `migrations/2026-09-23_metas_unique_mes_year.sql`, **APLICADA en producción el 24-sep** junto con el código; si uno llega sin el otro, guardar metas falla con 42P10), pestaña de canales del Excel de Conversión que se descartaba, borrado de metas de Mantenimiento que no borraba, desglose por KAM sin "No KAM", cambios de Configuración que no llegaban a mensual/diario, escrituras bloqueadas por RLS reportadas como éxito, listeners duplicados al re-loguear, XSS vía `showBanner`, Enter en buscadores, gráficos que desbordaban, CSV con inyección de fórmulas, fechas de archivo UTC.
 - **Velocidad** (medido con 300 ms de latencia simulada): primer pintado con caché 448→88 ms (semanal) y 827→108 ms (mensual guardada), sin parpadeo del login (el refresh del token ya no bloquea el pintado; `STATE._authEpoch` descarta cargas de una sesión vieja), segundo render salteado si los datos no cambiaron.
 - **i18n**: un solo diccionario de exportación (`core/i18nExport.ts`, `makeT`/`fmtL`), una sola tabla de meses (`core/meses.ts`), `check:drift` ampliado (placeholders, tríos, ternarios de idioma prohibidos), **tuteo** en toda la app y "Perú" con tilde. Los números de la UI siguen en es-PE; las exportaciones se formatean por idioma.
-- **Configuración** reorganizada: Datos maestros (Partners con "Pendientes", Clasificación —el tagging de fleetrooms se mudó desde Data Raw—, Cargas), Accesos (Usuarios, Monitoreo), Sistema (Preferencias, Mantenimiento). **"KAM vinculado" editable** vía acción nueva `setKam` en la Edge Function `admin-users`: probada en local, **NO desplegada** (`npx supabase functions deploy admin-users --project-ref oqakoinyzvdgqilxwjjv`, requiere visto bueno de Manuel); sin desplegar, el selector queda de solo lectura.
+- **Configuración** reorganizada: Datos maestros (Partners con "Pendientes", Clasificación —el tagging de fleetrooms se mudó desde Data Raw—, Cargas), Accesos (Usuarios, Monitoreo), Sistema (Preferencias, Mantenimiento). **"KAM vinculado" editable** vía acción nueva `setKam` en la Edge Function `admin-users`: **DESPLEGADA en producción el 24-sep** (`admin-users` v6, ver "Base de producción al día").
 - **Decisiones de Manuel** (24-sep): "Sobre meta" = todos los KPIs ≥100% (colores pColor 80/95/150 sin cambios); borrar metas de un KAM en la Calculadora exige teclear el nombre del KAM; "Salir" SIGUE cerrando todas las sesiones (signOut global — por eso un agente que prueba "Salir" con un usuario de prueba compartido mata la sesión de los demás: usar `signOut({scope:'local'})` en pruebas).
 - **Trampas de los worktrees** (costaron tiempo): `.env.local` no está versionado → un worktree nuevo apunta a PRODUCCIÓN hasta copiarlo; el Supabase local es uno solo y compartido; `vite dev` en otro puerto rompe el `connect-src` de la CSP por el websocket de HMR (verificar contra `vite build` + `vite preview`); las capturas del panel de navegador se desfasan con la página scrolleada (no es la app). El RPC `get_last_ingest_at` existe solo en producción (404 en local, tolerado).
 
@@ -513,7 +530,7 @@ Pendiente: verificación con datos y sesión reales (lo de arriba se validó con
 
 **Retiro completo de "Palabras Prohibidas"** — confirmado con el propio usuario (captura: 0 registros/0 partners excluidos por palabra, vs 249 por tagging de fleetroom/db_id) que ya no cumplía ninguna función real: los partners TukTuk/excluidos se gestionan hoy 100% por `db_id` en Data Raso → Vista Flotas. Se retiró de punta a punta, no solo la UI: `STATE.bannedWords` (`core/config.ts`), los 3 filtros en `data.ts` (semanal/mensual/diario), el toggle "Mostrar excluidos 🚫" + badge de fila + columna CSV en `rawdata.ts`, el badge "Palabra prohibida" en Vista Flotas, y `addBannedWord`/`removeBannedWord` + sus `data-act` en `app.ts`. Confirmado 0 referencias remanentes por grep. **No confundir con `STATE.tuktukPatterns`** (`rawdata.ts`) — es una feature totalmente distinta (solo sugiere en Vista Flotas qué CLIDs podrían ser TukTuk por nombre, no filtra nada), no se tocó.
 
-Ultimo commit relevante: **`868f648`** (watermark en PDFs).
+Ultimo commit relevante de ESA sesión (histórico): **`868f648`** (watermark en PDFs). El estado vigente está en "Resumen vigente", al inicio de esta sección.
 Historia reciente: `a237ff0` (fix colores Presentacion 2.0) → **plan de arquitectura jul 2026, 20 commits** (`0d0a...`→`868f648`).
 
 ### Sesión Julio 2026 — Migración a TypeScript + Preact (parcial) + optimización exhaustiva
@@ -592,7 +609,7 @@ RLS estricto (`is_admin()` + 28 policies; **NUNCA revocar EXECUTE de `is_admin()
 2. ~~**Watermark en PDFs**~~ — HECHO (`src/shared/pdfmeta.js`).
 3. ~~**Limpiar `console.*`**~~ — HECHO (flag `DEBUG` en `core/config.js`).
 4. ~~**Custom claim por KAM**~~ — **DESCARTADO por decision del usuario**: los roles internos son de PERMISOS, no de filtrado de datos. Todos los KAMs siguen viendo lo mismo. El scoping por CLID aplica SOLO al rol `partner` (B4). No reintentar filtrar data por KAM sin pedirselo de nuevo.
-5. **Headers HTTP** en el hosting (HSTS, X-Frame-Options DENY, Referrer-Policy strict-origin-when-cross-origin, Permissions-Policy minima) — PENDIENTE, depende del hosting definitivo.
+5. ~~**Headers HTTP**~~ — HECHO en `vercel.json` (Vercel es el hosting definitivo): HSTS con preload, X-Frame-Options DENY, X-Content-Type-Options nosniff, Referrer-Policy strict-origin-when-cross-origin, Permissions-Policy mínima y `frame-ancestors 'none'`.
 
 ## Git workflow — CRITICO
 
@@ -602,7 +619,7 @@ RLS estricto (`is_admin()` + 28 policies; **NUNCA revocar EXECUTE de `is_admin()
       -c user.email="masantillanag@yandex-team.ru" \
       commit -m "..."
   ```
-- Todo commit termina con `Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>`.
+- Todo commit termina con `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 - Solo commitear/pushear cuando el usuario lo pida explicitamente.
 - Branch principal: `main`. Remote: `https://github.com/manuelsg17/ops-dashboard.git`.
 
@@ -633,33 +650,28 @@ Cero elementos sin handler = migracion completa. `focus`/`blur` NO burbujean (a 
 
 ## Estructura de archivos
 
-Todo el codigo de app vive en `src/` como modulos ES. `index.html` esta en la raiz y carga solo `src/vendor.js`.
+Todo el codigo de app vive en `src/` como modulos TS. `index.html` esta en la raiz y carga solo `src/vendor.ts`.
 
-- `src/vendor.js` — entry: importa los 19 modulos + las libs npm y espeja los globales (`Object.assign(window, ...)`). **Ojo con el orden**: los imports de un modulo se resuelven ANTES del cuerpo del archivo que los importa, asi que cualquier codigo top-level que corra al evaluar un modulo NO puede depender de esos globales (ver el comentario largo en `auth.js` — esto rompio el login una vez, en silencio)
-- `src/core/config.js` — STATE global, KAM_COLORS, CITY_COLORS, METRICS, DEBUG, anon key
-- `src/core/security.js` — `escapeHTML`
-- `src/core/format.js` — `fmt`, `fmt5`, `fmtK`, `fmtSmart`, `pColor`, `normCity`, `cityLabel`, `hashColor`
-- `src/core/dates.js` — `parseLocalDate`
-- `src/shared/actions.js` — dispatcher del event delegation (`registerActions`). Todo handler nuevo va aca, NUNCA `onclick=` inline (rompe la CSP)
-- `src/shared/pdfmeta.js` — `stampPDF`: watermark + metadatos de exportacion. Llamar justo antes de `pdf.save()`
-- `src/data.js` — loaders Supabase (ventaneados por fecha, A3), parsers Excel, `applyFlotasOverride`
-- `src/auth.js` — login, rol (`STATE.userRole`/`isAdmin`/`canWrite`/`perms`), gate de UI por rol, logout con cleanup
-- `src/app.js` — init, sidebar, filtros LRU, `renderConfig`, `deleteDashboardData` (gated)
-- `src/rendimiento.js` — tab Analisis + selector de linea Agregador/Fleet/TukTuk/Combinado (`STATE.rendLine`)
-- `src/metas.js` — tab Metas + selector de linea (`STATE.metasLine`); Fleet/TukTuk/Combinado meta-vs-actual
-- ~~`src/partnerView.js`~~ — Vista Partner RETIRADA (sep 2026); sus piezas únicas viven en Presentación
-- `src/shell.ts` — navegación lateral, encabezado de página con chips de alcance; `src/configView.ts` — Configuración (chunk lazy)
-- `src/presentacion2.js` — tab Presentacion 2.0 (deck por partner, Taxi/TukTuk, "Avance vs Meta")
-- `src/calculator.js` — Calculadora de Metas (reparto goal×share, guardar a BD, tarjeta bilingue)
-- `src/rawdata.js` — Data Raw + Vista Flotas
-- `src/adminUsers.js` — administracion de usuarios (roles, permisos, mapeo de partners). Admin-only
-- `src/partnerPortal.js` — portal del rol `partner`
-- `src/unifview.js`, `src/seguimiento.js`, `src/charts.js`
-- `supabase/functions/admin-users/` — Edge Function (Deno). Lo unico que usa `service_role`
+- `src/vendor.ts` — entry: importa los modulos + las libs npm y espeja los globales (`Object.assign(window, ...)`). **Ojo con el orden**: los imports de un modulo se resuelven ANTES del cuerpo del archivo que los importa, asi que cualquier codigo top-level que corra al evaluar un modulo NO puede depender de esos globales (ver el comentario largo en `auth.ts` — esto rompio el login una vez, en silencio)
+- `src/core/` — `config.ts` (STATE global, colores, `SIN_KAM`, `normKamValor`, DEBUG, URL/anon key con fallback a produccion), `security.ts` (`escapeHTML`), `format.ts` (`fmt`, `fmt5`, `fmtSmart`, `pColor`, `normCity`...), `dates.ts`, `i18n.ts` (diccionario de la UI es/en/ru), `i18nExport.ts` (exportaciones), `meses.ts`
+- `src/domain/` — reglas de negocio PURAS con sus tests (sin STATE ni DOM): `metrics`, `flujoConductores`, `accionables`, `brechaMeta`, `cuadre`, `repartoLinea`, `desgloseTk`, `calcDraft`, `loteHojas`, `taxiparks`, etc. Lo nuevo con logica de decision va aca
+- `src/shared/` — `actions.ts` (dispatcher `registerActions`; todo handler nuevo va aca, NUNCA `onclick=` inline), `ui.ts`/`icons.ts`/`confirmDialog.ts` (sistema de diseño), `pdfmeta.ts` (`stampPDF`), `lazyLibs.ts`, `escala.ts`, `frescura.ts`, `ventanaCarga.ts`, `exportClaro.ts`, `accessLog.ts`...
+- `src/data.ts` — loaders Supabase (ventaneados por fecha), parsers Excel, `applyFlotasOverride`; `src/data/cache.ts` — caché IndexedDB
+- `src/auth.ts` — login, rol (`STATE.userRole`/`isAdmin`/`canWrite`/`perms`/`myKam`), gate de UI por rol, logout con cleanup
+- `src/app.ts` — init, sidebar, filtros, `renderConfig`, `deleteDashboardData` (gated)
+- `src/shell.ts` — navegacion lateral y encabezado de pagina con chips de alcance; `src/configView.ts` — Configuracion (chunk lazy); `src/monitoreo.ts` — Configuracion → Monitoreo
+- `src/rendimiento.ts` — pestaña **Desempeño** (id `rend`): KPIs contra la meta, ciudades, KAMs, accionables, flujo de conductores, tabla de partners
+- `src/metas.ts` — MOTOR de metas (sin vista desde el 30-sep): `metasResumenPais`, `metasCuentasLinea`, fechas del mes, `_metasMatchMes`, `_metasFleetActuals`
+- `src/calculator.ts` + `src/calcNumInput.ts` — Calculadora de Metas (reparto por linea, guardar a BD, CSV, tarjetas por partner en ES/EN/RU)
+- `src/presentacion2.ts` — Presentacion (deck por partner, `p2GenerarPdf`); `src/presentacionLote.ts` — descarga de la cartera de un KAM; `src/forecast.ts` — motor de proyeccion multi-mes
+- `src/seguimiento.ts`, `src/rawdata.ts` (Data Raw + Vista Flotas), `src/adminUsers.ts` (usuarios, admin-only), `src/partnerPortal.ts` (portal del rol `partner`), `src/charts.ts`
+- `src/workers/` — `excelWorker.ts`/`excelParse.ts` (XLSX fuera del hilo principal)
+- `src/dev/` — kit de UI (`?ui=kit`) y prototipo navegable (`?ui=proto`, `src/dev/proto/`), solo en dev
+- `supabase/functions/admin-users/` — Edge Function (Deno). Lo unico que usa `service_role` junto con `ingest-taxiparks`
 - `migrations/` — SQL versionado; se aplica via MCP Supabase (`apply_migration`, project `oqakoinyzvdgqilxwjjv`) o en el SQL editor. Ver memoria `supabase-mcp-direct-changes`
 - `supabase/config.toml` + `supabase/seed.sql` — entorno LOCAL en Docker (puertos 5433x, 4 usuarios de prueba). Solo lo lee el CLI local, nunca produccion
-- `scripts/local-session.mjs` — abre sesion local sin tipear password (`npm run local:session <rol>`)
-- `docs/local-dev.md` — **empezar por aca** para cualquier cosa de entorno local: puertos, usuarios, trampas ya resueltas y el bloqueador del esquema
+- `scripts/` — `local-session.mjs` (`npm run local:session <rol>`), `huella/` (huella de numeros), `check-drift.mjs`, `sync-ingest-parser.mjs`
+- `docs/local-dev.md` — **empezar por aca** para cualquier cosa de entorno local; `docs/plan-mejora-2026-09.md` — plan y bitacora del rediseño; `docs/ingest-taxiparks.md` — contrato de la ingesta automatica
 
 ## Modelo de datos
 
@@ -667,7 +679,7 @@ Todo el codigo de app vive en `src/` como modulos ES. `index.html` esta en la ra
 - `flotas` (clid, nombre_asignado, kam, ciudad, activo) — solo fallback si CLID no esta en `partners`, o para marcar `activo=false`
 - `rendimiento` (semanal), `rendimiento_mensual`, `rendimiento_diario` — series temporales; ~48 columnas (7 core historicas + ~41 KPIs taxiparks, incl. `gmv`). UNIQUE (clid,city,fecha|mes|date) para el upsert
 - `conversion_pais` (clid, partner, mes; funnel `first_order`/`n5_success`..`n100_success` + 8 columnas de canal: `agency_scouts`, `organic_partner`, `organic_scouts`, `organic_yango`, `paid_yango`, `partner_scouts`, `referral_partner`, `referral_yango`). UNIQUE (clid,mes). RLS espejo del Sprint 0
-- `metas` (clid, city, mes; UNIQUE clid,city,mes) — objetivos mensuales por partner. Agregador: `meta_active_drivers`/`meta_nr`/`meta_supply_hours`. Fleet: `meta_sh_car`/`meta_acceptance`/`meta_utilization` (nullable). TukTuk: `meta_tk_ad`/`meta_tk_nr`/`meta_tk_cars` (nullable). `mes` = NOMBRE mayus sin año + `mes_year` (desambigua). Ver `migrations/2026-07-08_metas_fleet_tuktuk.sql`
+- `metas` (clid, city, mes, mes_year; UNIQUE clid,city,mes,mes_year desde el 24-sep) — objetivos mensuales por partner. Agregador: `meta_active_drivers`/`meta_nr`/`meta_supply_hours`. Fleet: `meta_sh_car`/`meta_acceptance`/`meta_utilization` (nullable). TukTuk: `meta_tk_ad`/`meta_tk_nr`/`meta_tk_sh`/`meta_tk_cars` (nullable; son un DESGLOSE de la meta total, no una meta aparte). `mes` = NOMBRE mayus sin año + `mes_year` (desambigua). Ver `migrations/2026-07-08_metas_fleet_tuktuk.sql`
 - `proyectos` — proyectos en curso por partner
 - `audit_log` (at, user_id, user_email, action, table_name, row_key, old_data, new_data) — lo escriben SOLO los triggers. SELECT admin-only; **sin politicas de escritura a proposito** (tamper-evident). Retencion: purga manual >180 dias, comando en la migracion
 - `user_permissions` (user_id, permission) — grants que SUMAN sobre el rol. `can(perm)` los lee desde RLS
