@@ -254,6 +254,7 @@ function _rdKpi(o) {
     ${d ? `<div class="rd-tile__delta">${d}<span class="rd-tile__prev">${escapeHTML(_rdPrevLbl())}</span></div>` : ""}
     ${o.sub ? `<div class="rd-tile__sub">${escapeHTML(o.sub)}</div>` : ""}
     ${o.extra ? `<div class="rd-tile__extra">${o.extra}</div>` : ""}
+    ${o.pie || ""}
     ${g && !o.sinCaption ? `<div class="rd-tile__cap${conAnillo ? "" : " rd-tile__cap--none"}"${g.tip ? ` title="${escapeHTML(g.tip)}"` : ""}>${escapeHTML(g.caption)}</div>` : ""}
   </div>`;
 }
@@ -618,19 +619,17 @@ export function _renderRendImpl() {
   // Sin encabezado de sección (como el prototipo B): qué mide cada tile lo dice
   // su propia línea "última semana (14/09/2026)" / "acumulado del rango".
   // Franja "¿Llegamos a la meta?" (Desempeño, 29-sep-2026).
-  // La franja va DESPUÉS de las tarjetas (pedido de Manuel: primero los
-  // números, después "¿llegamos?"), compacta.
+  // "¿Llegamos?": una mini-tarjeta al pie de cada KPI (Manuel, 30-sep).
   const franja = _dsLlegamos(metaInfo, lastDate);
   html += `<h2 class="ui-sr-only">${escapeHTML(t("rd.kpis.titulo"))}</h2>`;
   html += `<div class="rd-kpis rd-kpis--tiles">
-    ${_rdKpi({ label: t("metric.ad.label"), value: fmt(tAD), numKey: "rend.pais.ad", cur: tAD, prev: pAD, sub: `${periodLabel} (${d2s(lastDate)})`, goal: _rdGoal(metaInfo, "ad"), icon: "users", sinCaption: !!franja })}
-    ${_rdKpi({ label: t("metric.nr.label"), ...vNR, cur: lNR, prev: pNR, goal: _rdGoal(metaInfo, "nr"), icon: "user", sinCaption: !!franja })}
-    ${_rdKpi({ label: t("metric.sh.label"), ...vSH, cur: lSH, prev: pSH, goal: _rdGoal(metaInfo, "sh"), icon: "clock", sinCaption: !!franja })}
+    ${_rdKpi({ label: t("metric.ad.label"), value: fmt(tAD), numKey: "rend.pais.ad", cur: tAD, prev: pAD, sub: `${periodLabel} (${d2s(lastDate)})`, goal: _rdGoal(metaInfo, "ad"), icon: "users", sinCaption: !!franja, pie: franja && franja.ad })}
+    ${_rdKpi({ label: t("metric.nr.label"), ...vNR, cur: lNR, prev: pNR, goal: _rdGoal(metaInfo, "nr"), icon: "user", sinCaption: !!franja, pie: franja && franja.nr })}
+    ${_rdKpi({ label: t("metric.sh.label"), ...vSH, cur: lSH, prev: pSH, goal: _rdGoal(metaInfo, "sh"), icon: "clock", sinCaption: !!franja, pie: franja && franja.sh })}
     ${_rdKpi({ label: t("metric.tr.label"), value: fmt(tTR), numKey: "rend.pais.tr", cur: lTR, prev: pTR, sub: acum, icon: "car",
                goal: metaInfo ? { pct: null, caption: t("rd.meta.sinMetaMensual") } : undefined })}
   </div>`;
   html += _rdGoalNota(metaInfo);
-  html += franja;
 
   // ── 1b. KPIs propios de TukTuk (Fleet tiene su vista dedicada arriba) ───────
   if (line === "tk") {
@@ -641,7 +640,13 @@ export function _renderRendImpl() {
   const _filtrarPrev = d => aggPD(_rendLinePrev(d, null).filter(r =>
     (cityFilter === "all" || r.city === cityFilter) && _lineSelHas(selSet, _sidebarSet, r.partner)));
   const flujo = _dsFlujoData(apd, dates, lastDate, prevDate, prevRows, mesParcial, _filtrarPrev);
+  // ORDEN DE LECTURA (Manuel, 30-sep-2026, "imagina que eres el Head de
+  // Partners"): KPIs → ciudades → KAMs → gráficas de partners → quién se movió
+  // → lo demás (flujo, tendencias contra la meta, comparativa…). Cada bloque se
+  // arma donde tiene sus datos y se reordena abajo con estas marcas.
+  const _m0 = html.length;
   html += _dsFlujoHTML(flujo);
+  const _m1 = html.length;
   // Estado contra la meta por partner: tabla de partners y "más lejos de su meta".
   const estados = _dsEstadoPorPartner(line, metaInfo);
   _dsTablaCtx = { estados, flujo };
@@ -686,6 +691,7 @@ export function _renderRendImpl() {
     html += _rdCiudadTiles(ciudades, _rdCiudadData, metaCiudad);
   }
 
+  const _m2 = html.length;
   // ── 3. Quién se movió (lo más accionable: a quién llamar) ──────────────────
   // Los 5 que más subieron y los 5 que más cayeron en Conductores Activos vs el
   // período anterior. Se excluyen los partners sin base previa (no es una caída,
@@ -728,6 +734,7 @@ export function _renderRendImpl() {
     </div>`;
   }
 
+  const _m3 = html.length;
   // ── 4. Tendencias ─────────────────────────────────────────────────────────
   // Perú por partner: top 8 por Conductores Activos del último período, sin
   // "Otros" dibujado (ni segundo eje): lo que queda fuera se dice en el pie.
@@ -748,6 +755,7 @@ export function _renderRendImpl() {
     html += _rdSec(t("ds.tend.meta.titulo", { m: metaInfo.mesTxt }), t("ds.tend.meta.sub"));
     html += `<div class="rd-grid-2">${_rdChart("dsCh_adMeta", t("ds.tend.adMeta"), "AD_vs_meta", t("ds.tend.adMetaPie"))}${_rdChart("dsCh_nrMeta", t("ds.tend.nrMeta"), "NR_vs_meta", t("ds.tend.nrMetaPie"))}</div>`;
   }
+  const _m4 = html.length;
   html += _rdSec(t("rend.tend.titulo"), t("rd.tend.sub"));
   html += `<div class="rd-grid-2">
     ${_rdChart("chP_ad", t("rend.ch.condActivos"), "AD_Peru", pieTop("ad"))}
@@ -756,6 +764,7 @@ export function _renderRendImpl() {
     ${_rdChart("chP_tr", t("metric.tr.label"),     "Viajes_Peru", pieTop("tr"))}
   </div>`;
 
+  const _m5 = html.length;
   // ── 5. Comparativa entre ciudades: UNA gráfica por métrica con una línea por ciudad.
   // Lima es ~7 veces Trujillo/Arequipa: en valores absolutos las dos quedan
   // aplastadas contra el piso. Por defecto se muestra el ÍNDICE (primer período
@@ -778,6 +787,7 @@ export function _renderRendImpl() {
     </div>`;
   }
 
+  const _m6 = html.length;
   // ── 6. Por KAM (tabla: último período + acumulado del rango) ────────────────
   const metaKam = {};
   // Por KAM: el ACTUAL también se acota a sus partners (metasResumenPais filtra
@@ -788,6 +798,13 @@ export function _renderRendImpl() {
     metaKam[k] = _dsMetaGrupo(line, lastDate, { kam: k, selected: (metaInfo.filtros.selected || []).filter(p => suyos.has(p)) });
   });
   html += _rendKamSeccion(apd, lastRows, prevRows, metaInfo ? metaKam : null);
+  {
+    const _m7 = html.length;
+    const parte = (a, b) => html.slice(a, b);
+    const flujoH = parte(_m0, _m1), ciudadH = parte(_m1, _m2), moversH = parte(_m2, _m3),
+          tendMetaH = parte(_m3, _m4), tendH = parte(_m4, _m5), compH = parte(_m5, _m6), kamH = parte(_m6, _m7);
+    html = html.slice(0, _m0) + ciudadH + kamH + tendH + moversH + flujoH + tendMetaH + compH;
+  }
 
   // ── 7. Productividad ──────────────────────────────────────────────────────
   // Ratios, no volúmenes: responden "¿cada conductor rinde más o menos?", que es
@@ -1684,34 +1701,35 @@ function _dsBar(p, pp) {
 export function _dsLlegamos(info, lastDate) {
   if (!info) return "";
   const dias = diasMesReporteDe(STATE, info.mesDates[info.mesDates.length - 1] || lastDate, parseLocalDate);
-  const cards = _DS_K3.map(k => {
+  let hay = false;
+  // Una mini-tarjeta por KPI que va AL PIE de su propia tarjeta (Manuel,
+  // 30-sep: "algo sutil… debajo de los principales KPIs"): así queda debajo de
+  // su número en cualquier ancho (con 2 columnas una fila aparte se desalinea).
+  const out = {};
+  _DS_K3.forEach(k => {
     const x = info.kpis[k];
-    if (!x || !(x.meta > 0) || x.actual == null) return "";
+    if (!x || !(x.meta > 0) || x.actual == null) return;
     const b = calcularBrecha({ tipo: k === "ad" ? "nivel" : "flujo", actual: x.actual, meta: x.meta,
       proj: info.proyOn ? x.proj : null, diasTranscurridos: dias.daysElapsed, diasRestantes: dias.daysRemaining });
-    if (!b) return "";
+    if (!b) return;
+    hay = true;
     const F = x.F || fmt;
+    const tono = b.cerrado ? (b.pct >= 100 ? "ok" : "warn") : (b.llega ? "ok" : "warn");
     const verd = b.cerrado
       ? t("ds.lleg.cerro", { p: b.pct.toFixed(1) + "%" })
       : t(b.llega ? "ds.lleg.llega" : "ds.lleg.noLlega", { p: b.projPct.toFixed(1) + "%" });
-    const tono = b.cerrado ? (b.pct >= 100 ? "ok" : "warn") : (b.llega ? "ok" : "warn");
-    let cuerpo;
-    if (b.falta <= 0) cuerpo = `<div class="ds-gap__big"><b>${escapeHTML(t("ds.lleg.alcanzada"))}</b></div>`;
-    else if (k === "ad" || b.cerrado) cuerpo = `<div class="ds-gap__big">${escapeHTML(t("ds.lleg.faltan"))} <b${dn("ds", "falta", k)}>${F(Math.round(b.falta))}</b></div>`;
-    else cuerpo = `<div class="ds-gap__big">${escapeHTML(t("ds.lleg.faltan"))} <b${dn("ds", "falta", k)}>${F(Math.round(b.falta))}</b> <span>${escapeHTML(t("ds.lleg.enDias", { n: dias.daysRemaining }))}</span></div>`;
+    const falta = b.falta <= 0 ? escapeHTML(t("ds.lleg.alcanzada"))
+      : `${escapeHTML(t("ds.lleg.faltan"))} <b${dn("ds", "falta", k)}>${F(Math.round(b.falta))}</b>` +
+        (k !== "ad" && !b.cerrado ? ` ${escapeHTML(t("ds.lleg.enDias", { n: dias.daysRemaining }))}` : "");
     const ritmo = k !== "ad" && !b.cerrado && b.falta > 0 && b.ritmoActual != null
-      ? `<div class="ds-gap__ritmo"><span>${escapeHTML(t("ds.lleg.ritmoAct"))} <b>${F(Math.round(b.ritmoActual))}</b>/${escapeHTML(t("ds.lleg.sem"))}</span>` +
-        `<span>${escapeHTML(t("ds.lleg.ritmoNec"))} <b class="${b.ritmoNecesario > b.ritmoActual ? "ds-bad" : ""}">${b.ritmoNecesario == null ? "—" : F(Math.round(b.ritmoNecesario))}</b>/${escapeHTML(t("ds.lleg.sem"))}</span></div>`
-      : k === "ad" ? `<div class="ds-gap__ritmo"><span>${escapeHTML(t("ds.lleg.nivel", { a: F(x.actual), m: F(x.meta) }))}</span></div>` : "";
-    return `<div class="ds-gap ds-gap--${tono}">
-      <div class="ds-gap__top"><span class="ds-gap__lbl">${escapeHTML(_dsLblK(k))}</span>
-        <span class="ds-gap__verd">${iconSvg(tono === "ok" ? "check-circle" : "alert-triangle", { size: 13 })}<span>${escapeHTML(verd)}</span></span></div>
-      ${cuerpo}${ritmo}
+      ? `<div class="ds-gap__ritmo">${escapeHTML(t("ds.lleg.ritmoAct"))} <b>${F(Math.round(b.ritmoActual))}</b>/${escapeHTML(t("ds.lleg.sem"))} · ${escapeHTML(t("ds.lleg.ritmoNec"))} <b class="${b.ritmoNecesario > b.ritmoActual ? "ds-bad" : ""}">${b.ritmoNecesario == null ? "—" : F(Math.round(b.ritmoNecesario))}</b>/${escapeHTML(t("ds.lleg.sem"))}</div>`
+      : "";
+    out[k] = `<div class="ds-gap ds-gap--${tono}" role="group" aria-label="${escapeHTML(t("ds.lleg.titulo", { m: info.mesTxt }))}" title="${escapeHTML(info.proyOn ? t("ds.lleg.sub") : t("ds.lleg.subCerrado"))}">
+      <div class="ds-gap__verd">${iconSvg(tono === "ok" ? "check-circle" : "alert-triangle", { size: 13 })}<span>${escapeHTML(verd)}</span></div>
+      <div class="ds-gap__big">${falta}</div>${ritmo}
     </div>`;
-  }).join("");
-  if (!cards) return "";
-  return `<section class="ds-lleg" aria-labelledby="dsLlegT"><div class="ds-lleg__head"><h2 class="ds-lleg__t" id="dsLlegT">${escapeHTML(t("ds.lleg.titulo", { m: info.mesTxt }))}</h2>` +
-    `<span class="ds-lleg__sub">${escapeHTML(info.proyOn ? t("ds.lleg.sub") : t("ds.lleg.subCerrado"))}</span></div><div class="ds-gaps">${cards}</div></section>`;
+  });
+  return hay ? out : null;
 }
 
 // ── Flujo de conductores ─────────────────────────────────────────────────────
