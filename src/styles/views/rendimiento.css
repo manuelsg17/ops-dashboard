@@ -487,3 +487,4 @@
 .rd-table--partners .ui-delta { padding: 1px 3px; }
 .rd-pcell__tend { display: inline-flex; margin-left: 6px; }
 .rd-pcell__tend .rd-trend { transform: scale(.85); }
+.ds-metarow__k small, .ds-kc__k small { font-weight: var(--weight-regular); color: var(--color-text-subtle); }

@@ -91,7 +91,15 @@ Pedido de Manuel: revisar todo (UX/UI, diccionarios, velocidad, bugs, integraci�
   - **Horas enteras** en Desempeño (`_fmtH`): `fmt` deja 2 decimales debajo de 10,000 ("7,473.47" en diario, "2,175.29" en la captura de Manuel).
   - **"SIN KAM" literal = sin KAM** (`normKamValor` en `core/config.ts`, 2 tests). La captura mostraba dos grupos, "SIN KAM" (GIAL WAY con `partners.kam = "SIN KAM"`) y "Sin KAM". Se normaliza al cargar `partners` y en todos los fallbacks (`rebuildKAMPartners`, `_buildPartnerKAM`, `_lineKamOf`, `_metasKamDe`). **Cambia cifras visibles**: esos partners pasan al grupo "No KAM".
   - **Trampa de verificación (nueva)**: mover `.env.local` para el build de producción hace que `vite dev` se reinicie apuntando a PRODUCCIÓN. Una pestaña que recarga en ese hueco muestra el login de producción; ahí un `setSession` con token local falla con "unrecognized JWT kid" (sin efecto, pero confunde). Restaurar el archivo y recargar.
-  - **Ojo, sin tocar**: en SEMANAL el AD del último período (snapshot semanal) también se compara contra una meta MENSUAL (conductores únicos del mes; producción agosto: 47,816 mensual vs ~27,500 semanal). Por eso la tarjeta de Miguel daba 44%. El veredicto de color usa la proyección máx × 1.4 (regla de Manuel), pero el % en sí no es comparable. `rendimiento_mensual` todavía no tiene septiembre (último mes cargado: agosto). Decidir con Manuel si en semanal AD se muestra solo la proyección.
+  - **Semanal: AD se lee SOLO por su proyección** (decisión de Manuel, 30-sep: "sí, en semanal muestra solo la proyección de AD"). El AD de una semana contra una meta de conductores únicos del MES no es comparable (producción agosto: 47,816 en el mes contra ~27,500 por semana; por eso Miguel salía en 44%).
+    - `_rendMetaMes`, en semanal, reemplaza el actual de AD por su proyección (máx × 1.4, la de Metas) y marca `soloProy` (el nivel de la semana queda en `adSemana`). Así el anillo, "¿llegamos?" ("a la proyección le faltan N" / "supera la meta por N"), las barras por ciudad y las tarjetas de KAM (rotuladas "proy.") muestran la proyección sin tocar cada consumidor.
+    - Con TukTuk se usa `cuota.proj`/`pctProj`. Sin proyección (mes cerrado) queda como en diario: `noComparable` + `noCompSemanal`, "míralo en mensual".
+    - Estado por partner y "Más atrasados" en AD: falta = meta − proyección.
+    - La gráfica pasa a "Proyección de conductores activos vs meta" (AD de cada semana × `AD_PROJECTION_FACTOR`).
+    - La tarjeta KPI conserva el AD de la semana como número grande, con su delta: es el dato medido.
+    - Mensual no cambia. `rendimiento_mensual` todavía no tiene septiembre (último mes cargado: agosto).
+    - **La pestaña Metas NO cambió** (sigue mostrando el % semanal con su aviso de escala). Se retira cuando los KAMs validen Desempeño.
+    - **Trampa**: con el panel del navegador oculto, cambiar de escala se "queda" en la anterior (rAF no dispara). Parchear `requestAnimationFrame` solo en la pestaña de prueba.
 - **Verificación de Calculadora → Metas (29-sep, local):**
   - La meta que muestra Metas por KAM y por línea coincide exacto con la base (`data-num` contra SQL): Combinado sept (Ana 8,487 · Dario 8,429 · Elena 4,591 · Fabio 3,762) y TukTuk sept (Dario 1,414 · 104,103 · 286, con cobertura "Declarada por: Dario").
   - Diferencias ESPERADAS, no bugs:

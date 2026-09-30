@@ -2,7 +2,7 @@
 // rendimiento.js — Pestaña Rendimiento
 
 // Núcleo de cálculo compartido (ver domain/metrics.ts).
-import { ratio, tasaAcum, sumarTasa, leerTasa } from "./domain/metrics.js";
+import { ratio, tasaAcum, sumarTasa, leerTasa, AD_PROJECTION_FACTOR } from "./domain/metrics.js";
 import { sliceEscala, datasetLinea } from "./shared/escala.js";
 import { SIN_KAM, normKamValor } from "./core/config.js";
 import { t, kamLabel, mesLabel, getLang } from "./core/i18n";
@@ -337,6 +337,21 @@ export function _rendMetaMes(line, lastDate, over = null) {
   // compara — daba "no llega · faltan 24,788" (30-sep-2026). N+R y Horas sí
   // acumulan dentro del mes, así que siguen.
   if (STATE.curMode === "diario" && kpis.ad) kpis = { ...kpis, ad: { ...kpis.ad, actual: null, pct: null, proj: null, pctProj: null, noComparable: true } };
+  // Semanal: el AD de UNA semana contra la meta de conductores del MES tampoco
+  // es comparable (prod. agosto: ~27,500 por semana vs 47,816 en el mes → la
+  // tarjeta de Miguel decía 44%). Decisión de Manuel (30-sep-2026): en semanal
+  // AD se lee SOLO por su proyección (máx × 1.4). La proyección pasa a ser el
+  // "actual" de AD para todo lo de abajo (anillo, ¿llegamos?, ciudades, KAMs);
+  // `adSemana` conserva el nivel de la semana. Sin proyección (mes cerrado) no
+  // se compara, igual que en diario.
+  if (STATE.curMode === "semanal" && kpis.ad && kpis.ad.meta > 0) {
+    const a = kpis.ad, cu = a.cuota;
+    const pp = cu ? a.pctProj : (a.proj != null && Number.isFinite(a.proj) ? a.proj / a.meta * 100 : null);
+    kpis = { ...kpis, ad: pp == null || !Number.isFinite(pp)
+      ? { ...a, actual: null, pct: null, proj: null, pctProj: null, noComparable: true, noCompSemanal: true }
+      : { ...a, adSemana: a.actual, actual: cu ? cu.proj : a.proj, pct: pp, proj: null, pctProj: null, soloProy: true,
+          cuota: cu ? { ...cu, actual: cu.proj, pct: pp, proj: null, pctProj: null } : cu } };
+  }
   // Nombre del mes con la mayúscula natural de cada idioma dentro de una frase
   // ("septiembre" / "September" / "сентябрь"); sin Intl, el de mesLabel.
   let mesTxt = mesLabel(op.mes);
@@ -363,7 +378,8 @@ function _rdGoal(info, id) {
   if (!info) return undefined;
   const k = info.kpis[id];
   if (!k || !(k.meta > 0)) return { pct: null, caption: t("rd.meta.sinMetaDe", { m: info.mesTxt }) };
-  if (k.noComparable) return { pct: null, caption: t("ds.ad.diario", { n: k.F(k.meta) }) };
+  if (k.noComparable) return { pct: null, caption: t(k.noCompSemanal ? "ds.ad.semCerrado" : "ds.ad.diario", { n: k.F(k.meta) }) };
+  if (k.soloProy) return { pct: k.pct, caption: t("ds.ad.semProy", { m: info.mesCap, a: k.F(Math.round(k.actual)), n: k.F(k.meta), p: k.pct.toFixed(1) + "%" }) };
   if (k.actual == null || k.pct == null || !Number.isFinite(k.pct))
     return { pct: null, caption: t("rd.meta.soloMeta", { m: info.mesTxt, n: k.F(k.meta) }) };
   const tipo = _RD_META_TIPO[id] || "mes";
@@ -389,6 +405,7 @@ function _rdGoalNota(info) {
   if (!info) return "";
   let txt = t("rd.meta.nota", { m: info.mesTxt, n: info.enRango, t: info.total });
   if (STATE.curMode !== "mensual") txt += " " + t("rd.meta.notaEscala");
+  if (info.kpis.ad && info.kpis.ad.soloProy) txt += " " + t("ds.ad.notaSem");
   return `<p class="rd-note">${iconSvg("info", { size: 14 })}<span>${escapeHTML(txt)}</span></p>`;
 }
 
@@ -733,7 +750,8 @@ export function _renderRendImpl() {
   const conMetaChart = adMetaOk || nrMetaOk;
   if (conMetaChart) {
     html += _rdSec(t("ds.tend.meta.titulo", { m: metaInfo.mesTxt }), t("ds.tend.meta.sub"));
-    html += `<div class="rd-grid-2">${adMetaOk ? _rdChart("dsCh_adMeta", t("ds.tend.adMeta"), "AD_vs_meta", t("ds.tend.adMetaPie")) : ""}${nrMetaOk ? _rdChart("dsCh_nrMeta", t("ds.tend.nrMeta"), "NR_vs_meta", t("ds.tend.nrMetaPie")) : ""}</div>`;
+    const adSP = metaInfo.kpis.ad && metaInfo.kpis.ad.soloProy;
+    html += `<div class="rd-grid-2">${adMetaOk ? _rdChart("dsCh_adMeta", t(adSP ? "ds.tend.adMetaProy" : "ds.tend.adMeta"), "AD_vs_meta", t(adSP ? "ds.tend.adMetaProyPie" : "ds.tend.adMetaPie")) : ""}${nrMetaOk ? _rdChart("dsCh_nrMeta", t("ds.tend.nrMeta"), "NR_vs_meta", t("ds.tend.nrMetaPie")) : ""}</div>`;
   }
   const _m4 = html.length;
   html += _rdSec(t("rend.tend.titulo"), t("rd.tend.sub"));
@@ -1780,7 +1798,7 @@ function _dsKamAvanceHTML(info, metaKam, lastRows, estados) {
   cards.sort((a, b) => (a.k === SIN_KAM) - (b.k === SIN_KAM) || (a.peor ?? 1e9) - (b.peor ?? 1e9) || a.k.localeCompare(b.k));
   const w = v => Math.max(0, Math.min(100, v || 0)).toFixed(1);
   const fila = (k, id, x, ev) => {
-    if (!x || x.noComparable) return `<div class="ds-kc__row ds-kc__row--vacia"><span class="ds-kc__k">${escapeHTML(_dsLblK(id))}</span><span class="rd-muted">${escapeHTML(t(x ? "ds.ad.diarioCorto" : "ds.kamc.sinMeta"))}</span></div>`;
+    if (!x || x.noComparable) return `<div class="ds-kc__row ds-kc__row--vacia"><span class="ds-kc__k">${escapeHTML(_dsLblK(id))}</span><span class="rd-muted">${escapeHTML(t(x ? "ds.ad.noCompCorto" : "ds.kamc.sinMeta"))}</span></div>`;
     const tono = _DS_KC_TONO[_dsEstadoDe(ev)] || "neutral";
     const marca = enCurso && id !== "ad" ? `<span class="ds-kc__tick" style="left:${w(frac * 100)}%" title="${escapeHTML(t("ds.kamc.hoy", { p: (frac * 100).toFixed(0) }))}"></span>` : "";
     const proj = x.projPct != null && Number.isFinite(x.projPct) && info.proyOn
@@ -1789,8 +1807,8 @@ function _dsKamAvanceHTML(info, metaKam, lastRows, estados) {
     // al cierre, que es el veredicto — un 70% morado se leía como "sobre meta".
     const projTxt = x.projPct != null && Number.isFinite(x.projPct) && info.proyOn
       ? `<small class="ds-pct--${tono}">${escapeHTML(t("ds.kamc.proy", { p: x.projPct.toFixed(0) + "%" }))}</small>` : "";
-    return `<div class="ds-kc__row" title="${escapeHTML(t("ds.meta.tip", { a: x.F(x.actual), m: x.F(x.meta) }))}">
-      <div class="ds-kc__lbl"><span class="ds-kc__k">${escapeHTML(_dsLblK(id))}</span><span class="ds-kc__nums">${escapeHTML(x.F(x.actual))} <span>/ ${escapeHTML(x.F(x.meta))}</span></span></div>
+    return `<div class="ds-kc__row" title="${escapeHTML(t(x.soloProy ? "ds.meta.tipProy" : "ds.meta.tip", { a: x.F(Math.round(x.actual)), m: x.F(x.meta) }))}">
+      <div class="ds-kc__lbl"><span class="ds-kc__k">${escapeHTML(_dsLblK(id))}${x.soloProy ? ` <small>${escapeHTML(t("ds.ad.proyCorto"))}</small>` : ""}</span><span class="ds-kc__nums">${escapeHTML(x.F(Math.round(x.actual)))} <span>/ ${escapeHTML(x.F(x.meta))}</span></span></div>
       <div class="ds-kc__track ds-kc__track--${tono}">${proj}<span class="ds-kc__fill" style="width:${w(x.pct)}%"></span>${marca}</div>
       <div class="ds-kc__pct"><span class="ds-pct"${dn("ds", "kam", k, id, "pct")}>${x.pct.toFixed(1)}%</span>${projTxt}</div>
     </div>`;
@@ -1923,7 +1941,20 @@ export function _dsLlegamos(info, lastDate) {
   _DS_K3.forEach(k => {
     const x = info.kpis[k];
     if (x && x.noComparable) {
-      out[k] = `<div class="ds-gap ds-gap--neutral"><div class="ds-gap__big">${escapeHTML(t("ds.ad.diario", { n: (x.F || fmt)(x.meta) }))}</div></div>`;
+      out[k] = `<div class="ds-gap ds-gap--neutral"><div class="ds-gap__big">${escapeHTML(t(x.noCompSemanal ? "ds.ad.semCerrado" : "ds.ad.diario", { n: (x.F || fmt)(x.meta) }))}</div></div>`;
+      hay = true;
+      return;
+    }
+    if (x && x.soloProy) {
+      // Semanal: el actual de AD YA es la proyección. Veredicto y cuánto le
+      // falta a la proyección para la meta; sin "ritmo" (AD es un nivel).
+      const F = x.F || fmt, p = x.pct, ok = p >= 100;
+      hay = true;
+      out[k] = `<div class="ds-gap ds-gap--${ok ? "ok" : "warn"}" title="${escapeHTML(t("ds.ad.semTip"))}">
+        <div class="ds-gap__verd">${iconSvg(ok ? "check-circle" : "alert-triangle", { size: 13 })}<span>${escapeHTML(t(ok ? "ds.lleg.llega" : "ds.lleg.noLlega", { p: p.toFixed(1) + "%" }))}</span></div>
+        <div class="ds-gap__big">${ok ? `${escapeHTML(t("ds.ad.semSupera"))} <b>${F(Math.round(x.actual - x.meta))}</b>` : `${escapeHTML(t("ds.ad.semFalta"))} <b${dn("ds", "falta", k)}>${F(Math.round(Math.max(x.meta - x.actual, 0)))}</b>`}</div>
+        <div class="ds-gap__ritmo">${escapeHTML(t("ds.ad.semPie", { a: F(Math.round(x.actual)), n: F(x.meta) }))}</div>
+      </div>`;
       return;
     }
     if (!x || !(x.meta > 0) || x.actual == null) return;
@@ -2060,7 +2091,7 @@ export function _dsMetaGrupo(line, lastDate, over) {
   _DS_K3.forEach(k => {
     const x = r.kpis[k];
     if (x && x.noComparable) { out[k] = { noComparable: true }; return; }
-    out[k] = x && x.meta > 0 && x.pct != null ? { pct: x.pct, projPct: x.proj != null && r.proyOn ? x.proj / x.meta * 100 : null, actual: x.actual, meta: x.meta, F: x.F || fmt } : null;
+    out[k] = x && x.meta > 0 && x.pct != null ? { pct: x.pct, projPct: x.proj != null && r.proyOn ? x.proj / x.meta * 100 : null, actual: x.actual, meta: x.meta, F: x.F || fmt, soloProy: !!x.soloProy } : null;
   });
   return out;
 }
@@ -2068,8 +2099,10 @@ export function _dsMetaFilas(m, numKeyBase) {
   if (!m) return "";
   return `<div class="ds-metarows">${_DS_K3.map(k => {
     const x = m[k] && m[k].noComparable ? null : m[k];
-    return `<div class="ds-metarow" title="${x ? escapeHTML(t("ds.meta.tip", { a: x.F(x.actual), m: x.F(x.meta) })) : m[k] && m[k].noComparable ? escapeHTML(t("ds.ad.diarioCorto")) : ""}">
-      <span class="ds-metarow__k">${escapeHTML(_dsLblK(k))}</span>${_dsBar(x ? x.pct : null, x ? x.projPct : null)}${_dsPct(x ? x.pct : null, x ? [numKeyBase, k, "pct"].join(".") : null)}</div>`;
+    const tip = x ? t(x.soloProy ? "ds.meta.tipProy" : "ds.meta.tip", { a: x.F(Math.round(x.actual)), m: x.F(x.meta) })
+      : m[k] && m[k].noComparable ? t("ds.ad.noCompCorto") : "";
+    return `<div class="ds-metarow" title="${escapeHTML(tip)}">
+      <span class="ds-metarow__k">${escapeHTML(_dsLblK(k))}${x && x.soloProy ? ` <small>${escapeHTML(t("ds.ad.proyCorto"))}</small>` : ""}</span>${_dsBar(x ? x.pct : null, x ? x.projPct : null)}${_dsPct(x ? x.pct : null, x ? [numKeyBase, k, "pct"].join(".") : null)}</div>`;
   }).join("")}</div>`;
 }
 
@@ -2095,8 +2128,11 @@ export function _dsEstadoPorPartner(line, info) {
     // meta del mes entero pintaba "bajo meta" a casi todos. Mes cerrado: el %.
     const pct = {}, eva = {};
     const diario = STATE.curMode === "diario";
+    // Semanal: AD solo por su proyección (sin ella, no se compara).
+    const semanal = STATE.curMode === "semanal";
+    const adFuera = diario || (semanal && !(c.proyOn && res.ad && res.ad.proj != null));
     _DS_K3.forEach(k => {
-      const x = diario && k === "ad" ? null : res[k];
+      const x = adFuera && k === "ad" ? null : res[k];
       pct[k] = x && x.meta > 0 ? x.pct : null;
       // Sin proyección con el mes en curso (Metas no proyecta en diario): el %
       // se lee contra lo esperado a la fecha (ritmo lineal) en los flujos.
@@ -2109,10 +2145,11 @@ export function _dsEstadoPorPartner(line, info) {
     // contra la meta directa.
     const falta = {};
     _DS_K3.forEach(k => {
-      const x = diario && k === "ad" ? null : res[k];
+      const x = adFuera && k === "ad" ? null : res[k];
       if (!x || !(x.meta > 0)) { falta[k] = 0; return; }
       const esperado = k === "ad" || !c.proyOn ? x.meta : x.meta * frac;
-      falta[k] = Math.max(esperado - (x.actual || 0), 0);
+      const act = k === "ad" && semanal ? x.proj : x.actual;
+      falta[k] = Math.max(esperado - (act || 0), 0);
     });
     out.set(p, { estado: peor == null ? "sin" : ps.some(v => v < 95) ? "bajo" : ps.every(v => v >= 100) ? "sobre" : "en", peor, pct, eva, falta, res });
   });
@@ -2151,8 +2188,11 @@ export function _dsPintarMeta(info, apd, dates) {
   apd.forEach(r => { const o = tot.get(r.date) || { ad: 0, nr: 0 }; o.ad += r.activeDrivers || 0; o.nr += _dsNR(r); tot.set(r.date, o); });
   const ad = info.kpis.ad, nr = info.kpis.nr;
   if (document.getElementById("dsCh_adMeta") && ad && ad.meta > 0) {
+    // Semanal: solo la proyección (AD de la semana × 1.4, la regla de Metas),
+    // no el nivel semanal contra una meta mensual (decisión de Manuel, 30-sep).
+    const f = ad.soloProy ? AD_PROJECTION_FACTOR : 1;
     buildLineChart("dsCh_adMeta", dates, [
-      { name: t("metric.ad.label"), data: dates.map(d => (tot.get(d) || {}).ad || 0) },
+      { name: ad.soloProy ? t("ds.tend.adProy") : t("metric.ad.label"), data: dates.map(d => Math.round(((tot.get(d) || {}).ad || 0) * f)) },
       { name: t("ds.tend.metaMes"), data: dates.map(() => ad.meta) }
     ], [seriesColor(0, tk), tk.textMuted], { ...ESTILO_SUAVE, stroke: { width: [3, 2], dashArray: [0, 6] } });
   }
