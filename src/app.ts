@@ -487,7 +487,10 @@ export function switchTab(tab) {
     };
     const lazyBox = LAZY_TAB_CONTENT[tab] && document.getElementById(LAZY_TAB_CONTENT[tab]);
     if (lazyBox && !lazyBox.innerHTML.trim()) {
-      lazyBox.innerHTML = `<div style="padding:60px 0;text-align:center;color:var(--color-text-muted);font-size:.85rem">Cargando…</div>`;
+      // Presentación: silueta de la barra y la hoja + los pasos que se esperan
+      // (pedido de Manuel, 30-sep-2026: "no solo el fondo blanco con CARGANDO").
+      lazyBox.innerHTML = tab === "present2" ? cargaPresentacionHTML()
+        : `<div style="padding:60px 0;text-align:center;color:var(--color-text-muted);font-size:.85rem">Cargando…</div>`;
     }
 
     // Restaurar filtros guardados
@@ -540,6 +543,7 @@ export function switchTab(tab) {
       }
 
       if (STATE._tabRenderId !== tokenAtDispatch || STATE.curTab !== tab) return;
+      marcarPasoCarga(lazyBox, "modulo");
 
       // Columnas pesadas bajo demanda: estas 4 pestañas son las únicas que leen
       // las 26 columnas que el arranque NO pide (ver TX_DEFERRED_COLS en
@@ -559,10 +563,12 @@ export function switchTab(tab) {
         try { await ensureFullRendColumns(); } catch (e) { /* nunca bloquear el render */ }
         if (STATE._tabRenderId !== tokenAtDispatch || STATE.curTab !== tab) return;
       }
+      marcarPasoCarga(lazyBox, "detalle");
       if (_NEED_MENSUAL.has(tab) && STATE.userRole !== "partner" && typeof loadMensualIfNeeded === "function") {
         try { await loadMensualIfNeeded(true); } catch (e) { /* nunca bloquear el render */ }
         if (STATE._tabRenderId !== tokenAtDispatch || STATE.curTab !== tab) return;
       }
+      marcarPasoCarga(lazyBox, "mensual");
       // Configuración NO espera (sus listas son útiles con la semanal sola): pide
       // mensual y diaria por detrás y se repinta una vez si llegó algo nuevo.
       if (_NEED_TODAS_ESCALAS.has(tab) && typeof loadMensualIfNeeded === "function") {
@@ -1079,6 +1085,7 @@ import { logAccess } from "./shared/accessLog.js";
 import { guardarPref, leerPref, instalarTema, temaActual, EVENTO_TEMA } from "./shared/theme";
 import { iconSvg } from "./shared/icons";
 import { escapeHTML } from "./core/security";
+import { cargaPresentacionHTML, marcarPasoCarga } from "./shared/cargaPresentacion";
 import { instalarShell, renderShellNav, renderPageHeader, schedulePageHeader, syncNavActive,
          closeNavDrawer, syncFiltrosAria, syncMenusAria } from "./shell";
 

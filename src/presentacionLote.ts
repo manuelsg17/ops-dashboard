@@ -37,13 +37,13 @@ import { registerActions } from "./shared/actions.js";
 import { mesL } from "./core/i18nExport";
 import { ordenarKams } from "./domain/desgloseKam";
 import {
-  TIPOS, tipoDeEtiqueta, nuevasReglas, incluida, fijarHoja, fijarTipoTodos, aplicarPlantilla,
-  plantillaActiva, tieneExcepciones, limpiarPartner, estadoDe, siguienteValor, PLANTILLAS
+  TIPOS, tipoDeEtiqueta, incluida, fijarHoja, fijarTipoTodos, aplicarPlantilla,
+  plantillaActiva, tieneExcepciones, limpiarPartner, estadoDe, siguienteValor, PLANTILLAS, reglasIniciales
 } from "./domain/loteHojas";
 import {
   PRESENT2_STATE, P2_LANGS, p2Deck, p2SlideKey, p2GenerarPdf, p2NombrePdf, p2ChequeoExport,
   p2HasTaxi, p2TuktukSectionVisible, p2TieneVertical, p2PartnerList, p2MetaMeses, p2AvanceMes,
-  destroyPresent2Charts, renderPresent2
+  destroyPresent2Charts, renderPresent2, p2PdfOffDefecto
 } from "./presentacion2";
 
 // Segundos por hoja medidos (html2canvas a escala 4 + espera de gráficos).
@@ -103,9 +103,10 @@ const _vista = p => P2_LOTE.vista[p] || "auto";
 const _hojasOn = p => p.hojas.filter(h => incluida(P2_LOTE.reglas, p.name, h.key));
 function _asegurar() {
   if (!P2_LOTE.kam || !p2LoteKams().includes(P2_LOTE.kam)) P2_LOTE.kam = _kamPorDefecto();
-  // Las hojas que el KAM ya saca siempre en la descarga individual (pdfOff)
-  // arrancan fuera también acá: son las mismas claves de hoja.
-  if (!P2_LOTE.reglas) { P2_LOTE.reglas = nuevasReglas(); PRESENT2_STATE.pdfOff.forEach(k => P2_LOTE.reglas.offKeys.add(k)); }
+  // Las hojas que el KAM ya saca en la descarga individual (pdfOff) arrancan
+  // fuera también acá: son las mismas claves de hoja. Las que no van por
+  // defecto (N+R por origen, Embudo) entran como tipo entero → "Estándar".
+  if (!P2_LOTE.reglas) P2_LOTE.reglas = reglasIniciales(PRESENT2_STATE.pdfOff, p2PdfOffDefecto());
   if (!_puedeCarpeta()) P2_LOTE.destino = "descargas";
 }
 
@@ -118,7 +119,7 @@ const _TIPO_TIP = {
   portada: "p2l.tip.portada", ejec: "p2l.tip.ejec", resumen: "p2l.tip.resumen", kpis: "p2l.tip.kpis", nrorigen: "p2l.tip.nrorigen",
   alertas: "p2l.tip.alertas", embudo: "p2l.tip.embudo", canal: "p2l.tip.canal", seg: "p2l.tip.seg", raw: "p2l.tip.raw", otra: "p2l.tip.otra"
 };
-const _PLANT_LBL = { completo: "p2l.plant.completo", ejecutivo: "p2l.plant.ejecutivo", sinanexo: "p2l.plant.sinanexo" };
+const _PLANT_LBL = { estandar: "p2l.plant.estandar", completo: "p2l.plant.completo", ejecutivo: "p2l.plant.ejecutivo", sinanexo: "p2l.plant.sinanexo" };
 const _dur = s => s < 90 ? t("p2l.dur.seg", { n: Math.max(5, Math.round(s / 5) * 5) }) : t("p2l.dur.min", { n: Math.round(s / 60) });
 
 // ── Render ────────────────────────────────────────────────────────────────────

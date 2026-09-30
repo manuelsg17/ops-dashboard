@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   tipoDeEtiqueta, tipoDeClave, nuevasReglas, incluida, fijarHoja, fijarTipoTodos,
-  aplicarPlantilla, plantillaActiva, tieneExcepciones, estadoDe, siguienteValor
+  aplicarPlantilla, plantillaActiva, tieneExcepciones, estadoDe, siguienteValor, reglasIniciales
 } from "./loteHojas";
 
 const RAW_TX = "taxi|Data Raw (#) · Taxi", RAW_TXP = "taxi|Data Raw (%) · Taxi", KPI_TX = "taxi|KPIs por Nivel · Taxi";
@@ -60,5 +60,22 @@ describe("lote de presentaciones: qué hojas van", () => {
     expect(siguienteValor("on")).toBe(false);
     expect(siguienteValor("mix")).toBe(true);
     expect(siguienteValor("off")).toBe(true);
+  });
+  it("arranca como la individual: N+R por origen y Embudo fuera como tipo (plantilla Estándar)", () => {
+    const DEF = ["taxi|N+R por origen · Taxi", "taxi|Embudo de conversión", "tuktuk|Embudo de conversión"];
+    const r = reglasIniciales(DEF, DEF);
+    expect(plantillaActiva(r)).toBe("estandar");
+    expect(incluida(r, "A", "taxi|N+R por origen · Taxi")).toBe(false);
+    expect(incluida(r, "A", "tuktuk|Embudo de conversión")).toBe(false);
+    expect(incluida(r, "A", "taxi|Adquisición por canal")).toBe(true);
+    // el KAM volvió a marcar el embudo en la individual → arranca adentro
+    const r2 = reglasIniciales([DEF[0], RAW_TX], DEF);
+    expect(incluida(r2, "A", "taxi|Embudo de conversión")).toBe(true);
+    expect(incluida(r2, "A", DEF[0])).toBe(false);
+    expect(incluida(r2, "A", RAW_TX)).toBe(false);          // hoja suelta, como antes
+    expect(incluida(r2, "A", RAW_TXP)).toBe(true);
+    // "Deck completo" incluye las que por defecto no van
+    aplicarPlantilla(r, "completo");
+    expect(incluida(r, "A", DEF[0])).toBe(true);
   });
 });

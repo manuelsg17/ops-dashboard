@@ -25,6 +25,7 @@ import "./styles.css";
 import "./styles/views/calculator.css";
 import "./styles/views/rendimiento.css"; import "./styles/ring.css";   // Fase 8: anillo de avance
 import "./styles/views/presentacion.css";
+import "./styles/views/caratula.css";   // carátula del deck (30-sep-2026)
 import "./styles/views/seguimiento.css";
 import "./styles/views/portal.css";
 import { createClient } from "@supabase/supabase-js";
@@ -212,6 +213,10 @@ if (import.meta.env.DEV && new URLSearchParams(location.search).get("ui") === "k
 // mecanismo que el kit: la rama se elimina del build de producción.
 if (import.meta.env.DEV && new URLSearchParams(location.search).get("ui") === "proto") {
   import("./dev/proto/proto").then(m => m.mountProto()).catch(err => console.error("[proto]", err));
+}
+// Maquetas de la carátula del deck (SOLO dev): ?ui=covers. Mismo mecanismo.
+if (import.meta.env.DEV && new URLSearchParams(location.search).get("ui") === "covers") {
+  import("./dev/covers").then(m => m.mountCovers()).catch(err => console.error("[covers]", err));
 }
 
 // Loader asíncrono para módulos de pantalla pesados (Lazy Loading)

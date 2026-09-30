@@ -1,0 +1,74 @@
+/* ═════════════════════════════════════════════════════════════════════════
+   views/caratula.css — Carátula del deck de Presentación (30-sep-2026)
+
+   Fondo de la propuesta A + información de la B (maquetas en ?ui=covers).
+   Semanal/diario: degradado oscuro con rojo. Mensual: degradado blanco.
+
+   Colores en HEX a propósito (a diferencia del resto de las vistas): la
+   carátula es una PIEZA de exportación, se ve igual con la app en claro o en
+   oscuro y es lo que recibe el partner en el PDF.
+
+   Medidas en cqw: `calc(N * 1cqw / 12.8)` = N px en la hoja de 1280 px del
+   PDF, y escala sola al ancho de la vista previa en pantalla. El contenedor de
+   las cqw es .p2c (container-type), así que .p2c no puede usarlas para sí.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+.p2c {
+  position: relative; width: 100%; height: 100%; overflow: hidden;
+  container-type: inline-size;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+.p2c--osc   { background: linear-gradient(115deg, #09090b 0%, #140707 40%, #3b0707 68%, #7d0d09 100%); color: #fff; }
+.p2c--clara { background: linear-gradient(115deg, #ffffff 0%, #ffffff 42%, #fff3f2 66%, #ffe0dd 100%); color: #141418; }
+.p2c__deco { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+
+.p2c__body {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%; box-sizing: border-box;
+  padding: calc(52cqw / 12.8) calc(64cqw / 12.8) calc(46cqw / 12.8);
+  display: flex; flex-direction: column;
+}
+.p2c__top { display: flex; align-items: center; justify-content: space-between; }
+.p2c__brand { display: flex; align-items: center; gap: calc(12cqw / 12.8); }
+.p2c__sq {
+  width: calc(44cqw / 12.8); height: calc(44cqw / 12.8); border-radius: calc(12cqw / 12.8);
+  background: #E1251B; display: flex; align-items: center; justify-content: center;
+}
+.p2c__sq svg { width: calc(24cqw / 12.8); height: calc(24cqw / 12.8); }
+.p2c__brandtxt { font-size: calc(22cqw / 12.8); font-weight: 900; letter-spacing: -.02em; }
+.p2c__conf { font-size: calc(12cqw / 12.8); font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+
+.p2c__main { margin-top: calc(96cqw / 12.8); }
+.p2c__eyebrow { font-size: calc(20cqw / 12.8); font-weight: 800; letter-spacing: .125em; text-transform: uppercase; }
+.p2c__rule { width: calc(300cqw / 12.8); height: 2px; margin: calc(12cqw / 12.8) 0 calc(22cqw / 12.8); }
+.p2c__name { font-weight: 900; letter-spacing: -.03em; line-height: 1.02; max-width: calc(800cqw / 12.8); overflow-wrap: anywhere; }
+.p2c__name--l  { font-size: calc(84cqw / 12.8); }
+.p2c__name--m  { font-size: calc(67cqw / 12.8); }
+.p2c__name--s  { font-size: calc(56cqw / 12.8); }
+.p2c__name--xs { font-size: calc(46cqw / 12.8); }
+.p2c__period { font-size: calc(34cqw / 12.8); font-weight: 700; letter-spacing: -.01em; margin-top: calc(18cqw / 12.8); }
+
+.p2c__strip { margin-top: auto; display: flex; align-items: stretch; gap: calc(28cqw / 12.8); max-width: calc(760cqw / 12.8); }
+.p2c__col { display: flex; flex-direction: column; gap: calc(6cqw / 12.8); min-width: 0; }
+.p2c__lbl { font-size: calc(12cqw / 12.8); font-weight: 800; letter-spacing: .15em; text-transform: uppercase; }
+.p2c__val { font-size: calc(18cqw / 12.8); font-weight: 700; }
+.p2c__sep { width: 1px; flex: none; }
+
+/* Logo en un círculo blanco (su sombra y su aro van en el SVG de fondo:
+   html2canvas no dibuja box-shadow igual que el navegador). */
+.p2c__logo {
+  position: absolute; left: 75cqw; top: calc(150cqw / 12.8);
+  width: calc(230cqw / 12.8); height: calc(230cqw / 12.8); border-radius: 50%;
+  background: #fff; display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+.p2c__logo img { max-width: 74%; max-height: 56%; width: auto; height: auto; }
+.p2c__mono { font-size: calc(78cqw / 12.8); font-weight: 900; letter-spacing: -.03em; color: #E1251B; }
+
+/* Colores por escala */
+.p2c--osc .p2c__acc, .p2c--osc .p2c__eyebrow, .p2c--osc .p2c__period, .p2c--osc .p2c__lbl { color: #ff4a3d; }
+.p2c--osc .p2c__rule { background: linear-gradient(90deg, #ff4a3d, rgba(255, 74, 61, 0)); }
+.p2c--osc .p2c__conf { color: rgba(255, 255, 255, .5); }
+.p2c--osc .p2c__sep  { background: rgba(255, 255, 255, .22); }
+.p2c--clara .p2c__acc, .p2c--clara .p2c__eyebrow, .p2c--clara .p2c__period, .p2c--clara .p2c__lbl { color: #E1251B; }
+.p2c--clara .p2c__rule { background: linear-gradient(90deg, #E1251B, rgba(225, 37, 27, 0)); }
+.p2c--clara .p2c__conf { color: rgba(122, 11, 8, .6); }   /* va sobre el panel rosado */
+.p2c--clara .p2c__sep  { background: rgba(225, 37, 27, .35); }

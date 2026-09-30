@@ -312,3 +312,78 @@
 .p2l-gen__txt { font-size: var(--text-sm); font-weight: var(--weight-semibold); }
 .p2l-gen__bar { height: 8px; border-radius: 99px; background: var(--color-fill-soft); overflow: hidden; }
 .p2l-gen__bar span { display: block; height: 100%; border-radius: 99px; background: var(--color-info-fg); transition: width .3s; }
+
+/* ── Pantalla de carga (primera visita de la sesión, 30-sep-2026) ─────────────
+   La pinta app.ts (shared/cargaPresentacion.ts) mientras llegan el chunk de la
+   vista, las columnas de detalle y la escala mensual. La silueta imita la barra
+   y la hoja reales; el fondo de la hoja es la carátula nueva (hex a propósito:
+   es la misma pieza que en caratula.css, igual en claro y en oscuro). */
+.p2-carga {
+  display: flex; flex-direction: column; gap: var(--space-3);
+  padding: var(--space-4) var(--space-5) var(--space-6);
+  font-family: var(--font-sans);
+}
+.p2-carga__barra {
+  display: flex; align-items: flex-end; gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-surface); border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-card); box-shadow: var(--shadow-card);
+}
+.p2-carga__esp { flex: 1; }
+.p2-carga__chips { display: flex; gap: var(--space-2); flex-wrap: nowrap; overflow: hidden; }
+.p2-sk {
+  display: inline-block; border-radius: 999px;
+  background: linear-gradient(90deg, var(--color-fill-soft) 0%, var(--color-border-soft) 50%, var(--color-fill-soft) 100%);
+  background-size: 200% 100%;
+  animation: p2Sk 1.4s ease-in-out infinite;
+}
+.p2-sk--campo { width: 132px; height: 34px; border-radius: 10px; }
+.p2-sk--boton { width: 116px; height: 34px; }
+.p2-sk--chip  { width: 92px; height: 28px; }
+@keyframes p2Sk { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+
+.p2-carga__hoja {
+  position: relative; width: 100%; aspect-ratio: 16 / 9; min-height: 320px; overflow: hidden;
+  border-radius: 16px; box-shadow: 0 4px 24px rgba(0, 0, 0, .12);
+  background: linear-gradient(115deg, #09090b 0%, #140707 40%, #3b0707 68%, #7d0d09 100%);
+  color: #fff;
+}
+.p2-carga__fondo { position: absolute; inset: 0; width: 100%; height: 100%; }
+.p2-carga__brillo {
+  position: absolute; top: 0; bottom: 0; left: -40%; width: 40%;
+  background: linear-gradient(100deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, .09) 50%, rgba(255, 255, 255, 0) 100%);
+  animation: p2Brillo 2.2s ease-in-out infinite;
+}
+@keyframes p2Brillo { 0% { transform: translateX(0); } 100% { transform: translateX(350%); } }
+.p2-carga__centro {
+  position: absolute; left: 7%; top: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column; align-items: flex-start; gap: 14px;
+}
+.p2-carga__logo {
+  width: 56px; height: 56px; border-radius: 16px; background: #E1251B;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 0 0 rgba(225, 37, 27, .6); animation: p2Latido 1.8s ease-out infinite;
+}
+.p2-carga__logo svg { width: 30px; height: 30px; }
+.p2-carga__trazo { stroke-dasharray: 60; stroke-dashoffset: 60; animation: p2Trazo 1.8s ease-in-out infinite; }
+@keyframes p2Trazo { 0% { stroke-dashoffset: 60; } 55%, 100% { stroke-dashoffset: 0; } }
+@keyframes p2Latido { 0% { box-shadow: 0 0 0 0 rgba(225, 37, 27, .55); } 100% { box-shadow: 0 0 0 22px rgba(225, 37, 27, 0); } }
+.p2-carga__titulo { font-size: clamp(18px, 2.4vw, 28px); font-weight: 900; letter-spacing: -.02em; }
+.p2-carga__pasos { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.p2-carga__paso { display: flex; align-items: center; gap: 10px; font-size: 14px; color: rgba(255, 255, 255, .45); transition: color .2s; }
+.p2-carga__marca {
+  width: 20px; height: 20px; border-radius: 50%; flex: none;
+  border: 2px solid rgba(255, 255, 255, .25); display: flex; align-items: center; justify-content: center;
+}
+.p2-carga__marca svg { width: 12px; height: 12px; opacity: 0; }
+.p2-carga__paso.is-activo { color: #fff; }
+.p2-carga__paso.is-activo .p2-carga__marca { border-color: rgba(255, 255, 255, .25); border-top-color: #ff4a3d; animation: p2Giro .8s linear infinite; }
+.p2-carga__paso.is-listo { color: rgba(255, 255, 255, .8); }
+.p2-carga__paso.is-listo .p2-carga__marca { background: #E1251B; border-color: #E1251B; color: #fff; }
+.p2-carga__paso.is-listo .p2-carga__marca svg { opacity: 1; }
+@keyframes p2Giro { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .p2-sk, .p2-carga__brillo, .p2-carga__logo, .p2-carga__trazo { animation: none; }
+  .p2-carga__trazo { stroke-dashoffset: 0; }
+  .p2-carga__paso.is-activo .p2-carga__marca { animation-duration: 2s; }
+}

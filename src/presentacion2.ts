@@ -135,6 +135,7 @@ export let PRESENT2_STATE = {
   // conductores en Delivery/Cargo igual recibía dos hojas por cada una. No se
   // resuelve con un umbral automático (¿2 conductores? ¿5?): la decisión de qué
   // le sirve a ESE partner es del KAM, y cambia según la conversación.
+  // Arranca con p2PdfOffDefecto() (se asigna más abajo, junto a esas hojas).
   pdfOff:   new Set(),
   pdfPanel: false,      // panel de selección abierto
   charts:   [],
@@ -495,47 +496,133 @@ export function p2BrandFooter(idx) {
   </div>`;
 }
 
-// ── SLIDE: CARÁTULA (branded, oscura) ─────────────────────────────────────────
-// Slot del LOGO del partner en la carátula. Hoy nadie carga logos, así que se
-// dibuja un monograma (iniciales en el color del partner) — el espacio ya está
-// reservado y maquetado. Cuando haya logos reales: poblar STATE.partnerLogos
-// (partner → dataURL o ruta same-origin; la CSP admite 'self', data: y blob:)
-// y esta función los usa sola, sin tocar el layout.
-export function p2CoverLogo(partner, col) {
-  const url = (STATE.partnerLogos || {})[partner];
-  if (url) return `<img class="p2-cover-logo" src="${escapeHTML(url)}" alt="">`;
-  const ini = String(partner || "").trim().split(/\s+/).slice(0, 2)
-    .map(w => w[0] || "").join("").toUpperCase();
-  return `<div class="p2-cover-logo p2-cover-monogram" style="color:${col};border-color:${col}33;background:${col}0d">${escapeHTML(ini)}</div>`;
+// ── SLIDE: CARÁTULA (rediseño 30-sep-2026) ────────────────────────────────────
+// Manuel eligió, entre las maquetas de ?ui=covers, el FONDO de la propuesta A
+// (paneles en diagonal con destello, en degradado, como la pieza de campaña
+// "Yango Ads × Santander" que mandó de referencia) con la INFORMACIÓN de la B
+// (nombre grande, período en color, franja con tendencia · ciudades ·
+// ejecutivo, logo en un círculo). Sin la tarjeta inclinada de la A: "lo mío no
+// es de tarjetas".
+//   - SEMANAL (y diario): degradado oscuro con rojo.
+//   - MENSUAL: degradado con BLANCO como color principal.
+//
+// Por qué el decorado es un <svg> con colores literales y no CSS: html2canvas
+// (el motor del PDF) no soporta `filter`, `clip-path` ni `color-mix()`, pero sí
+// rasteriza un SVG inline completo, gradientes y feGaussianBlur incluidos. Con
+// `currentColor` el SVG saldría negro en la captura (se serializa suelto).
+//
+// Medidas en `cqw` (styles/views/caratula.css): la hoja se ve a cualquier ancho
+// en pantalla y a 1280 px en el PDF, y todo escala junto sin JS.
+let _p2CoverUid = 0;
+function _p2CoverDeco(oscuro) {
+  const u = "p2c" + (++_p2CoverUid);
+  // Mensual: el panel arranca casi blanco y recién llega al rojo en el borde.
+  const [c1, c2] = oscuro ? ["#ff3b2f", "#8f0d08"] : ["#ffe1de", "#E1251B"];
+  const brillo = "#ff8f86";
+  // Círculo del logo: centro (1075, 265), radio 115 — mismo lugar que .p2c__logo.
+  // El panel en diagonal baja hasta x=860 para no cruzar la franja de abajo
+  // (tendencia · ciudades · ejecutivo), que llega a ~780 px.
+  const sombra = oscuro ? "#000" : "#7a0b08";
+  return `<svg class="p2c__deco" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <defs>
+      <linearGradient id="${u}p" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></linearGradient>
+      <linearGradient id="${u}q" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${c1}" stop-opacity="${oscuro ? .55 : .35}"/><stop offset="1" stop-color="${c1}" stop-opacity="0"/></linearGradient>
+      <radialGradient id="${u}g" cx=".82" cy=".78" r=".55"><stop offset="0" stop-color="${c1}" stop-opacity="${oscuro ? .55 : .28}"/><stop offset="1" stop-color="${c1}" stop-opacity="0"/></radialGradient>
+      <filter id="${u}b" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="7"/></filter>
+      <filter id="${u}B" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="26"/></filter>
+    </defs>
+    <rect width="1280" height="720" fill="url(#${u}g)"/>
+    <polygon points="990,0 1280,0 1280,720 860,720" fill="url(#${u}p)"/>
+    <polygon points="1160,0 1280,0 1280,720 1070,720" fill="${oscuro ? "#000" : c2}" opacity="${oscuro ? .28 : .22}"/>
+    <polygon points="920,0 960,0 830,720 790,720" fill="url(#${u}q)"/>
+    <line x1="988" y1="-10" x2="858" y2="730" stroke="${brillo}" stroke-width="12" filter="url(#${u}b)" opacity=".85"/>
+    <line x1="989" y1="-10" x2="859" y2="730" stroke="#fff" stroke-width="2" opacity=".75"/>
+    <line x1="1170" y1="-10" x2="1070" y2="730" stroke="#fff" stroke-width="1.5" opacity=".35"/>
+    <circle cx="1120" cy="610" r="150" fill="${brillo}" opacity="${oscuro ? .35 : .45}" filter="url(#${u}B)"/>
+    <g opacity=".5" filter="url(#${u}b)"><line x1="1280" y1="160" x2="960" y2="430" stroke="#fff" stroke-width="3"/><line x1="1280" y1="300" x2="1040" y2="520" stroke="#fff" stroke-width="2"/></g>
+    <circle cx="1075" cy="287" r="118" fill="${sombra}" opacity="${oscuro ? .45 : .3}" filter="url(#${u}B)"/>
+    <circle cx="1075" cy="265" r="127" fill="none" stroke="#fff" stroke-opacity=".22" stroke-width="12"/>
+  </svg>`;
+}
+// Mes corto en el idioma del deck ("sep", "Sep", "сен").
+function _p2MesCorto(i) {
+  const m = mesNombre(i, PRESENT2_STATE.lang, { corto: true });
+  return P2T(m.toLowerCase(), m, m.toLowerCase());   // inglés con mayúscula ("Sep")
+}
+// "21 – 27 sep 2026" (semana), "27 sep 2026" (día), "Agosto 2026" (mes).
+export function p2PeriodoCaratula(to, mode) {
+  if (!to) return "";
+  const d = parseLocalDate(to);
+  if (mode === "mensual") {
+    const { y, m } = reportYM(to, "mensual", parseLocalDate);
+    const base = `${mesNombre(m - 1, PRESENT2_STATE.lang)} ${y}`;
+    const dm = p2DiasMes(to);
+    // Mes en curso: se aclara hasta qué día llegan los datos.
+    return dm && dm.daysElapsed < dm.daysInMonth
+      ? `${base} · ${P2T("al", "through", "по")} ${dm.daysElapsed} ${_p2MesCorto(m - 1)}` : base;
+  }
+  if (mode === "diario") return `${d.getDate()} ${_p2MesCorto(d.getMonth())} ${d.getFullYear()}`;
+  const f = new Date(d); f.setDate(f.getDate() + 6);
+  const [d1, m1, y1, d2, m2, y2] = [d.getDate(), d.getMonth(), d.getFullYear(), f.getDate(), f.getMonth(), f.getFullYear()];
+  if (y1 !== y2) return `${d1} ${_p2MesCorto(m1)} ${y1} – ${d2} ${_p2MesCorto(m2)} ${y2}`;
+  if (m1 !== m2) return `${d1} ${_p2MesCorto(m1)} – ${d2} ${_p2MesCorto(m2)} ${y2}`;
+  return `${d1} – ${d2} ${_p2MesCorto(m2)} ${y2}`;
+}
+// "6 semanas · desde el 17 ago" / "4 meses · mayo → agosto". null con un solo período.
+function _p2TendenciaCaratula(dates, mode) {
+  if (!dates || dates.length < 2) return null;
+  const n = dates.length, mi = p2ModeInfo();
+  if (mode === "mensual") {
+    const a = reportYM(dates[0], "mensual", parseLocalDate), b = reportYM(dates[n - 1], "mensual", parseLocalDate);
+    const nom = i => { const s = mesNombre(i, PRESENT2_STATE.lang); return P2T(s.toLowerCase(), s, s.toLowerCase()); };
+    return `${n} ${mi.units} · ${nom(a.m - 1)} → ${nom(b.m - 1)}`;
+  }
+  const d = parseLocalDate(dates[0]);
+  return `${n} ${mi.units} · ${P2T("desde el", "since", "с")} ${d.getDate()} ${_p2MesCorto(d.getMonth())}`;
 }
 
 export function buildSlide2Cover(partner, dates) {
-  const col = (STATE.partnerColors && STATE.partnerColors[partner]) || "#FF0000";
+  const mode = STATE.curMode;
+  const oscuro = mode !== "mensual";
   const kam = (typeof getKAMForPartner === "function" ? getKAMForPartner(partner) : "") || "";
   const cities = p2PartnerCities(partner).map(c => ciudadL(c, PRESENT2_STATE.lang)).join(" · ");
   // Ventana REAL que muestran las demás slides (p2SelectedDates: en mensual = tail4,
   // ignora el "Desde" crudo) — NUNCA leer #dateFrom/#dateTo directo aquí: la carátula
   // rotulaba un período distinto al que cubren KPIs por Nivel/Data Raw (bug de auditoría).
-  const from = (dates && dates[0]) || (document.getElementById("dateFrom") ? document.getElementById("dateFrom").value : (p2AllDates() || [])[0]);
-  const to   = (dates && dates[dates.length - 1]) || (document.getElementById("dateTo") ? document.getElementById("dateTo").value : (p2AllDates() || []).slice(-1)[0]);
-  const modeLabel = P2T(`Avance ${p2ModeInfo().label}`, `${p2ModeInfo().label} Update`, `Обновление · ${p2ModeInfo().label}`);
-  const period = `${d2s(from)} → ${d2s(to)}`;
+  const to = (dates && dates[dates.length - 1]) || (document.getElementById("dateTo") ? document.getElementById("dateTo").value : (p2AllDates() || []).slice(-1)[0]);
+  const eyebrow = mode === "mensual" ? P2T("Avance mensual", "Monthly update", "Ежемесячный отчёт")
+                : mode === "diario"  ? P2T("Avance diario", "Daily update", "Ежедневный отчёт")
+                :                      P2T("Avance semanal", "Weekly update", "Еженедельный отчёт");
+  const tend = _p2TendenciaCaratula(dates, mode);
+  const largo = String(partner || "").length;
+  const tam = largo > 48 ? "xs" : largo > 34 ? "s" : largo > 24 ? "m" : "l";
+  const url = (STATE.partnerLogos || {})[partner];
+  const ini = String(partner || "").trim().split(/\s+/).slice(0, 2).map(w => w[0] || "").join("").toUpperCase();
+  const logo = url ? `<img src="${escapeHTML(url)}" alt="">` : `<span class="p2c__mono">${escapeHTML(ini)}</span>`;
+  const cols = [];
+  if (tend) cols.push([P2T("Tendencia", "Trend", "Динамика"), tend]);
+  if (cities) cols.push([P2T("Ciudades", "Cities", "Города"), cities]);
+  // "No KAM" es un bucket interno: no se le muestra al partner.
+  if (kam && kam !== SIN_KAM) cols.push([P2T("Ejecutivo de cuenta", "Account manager", "Менеджер"), kam]);
+  const strip = cols.map(([l, v]) => `<div class="p2c__col"><span class="p2c__lbl">${escapeHTML(l)}</span><span class="p2c__val">${escapeHTML(v)}</span></div>`)
+    .join(`<span class="p2c__sep"></span>`);
   return `
-    <div class="agy-style-342">
-      <div style="position:absolute;top:-80px;right:-80px;width:320px;height:320px;border-radius:50%;background:${col};opacity:.08"></div>
-      <div class="agy-style-343"></div>
-      <div class="agy-style-344">
-        <div class="agy-style-345">${P2_LOGO_SVG}</div>
-        <div class="agy-style-346">YANGO <span class="agy-style-51">Partners</span></div>
+    <div class="p2c ${oscuro ? "p2c--osc" : "p2c--clara"}">
+      ${_p2CoverDeco(oscuro)}
+      <div class="p2c__body">
+        <div class="p2c__top">
+          <div class="p2c__brand"><span class="p2c__sq">${P2_LOGO_SVG}</span><span class="p2c__brandtxt">YANGO <span class="p2c__acc">Partners</span></span></div>
+          <span class="p2c__conf">${escapeHTML(P2T("Confidencial", "Confidential", "Конфиденциально"))}</span>
+        </div>
+        <div class="p2c__main">
+          <div class="p2c__eyebrow">${escapeHTML(eyebrow)}</div>
+          <div class="p2c__rule"></div>
+          <div class="p2c__name p2c__name--${tam}">${escapeHTML(partner)}</div>
+          <div class="p2c__period">${escapeHTML(p2PeriodoCaratula(to, mode))}</div>
+        </div>
+        ${strip ? `<div class="p2c__strip">${strip}</div>` : ""}
       </div>
-      ${p2CoverLogo(partner, col)}
-      <div class="agy-style-175">
-        <div style="width:14px;height:14px;border-radius:50%;background:${col}"></div>
-        <div class="agy-style-347">${escapeHTML(partner)}</div>
-      </div>
-      <div class="agy-style-348">${modeLabel} · ${period}</div>
-      ${cities ? `<div class="agy-style-349">${escapeHTML(cities)}</div>` : `<div class="agy-style-350"></div>`}
-      ${kam && kam !== SIN_KAM /* "No KAM" es un bucket interno: no se le muestra al partner */ ? `<div class="agy-style-351">${P2T("Ejecutivo de Cuenta", "Account Manager", "Менеджер по работе с партнёром")}: <strong class="agy-style-352">${escapeHTML(kam)}</strong></div>` : ""}
+      <div class="p2c__logo">${logo}</div>
     </div>`;
 }
 
@@ -2468,6 +2555,18 @@ export const P2_CANAL_SLIDE = { es: "Adquisición por canal", en: "Acquisition b
   build: (p, d, i) => buildSlide2Canal(p, i), chartFn: (p, d, root) => buildSlide2CanalChart(p, root) };
 export const P2_NR_ORIGEN_SLIDE = { es: "N+R por origen", en: "N+R by source", ru: "Новые+реактив. по источнику", charts: true,
   build: (p, d, i) => buildSlide2NrOrigen(p, d, i), chartFn: (p, d, root) => buildSlide2NrOrigenCharts(p, d, root) };
+
+// Hojas que NO van al PDF por defecto (Manuel, 30-sep-2026: "Nuevos+Reactivados
+// y Embudo no los agreguemos por ahora"). Se siguen viendo en pantalla y el KAM
+// las puede volver a marcar en "Hojas del PDF". Son claves de p2SlideKey: N+R
+// por origen existe solo en Taxi (con el sufijo de su vertical, ver conSufijo
+// en p2Deck) y el embudo va al dataset base del deck (taxi, o tuktuk si el
+// partner es solo TukTuk). La descarga de la cartera las toma de acá como tipo
+// de hoja entero (loteHojas.reglasIniciales).
+export function p2PdfOffDefecto() {
+  return [`taxi|${P2_NR_ORIGEN_SLIDE.es} · Taxi`, `taxi|${P2_EMBUDO_SLIDE.es}`, `tuktuk|${P2_EMBUDO_SLIDE.es}`];
+}
+PRESENT2_STATE.pdfOff = new Set(p2PdfOffDefecto());
 
 // Pares del embudo (cohorte Top 5 / Top 10 + filtros AD/ND). Mismos defaults
 // que Vista Partner. Es estado del KAM, no del partner: se mantiene al cambiar.

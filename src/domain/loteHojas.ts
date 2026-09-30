@@ -31,10 +31,17 @@ export function tipoDeClave(clave: string): Tipo {
   return tipoDeEtiqueta(i >= 0 ? clave.slice(i + 1) : clave);
 }
 
+/** Tipos de hoja que NO van por defecto (Manuel, 30-sep-2026: N+R por origen
+ *  y Embudo "no los agreguemos por ahora"). Siguen disponibles a mano. */
+export const TIPOS_FUERA_DEFECTO: Tipo[] = ["nrorigen", "embudo"];
+
+// "estandar" = lo que arranca marcado. "completo" = TODO, incluidas las hojas
+// que por defecto no van.
 export const PLANTILLAS: { k: string; off: Tipo[] }[] = [
+  { k: "estandar", off: [...TIPOS_FUERA_DEFECTO] },
   { k: "completo", off: [] },
   { k: "ejecutivo", off: ["kpis", "nrorigen", "embudo", "canal", "seg", "raw"] },
-  { k: "sinanexo", off: ["raw"] }
+  { k: "sinanexo", off: ["raw", ...TIPOS_FUERA_DEFECTO] }
 ];
 
 export interface Reglas {
@@ -86,6 +93,23 @@ export function tieneExcepciones(r: Reglas, partner: string): boolean {
   return !!(r.offP.get(partner)?.size || r.onP.get(partner)?.size);
 }
 export function limpiarPartner(r: Reglas, partner: string): void { r.offP.delete(partner); r.onP.delete(partner); }
+
+/** Reglas con las que arranca la descarga de la cartera, a partir de lo que el
+ *  KAM tiene excluido en la descarga individual (`pdfOff`, claves de hoja).
+ *  Las hojas "fuera por defecto" se traducen a su TIPO entero (así la plantilla
+ *  Estándar queda reconocida), salvo que el KAM haya vuelto a marcar alguna en
+ *  la individual: ahí ese tipo arranca adentro. El resto de `pdfOff` va como
+ *  hoja suelta para todos, como antes. */
+export function reglasIniciales(pdfOff: Iterable<string>, clavesDefecto: Iterable<string>): Reglas {
+  const off = new Set(pdfOff), def = Array.from(clavesDefecto);
+  const r = nuevasReglas();
+  for (const tipo of TIPOS_FUERA_DEFECTO) {
+    const claves = def.filter(k => tipoDeClave(k) === tipo);
+    if (claves.length && claves.every(k => off.has(k))) r.off.add(tipo);
+  }
+  for (const k of off) if (!r.off.has(tipoDeClave(k))) r.offKeys.add(k);
+  return r;
+}
 
 export type EstadoCelda = "on" | "off" | "mix" | "na";
 /** Estado de un grupo de hojas (celda = hojas de un tipo de un partner; columna = de todos). */

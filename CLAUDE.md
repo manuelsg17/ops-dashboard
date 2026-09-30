@@ -30,6 +30,7 @@ Dashboard para KAMs (partner performance): modulos **TypeScript** bundleados con
   - Delivery/Cargo en la Calculadora: necesitan columnas en `metas` cuando lleguen sus datos.
   - Hueco conocido del desglose TukTuk en "Solo lo que cambié" (ver "Aviso antes de borrar o reescribir el desglose TukTuk").
   - Accionables es EXPERIMENTAL: los umbrales (`UMBRAL` en `domain/accionables.ts`) esperan el feedback de Manuel.
+  - **Carátula nueva + hojas fuera por defecto + pantalla de carga de Presentación: listas en local, SIN subir** (ver "Presentación: carátula nueva…").
 
 ### Sesión Septiembre 2026 (23–24 sep) — Auditoría integral + rediseño por olas (EN PRODUCCIÓN desde el 24-sep, commit `6a70389`)
 
@@ -152,7 +153,7 @@ Pedido de Manuel: revisar todo (UX/UI, diccionarios, velocidad, bugs, integraci�
   - **Matriz**: filas = partners del KAM con datos en la escala activa, ordenados por AD; columnas = tipos de hoja (`loteHojas.TIPOS`).
     - Las hojas de cada partner salen de `p2Deck` sin las `noPdf` (Proyección), así que "—" = ese partner no tiene esa hoja.
     - Clic en la columna: todo el lote (y borra las excepciones de ese tipo). Clic en la celda: solo ese partner. **Mayús+clic**: el tramo de filas desde la última celda (también en las casillas de partners). Casilla "todos" con estado intermedio.
-    - Plantillas: Deck completo, Resumen ejecutivo y Sin anexos. La activa se reconoce sola.
+    - Plantillas: Estándar (la de arranque, sin N+R por origen ni Embudo, desde el 30-sep), Deck completo, Resumen ejecutivo y Sin anexos. La activa se reconoce sola.
     - Vista por partner: Auto (Fleet si `isFleetPartner`), Agregador o Fleet (deshabilitado si no es Fleet, como en la descarga individual). "Volver a lo general" quita las excepciones del partner.
     - Las hojas que el KAM excluye en la descarga individual (`PRESENT2_STATE.pdfOff`) arrancan fuera también acá: son las mismas claves.
   - **Reglas** (`domain/loteHojas.ts`): tipo para todos → hoja suelta para todos → excepción por partner; lo más fino gana.
@@ -170,6 +171,28 @@ Pedido de Manuel: revisar todo (UX/UI, diccionarios, velocidad, bugs, integraci�
     - Lote de 8 cancelado tras el primero: 1 guardado, 7 "Cancelado", sin divs temporales colgados.
     - Tiempo real en local ~1.8-3.5 s por hoja; la estimación usa 1.8 s por hoja + 1.5 s por PDF.
   - **Sin probar**: el diálogo real de "Una carpeta" (lo abre el sistema operativo, no se puede automatizar). La escritura usa la API estándar (`getFileHandle` + `createWritable`).
+- **Presentación: carátula nueva, hojas fuera por defecto y pantalla de carga (30-sep-2026, verificado en local, SIN subir).** Pedido de Manuel con una pieza de campaña "Yango Ads × Santander" de referencia.
+  - **Carátula** (`presentacion2.buildSlide2Cover` + `styles/views/caratula.css`, nuevo). Maquetas en `?ui=covers` (`src/dev/covers.ts`, solo dev): tres propuestas y la de hoy. Manuel eligió el FONDO de la A (paneles en diagonal con destello) con la INFORMACIÓN de la B, y sin la tarjeta inclinada ("lo mío no es de tarjetas").
+    - Semanal y diario: degradado oscuro con rojo. Mensual: degradado con blanco como color principal (el panel arranca casi blanco y llega al rojo en el borde).
+    - Contenido:
+      - arriba, "YANGO Partners" y "Confidencial";
+      - rótulo "Avance semanal/mensual/diario" y el nombre del partner en grande (4 tamaños según el largo);
+      - el período legible: "14 – 20 sep 2026", "Septiembre 2026 · al 20 sep" con el mes en curso, "27 sep 2026" en diario;
+      - franja con Tendencia ("7 semanas · desde el 3 ago"), Ciudades y Ejecutivo de cuenta;
+      - logo del partner (`STATE.partnerLogos`) o su monograma, en un círculo blanco.
+    - "No KAM" sigue sin mostrarse. Con un solo período no hay columna Tendencia.
+    - **Decorado en un `<svg>` con colores literales**: html2canvas no soporta `filter`, `clip-path` ni `color-mix()`, pero rasteriza un SVG entero (gradientes y blur incluidos). La sombra y el aro del logo van en el SVG, porque html2canvas no dibuja `box-shadow` como el navegador. `currentColor` saldría negro en la captura.
+    - **Medidas en `cqw`** (`calc(N * 1cqw / 12.8)` = N px en la hoja de 1280 del PDF), con `.p2c` como contenedor: la vista previa escala sola a cualquier ancho y el PDF sale idéntico.
+    - Verificado con el motor real (`p2GenerarPdf`, interceptando `addImage`): la página del PDF = la pantalla, en semanal y mensual, con logo y con monograma. También en ES/EN/RU y con un nombre de 39 caracteres.
+    - El panel en diagonal baja hasta x=860 para no cruzar la franja de abajo (en la maqueta llegaba a 700 y tapaba "Ejecutivo de cuenta").
+    - `buildSlide2SectionCover`/`P2_DIVIDER` (portada de sección TukTuk) siguen con el diseño viejo, pero ninguna hoja los usa (código muerto, no se tocó).
+  - **N+R por origen y Embudo de conversión NO van al PDF por defecto** ("no los agreguemos por ahora"). Siguen en pantalla (chip tachado) y se pueden volver a marcar en "Hojas del PDF".
+    - `PRESENT2_STATE.pdfOff` arranca con `p2PdfOffDefecto()`: `taxi|N+R por origen · Taxi`, `taxi|Embudo de conversión`, `tuktuk|Embudo de conversión`.
+    - Cartera: `loteHojas.reglasIniciales(pdfOff, p2PdfOffDefecto())` las traduce a su tipo entero, salvo que el KAM haya vuelto a marcar alguna en la individual. Plantilla nueva **"Estándar"** (la de arranque, sin esos dos tipos). "Deck completo" ahora sí incluye TODO. "Sin anexos" = Estándar sin Data Raw. 1 test nuevo.
+  - **Pantalla de carga de Presentación** (`shared/cargaPresentacion.ts`, eager y chica). Antes, la primera visita de la sesión mostraba solo "Cargando…" sobre fondo blanco.
+    - Ahora hay una silueta de la barra y de los chips, y una hoja con el fondo de la carátula, brillo y el logo animado.
+    - Muestra los pasos reales que espera `switchTab`: abrir la vista → métricas de detalle → escala mensual → armar las hojas. `marcarPasoCarga` los tilda a medida que terminan.
+    - Respeta `prefers-reduced-motion`. En pantallas angostas la hoja tiene una altura mínima de 320 px.
 - **Calculadora: CSV y tarjetas probados (30-sep, local, sin bajar archivos)**: se interceptó `URL.createObjectURL` y `a.click()` para inspeccionar lo que la app genera.
   - **CSV** (Ana, octubre): 12 filas, AD 12,345 · N+R 3,269 · Horas 701,234 y TukTuk 1,988 / 538, igual que la pantalla y la base. Lleva BOM UTF-8 (EF BB BF) y 14 encabezados, todos reconocidos por `uploadMetas`. La ida y vuelta por el lector de la subida (`leerLibro`, string binario como `FileReader.readAsBinaryString`) conserva "AÑO", CLID y las columnas TukTuk/Fleet. Quedó como test: `src/workers/csvCalculadora.test.ts`.
   - **Tarjetas**: PNG de 1120 px de ancho (escala 2×) en ES, EN, ES/EN y RU, con cifras que cuadran con el CSV (ANDINA Lima: total 4,795 − TukTuk 148 = Taxi 4,647). "Descargar todas" dio 8 PNG distintos (los 8 partners de Ana), sin errores, y restaura la tarjeta elegida al terminar.
