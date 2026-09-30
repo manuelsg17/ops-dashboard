@@ -129,6 +129,19 @@ Pedido de Manuel: revisar todo (UX/UI, diccionarios, velocidad, bugs, integraci�
     - "Solo las celdas que completé": 1 fila, total 3,010;
     - "Eliminar metas de Elena" con el nombre tecleado: 0 filas, los demás KAMs intactos.
     - Sin probar: CSV y descargas de imagen (bajan archivos).
+- **Calculadora: CSV y tarjetas probados (30-sep, local, sin bajar archivos)**: se interceptó `URL.createObjectURL` y `a.click()` para inspeccionar lo que la app genera.
+  - **CSV** (Ana, octubre): 12 filas, AD 12,345 · N+R 3,269 · Horas 701,234 y TukTuk 1,988 / 538, igual que la pantalla y la base. Lleva BOM UTF-8 (EF BB BF) y 14 encabezados, todos reconocidos por `uploadMetas`. La ida y vuelta por el lector de la subida (`leerLibro`, string binario como `FileReader.readAsBinaryString`) conserva "AÑO", CLID y las columnas TukTuk/Fleet. Quedó como test: `src/workers/csvCalculadora.test.ts`.
+  - **Tarjetas**: PNG de 1120 px de ancho (escala 2×) en ES, EN, ES/EN y RU, con cifras que cuadran con el CSV (ANDINA Lima: total 4,795 − TukTuk 148 = Taxi 4,647). "Descargar todas" dio 8 PNG distintos (los 8 partners de Ana), sin errores, y restaura la tarjeta elegida al terminar.
+- **Maqueta: descarga MASIVA de presentaciones por KAM (30-sep, SOLO prototipo, `?ui=proto&p=pres&bv=b1|b2|b3`, `src/dev/proto/pPres.ts` + `pres.css`).** Pedido de Manuel: elegir el KAM, que cada partner venga en automático (Fleet/Agregador), poder cambiarlo y quitar o agregar hojas, "muy fácil de usar", dentro de Presentación. Pendiente que elija.
+  - Hojas por partner con la MISMA regla que `presentacion2.p2Deck`: por vertical que opera, N+R por origen solo en Taxi, Proyección nunca va al PDF. Vista automática = Fleet si el partner es Fleet.
+  - Plantillas: "Deck completo", "Resumen ejecutivo", "Sin anexos".
+  - Reglas en tres niveles: tipo de hoja para todos, hoja suelta para todos (misma clave entre partners) y excepción por partner, con "Volver a lo general".
+  - Pie con total de presentaciones, hojas y tiempo estimado; formato .zip o PDF separados; progreso por partner simulado (en cola, n/m, listo) con cancelar.
+  - Propuestas:
+    - **b1** · Panel de cartera: panel lateral sobre la Presentación de siempre.
+    - **b2** · Modo cartera: lista de partners más vista previa de sus hojas, con "Usar estas hojas en todos".
+    - **b3** · Matriz partners × tipos de hoja.
+  - Para implementar: el .zip necesita JSZip (npm, en chunk diferido) o bajar PDF separados (el navegador pide permiso para varias descargas). La generación es secuencial en el navegador, ~0.9 s por hoja: la cartera de un KAM de producción (~15 partners × ~12 hojas) tarda ~3 min.
 - **Verificación de Calculadora → Metas (29-sep, local):**
   - La meta que muestra Metas por KAM y por línea coincide exacto con la base (`data-num` contra SQL): Combinado sept (Ana 8,487 · Dario 8,429 · Elena 4,591 · Fabio 3,762) y TukTuk sept (Dario 1,414 · 104,103 · 286, con cobertura "Declarada por: Dario").
   - Diferencias ESPERADAS, no bugs:

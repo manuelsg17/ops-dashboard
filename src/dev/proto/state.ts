@@ -4,7 +4,7 @@
 import { filtrosPorDefecto, type Filtros, type Linea } from "./model";
 
 export type Version = "elegida" | "a" | "b" | "c";
-export type Pagina = "rend" | "metas" | "perf" | "calc" | "config";
+export type Pagina = "rend" | "metas" | "perf" | "calc" | "config" | "pres";
 export type SeccionCfg = "partners" | "clasificacion" | "cargas" | "usuarios" | "monitoreo" | "preferencias" | "mantenimiento";
 
 export const VERSIONES: { id: Version; label: string; desc: string }[] = [
@@ -21,6 +21,13 @@ export const VERSIONES_PERF: { id: PerfV; label: string; desc: string }[] = [
   { id: "d1", label: "1 · Tablero con meta", desc: "Una sola página: tarjetas con anillo, ciudades con avance, KAM, quién se movió, tendencias con la meta dibujada y la tabla de partners con estado" },
   { id: "d2", label: "2 · Pestañas por nivel", desc: "Tarjetas arriba y pestañas Resumen · Ciudades · KAMs · Partners · Tendencias: menos scroll" },
   { id: "d3", label: "3 · Foco en la brecha", desc: "Arranca por ¿llegamos?: cuánto falta, ritmo necesario por semana y qué cuentas explican la brecha" }
+];
+// Descarga masiva de presentaciones por KAM (pPres.ts): tres propuestas.
+export type PresV = "b1" | "b2" | "b3";
+export const VERSIONES_PRES: { id: PresV; label: string; desc: string }[] = [
+  { id: "b1", label: "1 · Panel de cartera", desc: "Un botón \"Cartera del KAM\" en la Presentación de siempre abre un panel: KAM, hojas para todos y la lista de partners, cada uno con su vista y sus hojas" },
+  { id: "b2", label: "2 · Modo cartera", desc: "La Presentación cambia a modo cartera: partners a la izquierda y, a la derecha, la vista previa de las hojas del que elijas para revisarlas antes de descargar" },
+  { id: "b3", label: "3 · Matriz", desc: "Una tabla partners × tipos de hoja: un clic por columna para todos, un clic por celda para uno. Lo más rápido para ajustar mucho" }
 ];
 // Calculadora, segunda vuelta (pCalc2.ts): tres propuestas propias.
 export type CalcV = "p1" | "p2" | "p3";
@@ -82,6 +89,7 @@ export const PS = {
     modo: "full", vista: "agg", refAbierta: false, avanzados: false, paso: 1, sel: null
   } as CalcState,
   perf: { v: "d1" as PerfV, line: "comb", filtro: "todos", sort: "pct", tab: "resumen" },
+  pres: { v: "b1" as PresV },
   c2: {
     v: "p1", kam: "Ana", total: { ad: 10000, sh: 640000, nr: 2200 }, tkModo: "pct",
     tkPct: { ad: 17, sh: 20.2, nr: 15.6 }, tkAbs: { ad: null, sh: null, nr: null },

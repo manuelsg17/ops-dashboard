@@ -30,6 +30,8 @@ import { refrescarCalc, dist } from "./pCalc";
 import { renderCalc2, totalesCalc2 } from "./pCalc2";
 import { renderPerf, chartsPerf } from "./pPerf";
 import { renderConfig } from "./pConfig";
+import { renderPres, accionesPres, simularDescarga } from "./pPres";
+import "./pres.css";
 import { SEMANAS, PARTNERS, partnersDeKam, mesDeSemana, filtrosPorDefecto, unidadesCalc } from "./model";
 
 const ROOT = "protoRoot";
@@ -45,6 +47,7 @@ function contenido(): string {
     case "perf": return renderPerf();
     case "calc": return renderCalc2();   // segunda vuelta (29-sep); la anterior sigue en pCalc.ts
     case "config": return renderConfig();
+    case "pres": return renderPres();
   }
 }
 
@@ -98,6 +101,7 @@ function _url(): void {
   if (PS.page === "config") u.searchParams.set("sec", PS.cfg.sec); else u.searchParams.delete("sec");
   if (PS.page === "calc") u.searchParams.set("cv", PS.c2.v); else u.searchParams.delete("cv");
   if (PS.page === "perf") u.searchParams.set("pv", PS.perf.v); else u.searchParams.delete("pv");
+  if (PS.page === "pres") u.searchParams.set("bv", PS.pres.v); else u.searchParams.delete("bv");
   history.replaceState(null, "", u.toString());
 }
 
@@ -241,6 +245,28 @@ registerActions({
   },
   // Desempeño (pPerf.ts)
   pfVer: (d: DOMStringMap) => { PS.perf.v = d.value as PerfV; render(); },
+  // Descarga masiva por KAM (pPres.ts)
+  bxVer: (d: DOMStringMap) => { PS.pres.v = d.value as any; render(); },
+  bxKam: (_d: DOMStringMap, el: HTMLSelectElement) => { accionesPres.bxKam(el.value); render(); },
+  bxLang: (d: DOMStringMap) => { accionesPres.bxLang(d.value || "es"); render(); },
+  bxPreset: (d: DOMStringMap) => { accionesPres.bxPreset(d.value || ""); render(); },
+  bxTipo: (d: DOMStringMap) => { accionesPres.bxTipo(d.value || ""); render(); },
+  bxSel: (d: DOMStringMap) => { accionesPres.bxSel(d.value || ""); render(); },
+  bxSelTodos: () => { accionesPres.bxSelTodos(); render(); },
+  bxVista: (d: DOMStringMap) => { accionesPres.bxVista(d.partner || "", d.value || "auto"); render(); },
+  bxVistaSel: (d: DOMStringMap, el: HTMLSelectElement) => { accionesPres.bxVista(d.partner || "", el.value || "auto"); render(); },
+  bxHoja: (d: DOMStringMap) => { accionesPres.bxHoja(d.partner || "", d.key || ""); render(); },
+  bxCelda: (d: DOMStringMap) => { accionesPres.bxCelda(d.partner || "", d.value || ""); render(); },
+  bxRestaurar: (d: DOMStringMap) => { accionesPres.bxRestaurar(d.value || ""); render(); },
+  bxAplicarATodos: (d: DOMStringMap) => { accionesPres.bxAplicarATodos(d.value || ""); render(); toast("Esas hojas pasan a ser la regla para toda la cartera"); },
+  bxFoco: (d: DOMStringMap) => { accionesPres.bxFoco(d.value || ""); render(); },
+  bxHojaFoco: (d: DOMStringMap) => { accionesPres.bxHojaFoco(d.value || "0"); render(); },
+  bxExpand: (d: DOMStringMap) => { accionesPres.bxExpand(d.value || ""); render(); },
+  bxAbrir: () => { accionesPres.bxAbrir(); render(); },
+  bxModo: (d: DOMStringMap) => { accionesPres.bxModo(d.value || "cartera"); render(); },
+  bxFormato: (d: DOMStringMap) => { accionesPres.bxFormato(d.value || "zip"); render(); },
+  bxNuevo: () => { accionesPres.bxNuevo(); render(); },
+  bxDescargar: () => simularDescarga(render),
   pfLine: (d: DOMStringMap) => { PS.perf.line = d.value as any; render(); },
   pfMes: (_d: DOMStringMap, el: HTMLSelectElement) => { PS.metasMes = el.value; render(); },
   pfFiltro: (d: DOMStringMap) => { PS.perf.filtro = d.value as any; render(); },
@@ -330,7 +356,7 @@ export function cerrarProto(): void {
   document.removeEventListener("keydown", _escape);
   document.body.style.overflow = "";
   const u = new URL(location.href);
-  ["ui", "v", "p", "theme", "sec", "paso", "shot", "cv", "pv"].forEach(k => u.searchParams.delete(k));
+  ["ui", "v", "p", "theme", "sec", "paso", "shot", "cv", "pv", "bv"].forEach(k => u.searchParams.delete(k));
   history.replaceState(null, "", u.toString());
 }
 
@@ -338,7 +364,8 @@ export function mountProto(): void {
   if (document.getElementById(ROOT)) return;
   const q = new URLSearchParams(location.search);
   const v = q.get("v"); if (v === "a" || v === "b" || v === "c" || v === "elegida") PS.v = v;
-  const p = q.get("p"); if (p === "rend" || p === "metas" || p === "perf" || p === "calc" || p === "config") PS.page = p;
+  const p = q.get("p"); if (p === "rend" || p === "metas" || p === "perf" || p === "calc" || p === "config" || p === "pres") PS.page = p;
+  const bv = q.get("bv"); if (bv === "b1" || bv === "b2" || bv === "b3") PS.pres.v = bv;
   const pv = q.get("pv"); if (pv === "d1" || pv === "d2" || pv === "d3") PS.perf.v = pv;
   PS.theme = q.get("theme") === "dark" ? "dark" : "light";
   const sec = q.get("sec"); if (sec) PS.cfg.sec = sec as SeccionCfg;
