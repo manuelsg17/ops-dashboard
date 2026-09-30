@@ -119,9 +119,9 @@ export const STATE = {
   // sigue viendo todos los partners igual que antes.
   myKam:            null as string | null,
   rendLine:         "comb",
-  metasLine:        "comb",
-  // Mes de Metas elegido a mano en el selector: NOMBRE + AÑO (B1). null = el
-  // default (último mes con datos, ver metas._metasMesElegido).
+  // Mes de metas elegido a mano: NOMBRE + AÑO (B1). null = el default (último
+  // mes con datos, ver metas._metasMesElegido). Desde que se retiró la pestaña
+  // Metas (30-sep-2026) nadie lo fija; Configuración lo resetea al borrar metas.
   metasMesSel:      null as string | null,
   metasMesSelYear:  null as number | null,
   declineThreshold: 3,

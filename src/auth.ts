@@ -424,7 +424,6 @@ export function _limpiarEstadoEnMemoria() {
    "allDates","allPartners","sidebarPartners","curSummaries"
   ].forEach(k => { if (Array.isArray(STATE[k])) STATE[k].length = 0; });
   STATE.rendLine  = "comb";
-  STATE.metasLine = "comb";
   STATE._tuktukMensualByCityDate = null;
   STATE._tuktukMensualPartners   = null;
   STATE._tuktukMensualDates      = null;

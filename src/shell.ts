@@ -5,7 +5,7 @@
 // Lo que NO hace: pintar el contenido de las vistas (eso es de cada módulo y se
 // rediseña en la Ola 6) ni leer datos. Solo LEE el estado de los filtros por
 // las mismas vías que las vistas (getCurrentFilters, STATE.curMode,
-// STATE.rendLine/metasLine) y, para quitar un filtro, dispara los MISMOS
+// STATE.rendLine) y, para quitar un filtro, dispara los MISMOS
 // eventos/acciones que usa el panel de filtros — así la lógica de filtrado de
 // app.ts/data.ts sigue siendo una sola.
 //
@@ -398,10 +398,10 @@ export function instalarShell() {
     const el = e.target;
     if (el && el.closest && el.closest("#mainSidebar")) schedulePageHeader();
   });
-  // Línea de negocio: setRendLine/setMetasLine fijan STATE.*Line de forma
+  // Línea de negocio: setRendLine fija STATE.*Line de forma
   // sincrónica antes de su primer await.
   document.addEventListener("click", e => {
-    if (e.target.closest && e.target.closest('[data-act="setRendLine"],[data-act="setMetasLine"]')) schedulePageHeader();
+    if (e.target.closest && e.target.closest('[data-act="setRendLine"]')) schedulePageHeader();
   });
 
   document.addEventListener("keydown", e => {

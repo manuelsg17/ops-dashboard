@@ -23,7 +23,6 @@ import "./styles/components.css";
 import "./styles/views/config.css"; import "./styles/views/rawdata.css";   // Ola 6: Configuración + Data Raw
 import "./styles.css";
 import "./styles/views/calculator.css";
-import "./styles/views/metas.css";
 import "./styles/views/rendimiento.css"; import "./styles/ring.css";   // Fase 8: anillo de avance
 import "./styles/views/presentacion.css";
 import "./styles/views/seguimiento.css";

@@ -3,12 +3,11 @@
 //
 // Qué hace: con la app ya abierta y con sesión, recorre escalas (semanal /
 // mensual / diario) × líneas (combinado / agregador / fleet / tuktuk) × vistas
-// (Rendimiento, Metas con el mes más reciente que tiene datos, y Calculadora
-// una vez) usando las funciones globales de la propia app (switchMode,
-// switchTab, setRendLine, setMetasLine, setMetasMes, onKAMChange,
-// applyFilters…), y junta {clave: texto} de cada elemento con `data-num`
-// (ver src/shared/huella.ts). Con rol partner recorre el portal en vez de
-// Rendimiento/Metas.
+// (Desempeño y Calculadora una vez) usando las funciones globales de la propia
+// app (switchMode, switchTab, setRendLine, onKAMChange, applyFilters…), y junta
+// {clave: texto} de cada elemento con `data-num` (ver src/shared/huella.ts).
+// Con rol partner recorre el portal en vez de Desempeño. La pestaña Metas se
+// retiró el 30-sep-2026: sus cifras de meta viven en Desempeño (claves ds.*).
 //
 // Para qué: probar que un rediseño NO movió ningún número. Se saca la huella
 // antes y después de una ola y se comparan con scripts/huella/compare.mjs.
@@ -41,7 +40,7 @@
   const OPTS = Object.assign({
     escalas: ["semanal", "mensual", "diario"],
     lineas:  ["comb", "agg", "fleet", "tk"],
-    vistas:  ["rend", "metas", "calculator"],
+    vistas:  ["rend", "calculator"],
     rango:   { semanal: 6, mensual: 3, diario: 14 },
     timeoutMs: 20000
   }, window.__huellaOpts || {});
@@ -125,8 +124,7 @@
   // los relee. Se guarda el texto EXACTO para devolverlo tal cual al final.
   const lsFiltrosInicial = (() => { try { return localStorage.getItem("yangoFilters"); } catch (e) { return null; } })();
   const estadoInicial = {
-    tab: S.curTab, mode: S.curMode, rendLine: S.rendLine, metasLine: S.metasLine,
-    metasMesSel: S.metasMesSel,
+    tab: S.curTab, mode: S.curMode, rendLine: S.rendLine,
     dateFrom: $("dateFrom") && $("dateFrom").value, dateTo: $("dateTo") && $("dateTo").value,
     city: $("cityFilter") && $("cityFilter").value, kam: $("kamFilter") && $("kamFilter").value,
     search: $("partnerSearch") && $("partnerSearch").value,
@@ -199,19 +197,6 @@
     const n = OPTS.rango[mode] || 6;
     return { desde: lista[Math.max(0, lista.length - n)], hasta: lista[lista.length - 1] };
   }
-  function mesMetas() {
-    const meses = [...new Set((S.metasData || []).map(m => m.mes).filter(Boolean))]
-      .sort((a, b) => W._metasMesOrden(b) - W._metasMesOrden(a));
-    const cargadas = fechasCargadas();
-    const hastaMax = cargadas[cargadas.length - 1];
-    for (const mes of meses) {
-      const anio = W._metasMesActualYear(mes);
-      const fechas = W._metasFechasMesCompleto(mes, anio, hastaMax).filter(d => cargadas.includes(d));
-      if (fechas.length) return { mes, anio, desde: fechas[0], hasta: fechas[fechas.length - 1], periodos: fechas.length };
-    }
-    return null;
-  }
-
   function recolectar(root) {
     const res = {}, dup = [];
     if (!root) return { res, dup };
@@ -271,24 +256,6 @@
         }
       }
 
-      // ── METAS ───────────────────────────────────────────────────────────────
-      if (OPTS.vistas.includes("metas") && (S.metasData || []).length) {
-        await irATab("metas");
-        const m = mesMetas();
-        if (!m) {
-          console.warn("[huella] metas: ningún mes de meta tiene períodos cargados en", mode);
-        } else {
-          for (const line of OPTS.lineas) {
-            await W.setMetasLine(line);
-            W.setMetasMes(m.mes);
-            resetFiltros(m.desde, m.hasta);
-            W.applyFilters();
-            await waitStable($("metasContent"), "metas " + line);
-            guardar(`${mode}|metas|${line}`, $("metasContent"),
-              { mes: m.mes, anio: m.anio, desde: m.desde, hasta: m.hasta, periodos: m.periodos });
-          }
-        }
-      }
     }
 
     // ── CALCULADORA (una vez: su base es mensual, no depende de la escala) ────
@@ -326,8 +293,6 @@
     await paso("líneas", async () => {
       if (!esPartner) {
         if (estadoInicial.rendLine) S.rendLine = estadoInicial.rendLine;
-        if (estadoInicial.metasLine) S.metasLine = estadoInicial.metasLine;
-        S.metasMesSel = estadoInicial.metasMesSel;
       } else if (W.PORTAL_STATE && estadoInicial.portalLine) {
         W.PORTAL_STATE.line = estadoInicial.portalLine;
       }

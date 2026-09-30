@@ -235,19 +235,18 @@ seccion 5, compuerta 3). Se saca una huella antes y otra despues, y se comparan.
 `src/shared/huella.ts`). La entidad es el nombre del partner/ciudad/KAM (o
 `partner@CIUDAD`), nunca una posicion: reordenar una tabla no cambia la huella.
 Cubre Rendimiento (pais + desglose por KAM, ciudades, KAMs, productividad, tabla
-de partners, vista Fleet y KPIs TukTuk), Metas (tarjetas pais / ciudad / KAM /
-partner de las 4 lineas, con `.real` `.meta` `.pct` `.proj`), el portal del
+de partners, vista Fleet y KPIs TukTuk, y desde sep-2026 el avance contra la meta
+de Desempeño: claves `ds.*`), el portal del
 partner (KPIs, bloque de metas, detalle por periodo) y la tabla de reparto de la
 Calculadora (inputs de meta — se lee su `value` —, % y totales/cuadre). Donde la
-cifra estaba suelta dentro de un texto se envolvio en un `<span>` sin clase; la
-meta de las tarjetas pais de Metas va dentro de una frase traducida, asi que se
-repite en un `<span hidden>`. Nada de eso cambia lo que se ve.
+cifra estaba suelta dentro de un texto se envolvio en un `<span>` sin clase. Nada
+de eso cambia lo que se ve.
 
 **Sacar una huella** (app abierta con sesion, cualquier rol):
 
 1. Abrir la consola del navegador y pegar el contenido entero de
    `scripts/huella/huella.js`. Recorre semanal/mensual/diario × comb/agg/fleet/tk
-   × Rendimiento + Metas (mes de meta mas reciente con periodos, completo) + la
+   × Desempeño + la
    Calculadora una vez; con rol `partner`, el portal en cada linea disponible.
    Tarda del orden de un minuto; al final restaura escala, pestaña y filtros.
 2. Esperar `✓ huella lista`. El JSON queda en `window.__huellaJSON`; en Chrome
@@ -266,8 +265,9 @@ node scripts/huella/compare.mjs /tmp/huella-antes.json /tmp/huella-despues.json
 ediciones de prueba en el medio — re-sembrar si hizo falta), mismo rol, mismo
 idioma (los numeros se formatean segun el idioma) y el mismo KAM elegido en la
 Calculadora. El rango de fechas NO depende del sidebar: el script lo fija por
-escala (Rendimiento: ultimos 6 / 3 / 14 periodos cargados; Metas: el mes
-completo) y lo deja en `meta.escenarios`; `compare.mjs` avisa si cambio.
+escala (Desempeño: ultimos 6 / 3 / 14 periodos cargados) y lo deja en
+`meta.escenarios`; `compare.mjs` avisa si cambio. (La pestaña Metas, que usaba el
+mes completo, se retiro el 30-sep-2026.)
 
 **Trampas**: con la pestaña del navegador OCULTA `requestAnimationFrame` no
 dispara y `switchMode`/`switchTab` se cuelgan (ver CLAUDE.md, sep-2026); el script

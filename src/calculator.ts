@@ -17,6 +17,7 @@ import { logAccess } from "./shared/accessLog.js";
 import { dn } from "./shared/huella";
 import { alCerrarSesion } from "./shared/sesion";
 import { upsertMetas } from "./shared/upsertMetas";
+import { cuadreMetrica } from "./domain/cuadre";
 import { cityLabel } from "./core/format";
 import { ATAJOS_META, metaAtajo, variacionPct, textoVariacion, estadoCelda, soltarCeldas, ordenarUnidades } from "./domain/calcPlanilla";
 import { absolutoTk } from "./domain/tkResumen";
@@ -672,12 +673,11 @@ export function _calcComputeModel() {
 }
 
 // ── ESTADO / CUADRE ───────────────────────────────────────────────────────────
-// Cuadre de una métrica: sum distribuida vs meta KAM (misma tolerancia que _calcCuadre).
+// Cuadre de una métrica: sum distribuida vs meta KAM. EXACTO desde el
+// 30-sep-2026 (ver domain/cuadre.ts, con tests): la tolerancia de 0.5% escondía
+// ediciones reales.
 export function _calcMetricCuadre(sum, target) {
-  const hasGoal = target > 0;
-  const gap = sum - target;
-  const ok = hasGoal && Math.abs(gap) <= Math.max(1, target * 0.005);
-  return { sum, target, gap, ok, hasGoal };
+  return cuadreMetrica(sum, target);
 }
 
 // Sumas distribuidas de agregador (respeta edits). Incluye Fleet (ahora se reparte
@@ -1686,7 +1686,7 @@ function _calcActualizarFila(input) {
 export function _calcCuadre(sum, target) {
   if (!target) return `<span class="calc-cell-muted">${escapeHTML(t("calc.sinMeta"))}</span>`;
   const gap = sum - target;
-  const ok = Math.abs(gap) <= Math.max(1, target * 0.005);
+  const ok = cuadreMetrica(sum, target).ok;
   const tone = ok ? "ok" : (gap > 0 ? "warn" : "bad");
   const tag = ok
     ? `${icon("check", { size: 12, strokeWidth: 2.5 })}${escapeHTML(t("calc.cuadraCorto"))}`

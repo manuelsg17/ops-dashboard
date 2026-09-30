@@ -1523,7 +1523,6 @@ function _applyCoreData(partners, rend, frooms, flotas, opts = {}) {
     // Fleet o TukTuk mientras la data fresca estaba en vuelo.
     if (opts.resetLine !== false) {
       STATE.rendLine  = "comb";   // carga fresca → vista base Combinado (Taxi+TukTuk)
-      STATE.metasLine = "comb";
     }
 
     // BUG REAL (ago 2026, reportado como "cambio de escala y los datos no
