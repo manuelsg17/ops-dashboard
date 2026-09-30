@@ -58,6 +58,7 @@ const cssVar = (n, fb) => _cssVarEn(n, fb, lightScope());
 import { embudoCohorte, canalCohorte, FILTRO_DEFECTO, COHORTE_MIN, EMBUDO_COLS, CANALES } from "./domain/conversionCohorte";
 import { mesNombre } from "./core/meses";
 import * as forecast from "./forecast.js";
+import { P2_LOTE, p2LoteShellHTML, p2LotePintar, p2LoteModoHTML } from "./presentacionLote";
 Object.assign(window, forecast);
 
 // ── Helpers de presentación (ex-presentacion.js) ──────────────────────────────
@@ -3206,6 +3207,13 @@ export function renderPresent2() {
     return;
   }
   if (!PRESENT2_STATE.partner || !partners.includes(PRESENT2_STATE.partner)) PRESENT2_STATE.partner = partners[0];
+  // Modo CARTERA (30-sep-2026): la matriz partners × hojas del KAM, en su módulo
+  // (presentacionLote.ts). No arma el deck en vivo.
+  if (P2_LOTE.modo === "cartera") {
+    el.innerHTML = p2LoteShellHTML();
+    p2LotePintar();
+    return;
+  }
   // "Fleet" forzado solo tiene sentido si el partner está flagged Fleet — si no,
   // los KPIs de referencia (Acceptance/Owned Cars/SH interno) no existen y solo
   // se ven guiones. Clamp: si cambiaste de partner y el nuevo no es Fleet, vuelve a Auto.
@@ -3266,6 +3274,7 @@ export function renderPresent2() {
     <div class="p2-shell">
       <div class="p2-toolbar" role="toolbar" aria-label="${escapeHTML(t("p2.ctl.aria"))}">
         <div class="p2-toolbar__row">
+          ${p2LoteModoHTML()}
           <div class="p2-field p2-field--partner">
             ${lbl(t("p2.ctl.partner"), "present2Search")}
             <div class="p2-search">
@@ -3587,36 +3596,21 @@ export async function p2AbrirChequeoExport() {
   if (ok) await downloadPresent2PDF();
 }
 
-export async function downloadPresent2PDF() {
-  logAccess("download_pdf", "presentacion2:" + (PRESENT2_STATE.partner || "?"));
-  const partner = PRESENT2_STATE.partner;
-  if (!partner) { await alertDialog({ title: t("p2.err.sinPartner") }); return; }
-  try { await ensurePdfLibs(); } catch (e) { await alertDialog({ title: t("p2.err.libs"), tone: "bad" }); return; }
-  destroyPresent2Charts();
-  await new Promise(r => setTimeout(r, 100));
-
-  const from = document.getElementById("dateFrom") ? document.getElementById("dateFrom").value : STATE.allDates[0];
-  const to   = document.getElementById("dateTo")   ? document.getElementById("dateTo").value   : STATE.allDates[STATE.allDates.length - 1];
-  // dates se calcula POR SLIDE dentro del loop (dataset-aware): Taxi y TukTuk usan
-  // cada uno sus propias fechas. No calcular acá (sería siempre las de Taxi).
-
-  const prog = document.createElement("div");
-  prog.className = "p2-progress";
-  prog.setAttribute("role", "status");
-  prog.innerHTML = `<div class="p2-progress__spin"></div><div id="p2Msg" class="p2-progress__msg">${escapeHTML(t("p2.pdf.generando"))}</div>`;
-  document.body.appendChild(prog);
-
-  // Deck combinado: incluye sección Taxi + (si aplica) sección TukTuk. Se excluyen
-  // las slides marcadas noPdf (Proyección: solo pantalla) y las que el KAM haya
-  // desmarcado en el panel de hojas.
-  const deck = p2Deck(partner).filter(p2SlideEnPdf);
-  if (!deck.length) { document.body.removeChild(prog); await alertDialog({ title: t("p2.err.sinHojas"), tone: "bad" }); return; }
+// Motor del PDF de UN partner, compartido por la descarga individual y por la
+// de la cartera del KAM (presentacionLote.ts, 30-sep-2026). Recibe las hojas ya
+// elegidas y devuelve el jsPDF armado (con watermark), o null si se canceló.
+// No abre ni cierra el velo de progreso, no guarda y no restaura la vista: eso
+// es de quien lo llama. Deja PRESENT2_STATE.dataset/_exporting como estaban.
+//   opts.onHoja(i, n)  → avance (después de cada hoja)
+//   opts.cancelado()   → true = cortar después de la hoja en curso
+export async function p2GenerarPdf(partner, deck, from, to, opts = {}) {
+  if (!deck.length) return null;
+  const { jsPDF } = window.jspdf;
   PRESENT2_STATE._deckLen = deck.length;
   PRESENT2_STATE._showDsBadge = p2TuktukSectionVisible(partner) && p2HasTaxi(partner);
   const savedDs = PRESENT2_STATE.dataset;
   PRESENT2_STATE._exporting = true;   // slides omiten bloques solo-vivo (ej. detalle KAM del pronóstico)
   try {
-    const { jsPDF } = window.jspdf;
     // hotfixes:["px_scaling"] — bug documentado de jsPDF: sin este flag, unit:"px"
     // arrastra un factor de conversión DPI (96→72) inconsistente entre el `format`
     // de la página y las coordenadas de `addImage`, lo que puede recortar o
@@ -3629,6 +3623,7 @@ export async function downloadPresent2PDF() {
     const P2_PDF_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
     if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) {} }
     for (let i = 0; i < deck.length; i++) {
+      if (opts.cancelado && opts.cancelado()) return null;
       const entry = deck[i], s = entry.def;
       PRESENT2_STATE.dataset = entry.ds;   // scope por-slide (los accesores leen este global)
       const dates = p2SelectedDates(from, to, STATE.curMode);   // dataset-aware por slide
@@ -3653,15 +3648,19 @@ export async function downloadPresent2PDF() {
       // exporta. backgroundColor explícito evita cualquier borde translúcido en el
       // recorte. PNG (sin compresión JPEG) para que texto y líneas finas de los
       // charts salgan nítidos, no borrosos.
-      const canvas = await html2canvas(div, opcionesCapturaClara({
-        width: 1280, height: 720, windowWidth: 1280, windowHeight: 720,
-        scale: P2_EXPORT_SCALE, useCORS: true, logging: false, backgroundColor: "#fff"
-      }));
-      if (s.charts) {
-        div.querySelectorAll("canvas").forEach(c => { const ch = Chart.getChart(c); if (ch) ch.destroy(); });
-        PRESENT2_STATE.charts = [];
+      let canvas;
+      try {
+        canvas = await html2canvas(div, opcionesCapturaClara({
+          width: 1280, height: 720, windowWidth: 1280, windowHeight: 720,
+          scale: P2_EXPORT_SCALE, useCORS: true, logging: false, backgroundColor: "#fff"
+        }));
+      } finally {
+        if (s.charts) {
+          div.querySelectorAll("canvas").forEach(c => { const ch = Chart.getChart(c); if (ch) ch.destroy(); });
+          PRESENT2_STATE.charts = [];
+        }
+        try { if (div.parentNode) document.body.removeChild(div); } catch (e) {}
       }
-      try { if (div.parentNode) document.body.removeChild(div); } catch (e) {}
       if (i > 0) pdf.addPage();
       // PNG (sin compresión) tirado atrás: a scale:4 el canvas es 5120×2880 y el
       // string base64 de un PNG sin comprimir de una slide con gráficos/texto
@@ -3670,18 +3669,55 @@ export async function downloadPresent2PDF() {
       // visibles — la nitidez real ya la resuelve que devicePixelRatio del chart
       // y el scale de html2canvas coincidan (P2_EXPORT_SCALE), no el formato.
       pdf.addImage(canvas.toDataURL("image/jpeg", 1.0), "JPEG", 0, 0, 1280, 720);
+      if (opts.onHoja) opts.onHoja(i + 1, deck.length);
     }
     stampPDF(pdf, `${P2T("Presentación", "Presentation", "Презентация")} — ${partner}`);
-    pdf.save(`${partner}_Presentacion2_${to}.pdf`);
+    return pdf;
+  } finally {
+    PRESENT2_STATE.dataset = savedDs;   // restaurar el dataset de la vista en vivo
+    PRESENT2_STATE._exporting = false;
+    document.querySelectorAll('div[data-p2slide="1"]').forEach(d => { try { d.remove(); } catch (e) {} });
+  }
+}
+// Nombre del archivo del PDF de un partner (mismo formato de siempre; sin los
+// caracteres que un sistema de archivos no acepta).
+export function p2NombrePdf(partner, to) {
+  return `${String(partner).replace(/[\\/:*?"<>|]/g, "-")}_Presentacion2_${to}.pdf`;
+}
+
+export async function downloadPresent2PDF() {
+  logAccess("download_pdf", "presentacion2:" + (PRESENT2_STATE.partner || "?"));
+  const partner = PRESENT2_STATE.partner;
+  if (!partner) { await alertDialog({ title: t("p2.err.sinPartner") }); return; }
+  try { await ensurePdfLibs(); } catch (e) { await alertDialog({ title: t("p2.err.libs"), tone: "bad" }); return; }
+  destroyPresent2Charts();
+  await new Promise(r => setTimeout(r, 100));
+
+  const from = document.getElementById("dateFrom") ? document.getElementById("dateFrom").value : STATE.allDates[0];
+  const to   = document.getElementById("dateTo")   ? document.getElementById("dateTo").value   : STATE.allDates[STATE.allDates.length - 1];
+  // dates se calcula POR SLIDE dentro del motor (dataset-aware): Taxi y TukTuk usan
+  // cada uno sus propias fechas.
+
+  const prog = document.createElement("div");
+  prog.className = "p2-progress";
+  prog.setAttribute("role", "status");
+  prog.innerHTML = `<div class="p2-progress__spin"></div><div id="p2Msg" class="p2-progress__msg">${escapeHTML(t("p2.pdf.generando"))}</div>`;
+  document.body.appendChild(prog);
+
+  // Deck combinado: incluye sección Taxi + (si aplica) sección TukTuk. Se excluyen
+  // las slides marcadas noPdf (Proyección: solo pantalla) y las que el KAM haya
+  // desmarcado en el panel de hojas.
+  const deck = p2Deck(partner).filter(p2SlideEnPdf);
+  if (!deck.length) { document.body.removeChild(prog); await alertDialog({ title: t("p2.err.sinHojas"), tone: "bad" }); return; }
+  try {
+    const pdf = await p2GenerarPdf(partner, deck, from, to);
+    if (pdf) pdf.save(p2NombrePdf(partner, to));
   } catch (err) {
     console.error(err);
     // Se avisa DESPUÉS de restaurar la vista (más abajo): el diálogo no debe
     // quedar detrás del velo de progreso.
     PRESENT2_STATE._pdfError = err && err.message ? err.message : String(err);
-    document.querySelectorAll('div[data-p2slide="1"]').forEach(d => { try { d.remove(); } catch (e) {} });
   }
-  PRESENT2_STATE.dataset = savedDs;   // restaurar el dataset de la vista en vivo
-  PRESENT2_STATE._exporting = false;
   document.body.removeChild(prog);
   // Restaurar la vista en vivo (los charts se destruyeron al inicio)
   try { renderSlide2(); } catch (e) {}

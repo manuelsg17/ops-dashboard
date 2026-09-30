@@ -129,6 +129,30 @@ Pedido de Manuel: revisar todo (UX/UI, diccionarios, velocidad, bugs, integraci�
     - "Solo las celdas que completé": 1 fila, total 3,010;
     - "Eliminar metas de Elena" con el nombre tecleado: 0 filas, los demás KAMs intactos.
     - Sin probar: CSV y descargas de imagen (bajan archivos).
+- **Presentación: descarga de la CARTERA de un KAM (30-sep-2026, EN PRODUCCIÓN, `presentacionLote.ts` + `domain/loteHojas.ts`, 6 tests).** Manuel eligió la propuesta 3 de la maqueta (matriz, `?ui=proto&p=pres&bv=b3`): "hay KAMs con 13-19 cuentas… modificar masivamente rápido".
+  - **Acceso**: selector "Qué descargar: Un partner / Cartera de un KAM" al inicio de la barra de Presentación. En modo cartera la pestaña muestra la matriz en vez del deck.
+  - **Barra**: KAM (arranca en `STATE.myKam`, luego el filtro de KAM y luego el primero), idioma del deck y mes de la meta (los mismos de `PRESENT2_STATE`).
+  - **Matriz**: filas = partners del KAM con datos en la escala activa, ordenados por AD; columnas = tipos de hoja (`loteHojas.TIPOS`).
+    - Las hojas de cada partner salen de `p2Deck` sin las `noPdf` (Proyección), así que "—" = ese partner no tiene esa hoja.
+    - Clic en la columna: todo el lote (y borra las excepciones de ese tipo). Clic en la celda: solo ese partner. **Mayús+clic**: el tramo de filas desde la última celda (también en las casillas de partners). Casilla "todos" con estado intermedio.
+    - Plantillas: Deck completo, Resumen ejecutivo y Sin anexos. La activa se reconoce sola.
+    - Vista por partner: Auto (Fleet si `isFleetPartner`), Agregador o Fleet (deshabilitado si no es Fleet, como en la descarga individual). "Volver a lo general" quita las excepciones del partner.
+    - Las hojas que el KAM excluye en la descarga individual (`PRESENT2_STATE.pdfOff`) arrancan fuera también acá: son las mismas claves.
+  - **Reglas** (`domain/loteHojas.ts`): tipo para todos → hoja suelta para todos → excepción por partner; lo más fino gana.
+  - **Motor**: se extrajo `p2GenerarPdf(partner, deck, from, to, {onHoja, cancelado})` de `downloadPresent2PDF`. Lo usan la descarga individual (mismo resultado: verificado 9/9 páginas con una hoja excluida, mismo nombre de archivo) y el lote. `p2NombrePdf` le quita al nombre los caracteres inválidos.
+    - En el lote se fijan `partner`/`fleetMode` de cada cuenta y `pdfOff` vacío (el deck ya viene filtrado), y al terminar se restaura todo.
+  - **Salida**: una presentación por partner. **NO hay .zip**: cada PDF pesa 15-20 MB en producción (YEGO 18.1 MB), así que 19 cuentas serían ~350 MB en memoria.
+    - "Una carpeta" (`showDirectoryPicker`, Chrome/Edge/Yandex): se elige una vez y cada PDF se escribe apenas termina.
+    - "Descargas" (Safari/Firefox o a elección): `pdf.save` con 700 ms entre archivos.
+    - Chequeo previo con KAM, cantidad, hojas, idioma, escala, rango, mes, destino y tiempo estimado, más los avisos del chequeo individual: los globales una vez y "sin metas del mes" contado por partner.
+    - Progreso por fila (en cola, n/m, listo, error con el motivo en el tooltip), barra general y **Cancelar** (termina la hoja en curso). `beforeunload` avisa si se cierra la pestaña a mitad.
+  - **Sin parpadeo**: cada acción repinta solo `#p2LoteBody` (matriz + pie). Verificado: la barra es el mismo nodo antes y después de cambiar la plantilla. En la maqueta parpadeaba porque cada clic rehacía la página entera (`render()` del prototipo).
+  - **Verificado en local**, sin errores de consola, interceptando la descarga:
+    - Todas las interacciones: plantillas, columna, celda, Mayús+clic en celdas y filas, estado intermedio, vista, "Volver a lo general", cambio de KAM, modo oscuro, 1280 px.
+    - Lote de 2 con "Resumen ejecutivo": 2 PDF de 4 páginas (~4 MB) con marca de agua y metadatos.
+    - Lote de 8 cancelado tras el primero: 1 guardado, 7 "Cancelado", sin divs temporales colgados.
+    - Tiempo real en local ~1.8-3.5 s por hoja; la estimación usa 1.8 s por hoja + 1.5 s por PDF.
+  - **Sin probar**: el diálogo real de "Una carpeta" (lo abre el sistema operativo, no se puede automatizar). La escritura usa la API estándar (`getFileHandle` + `createWritable`).
 - **Calculadora: CSV y tarjetas probados (30-sep, local, sin bajar archivos)**: se interceptó `URL.createObjectURL` y `a.click()` para inspeccionar lo que la app genera.
   - **CSV** (Ana, octubre): 12 filas, AD 12,345 · N+R 3,269 · Horas 701,234 y TukTuk 1,988 / 538, igual que la pantalla y la base. Lleva BOM UTF-8 (EF BB BF) y 14 encabezados, todos reconocidos por `uploadMetas`. La ida y vuelta por el lector de la subida (`leerLibro`, string binario como `FileReader.readAsBinaryString`) conserva "AÑO", CLID y las columnas TukTuk/Fleet. Quedó como test: `src/workers/csvCalculadora.test.ts`.
   - **Tarjetas**: PNG de 1120 px de ancho (escala 2×) en ES, EN, ES/EN y RU, con cifras que cuadran con el CSV (ANDINA Lima: total 4,795 − TukTuk 148 = Taxi 4,647). "Descargar todas" dio 8 PNG distintos (los 8 partners de Ana), sin errores, y restaura la tarjeta elegida al terminar.
