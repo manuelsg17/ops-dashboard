@@ -7,7 +7,7 @@ import { emptyState, btn } from "./shared/ui";
 import { confirmDialog, alertDialog } from "./shared/confirmDialog";
 import { SIN_KAM } from "./core/config.js";
 import { userCan } from "./auth.js";
-import { LISTAS_SEG, ordenLista, moverTarjeta, ordenAlFinal, vencida, vencePronto, checklistDe, avanceChecklist } from "./domain/tableroSeg";
+import { LISTAS_SEG, ordenLista, moverTarjeta, ordenAlFinal, vencida, vencePronto, checklistDe, avanceChecklist, kanbanDeck, fechaCierre } from "./domain/tableroSeg";
 // seguimiento.ts — Seguimiento de tareas con los partners, TIPO TRELLO (1-oct-2026).
 //
 // Manuel eligió la propuesta "A · Clásico" de la maqueta ?ui=tablero
@@ -299,29 +299,92 @@ function _segPedirTexto(o) {
 }
 
 
-// ── SLIDE DEL DECK (Presentación 2.0) — render-only, entra al PDF ──────────────
+// ── HOJA DEL DECK: "Plan de trabajo" en Kanban (1-oct-2026) ─────────────────
+// Manuel la eligió (maqueta ?ui=segdeck, propuesta D): cuatro columnas en SU
+// orden — Logrados · Bloqueados · En proceso · Próximos pasos — para que el
+// partner vea de un vistazo qué se logró, qué está trabado, en qué se avanza y
+// qué sigue. Reemplaza al Gantt (que sigue en la pestaña como Cronograma).
+//   - Logrados = SOLO lo cerrado en el período del deck (desde el primer
+//     período de la ventana), por la fecha real de cierre `completed_at`.
+//   - Hasta 4 tarjetas por columna y hoja; lo demás sigue en otra hoja (1/2).
+//     Antes, con muchas tareas, el Gantt se cortaba en silencio.
+//   - Los comentarios internos NO van al partner.
+// Colores literales donde importa al PDF (html2canvas); el del proyecto sale de
+// los tokens, como en el Gantt.
+const SEG_POR_COLUMNA = 4;
 export function p2PartnerHasSeguimiento(partner) {
   return (STATE.seguimientoData || []).some(r => r.partner === partner && (r.task || "").trim());
 }
-export function buildSlide2Seguimiento(partner, idx) {
+function _segKanbanDe(partner, desde) {
+  return kanbanDeck(_segRealTasks((STATE.seguimientoData || []).filter(r => r.partner === partner)), desde || "0000", SEG_POR_COLUMNA);
+}
+/** Cuántas hojas ocupa el Kanban del partner (p2Deck las agrega todas). */
+export function p2SegPaginas(partner, desde) { return _segKanbanDe(partner, desde).paginas.length; }
+
+const _SGK = {
+  hecho:     { col: "#16a34a", ico: "✓" },
+  bloqueado: { col: "#dc2626", ico: "!" },
+  en_curso:  { col: "#0284c7", ico: "→" },
+  pendiente: { col: "#6b7280", ico: "•" }
+};
+export function buildSlide2Seguimiento(partner, idx, pag = 0, dates = null) {
   // El idioma del deck es de PRESENT2_STATE (el del partner), no el de la app.
   const L = (typeof PRESENT2_STATE !== "undefined" ? PRESENT2_STATE.lang : "es") || "es";
   const T = (es, en, ru) => pick({ es, en, ru }, L);
-  const rows = (STATE.seguimientoData || []).filter(r => r.partner === partner);
+  const desde = (dates && dates[0]) || "0000";
+  const k = _segKanbanDe(partner, desde);
+  const n = k.paginas.length, hoja = k.paginas[Math.min(pag, n - 1)];
+  const hoy = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; })();
+  const fd = d => { const x = _segParseDate(d); return x ? `${x.getDate()} ${mesNombre(x.getMonth(), L, { corto: true }).toLowerCase()}` : ""; };
+  const desdeTxt = desde !== "0000" ? fd(desde) : "";
+  const TIT = {
+    hecho:     [T("Logrados", "Achieved", "Достигнуто"), desdeTxt ? T(`cerrados desde el ${desdeTxt}`, `closed since ${desdeTxt}`, `закрыто с ${desdeTxt}`) : T("cerrados", "closed", "закрыто")],
+    bloqueado: [T("Bloqueados", "Blocked", "Заблокировано"), T("necesitan una acción", "need an action", "требуют действия")],
+    en_curso:  [T("En proceso", "In progress", "В работе"), T("avanzando", "moving forward", "продвигаются")],
+    pendiente: [T("Próximos pasos", "Next steps", "Следующие шаги"), T("por fecha", "by date", "по сроку")]
+  };
+  const pareceDelPartner = o => /partner|socio|aliado/i.test(o || "") || (o && partner && String(partner).toLowerCase().includes(String(o).toLowerCase().trim()) && String(o).trim().length > 3);
+  const card = (r, l, num) => {
+    const items = checklistDe(r.checklist), av = avanceChecklist(items), venc = vencida(r, hoy);
+    const fecha = l === "hecho" ? T(`Cerrado el ${fd(fechaCierre(r))}`, `Closed ${fd(fechaCierre(r))}`, `Закрыто ${fd(fechaCierre(r))}`)
+      : !r.end_date ? T("Sin fecha", "No date", "Без срока")
+      : venc ? T(`Vencía el ${fd(r.end_date)}`, `Was due ${fd(r.end_date)}`, `Срок был ${fd(r.end_date)}`)
+      : T(`Para el ${fd(r.end_date)}`, `Due ${fd(r.end_date)}`, `Срок ${fd(r.end_date)}`);
+    return `<div class="sgk-card" style="border-left-color:${_SGK[l].col}">
+      <div class="sgk-top">${r.project ? `<span class="sgk-proy"><span class="sgk-sq" style="background:${_segProjColor(r.project, partner)}"></span>${escapeHTML(r.project)}</span>` : "<span></span>"}${l === "pendiente" ? `<span class="sgk-n">${num}</span>` : ""}</div>
+      <div class="sgk-t">${escapeHTML(r.task)}</div>
+      ${r.expected_result ? `<div class="sgk-res">🎯 ${escapeHTML(r.expected_result)}</div>` : ""}
+      ${l === "en_curso" && av.total ? `<div class="sgk-chk"><div class="sgk-bar"><span style="width:${av.pct}%"></span></div><span>${T(`${av.hechos}/${av.total} pasos`, `${av.hechos}/${av.total} steps`, `${av.hechos}/${av.total} шагов`)}</span></div>` : ""}
+      <div class="sgk-meta"><span class="${venc ? "sgk-venc" : ""}">${escapeHTML(fecha)}</span><span>${escapeHTML(r.owner || "")}</span></div>
+      ${l === "bloqueado" && pareceDelPartner(r.owner) ? `<div class="sgk-nec">${escapeHTML(T("Necesitamos de ti para destrabarlo", "We need you to unblock it", "Нужна ваша помощь, чтобы разблокировать"))}</div>` : ""}
+    </div>`;
+  };
+  const cols = LISTAS_ORDEN_DECK.map(l => {
+    const lista = hoja[l], resto = k.conteo[l] - (pag + 1) * SEG_POR_COLUMNA;
+    const vacio = pag === 0 ? (l === "bloqueado" ? T("Nada bloqueado", "Nothing blocked", "Ничего не заблокировано") : "—") : "";
+    return `<section class="sgk-col">
+      <header class="sgk-h" style="background:${_SGK[l].col}"><span class="sgk-ico">${_SGK[l].ico}</span><span class="sgk-h__t"><b>${escapeHTML(TIT[l][0])}</b><span>${escapeHTML(TIT[l][1])}</span></span><span class="sgk-cnt">${k.conteo[l]}</span></header>
+      <div class="sgk-body">${lista.map((r, j) => card(r, l, pag * SEG_POR_COLUMNA + j + 1)).join("") || `<div class="sgk-vacio">${escapeHTML(vacio)}</div>`}
+        ${resto > 0 ? `<div class="sgk-mas">${escapeHTML(T(`+${resto} en la hoja siguiente`, `+${resto} on the next page`, `+${resto} на следующей странице`))}</div>` : ""}</div>
+    </section>`;
+  }).join("");
+  const sub = n > 1 ? ` (${pag + 1}/${n})` : "";
   const header = (typeof p2BrandHeader === "function")
-    ? p2BrandHeader(partner, T("Seguimiento · Próximos pasos", "Follow-up · Next steps", "Сопровождение · Следующие шаги"),
-        T("Proyecto → tareas · owner · fechas · resultado esperado",
-          "Project → tasks · owner · dates · expected result",
-          "Проект → задачи · ответственный · сроки · ожидаемый результат"))
-    : `<h2>${escapeHTML(partner)} — ${T("Seguimiento", "Follow-up", "Сопровождение")}</h2>`;
+    ? p2BrandHeader(partner, T("Plan de trabajo", "Work plan", "План работ") + sub, T("En qué estamos: logrado, bloqueado, en proceso y próximos pasos", "Where we are: achieved, blocked, in progress and next steps", "Где мы: достигнуто, заблокировано, в работе и следующие шаги"))
+    : `<h2>${escapeHTML(partner)}</h2>`;
   const footer = (typeof p2BrandFooter === "function") ? p2BrandFooter(idx) : "";
   return `<div class="agy-style-365">
     ${header}
-    <div class="sg-slide__body">${_segBuildGantt(rows, { lang: L, partner })}</div>
+    <div class="sgk-sum">
+      <div class="sgk-av"><b>${k.pct}%</b> ${escapeHTML(T("del plan completado", "of the plan completed", "плана выполнено"))} <span class="sgk-av__sub">${k.hechas}/${k.total}</span><div class="sgk-bar sgk-bar--av"><span style="width:${k.pct}%"></span></div></div>
+      ${LISTAS_ORDEN_DECK.map(l => `<div class="sgk-mini"><b style="color:${_SGK[l].col}">${k.conteo[l]}</b>${escapeHTML(TIT[l][0].toLowerCase())}</div>`).join("")}
+      ${k.logradosAntes ? `<div class="sgk-antes">${escapeHTML(T(`+${k.logradosAntes} logrados antes del ${desdeTxt}`, `+${k.logradosAntes} achieved before ${desdeTxt}`, `+${k.logradosAntes} достигнуто до ${desdeTxt}`))}</div>` : ""}
+    </div>
+    <div class="sgk">${cols}</div>
     ${footer}
   </div>`;
 }
-
+const LISTAS_ORDEN_DECK = ["hecho", "bloqueado", "en_curso", "pendiente"];
 
 // ── TABLERO: datos ───────────────────────────────────────────────────────────
 // Fecha de HOY en hora local, "YYYY-MM-DD" (las fechas de la tarjeta no tienen hora).
@@ -612,7 +675,11 @@ function _mover(id, destino, antesDe) {
   const r = _fila(id); if (!r) return;
   const mismas = _filas().filter(x => x.partner === r.partner);
   const cambios = moverTarjeta(mismas, id, destino, antesDe);
-  if (cambios.length) _actualizar(cambios.map(c => ({ id: c.id, patch: { status: c.status, sort_order: c.sort_order } })));
+  if (!cambios.length) return;
+  // completed_at lo pone la BASE (trigger); acá solo se refleja al instante.
+  const ahora = new Date().toISOString();
+  cambios.forEach(c => { const f = _fila(c.id); if (f && (f.status === "hecho") !== (c.status === "hecho")) f.completed_at = c.status === "hecho" ? ahora : null; });
+  _actualizar(cambios.map(c => ({ id: c.id, patch: { status: c.status, sort_order: c.sort_order } })));
 }
 async function _checklist(id, fn) {
   const r = _fila(id); if (!r) return;

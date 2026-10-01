@@ -64,3 +64,46 @@ export function avanceChecklist(items: ItemCheck[]): { hechos: number; total: nu
   const total = items.length, hechos = items.filter(x => x.ok).length;
   return { hechos, total, pct: total ? Math.round(hechos / total * 100) : 0 };
 }
+
+// ── Hoja "Plan de trabajo" del deck (Kanban, 1-oct-2026) ─────────────────────
+export interface FilaSeg { status?: string; end_date?: string | null; completed_at?: string | null }
+const _dLocal = (ts: string) => { const d = new Date(ts); return isNaN(+d) ? "" : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+/** Día en que se cerró: `completed_at` (lo registra la base al pasar a Hecho, en
+ *  hora LOCAL) o, para lo cerrado antes de que existiera, el vencimiento. */
+export function fechaCierre(r: FilaSeg): string {
+  if (r.completed_at) return _dLocal(r.completed_at);
+  return (r.end_date || "").slice(0, 10);
+}
+export interface KanbanDeck<T> {
+  paginas: Record<ListaSeg, T[]>[];   // columnas de cada hoja, ya recortadas
+  conteo: Record<ListaSeg, number>;   // totales por columna (logrados = del período)
+  logradosAntes: number;              // cerrados ANTES del período (no se muestran)
+  total: number; hechas: number; pct: number;
+}
+/**
+ * Arma la hoja Kanban del deck. Logrados = cerrados desde `desde` (el inicio
+ * del período del deck), el más reciente primero; el resto por vencimiento más
+ * cercano (sin fecha al final). Hasta `porColumna` tarjetas por columna y hoja:
+ * lo que no entra sigue en la hoja siguiente, nunca se corta.
+ */
+export function kanbanDeck<T extends FilaSeg>(rows: T[], desde: string, porColumna = 4): KanbanDeck<T> {
+  const st = (r: T) => (LISTAS_SEG as string[]).includes(r.status || "") ? r.status as ListaSeg : "pendiente";
+  const porFecha = (a: T, b: T) => (a.end_date || "9999").localeCompare(b.end_date || "9999");
+  const hechas = rows.filter(r => st(r) === "hecho");
+  const logrados = hechas.filter(r => fechaCierre(r) >= desde).sort((a, b) => fechaCierre(b).localeCompare(fechaCierre(a)));
+  const cols: Record<ListaSeg, T[]> = {
+    hecho: logrados,
+    bloqueado: rows.filter(r => st(r) === "bloqueado").sort(porFecha),
+    en_curso: rows.filter(r => st(r) === "en_curso").sort(porFecha),
+    pendiente: rows.filter(r => st(r) === "pendiente").sort(porFecha)
+  };
+  const n = Math.max(1, ...LISTAS_SEG.map(l => Math.ceil(cols[l].length / porColumna)));
+  const paginas = Array.from({ length: n }, (_, k) =>
+    Object.fromEntries(LISTAS_SEG.map(l => [l, cols[l].slice(k * porColumna, (k + 1) * porColumna)])) as Record<ListaSeg, T[]>);
+  const total = rows.length;
+  return {
+    paginas, total, hechas: hechas.length, pct: total ? Math.round(hechas.length / total * 100) : 0,
+    conteo: Object.fromEntries(LISTAS_SEG.map(l => [l, cols[l].length])) as Record<ListaSeg, number>,
+    logradosAntes: hechas.length - logrados.length
+  };
+}

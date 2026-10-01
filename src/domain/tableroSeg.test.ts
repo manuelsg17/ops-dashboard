@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { moverTarjeta, ordenLista, ordenAlFinal, vencida, vencePronto, checklistDe, avanceChecklist } from "./tableroSeg";
+import { moverTarjeta, ordenLista, ordenAlFinal, vencida, vencePronto, checklistDe, avanceChecklist, kanbanDeck, fechaCierre } from "./tableroSeg";
 
 const C = (id: string, status: string, sort_order: number) => ({ id, status, sort_order });
 const base = [C("a", "pendiente", 0), C("b", "pendiente", 1), C("c", "pendiente", 2), C("x", "hecho", 0)];
@@ -37,5 +37,28 @@ describe("tablero de seguimiento", () => {
     expect(l).toEqual([{ t: "a", ok: true }, { t: "b", ok: false }]);
     expect(avanceChecklist(l)).toEqual({ hechos: 1, total: 2, pct: 50 });
     expect(checklistDe(undefined)).toEqual([]);
+  });
+});
+
+describe("hoja Kanban del deck", () => {
+  const R = (status: string, end_date: string | null, completed_at: string | null = null) => ({ status, end_date, completed_at });
+  it("logrados: solo los cerrados en el período, el más reciente primero; cuenta los de antes", () => {
+    const k = kanbanDeck([R("hecho", "2026-09-10"), R("hecho", "2026-07-01"), R("hecho", "2026-06-01", "2026-09-20T15:00:00"), R("en_curso", "2026-10-05")], "2026-09-01");
+    expect(k.paginas[0].hecho.map(r => fechaCierre(r))).toEqual(["2026-09-20", "2026-09-10"]);
+    expect(k.logradosAntes).toBe(1);
+    expect(k.hechas).toBe(3); expect(k.total).toBe(4); expect(k.pct).toBe(75);
+  });
+  it("pagina de a 4 por columna y nunca pierde tarjetas", () => {
+    const rows = Array.from({ length: 9 }, (_, i) => R("en_curso", `2026-10-${String(10 - i).padStart(2, "0")}`));
+    const k = kanbanDeck([...rows, R("pendiente", null), R("pendiente", "2026-10-02")], "2026-09-01");
+    expect(k.paginas.length).toBe(3);
+    expect(k.paginas.flatMap(p => p.en_curso).length).toBe(9);
+    expect(k.paginas[0].en_curso[0].end_date).toBe("2026-10-02");        // lo más urgente primero
+    expect(k.paginas[0].pendiente.map(r => r.end_date)).toEqual(["2026-10-02", null]);   // sin fecha al final
+    expect(k.paginas[2].pendiente).toEqual([]);
+  });
+  it("sin tareas: una hoja vacía", () => {
+    const k = kanbanDeck([], "2026-09-01");
+    expect(k.paginas.length).toBe(1); expect(k.pct).toBe(0);
   });
 });

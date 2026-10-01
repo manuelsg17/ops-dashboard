@@ -208,3 +208,41 @@ th.sg-gantt__today { color: var(--color-over-fg); }
   .sgt-list { flex-basis: 78vw; max-height: none; }
   .sgt-kpis { flex-wrap: wrap; gap: 8px 14px; }
 }
+
+/* ── Hoja del deck: "Plan de trabajo" en Kanban (sgk-*, 1-oct-2026) ──────────
+   Va al PDF del partner: colores literales donde importa (html2canvas) y nada
+   de line-clamp/color-mix. Los títulos se recortan a 2 líneas con max-height +
+   overflow (eso sí lo respeta html2canvas) para que 4 tarjetas siempre entren. */
+.sgk-sum { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 22px; margin: 2px 0 10px; flex: 0 0 auto; }
+.sgk-av { flex: 0 0 280px; font-size: .78rem; color: #374151; }
+.sgk-av b { font-size: 1.45rem; font-weight: 900; color: #111; margin-right: 4px; }
+.sgk-av__sub { color: #9ca3af; font-size: .7rem; margin-left: 4px; }
+.sgk-bar { height: 6px; background: #eef0f3; border-radius: 999px; overflow: hidden; flex: 1; }
+.sgk-bar span { display: block; height: 100%; background: #0284c7; border-radius: 999px; }
+.sgk-bar--av { height: 9px; margin-top: 5px; }
+.sgk-bar--av span { background: #16a34a; }
+.sgk-mini { font-size: .76rem; color: #374151; }
+.sgk-mini b { font-size: 1.3rem; font-weight: 900; margin-right: 5px; }
+.sgk-antes { font-size: .68rem; color: #6b7280; font-style: italic; margin-left: auto; }
+.sgk { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; flex: 1; min-height: 0; }
+.sgk-col { background: #f6f7f9; border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+.sgk-h { display: flex; align-items: center; gap: 9px; color: #fff; padding: 8px 11px; flex: 0 0 auto; }
+.sgk-h__t { display: flex; flex-direction: column; min-width: 0; }
+.sgk-h__t b { font-size: .9rem; line-height: 1.2; }
+.sgk-h__t span { font-size: .64rem; opacity: .9; }
+.sgk-ico { width: 24px; height: 24px; border-radius: 50%; background: rgba(255,255,255,.25); display: inline-flex; align-items: center; justify-content: center; font-weight: 900; font-size: .85rem; flex: none; }
+.sgk-cnt { margin-left: auto; font-size: 1.2rem; font-weight: 900; }
+.sgk-body { padding: 7px; display: flex; flex-direction: column; gap: 6px; min-height: 0; overflow: hidden; }
+.sgk-card { background: #fff; border-radius: 8px; border-left: 4px solid; padding: 6px 9px; box-shadow: 0 1px 2px rgba(0,0,0,.08); display: flex; flex-direction: column; gap: 3px; }
+.sgk-top { display: flex; justify-content: space-between; align-items: center; min-height: 14px; }
+.sgk-proy { display: inline-flex; align-items: center; gap: 5px; font-size: .6rem; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: .3px; max-width: 85%; overflow: hidden; white-space: nowrap; }
+.sgk-sq { width: 9px; height: 9px; border-radius: 3px; flex: none; display: inline-block; }
+.sgk-n { width: 17px; height: 17px; border-radius: 50%; background: #111; color: #fff; font-size: .6rem; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.sgk-t { font-size: .8rem; font-weight: 700; line-height: 1.25; color: #111; max-height: 2.5em; overflow: hidden; overflow-wrap: anywhere; }
+.sgk-res { font-size: .66rem; color: #16a34a; font-weight: 600; white-space: nowrap; overflow: hidden; }
+.sgk-chk { display: flex; align-items: center; gap: 7px; font-size: .62rem; color: #0284c7; font-weight: 700; }
+.sgk-meta { display: flex; justify-content: space-between; gap: 6px; font-size: .62rem; line-height: 1.45; padding-bottom: 1px; color: #6b7280; white-space: nowrap; overflow: hidden; }
+.sgk-venc { color: #dc2626; font-weight: 800; }
+.sgk-nec { font-size: .62rem; font-weight: 800; color: #dc2626; background: #fee2e2; border-radius: 6px; padding: 3px 7px; }
+.sgk-vacio { font-size: .76rem; color: #6b7280; text-align: center; padding: 16px 0; }
+.sgk-mas { font-size: .66rem; color: #6b7280; font-style: italic; padding-left: 4px; }

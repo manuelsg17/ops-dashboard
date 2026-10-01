@@ -57,6 +57,10 @@ const chartTokens = () => _chartTokensEn(lightScope());
 const cssVar = (n, fb) => _cssVarEn(n, fb, lightScope());
 import { embudoCohorte, canalCohorte, FILTRO_DEFECTO, COHORTE_MIN, EMBUDO_COLS, CANALES } from "./domain/conversionCohorte";
 import { mesNombre } from "./core/meses";
+// Import EXPLÍCITO (1-oct-2026): antes la hoja de Seguimiento dependía de los
+// globales que deja seguimiento.ts al cargarse por detrás; si se abría
+// Presentación antes de esa precarga, el deck salía SIN la hoja, en silencio.
+import { p2PartnerHasSeguimiento, p2SegPaginas, buildSlide2Seguimiento } from "./seguimiento";
 import * as forecast from "./forecast.js";
 import { P2_LOTE, p2LoteShellHTML, p2LotePintar, p2LoteModoHTML } from "./presentacionLote";
 Object.assign(window, forecast);
@@ -269,7 +273,21 @@ export function p2PartnerList() {
 export const P2_DIVIDER = { es: "TukTuk", en: "TukTuk", ru: "ТукТук", charts: false, build: (p) => buildSlide2SectionCover(p, "tuktuk") };
 // Slide de Seguimiento (Fase 3, render-only): solo si el partner tiene tareas cargadas.
 // Va al final del deck y entra al PDF automáticamente (no es noPdf). Definida en seguimiento.js.
-export const P2_SEG_SLIDE = { es: "Seguimiento", en: "Follow-up", ru: "Сопровождение", charts: false, build: (p, d, i) => buildSlide2Seguimiento(p, i) };
+export const P2_SEG_SLIDE = { es: "Seguimiento", en: "Follow-up", ru: "Сопровождение", charts: false, build: (p, d, i) => buildSlide2Seguimiento(p, i, 0, d) };
+// Hoja N (≥2) del Kanban de Seguimiento. La etiqueta lleva " · n/m" para que la
+// clave de hoja sea distinta por página y loteHojas la siga reconociendo como
+// tipo "seg" (corta en " · ").
+function _p2SegHoja(pag, total) {
+  const suf = ` · ${pag + 1}/${total}`;
+  return { ...P2_SEG_SLIDE, es: P2_SEG_SLIDE.es + suf, en: P2_SEG_SLIDE.en + suf, ru: P2_SEG_SLIDE.ru + suf,
+    build: (p, d, i) => buildSlide2Seguimiento(p, i, pag, d) };
+}
+// Inicio del período del deck (el primer período de la ventana que muestran las
+// hojas). Lo usa la hoja de Seguimiento para "Logrados en el período".
+function _p2InicioPeriodo() {
+  const from = document.getElementById("dateFrom")?.value, to = document.getElementById("dateTo")?.value;
+  return (p2SelectedDates(from, to, STATE.curMode) || [])[0] || "";
+}
 // Avance vs Meta Combinado (Taxi+TukTuk): NO vive en P2_SLIDES a propósito — ese
 // array se re-ejecuta completo para la sección Taxi Y para la TukTuk (ver body.forEach
 // más abajo); si el combinado estuviera ahí, se duplicaría (una vez por sección). Se
@@ -325,8 +343,12 @@ export function p2Deck(partner) {
   verticales.forEach(v => P2_ANEXO_VERTICAL.forEach(def => deck.push({ def: conSufijo(def, v.et), ds: v.ds })));
 
   // Seguimiento: solo si el partner tiene tareas cargadas.
-  if (typeof p2PartnerHasSeguimiento === "function" && p2PartnerHasSeguimiento(partner))
+  // Seguimiento (Kanban): una hoja o más si no entra (nunca se corta).
+  if (p2PartnerHasSeguimiento(partner)) {
+    const n = p2SegPaginas(partner, _p2InicioPeriodo());
     deck.push({ def: P2_SEG_SLIDE, ds: base });
+    for (let k = 1; k < n; k++) deck.push({ def: _p2SegHoja(k, n), ds: base });
+  }
   return deck;
 }
 // Selector de hojas (Ola 6): lista segmentada con scroll horizontal, en UNA
