@@ -218,6 +218,10 @@ if (import.meta.env.DEV && new URLSearchParams(location.search).get("ui") === "p
 if (import.meta.env.DEV && new URLSearchParams(location.search).get("ui") === "covers") {
   import("./dev/covers").then(m => m.mountCovers()).catch(err => console.error("[covers]", err));
 }
+// Maquetas de Seguimiento tipo Trello (SOLO dev): ?ui=tablero. Mismo mecanismo.
+if (import.meta.env.DEV && new URLSearchParams(location.search).get("ui") === "tablero") {
+  import("./dev/tablero").then(m => m.mountTablero()).catch(err => console.error("[tablero]", err));
+}
 
 // Loader asíncrono para módulos de pantalla pesados (Lazy Loading)
 //
