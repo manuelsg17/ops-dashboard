@@ -187,6 +187,21 @@ Pedido de Manuel: revisar todo (UX/UI, diccionarios, velocidad, bugs, integraci�
   - **Verificado**:
     - Local, con sesión real de KAM: alta, checklist, comentario, responsable, fecha, siguiente lista, arrastre con orden guardado, borrado con confirmación, Mi cartera, Cronograma y Esc; todo confirmado contra la base y con `audit_log` a nombre del KAM. Con sesión de viewer: solo lectura.
     - Batería de RLS en local y en producción (bloque que se revierte solo): KAM crea, comenta, actualiza y borra; viewer → 42501, 0 filas al actualizar y comentar NULL; partner lee 0; admin sin regresión. Producción quedó en 0 filas.
+  - **Segunda ronda de pruebas (1-oct, local, sesiones reales de admin, KAM y viewer)**:
+    - **Inyección**: un título `<img onerror>` y un comentario `<script>` se muestran como texto, sin ejecutarse, en la tarjeta, la ventana y la hoja del PDF.
+    - **Título vacío**: no se guarda; vuelve al anterior.
+    - **Proyecto nuevo** desde la ventana ("+ Nuevo proyecto…" → diálogo): se guarda y la etiqueta aparece en la tarjeta.
+    - **Checklist**: agregar y quitar elementos.
+    - **Esc con el diálogo de borrado abierto**: no cierra la tarjeta.
+    - **Falla de la base** (simulada reemplazando `sb.from`): el cambio vuelve atrás y aparece "No se pudo guardar".
+    - **Dos comentarios a la vez** por la RPC: quedan los dos.
+    - **Buscador "Abrir otro partner"**: abre el tablero vacío de un partner sin tarjetas, con "Añadir tarjeta" en las 4 listas.
+    - **Conteos contra la base**: cabecera (abiertas 5 · vencidas 3 · bloqueadas 1 · esta semana 0) y por lista (2/2/1/1) = SQL. "Mi cartera" de Ana 6 = 6; todos los KAMs 26 = 26. "Solo vencidas" deja solo tarjetas con fecha en rojo.
+    - **Hoja del deck**: Seguimiento sigue en el deck y en el PDF; el Gantt muestra las 6 tareas del partner = base. Página generada con `p2GenerarPdf` revisada a ojo.
+    - **Modo oscuro**: bien.
+    - **Admin**: borra con confirmación.
+    - **BUG encontrado y corregido** (EN PRODUCCIÓN desde el 1-oct): en celular la ventana de la tarjeta no se apilaba y la barra lateral tapaba los comentarios. La regla `@media (max-width: 760px)` estaba ANTES de la regla general de `.sgt-det__grid` y esta la pisaba. Ahora va al final de `seguimiento.css`, con un comentario. En celular también las listas ocupan 78vw y los conteos hacen salto de línea.
+  - **Limitación conocida (a propósito)**: los cambios de OTRA persona no aparecen hasta recargar la página o el próximo refresco de datos; no hay tiempo real (sería Supabase Realtime, que suma conexiones y egress en el plan gratuito).
 - **Presentación: carátula nueva, hojas fuera por defecto y pantalla de carga (30-sep-2026, EN PRODUCCIÓN, `2137cf4`).** Pedido de Manuel con una pieza de campaña "Yango Ads × Santander" de referencia.
   - **Carátula** (`presentacion2.buildSlide2Cover` + `styles/views/caratula.css`, nuevo). Maquetas en `?ui=covers` (`src/dev/covers.ts`, solo dev): tres propuestas y la de hoy. Manuel eligió el FONDO de la A (paneles en diagonal con destello) con la INFORMACIÓN de la B, y sin la tarjeta inclinada ("lo mío no es de tarjetas").
     - Semanal y diario: degradado oscuro con rojo. Mensual: degradado con blanco como color principal (el panel arranca casi blanco y llega al rojo en el borde).

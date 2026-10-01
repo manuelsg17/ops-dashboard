@@ -100,10 +100,6 @@ th.sg-gantt__today { color: var(--color-over-fg); }
 .sgt-chk li:hover .sgt-x--sm { opacity: 1; }
 .sgt-com__vacio { font-size: 13px; color: var(--color-text-muted); }
 .sgt-in:disabled, .sgt-det__title:disabled { opacity: .85; cursor: default; background: transparent; }
-@media (max-width: 760px) {
-  .sgt-det__grid { grid-template-columns: 1fr; }
-  .sgt-det__side { border-left: 0; padding-left: 0; border-top: 1px solid var(--color-border-soft); padding-top: 12px; }
-}
 /* ── Tablero: estructura ─────────────────────────────────────────────────────────────────── */
 
 .sgt-head { padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
@@ -201,3 +197,14 @@ th.sg-gantt__today { color: var(--color-over-fg); }
 .sgt-side-btn:hover { background: var(--color-border-soft); }
 .sgt-side-btn--bad { color: var(--color-bad-solid); }
 
+/* Pantallas angostas: AL FINAL a propósito — si va antes, la regla general de
+   .sgt-det__grid (2 columnas) la pisa y en celular la barra lateral tapa los
+   comentarios (pasó en la primera versión). */
+@media (max-width: 760px) {
+  .sgt-modal { padding: 16px 8px; }
+  .sgt-det { padding: 14px; }
+  .sgt-det__grid { grid-template-columns: 1fr; }
+  .sgt-det__side { border-left: 0; padding-left: 0; border-top: 1px solid var(--color-border-soft); padding-top: 12px; }
+  .sgt-list { flex-basis: 78vw; max-height: none; }
+  .sgt-kpis { flex-wrap: wrap; gap: 8px 14px; }
+}
