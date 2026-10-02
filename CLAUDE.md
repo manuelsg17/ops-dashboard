@@ -15,8 +15,8 @@ Dashboard para KAMs (partner performance): modulos **TypeScript** bundleados con
 ## Estado actual
 
 ### Resumen vigente (30-sep-2026) — leer primero
-- **Producción = `main` = `2137cf4`** (carátula nueva, N+R por origen y Embudo fuera del PDF por defecto, pantalla de carga de Presentación). CI en verde y bundle de Vercel (`index-BQ7spuaJ.js`) verificado contra el build local.
-- **Pestañas**: Desempeño (por defecto, id `rend`) · Calculadora · Seguimiento · Presentación (con "Qué descargar: Un partner / Cartera de un KAM") · Data Raw · Configuración. **Retiradas**: Metas (30-sep, su motor sigue en `metas.ts`), Vista Partner (sep) y "Rend + Metas" (jul).
+- **Producción = `main` = `b7e8213`** (2-oct-2026): Seguimiento tipo Trello + hoja "Plan de trabajo" en Kanban en el deck + carátula nueva de Presentación. CI en verde y bundle de Vercel (`index-DSc7H9B2.js`) verificado contra el build local. Migraciones de Seguimiento (`seguimiento_tablero`, `seguimiento_completed_at`) aplicadas en producción.
+- **Pestañas**: Desempeño (por defecto, id `rend`) · Calculadora · Seguimiento (tablero tipo Trello por partner + Mi cartera + Cronograma) · Presentación (con "Qué descargar: Un partner / Cartera de un KAM") · Data Raw · Configuración. **Retiradas**: Metas (30-sep, su motor sigue en `metas.ts`), Vista Partner (sep) y "Rend + Metas" (jul).
 - **Reglas de cálculo vigentes** (detalle en cada fase de abajo):
   - Proyección de AD = máx del rango × 1.4. En semanal, AD contra la meta se lee SOLO por su proyección. En diario, AD no se compara con la meta mensual.
   - Retención = (AD − nuevos − reactivados) / AD anterior, sobre los totales del nivel que se muestra (la fórmula de la Presentación).
@@ -29,6 +29,7 @@ Dashboard para KAMs (partner performance): modulos **TypeScript** bundleados con
   - Datos maestros sucios: 5 metas de Rodolfo sin KAM en `partners`, restos de Miguel (Taxigo, FENIX DRIVE, GIAL WAY) y 11 cuentas sin KAM sin meta.
   - Delivery/Cargo en la Calculadora: necesitan columnas en `metas` cuando lleguen sus datos.
   - Hueco conocido del desglose TukTuk en "Solo lo que cambié" (ver "Aviso antes de borrar o reescribir el desglose TukTuk").
+  - Seguimiento está vacío en producción (0 tarjetas al 1-oct): la hoja "Plan de trabajo" del deck aparece recién cuando los KAMs carguen tarjetas. Conviene pedir feedback tras la primera semana de uso.
   - Accionables es EXPERIMENTAL: los umbrales (`UMBRAL` en `domain/accionables.ts`) esperan el feedback de Manuel.
   - **Backlog de mejoras de Seguimiento, guardado SIN implementar** (Manuel, 1-oct: "aún no implementemos nada"): 1) casilla "Depende del partner", 2) motivo del bloqueo, 3) "Visible para el partner" por tarjeta (recomendadas para empezar), 4) crear tarjeta desde Accionables, 5) resultado real junto al esperado, 6) plantillas de plan, 7) fecha de cierre visible en el tablero, 8) historial en la tarjeta, 9) Kanban en el portal del partner (requiere RLS).
 
@@ -684,7 +685,7 @@ RLS estricto (`is_admin()` + 28 policies; **NUNCA revocar EXECUTE de `is_admin()
       -c user.email="masantillanag@yandex-team.ru" \
       commit -m "..."
   ```
-- Todo commit termina con `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
+- Todo commit termina con `Co-Authored-By: <modelo en uso> <noreply@anthropic.com>` (hasta el 1-oct fue `Claude Opus 5.5`; desde el 2-oct la sesión usa `Claude Sonnet 5.5`). Si cambia el modelo, usar el vigente.
 - Solo commitear/pushear cuando el usuario lo pida explicitamente.
 - Branch principal: `main`. Remote: `https://github.com/manuelsg17/ops-dashboard.git`.
 
