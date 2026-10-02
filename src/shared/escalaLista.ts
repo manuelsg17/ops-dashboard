@@ -34,13 +34,14 @@ export function escalaLista(state: any): boolean {
 /**
  * Programa `render` para cuando el dataset de la escala activa esté listo.
  * Reintenta cada `cadaMs` hasta `maxMs`; se abandona si `sigue()` da false (el
- * usuario cambió de pestaña). Un solo reintento en vuelo por clave: renders
+ * usuario cambió de pestaña). Si se agota `maxMs` llama a `alAgotar` (la vista
+ * muestra el error con un botón para reintentar). Un solo reintento en vuelo por clave: renders
  * repetidos mientras se espera no apilan timers.
  */
 const _pendientes = new Map<string, ReturnType<typeof setTimeout>>();
 export function reintentarCuandoEscalaLista(
   clave: string, state: any, render: () => void, sigue: () => boolean,
-  cadaMs = 200, maxMs = 60000
+  cadaMs = 200, maxMs = 60000, alAgotar?: () => void
 ): void {
   if (_pendientes.has(clave)) return;
   const t0 = Date.now();
@@ -48,7 +49,7 @@ export function reintentarCuandoEscalaLista(
     _pendientes.delete(clave);
     if (!sigue()) return;
     if (escalaLista(state)) { render(); return; }
-    if (Date.now() - t0 > maxMs) return;
+    if (Date.now() - t0 > maxMs) { if (alAgotar) alAgotar(); return; }   // no dejar "Cargando…" para siempre
     _pendientes.set(clave, setTimeout(tick, cadaMs));
   };
   _pendientes.set(clave, setTimeout(tick, cadaMs));

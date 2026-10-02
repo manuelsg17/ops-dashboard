@@ -59,4 +59,18 @@ describe("reintentarCuandoEscalaLista", () => {
     expect(render).not.toHaveBeenCalled();
     vi.useRealTimers();
   });
+  it("2-oct: si se agota la espera avisa (alAgotar) en vez de dejar el spinner eterno", () => {
+    vi.useFakeTimers();
+    const st: any = { curMode: "mensual", rawData: sem, _semanalData: sem, rawDataMensual: [] };
+    const render = vi.fn(), agotado = vi.fn();
+    reintentarCuandoEscalaLista("t3", st, render, () => true, 100, 1000, agotado);
+    vi.advanceTimersByTime(900);
+    expect(agotado).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(400);
+    expect(agotado).toHaveBeenCalledTimes(1);
+    expect(render).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(5000);
+    expect(agotado).toHaveBeenCalledTimes(1);   // una sola vez
+    vi.useRealTimers();
+  });
 });

@@ -457,7 +457,13 @@ export function renderRend() {
   // bajo rótulos mensuales. Se muestra "cargando" y se reintenta solo.
   if (!escalaLista(STATE)) {
     _rendPintarCargandoEscala();
-    reintentarCuandoEscalaLista("rend", STATE, renderRend, () => STATE.curTab === "rend");
+    // 2-oct-2026 — "se queda cargando para siempre": si curMode dice mensual/
+    // diario pero NADIE está cargando esa escala (pasó al entrar con otro
+    // usuario sin recargar: la escala del anterior quedaba en memoria y los
+    // datos que llegaban eran semanales), esperar no sirve de nada. Se pide la
+    // carga; switchMode ignora el pedido si ya hay una en curso.
+    if (typeof window.switchMode === "function" && STATE.curMode !== "semanal") window.switchMode(STATE.curMode);
+    reintentarCuandoEscalaLista("rend", STATE, renderRend, () => STATE.curTab === "rend", 200, 60000, _rendPintarEscalaFallida);
     return;
   }
   _renderRendBusy  = true;
@@ -478,6 +484,16 @@ function _rendPintarCargandoEscala() {
   destroyAllCharts();
   content.innerHTML = `<div class="${RD_VIEW}">${rendLineToggleHTML()}${emptyState({
     icon: "refresh", title: t("carga.escala", { e: t("mode." + (STATE.curMode || "semanal")) }) })}</div>`;
+}
+
+// Se agotó la espera: decirlo y dar una salida (antes quedaba el spinner eterno).
+function _rendPintarEscalaFallida() {
+  const content = document.getElementById("rendContent");
+  if (!content || STATE.curTab !== "rend") return;
+  content.innerHTML = `<div class="${RD_VIEW}">${rendLineToggleHTML()}${emptyState({
+    icon: "alert-triangle", title: t("carga.escalaFalla", { e: t("mode." + (STATE.curMode || "semanal")) }),
+    text: t("carga.escalaFallaTxt"),
+    action: btn({ label: t("app.reintentar"), icon: "refresh", variant: "primary", act: "reloadApp" }) })}</div>`;
 }
 
 // Alcance de los filtros activos (I13). Vacío = sin recorte. Hoy el título y

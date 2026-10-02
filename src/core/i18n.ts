@@ -183,6 +183,8 @@ export const I18N: Record<string, Record<string, string>> = {
   // Guard de escala (B12): mientras llega el dataset de la escala elegida no se
   // pintan los números de la otra escala con este rótulo.
   "carga.escala":       { es: "Cargando datos ({e})…", en: "Loading data ({e})…", ru: "Загрузка данных ({e})…" },
+  "carga.escalaFalla":  { es: "No se pudieron cargar los datos ({e})", en: "Couldn't load the data ({e})", ru: "Не удалось загрузить данные ({e})" },
+  "carga.escalaFallaTxt": { es: "La carga tardó demasiado o falló. Reintenta; si sigue igual, cambia la escala a Semanal.", en: "Loading took too long or failed. Retry; if it persists, switch the scale to Weekly.", ru: "Загрузка заняла слишком много времени или завершилась ошибкой. Повторите; если не поможет, переключите масштаб на «Неделя»." },
 
   "rend.tend.titulo":   { es: "Tendencias", en: "Trends", ru: "Тренды" },
   // V1: un pedido de datos sin sesión válida NO sale con la anon key (data.ts _authToken).

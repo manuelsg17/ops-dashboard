@@ -424,6 +424,12 @@ export function _limpiarEstadoEnMemoria() {
    "allDates","allPartners","sidebarPartners","curSummaries"
   ].forEach(k => { if (Array.isArray(STATE[k])) STATE[k].length = 0; });
   STATE.rendLine  = "comb";
+  // La escala vuelve a semanal: la sesión nueva carga primero la semanal. Antes
+  // curMode quedaba en "mensual" tras un logout (yangoFilters se borra), y el
+  // usuario siguiente veía "Cargando datos (Mensual)…" para siempre porque llegaba
+  // la semanal y nadie pedía la mensual.
+  STATE.curMode = "semanal";
+  document.querySelectorAll('.mode-btn[data-act="switchMode"]').forEach(b => b.classList.toggle("active", b.dataset.mode === "semanal"));
   STATE._tuktukMensualByCityDate = null;
   STATE._tuktukMensualPartners   = null;
   STATE._tuktukMensualDates      = null;
