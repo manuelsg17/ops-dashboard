@@ -1,0 +1,9 @@
+{
+  "name": "Yango Dashboard",
+  "short_name": "Yango KAMs",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#E1251B",
+  "icons": [{ "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }]
+}

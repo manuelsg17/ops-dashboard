@@ -4,6 +4,14 @@
   <meta charset="UTF-8"/>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23E1251B'/><polyline points='85,50 65,50 55,80 35,20 25,50 15,50' stroke='white' stroke-width='10' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <!-- Atajo en el escritorio del iPhone/iPad (1-oct-2026): iOS IGNORA el favicon
+       SVG de arriba y pide un PNG apple-touch-icon (180×180, cuadrado: iOS le
+       aplica sus propias esquinas). Sin esto el atajo sale con una letra o en
+       blanco. El manifest cubre Android/Chrome. -->
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
+  <link rel="manifest" href="/site.webmanifest"/>
+  <meta name="theme-color" content="#E1251B"/>
+  <meta name="apple-mobile-web-app-title" content="Yango KAMs"/>
   <title>Yango Dashboard</title>
 
   <!-- CSP ESTRICTA para scripts (Fase A2). script-src ya NO lleva 'unsafe-inline':
