@@ -521,3 +521,7 @@
 }
 .calc-goal__bd { display: flex; align-items: center; gap: 4px; margin-top: 2px; color: var(--color-info-fg); }
 .calc-lcard__v.is-sug b { color: var(--color-text-muted); font-style: italic; font-weight: var(--weight-regular); }
+
+/* Selector del mes de las metas (2-oct-2026) */
+.calc-mes__sel { width: auto; min-width: 150px; border: 0; background: transparent; font-weight: var(--weight-semibold); padding-left: 4px; }
+.calc-mes__aviso { font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--color-warn-fg); background: var(--color-warn-bg); border-radius: var(--radius-pill); padding: 2px var(--space-2); white-space: nowrap; }

@@ -102,6 +102,7 @@ export const CALC_STATE = {
   // junto a _calcSeedGuardadas). Clave del draft de abajo: sin el mes, un
   // borrador de julio reaparecería sobre agosto y pisaría números de otro ciclo.
   _mesKey:     "",
+  mesSel:      "",     // mes objetivo elegido a mano ("YYYY-MM"); "" = el de siempre (el siguiente al último con datos)
   // true tras el primer intento de cargar el draft de localStorage en esta
   // carga de página. Ver _calcCargarDraftSiAplica: el draft solo debe aplicarse
   // UNA vez, para sobrevivir un F5 — no en cada re-render, donde pisaría lo que
@@ -924,7 +925,7 @@ export function renderCalculator() {
   // cualquier otro seeding: así el KAM abre la calculadora viendo sus metas
   // reales (y qué partners ya tienen) en vez de una tabla en 0.
   {
-    const { name: _mn, year: _my } = _calcNextMonthName(m.lastMonth || "");
+    const { name: _mn, year: _my } = _calcMesObjetivo(m);
     CALC_STATE._mesKey = `${_mn}-${_my}`;
     _calcSeedGuardadas(_mn, _my);
     // Restaura kamGoals/tkPct de un F5 — solo si el KAM y el mes coinciden
@@ -1033,7 +1034,7 @@ export function _calcLineCardsHTML(m, status) {
 
 // ── TARJETA DE ARRIBA: KAM, mes, acciones, metas del KAM ────────────────────
 export function _calcTopCard(m, allKAMs, status) {
-  const nextM = _calcNextMonth(m.lastMonth || "");
+  const nextM = _calcMesObjetivo(m).iso;
   const kamAll = CALC_STATE.kam === "all";
   return `
     <div class="calc-top ui-card" aria-label="${escapeHTML(t("calc.panelAria"))}">
@@ -1046,7 +1047,13 @@ export function _calcTopCard(m, allKAMs, status) {
           </select>
           ${infoTip(t("calc.kamTodosAviso"))}
         </span>
-        <span class="calc-mes">${icon("calendar", { size: 15 })}<span class="calc-mes__val">${escapeHTML(_calcMesTxt(nextM))}</span>${infoTip(t("calc.repartoSegun", { r: _calcMesTxt(m.lastMonth || "") }))}</span>
+        <span class="calc-mes">${icon("calendar", { size: 15 })}
+          <label class="ui-sr-only" for="calcMesSel">${escapeHTML(t("calc.mesLabel"))}</label>
+          <select id="calcMesSel" class="ui-select calc-mes__sel" data-act-change="calcOnMesChange">
+            ${_calcMesOpciones(m).map(iso => `<option value="${iso}"${iso === nextM ? " selected" : ""}>${escapeHTML(_calcMesTxt(iso))}${iso === _calcNextMonthName(m.lastMonth || "").iso ? " · " + escapeHTML(t("calc.mesActual")) : ""}</option>`).join("")}
+          </select>
+          ${nextM < _calcNextMonthName(m.lastMonth || "").iso ? `<span class="calc-mes__aviso">${escapeHTML(t("calc.mesAnteriorAviso"))}</span>` : ""}
+          ${infoTip(t("calc.repartoSegun", { r: _calcMesTxt(m.lastMonth || "") }))}</span>
         ${_calcBarAcciones()}
       </div>
       <div class="calc-top__grid">
@@ -1879,7 +1886,7 @@ export function _calcTabla3m(agg, months) {
 // TukTuk (meta_tk_ad/_nr/_sh) guardado? Solo alimenta el aviso del hueco
 // conocido de "Solo lo que cambié" (ver _calcAvisoHuecoTk); no decide nada.
 export function _calcFilasConDesgloseTk(m) {
-  const { name, year } = _calcNextMonthName(m.lastMonth || "");
+  const { name, year } = _calcMesObjetivo(m);
   const enPantalla = new Set([...m.aggLast1.values()].map(e => `${e.partner}|||${e.city}`));
   return (STATE.metasData || []).filter(x =>
     x.mes === name && (year == null || x.mYear == null || x.mYear === year) &&
@@ -2582,13 +2589,54 @@ export function _calcNextMonthName(lastMonth) {
   const [y, mm] = iso.split("-").map(Number);
   return { name: CALC_MES_NOMBRES[mm - 1] || iso, year: y, iso };
 }
+// MES QUE SE ESTÁ EDITANDO (2-oct-2026). Antes estaba atado al siguiente del
+// último mes con datos: pasado el cierre de un mes no había forma de reajustar
+// sus metas ("quiero editar las de septiembre pero ya estamos en octubre").
+// Ahora el KAM elige el mes (CALC_STATE.mesSel); sin elegir, todo sigue igual.
+export function _calcMesObjetivo(m) {
+  const sel = CALC_STATE.mesSel;
+  if (sel && /^\d{4}-\d{2}$/.test(sel)) {
+    const [y, mm] = sel.split("-").map(Number);
+    return { name: CALC_MES_NOMBRES[mm - 1] || sel, year: y, iso: sel };
+  }
+  return _calcNextMonthName((m && m.lastMonth) || "");
+}
+// Opciones del selector: de 8 meses atrás hasta 2 adelante del mes por defecto,
+// más cualquier mes que ya tenga metas guardadas (aunque sea más viejo).
+export function _calcMesOpciones(m) {
+  const base = _calcNextMonthName((m && m.lastMonth) || "").iso;
+  const [by, bm] = base.split("-").map(Number);
+  const set = new Set();
+  for (let d = -8; d <= 2; d++) { const x = new Date(by, bm - 1 + d, 1); set.add(`${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}`); }
+  (STATE.metasData || []).forEach(r => {
+    const mm = CALC_MES_NOMBRES.indexOf(String(r.mes || "").toUpperCase());
+    if (mm >= 0 && r.mYear) set.add(`${r.mYear}-${String(mm + 1).padStart(2, "0")}`);
+  });
+  set.add(_calcMesObjetivo(m).iso);
+  return [...set].sort().reverse();
+}
+export async function calcOnMesChange(v) {
+  const m = _calcComputeModel();
+  const actual = _calcMesObjetivo(m).iso;
+  if (v === actual) return;
+  if (_calcTieneProgresoSinGuardar()) {
+    const ok = await confirmDialog({
+      title: t("calc.dlg.cambioMesTitulo"), body: t("calc.confirmCambioMes"),
+      confirmLabel: t("calc.dlg.cambioMesOk")
+    });
+    if (!ok) { const sel = document.getElementById("calcMesSel"); if (sel) sel.value = actual; return; }
+  }
+  CALC_STATE.mesSel = v === _calcNextMonthName(m.lastMonth || "").iso ? "" : v;
+  _calcResetParaNuevoKam();   // mismo reseteo de lo volátil; lo guardado se vuelve a leer para el mes nuevo
+  renderCalculator();
+}
 
 // Construye las filas de metas (Agregador + Fleet) del KAM actual para el próximo
 // mes. Una fila por (clid,city). MISMA matemática que la UI (_calcAggMetaBases /
 // _calcGoalFor) → CSV, guardado directo y pantalla no divergen.
 export function _calcBuildMetaRows(m) {
   const g = CALC_STATE.kamGoals;
-  const { name: mesName, year: mesYear } = _calcNextMonthName(m.lastMonth || "");
+  const { name: mesName, year: mesYear } = _calcMesObjetivo(m);
   const byKey = new Map();
   const getRow = (partner, city, clid) => {
     const k = `${clid}|||${city}`;
@@ -3034,7 +3082,7 @@ export async function calcDeleteMetasKam() {
   if (CALC_STATE.kam === "all") { await _calcAviso(t("calc.dlg.elegirKamTitulo"), t("calc.borrarKamNeedKam")); return; }
 
   const m = _calcComputeModel();
-  const { name: mesName, year: mesYear } = _calcNextMonthName(m.lastMonth || "");
+  const { name: mesName, year: mesYear } = _calcMesObjetivo(m);
   if (!mesName) return;
 
   // FILAS afectadas = las metas de ese (mes, año) cuyo KAM, con la MISMA
@@ -3271,6 +3319,7 @@ import { registerActions } from "./shared/actions.js";
 
 registerActions({
   calcOnKamChange:   (d, el) => calcOnKamChange(el.value),
+  calcOnMesChange:   (d, el) => calcOnMesChange(el.value),
   calcNumFocus:      (d, el) => calcNumFocus(el),
   calcNumBlur:       (d, el) => calcNumBlur(el),
   calcNumKeydown:    (d, el, e) => calcNumKeydown(e, el),
