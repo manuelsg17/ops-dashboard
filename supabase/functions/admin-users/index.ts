@@ -23,8 +23,8 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const ROLES_VALIDOS = ["admin", "kam", "viewer", "partner"];
 
+// GitHub Pages se retiró (24-sep-2026): su dominio ya no está permitido (2-oct-2026).
 const ALLOWED_ORIGINS = [
-  "https://manuelsg17.github.io",
   "https://ops-dashboard-opsteam1.vercel.app",
   "http://localhost:8765",
   "http://127.0.0.1:8765",
@@ -84,7 +84,9 @@ Deno.serve(async (req: Request) => {
       const users = (data?.users || []).map(u => ({
         id:    u.id,
         email: u.email,
-        role:  (u.app_metadata as Record<string, unknown> | null)?.role ?? "viewer",
+        // Sin rol = null (2-oct-2026). Antes se mostraba como "viewer" y una
+        // cuenta registrada sola (sin acceso real) pasaba por interna.
+        role:  (u.app_metadata as Record<string, unknown> | null)?.role ?? null,
         // KAM vinculado (app_metadata.kam). Siempre presente (null si no hay):
         // el cliente usa la PRESENCIA de la clave para saber que esta versión
         // de la función ya soporta `setKam`.

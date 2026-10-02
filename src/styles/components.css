@@ -424,3 +424,9 @@ td.ui-num > .ui-delta { margin-left: auto; }
 .ui-dialog__choice:disabled { cursor: not-allowed; opacity: .55; }
 .ui-dialog__choice-label { font-weight: var(--weight-semibold); }
 .ui-dialog__choice-desc { font-size: var(--text-sm); color: var(--color-text-muted); }
+
+/* Aviso "tu cuenta no tiene acceso" (auth.ts, 2-oct-2026): una cuenta sin rol
+   no entra a la app y ve esto en la caja de login. */
+.login-sin-permiso { display: flex; flex-direction: column; gap: 10px; align-items: center; text-align: center; font-size: 14px; color: var(--color-text-muted); margin-top: 8px; }
+.login-sin-permiso__t { font-size: 16px; font-weight: 600; color: var(--color-text); margin: 0; }
+.login-sin-permiso p { margin: 0; }

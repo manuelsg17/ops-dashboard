@@ -257,9 +257,13 @@ function _roleMeta(r) {
     admin:   { icon: "lock",     label: t("au.rol.adminLabel"),   desc: t("au.rol.adminDesc") },
     kam:     { icon: "user",     label: t("au.rol.kamLabel"),     desc: t("au.rol.kamDesc") },
     viewer:  { icon: "eye",      label: t("au.rol.viewerLabel"),  desc: t("au.rol.viewerDesc") },
-    partner: { icon: "building", label: t("au.rol.partnerLabel"), desc: t("au.rol.partnerDesc") }
+    partner: { icon: "building", label: t("au.rol.partnerLabel"), desc: t("au.rol.partnerDesc") },
+    // Sin rol (2-oct-2026): NO tiene acceso (la base exige un rol explícito).
+    // Antes se mostraba como "viewer" y una cuenta registrada sola pasaba
+    // desapercibida.
+    sinrol:  { icon: "alert-circle", label: t("au.rol.sinRolLabel"), desc: t("au.rol.sinRolDesc") }
   };
-  return M[r] || M.viewer;
+  return M[r] || M.sinrol;
 }
 
 // "es-PE" fijo A PROPOSITO, igual que el timestamp de "Datos cargados" en
@@ -321,7 +325,8 @@ export function renderAdminUsers() {
   const filtro = segmented({
     ariaLabel: t("au6.filtroRolAria"), act: "auFilterRol", value: AU_UI.rol,
     options: [{ value: "todos", label: `${t("au.todos")} (${S.users.length})` },
-      ...AU_ROLES.map(r => ({ value: r, label: `${_roleMeta(r).label} (${conteo(r)})` }))]
+      ...AU_ROLES.map(r => ({ value: r, label: `${_roleMeta(r).label} (${conteo(r)})` })),
+      ...(S.users.some(u => !AU_ROLES.includes(u.role)) ? [{ value: "sinrol", label: `${_roleMeta("sinrol").label} (${S.users.filter(u => !AU_ROLES.includes(u.role)).length})` }] : [])]
   });
   const invitar = AU_UI.invitar ? `
     <section class="ui-card au6-invite" id="auInviteBox" aria-labelledby="auInviteT">
@@ -426,7 +431,7 @@ function _auListHTML(permsByUser, clidsByUser) {
   const S = ADMIN_USERS_STATE;
   const q = (AU_UI.q || "").toLowerCase().trim();
   const visibles = S.users.filter(u =>
-    (AU_UI.rol === "todos" || u.role === AU_UI.rol) &&
+    (AU_UI.rol === "todos" || u.role === AU_UI.rol || (AU_UI.rol === "sinrol" && !AU_ROLES.includes(u.role))) &&
     (!q || String(u.email || "").toLowerCase().includes(q))
   );
   if (!visibles.length) return emptyState({ icon: "search", title: t("au.ningunoCoincide") });

@@ -1052,6 +1052,11 @@ export const I18N: Record<string, Record<string, string>> = {
                     ru: "Создать" },
 
   // ── Portal del partner (Ola 3) ────────────────────────────────────────────
+  "au.rol.sinRolLabel": { es: "Sin rol", en: "No role", ru: "Без роли" },
+  "au.rol.sinRolDesc": { es: "No tiene acceso a ningún dato. Elige un rol para habilitarla.", en: "Has no access to any data. Choose a role to enable it.", ru: "Нет доступа к данным. Выберите роль, чтобы включить доступ." },
+  "auth.sinRol.titulo": { es: "Tu cuenta todavía no tiene acceso", en: "Your account does not have access yet", ru: "У вашей учётной записи пока нет доступа" },
+  "auth.sinRol.texto": { es: "{e} inició sesión, pero no tiene un rol asignado. Pide acceso al administrador del dashboard.", en: "{e} signed in, but has no role assigned. Ask the dashboard administrator for access.", ru: "{e} вошёл в систему, но роль не назначена. Запросите доступ у администратора." },
+  "auth.sinRol.salir": { es: "Salir", en: "Sign out", ru: "Выйти" },
   // ── Portal del partner (rediseño 2-oct-2026, prefijo pt.) ──
   "pt.lock": { es: "Solo ves la información de tu empresa", en: "You only see your company's information", ru: "Вы видите только данные своей компании" },
   "pt.tab.resumen": { es: "Resumen", en: "Summary", ru: "Сводка" },

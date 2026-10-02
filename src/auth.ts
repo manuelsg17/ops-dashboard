@@ -18,6 +18,7 @@ import { logAccess, resetAccessLogSession } from "./shared/accessLog.js";
 import { resetearEstadoDeSesion } from "./shared/sesion";
 import { perfMark } from "./shared/perf";
 import { t } from "./core/i18n";
+import { escapeHTML } from "./core/security";
 import { iconSvg } from "./shared/icons";
 import { renderShellNav, renderPageHeader } from "./shell";
 
@@ -508,8 +509,28 @@ export let _appInitialized = false;
 // `opts.provisional`: arranque con la sesión guardada, antes de que el refresh
 // del token la confirme (ver initAuth). Hace exactamente lo mismo — el gating
 // sale del usuario guardado hasta que _confirmarSesion lo corrija si cambió.
+// Roles que dan acceso (2-oct-2026, auditoría de seguridad). Una cuenta SIN rol
+// (o con uno desconocido) no entra a la app: la base ya no le devuelve nada
+// (is_internal() / is_partner()), y en vez de una app vacía ve este aviso.
+const _ROLES_CON_ACCESO = ["admin", "kam", "viewer", "partner"];
+function _mostrarSinPermiso(user) {
+  const caja = document.querySelector("#loginScreen .login-box");
+  if (!caja) return;
+  document.getElementById("loginScreen").style.display = "flex";
+  document.getElementById("appContainer").style.display = "none";
+  const form = document.getElementById("loginForm");
+  if (form) form.style.display = "none";
+  let aviso = document.getElementById("sinPermiso");
+  if (!aviso) { aviso = document.createElement("div"); aviso.id = "sinPermiso"; aviso.className = "login-sin-permiso"; caja.appendChild(aviso); }
+  aviso.innerHTML = `<p class="login-sin-permiso__t">${escapeHTML(t("auth.sinRol.titulo"))}</p>
+    <p>${escapeHTML(t("auth.sinRol.texto", { e: user.email || "" }))}</p>
+    <button type="button" class="ui-btn ui-btn--secondary" data-act="sinPermisoSalir">${escapeHTML(t("auth.sinRol.salir"))}</button>`;
+}
+
 export function showApp(user, opts = {}) {
   _quitarSplash();
+  const _rol = user && user.app_metadata && user.app_metadata.role;
+  if (!_ROLES_CON_ACCESO.includes(_rol)) { _mostrarSinPermiso(user); return; }
   // true mientras el refresh no confirmó la sesión guardada (lo leen las pruebas
   // y sirve para diagnosticar; ningún permiso depende de esto — eso es RLS).
   STATE._sesionProvisional = !!opts.provisional;
@@ -566,4 +587,8 @@ document.addEventListener("DOMContentLoaded", () => {
 // la recarga de página que hace un submit nativo sin backend.
 function handleLoginSubmit(d, el, e) { e.preventDefault(); handleLogin(); }
 
-registerActions({ handleLogin, handleLogout, handleLoginSubmit });
+registerActions({
+  handleLogin, handleLogout, handleLoginSubmit,
+  // Salir desde el aviso "sin permisos": cierra SOLO esta sesión y recarga limpio.
+  sinPermisoSalir: async () => { try { await sb.auth.signOut({ scope: "local" }); } catch (_) { /* igual recarga */ } location.reload(); }
+});
