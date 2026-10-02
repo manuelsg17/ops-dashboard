@@ -380,6 +380,9 @@ export async function switchMode(mode) {
   if (STATE.curTab === "calculator"  && STATE.rawData.length) renderCalculator();
   if (STATE.curTab === "present2"    && STATE.rawData.length && typeof renderPresent2 === "function") renderPresent2();
   if (STATE.curTab === "rawdata"     && typeof renderRawData === "function") renderRawData();
+  // Portal del partner: antes no estaba en esta lista y cambiar de escala dejaba
+  // la pantalla con la escala anterior (encontrado el 2-oct-2026).
+  if (STATE.curTab === "portal"      && typeof renderPartnerPortal === "function") renderPartnerPortal();
 
   showLoad(false);
   _inSwitchMode = false;
@@ -899,19 +902,21 @@ export function applyFilters() {
   saveFilters();
   schedulePageHeader();
 
-  // Partner externo: su unica vista es el portal (Track C2).
-  if (STATE.userRole === "partner") {
-    if (typeof renderPartnerPortal === "function") renderPartnerPortal();
-    return;
-  }
-
   // Fase A3: los datos se cargan por VENTANA (últimas N semanas), no la tabla
   // entera. Los selectores sí ofrecen todos los períodos, así que el usuario
   // puede pedir uno anterior a lo que hay en memoria — ahí se re-fetchea
   // ampliando la ventana. saveFilters() ya corrió arriba, así que la recarga
   // (que repuebla el sidebar vía restoreFilters) conserva el rango elegido.
+  // Va ANTES de la salida del partner: antes el portal nunca ampliaba la
+  // ventana y un rango más viejo se veía vacío (encontrado el 2-oct-2026).
   if (typeof needsWiderRange === "function" && needsWiderRange(elFrom?.value)) {
     loadFromSupabase({ from: elFrom.value });   // re-renderiza al terminar
+    return;
+  }
+
+  // Partner externo: su unica vista es el portal (Track C2).
+  if (STATE.userRole === "partner") {
+    if (typeof renderPartnerPortal === "function") renderPartnerPortal();
     return;
   }
   if (STATE.curTab === "rend"        && STATE.rawData.length)                           renderRend();

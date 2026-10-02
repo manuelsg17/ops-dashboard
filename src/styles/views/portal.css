@@ -98,6 +98,78 @@
 .pp-table .ui-delta { display: flex; width: fit-content; margin-left: auto; font-size: var(--text-xs); }
 
 /* ── Responsive ───────────────────────────────────────────────────────────── */
+/* El portal tiene su propia barra de filtros (escala, rango, ciudad, subflota)
+   que maneja los mismos controles del panel lateral: para el partner el panel y
+   el botón "Filtros" del encabezado sobran. Se ocultan (no se quitan: siguen
+   guardando el rango). */
+body.role-partner .sidebar-wrap, body.role-partner .sidebar-toggle, body.role-partner .shell-filtros-btn { display: none !important; }
+.pt-filtros select.ui-select { width: auto; min-width: 150px; }
+
+/* ── Portal rediseñado (2-oct-2026, maqueta ?ui=portal): pestañas, filtros,
+   tarjetas, subflotas, Mis datos y comparación con el mercado. Prefijo pt-. ── */
+.pt { display: flex; flex-direction: column; gap: var(--space-3); }
+.pt .pp-hero { position: relative; flex-wrap: wrap; }
+.pt-lock { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; color: var(--color-ok-solid); background: var(--color-ok-soft, rgba(22,163,74,.1)); border-radius: 999px; padding: 3px 10px; }
+.pt-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--color-border-soft); overflow-x: auto; }
+.pt-tab { display: inline-flex; align-items: center; gap: 7px; border: 0; background: none; font: inherit; font-size: 14px; padding: 10px 14px; color: var(--color-text-muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+.pt-tab.is-on { color: var(--color-text); font-weight: 600; border-bottom-color: var(--color-brand); }
+.pt-filtros { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.pt-fecha { display: inline-flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--color-text-muted); }
+.pt-fecha select { min-width: 120px; }
+.pt-atajos { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.pt-atajo { border: 1px solid var(--color-border-soft); background: var(--color-surface); border-radius: 999px; padding: 5px 10px; font: inherit; font-size: 12px; color: var(--color-text-muted); cursor: pointer; }
+.pt-atajo.is-on { border-color: var(--color-text); color: var(--color-text); font-weight: 600; }
+.pt-pdf { margin-left: auto; }
+.pt-grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.pt-span2 { grid-column: 1 / -1; }
+.pt-card { padding: 16px 18px; min-width: 0; }
+.pt-card__t { margin: 0 0 12px; font-size: 15px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.pt-chip { font-size: 11px; font-weight: 600; color: var(--color-text-muted); background: var(--color-fill-soft); border-radius: 999px; padding: 2px 8px; }
+.pt-mut { color: var(--color-text-muted); font-size: 12.5px; margin: 6px 0 0; }
+.pt-lbl { font-size: 12px; font-weight: 600; color: var(--color-text-muted); }
+.pt-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.pt-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 10px; margin-bottom: 8px; }
+.pt-kpi { background: var(--color-fill-soft); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pt-kpi__l { font-size: 12px; color: var(--color-text-muted); }
+.pt-kpi b { font-size: 21px; font-variant-numeric: tabular-nums; }
+.pt-kpi small { font-size: 11.5px; color: var(--color-text-muted); }
+.pt-mkt { margin-top: 4px; font-size: 11px; font-weight: 600; border-radius: 6px; padding: 2px 6px; align-self: flex-start; color: #6d28d9; background: rgba(124,58,237,.08); }
+.pt-mkt--mejor { color: var(--color-ok-solid); background: rgba(22,163,74,.1); }
+.pt-mkt--peor { color: var(--color-bad-solid); background: rgba(220,38,38,.08); }
+.pt-chart { min-height: 210px; }
+.pt-ins { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; font-size: 13.5px; }
+.pt-ins li { display: flex; gap: 10px; align-items: flex-start; }
+.pt-ins--bad svg { color: var(--color-bad-solid); } .pt-ins--ok svg { color: var(--color-ok-solid); } .pt-ins--mkt svg { color: #6d28d9; }
+.pt-comp { display: flex; flex-direction: column; gap: 9px; font-size: 13px; }
+.pt-comp__row { display: grid; grid-template-columns: minmax(120px, 190px) 1fr 56px 38px; gap: 8px; align-items: center; }
+.pt-comp__row span { display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; }
+.pt-comp__row i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex: none; }
+.pt-comp small { color: var(--color-text-muted); font-size: 11px; }
+.pt-bar { height: 10px; background: var(--color-fill-soft); border-radius: 999px; overflow: hidden; }
+.pt-bar span { display: block; height: 100%; border-radius: 999px; }
+.pt-link { border: 0; background: none; color: var(--color-brand); font: inherit; font-size: 13px; cursor: pointer; padding: 0; align-self: flex-start; white-space: nowrap; }
+.pt-tbl td small { display: block; color: var(--color-text-muted); font-size: 11px; }
+.pt-tbl tr.is-fuera td { opacity: .6; }
+.pt-dl { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin: 10px 0 14px; }
+.pt-dl__btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.pt-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.pt-ck { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; background: var(--color-fill-soft); border-radius: 999px; padding: 4px 10px; cursor: pointer; }
+.pt-cmp { display: flex; flex-direction: column; gap: 10px; }
+.pt-cmp__row { display: grid; grid-template-columns: minmax(170px, 230px) 1fr 70px 90px 170px; gap: 10px; align-items: center; font-size: 13px; }
+.pt-cmp__row small { color: var(--color-text-muted); font-size: 11.5px; }
+.pt-cmp__bar { position: relative; height: 14px; background: var(--color-fill-soft); border-radius: 999px; }
+.pt-cmp__band { position: absolute; top: 0; bottom: 0; background: rgba(124,58,237,.22); border-radius: 999px; }
+.pt-cmp__med { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #6d28d9; }
+.pt-cmp__tu { position: absolute; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: var(--color-brand); border: 2px solid var(--color-surface); box-shadow: 0 0 0 1px var(--color-brand); }
+.pt-ver { font-size: 12px; font-weight: 600; color: var(--color-text-muted); }
+.pt-ver--mejor { color: var(--color-ok-solid); } .pt-ver--peor { color: var(--color-bad-solid); }
+.pt-leg { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; margin: 12px 0 0; }
+.pt-leg span { display: inline-flex; gap: 6px; align-items: center; }
+.pt-leg i { position: static; display: inline-block; margin: 0; }
+.pt-leg .pt-leg__tu { width: 10px; height: 10px; }
+.pt-leg .pt-leg__med { width: 2px; height: 12px; }
+.pt-leg .pt-leg__band { width: 18px; height: 10px; }
+
 @media (max-width: 1180px) {
   .pp-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -114,4 +186,14 @@
   .pp-hero__date { flex-direction: row; align-items: baseline; gap: var(--space-2); width: 100%; }
   .pp-toolbar__pdf { margin-left: 0; }
   .pp-toolbar .ui-segmented { max-width: 100%; overflow-x: auto; }
+}
+/* Portal rediseñado en pantallas angostas (al final a propósito: si va antes, las
+   reglas generales de .pt-* lo pisan). */
+@media (max-width: 860px) {
+  .pt-grid2 { grid-template-columns: 1fr; }
+  .pt-cmp__row { grid-template-columns: 1fr 64px; }
+  .pt-cmp__bar { grid-column: 1 / -1; grid-row: 2; }
+  .pt-cmp__row > small, .pt-cmp__row > .pt-ver { display: none; }
+  .pt-comp__row { grid-template-columns: 120px 1fr 50px 34px; }
+  .pt-pdf { margin-left: 0; }
 }

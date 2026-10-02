@@ -13,6 +13,7 @@
 // Import explícito (no global bare): el caché se consulta al ARRANQUE, antes de
 // que muchas cosas estén listas, y no vale la pena que dependa del espejado a
 // window de vendor.js.
+import { lecturaPartner } from "./shared/lecturaPartner";
 import { snapshotLoad, snapshotSave, snapshotTouch, snapshotClear, snapshotDrop } from "./data/cache.js";
 import { claveVersion, claveVersionTabla, reusarFilas, TABLA_DE_ESCALA } from "./shared/versionDatos";
 import { perfMark, perfMeasure, perfNote } from "./shared/perf";
@@ -595,10 +596,11 @@ async function _dataVersionRed() {
 
 // Filas de `tabla` con `col >= desde` (sin cota si `desde` es null), vía HEAD
 // count=exact: solo cabeceras, sin cuerpo. null ante cualquier falla.
-async function _contarFilas(tabla, col, desde) {
+async function _contarFilas(tablaPedida, col, desde) {
   try {
     const token = await _authToken();
-    const params = new URLSearchParams({ select: col });
+    const { tabla, cols } = lecturaPartner(tablaPedida, col, STATE.userRole === "partner");
+    const params = new URLSearchParams({ select: cols });
     if (desde) params.set(col, `gte.${desde}`);
     const res = await fetch(`${SUPABASE_URL}/rest/v1/${tabla}?${params.toString()}`, {
       method: "HEAD",
@@ -662,10 +664,12 @@ async function _pgPaginaEspeculativa(table, query, desde, hasta) {
   } catch (_) { return null; }
 }
 
-export async function fetchAllPages(table, orderCol, opts = {}) {
+export async function fetchAllPages(tablaPedida, orderCol, opts = {}) {
   const gte = opts.gte;
   const lt  = opts.lt;
-  const cols = opts.columns || "*";
+  // Rol partner: rendimiento* se lee por las funciones portal_* (solo sus CLIDs,
+  // sin columnas internas). Ver shared/lecturaPartner.ts.
+  const { tabla: table, cols } = lecturaPartner(tablaPedida, opts.columns || "*", STATE.userRole === "partner");
   // Desempate por `id` (PK en las 4 tablas paginadas): con ORDER BY solo por la
   // fecha, las filas de la MISMA fecha no tienen orden garantizado entre dos
   // consultas, y paginar por Range/OFFSET puede repetir una fila en dos páginas

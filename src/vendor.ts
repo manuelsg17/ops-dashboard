@@ -222,6 +222,10 @@ if (import.meta.env.DEV && new URLSearchParams(location.search).get("ui") === "c
 if (import.meta.env.DEV && new URLSearchParams(location.search).get("ui") === "segdeck") {
   import("./dev/segdeck").then(m => m.mountSegDeck()).catch(err => console.error("[segdeck]", err));
 }
+// Maqueta del portal del partner (SOLO dev): ?ui=portal. Mismo mecanismo.
+if (import.meta.env.DEV && new URLSearchParams(location.search).get("ui") === "portal") {
+  import("./dev/portal").then(m => m.mountPortal()).catch(err => console.error("[portal]", err));
+}
 // Maqueta de las 3 mejoras de Seguimiento (SOLO dev): ?ui=segmejoras. Mismo mecanismo.
 if (import.meta.env.DEV && new URLSearchParams(location.search).get("ui") === "segmejoras") {
   import("./dev/segmejoras").then(m => m.mountSegMejoras()).catch(err => console.error("[segmejoras]", err));

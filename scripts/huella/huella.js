@@ -232,13 +232,13 @@
         resetFiltros(r.desde, r.hasta);
         W.applyFilters();
         await waitStable($("portalContent"), "portal");
-        const disponibles = [...document.querySelectorAll('#portalContent [data-act="portalSetLine"]')]
-          .map(b => b.getAttribute("data-line"));
-        const lineas = OPTS.lineas.filter(l => disponibles.length ? disponibles.includes(l) : l === "agg");
-        for (const line of lineas) {
-          W.portalSetLine(line);
-          await waitStable($("portalContent"), "portal " + line);
-          guardar(`${mode}|portal|${line}`, $("portalContent"), { desde: r.desde, hasta: r.hasta });
+        // Portal rediseñado (2-oct-2026): ya no hay selector de línea (el total es
+        // Combinado); se recorren sus pestañas con números.
+        for (const tab of ["resumen", "desempeno", "subflotas"]) {
+          const btn = document.querySelector(`#portalContent [data-act="portalTab"][data-v="${tab}"]`);
+          if (btn) btn.click();
+          await waitStable($("portalContent"), "portal " + tab);
+          guardar(`${mode}|portal|${tab}`, $("portalContent"), { desde: r.desde, hasta: r.hasta });
         }
         continue;
       }
