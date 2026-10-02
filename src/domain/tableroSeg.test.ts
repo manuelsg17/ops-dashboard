@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { moverTarjeta, ordenLista, ordenAlFinal, vencida, vencePronto, checklistDe, avanceChecklist, kanbanDeck, fechaCierre } from "./tableroSeg";
+import { moverTarjeta, ordenLista, ordenAlFinal, vencida, vencePronto, checklistDe, avanceChecklist, kanbanDeck, fechaCierre, visibleParaPartner, necesitaAlPartner, motivoVisible } from "./tableroSeg";
 
 const C = (id: string, status: string, sort_order: number) => ({ id, status, sort_order });
 const base = [C("a", "pendiente", 0), C("b", "pendiente", 1), C("c", "pendiente", 2), C("x", "hecho", 0)];
@@ -60,5 +60,30 @@ describe("hoja Kanban del deck", () => {
   it("sin tareas: una hoja vacía", () => {
     const k = kanbanDeck([], "2026-09-01");
     expect(k.paginas.length).toBe(1); expect(k.pct).toBe(0);
+  });
+});
+
+describe("presentación al partner", () => {
+  it("visible salvo que sea explícitamente interna (caché viejo = visible)", () => {
+    expect(visibleParaPartner({})).toBe(true);
+    expect(visibleParaPartner({ visible_partner: null })).toBe(true);
+    expect(visibleParaPartner({ visible_partner: true })).toBe(true);
+    expect(visibleParaPartner({ visible_partner: false })).toBe(false);
+  });
+  it("'Necesitamos de ti' exige bloqueada Y dependiente", () => {
+    expect(necesitaAlPartner({ status: "bloqueado", depende_partner: true })).toBe(true);
+    expect(necesitaAlPartner({ status: "bloqueado", depende_partner: false })).toBe(false);
+    expect(necesitaAlPartner({ status: "en_curso", depende_partner: true })).toBe(false);
+    expect(necesitaAlPartner({ status: "bloqueado" })).toBe(false);
+  });
+  it("el motivo solo se ve bloqueada y sin espacios sobrantes", () => {
+    expect(motivoVisible({ status: "bloqueado", motivo_bloqueo: "  Falta el proveedor " })).toBe("Falta el proveedor");
+    expect(motivoVisible({ status: "en_curso", motivo_bloqueo: "viejo" })).toBe("");
+    expect(motivoVisible({ status: "bloqueado" })).toBe("");
+  });
+  it("las internas no entran al Kanban si el llamador las filtra (conteos y % salen solo de las visibles)", () => {
+    const rows = [{ status: "hecho", end_date: "2026-09-10", visible_partner: true }, { status: "hecho", end_date: "2026-09-11", visible_partner: false }, { status: "en_curso", end_date: null, visible_partner: false }];
+    const k = kanbanDeck(rows.filter(visibleParaPartner), "2026-09-01");
+    expect(k.total).toBe(1); expect(k.pct).toBe(100); expect(k.conteo.en_curso).toBe(0);
   });
 });

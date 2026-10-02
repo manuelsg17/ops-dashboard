@@ -65,6 +65,21 @@ export function avanceChecklist(items: ItemCheck[]): { hechos: number; total: nu
   return { hechos, total, pct: total ? Math.round(hechos / total * 100) : 0 };
 }
 
+// ── Presentación al partner (2-oct-2026) ─────────────────────────────────────
+/** ¿Sale en la presentación al partner? Solo `visible_partner === false` (interna)
+ *  la deja fuera: una fila sin el campo (caché viejo) cuenta como visible. */
+export function visibleParaPartner(r: { visible_partner?: boolean | null }): boolean {
+  return r.visible_partner !== false;
+}
+/** "Necesitamos de ti": bloqueada Y marcada como dependiente del partner. */
+export function necesitaAlPartner(r: { status?: string; depende_partner?: boolean | null }): boolean {
+  return r.status === "bloqueado" && r.depende_partner === true;
+}
+/** Motivo a mostrar: solo mientras está bloqueada, sin espacios de más. */
+export function motivoVisible(r: { status?: string; motivo_bloqueo?: string | null }): string {
+  return r.status === "bloqueado" ? String(r.motivo_bloqueo || "").trim() : "";
+}
+
 // ── Hoja "Plan de trabajo" del deck (Kanban, 1-oct-2026) ─────────────────────
 export interface FilaSeg { status?: string; end_date?: string | null; completed_at?: string | null }
 const _dLocal = (ts: string) => { const d = new Date(ts); return isNaN(+d) ? "" : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };

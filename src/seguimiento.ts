@@ -7,7 +7,7 @@ import { emptyState, btn } from "./shared/ui";
 import { confirmDialog, alertDialog } from "./shared/confirmDialog";
 import { SIN_KAM } from "./core/config.js";
 import { userCan } from "./auth.js";
-import { LISTAS_SEG, ordenLista, moverTarjeta, ordenAlFinal, vencida, vencePronto, checklistDe, avanceChecklist, kanbanDeck, fechaCierre } from "./domain/tableroSeg";
+import { LISTAS_SEG, ordenLista, moverTarjeta, ordenAlFinal, vencida, vencePronto, checklistDe, avanceChecklist, kanbanDeck, fechaCierre, visibleParaPartner, necesitaAlPartner, motivoVisible } from "./domain/tableroSeg";
 // seguimiento.ts — Seguimiento de tareas con los partners, TIPO TRELLO (1-oct-2026).
 //
 // Manuel eligió la propuesta "A · Clásico" de la maqueta ?ui=tablero
@@ -313,10 +313,11 @@ function _segPedirTexto(o) {
 // los tokens, como en el Gantt.
 const SEG_POR_COLUMNA = 4;
 export function p2PartnerHasSeguimiento(partner) {
-  return (STATE.seguimientoData || []).some(r => r.partner === partner && (r.task || "").trim());
+  return (STATE.seguimientoData || []).some(r => r.partner === partner && (r.task || "").trim() && visibleParaPartner(r));
 }
 function _segKanbanDe(partner, desde) {
-  return kanbanDeck(_segRealTasks((STATE.seguimientoData || []).filter(r => r.partner === partner)), desde || "0000", SEG_POR_COLUMNA);
+  // Las tarjetas internas (visible_partner = false) no existen para el partner: ni en la hoja ni en sus conteos.
+  return kanbanDeck(_segRealTasks((STATE.seguimientoData || []).filter(r => r.partner === partner && visibleParaPartner(r))), desde || "0000", SEG_POR_COLUMNA);
 }
 /** Cuántas hojas ocupa el Kanban del partner (p2Deck las agrega todas). */
 export function p2SegPaginas(partner, desde) { return _segKanbanDe(partner, desde).paginas.length; }
@@ -343,7 +344,6 @@ export function buildSlide2Seguimiento(partner, idx, pag = 0, dates = null) {
     en_curso:  [T("En proceso", "In progress", "В работе"), T("avanzando", "moving forward", "продвигаются")],
     pendiente: [T("Próximos pasos", "Next steps", "Следующие шаги"), T("por fecha", "by date", "по сроку")]
   };
-  const pareceDelPartner = o => /partner|socio|aliado/i.test(o || "") || (o && partner && String(partner).toLowerCase().includes(String(o).toLowerCase().trim()) && String(o).trim().length > 3);
   const card = (r, l, num) => {
     const items = checklistDe(r.checklist), av = avanceChecklist(items), venc = vencida(r, hoy);
     const fecha = l === "hecho" ? T(`Cerrado el ${fd(fechaCierre(r))}`, `Closed ${fd(fechaCierre(r))}`, `Закрыто ${fd(fechaCierre(r))}`)
@@ -354,9 +354,10 @@ export function buildSlide2Seguimiento(partner, idx, pag = 0, dates = null) {
       <div class="sgk-top">${r.project ? `<span class="sgk-proy"><span class="sgk-sq" style="background:${_segProjColor(r.project, partner)}"></span>${escapeHTML(r.project)}</span>` : "<span></span>"}${l === "pendiente" ? `<span class="sgk-n">${num}</span>` : ""}</div>
       <div class="sgk-t">${escapeHTML(r.task)}</div>
       ${r.expected_result ? `<div class="sgk-res">🎯 ${escapeHTML(r.expected_result)}</div>` : ""}
+      ${motivoVisible(r) ? `<div class="sgk-motivo">🚧 ${escapeHTML(motivoVisible(r))}</div>` : ""}
       ${l === "en_curso" && av.total ? `<div class="sgk-chk"><div class="sgk-bar"><span style="width:${av.pct}%"></span></div><span>${T(`${av.hechos}/${av.total} pasos`, `${av.hechos}/${av.total} steps`, `${av.hechos}/${av.total} шагов`)}</span></div>` : ""}
       <div class="sgk-meta"><span class="${venc ? "sgk-venc" : ""}">${escapeHTML(fecha)}</span><span>${escapeHTML(r.owner || "")}</span></div>
-      ${l === "bloqueado" && pareceDelPartner(r.owner) ? `<div class="sgk-nec">${escapeHTML(T("Necesitamos de ti para destrabarlo", "We need you to unblock it", "Нужна ваша помощь, чтобы разблокировать"))}</div>` : ""}
+      ${necesitaAlPartner(r) ? `<div class="sgk-nec">${escapeHTML(T("Necesitamos de ti para destrabarlo", "We need you to unblock it", "Нужна ваша помощь, чтобы разблокировать"))}</div>` : ""}
     </div>`;
   };
   const cols = LISTAS_ORDEN_DECK.map(l => {
@@ -432,12 +433,15 @@ function _tarjeta(r, conPartner) {
     fin ? `<span class="sgt-badge${tono}" title="${escapeHTML(t("seg.tb.vence"))}">${iconSvg("clock", { size: 12 })}${escapeHTML(_fCorta(fin))}</span>` : "",
     chk.total ? `<span class="sgt-badge${chk.hechos === chk.total ? " sgt-badge--ok" : ""}">${iconSvg("check-circle", { size: 12 })}${chk.hechos}/${chk.total}</span>` : "",
     ncom ? `<span class="sgt-badge">${iconSvg("file-text", { size: 12 })}${ncom}</span>` : "",
+    r.depende_partner ? `<span class="sgt-chip sgt-chip--dep" title="${escapeHTML(t("seg.tb.depende"))}">${iconSvg("users", { size: 12 })}${escapeHTML(t("seg.tb.chipPartner"))}</span>` : "",
+    visibleParaPartner(r) ? "" : `<span class="sgt-chip sgt-chip--int" title="${escapeHTML(t("seg.tb.visibleAyudaOff"))}">${iconSvg("lock", { size: 12 })}${escapeHTML(t("seg.tb.chipInterna"))}</span>`,
     r.expected_result ? `<span class="sgt-badge" title="${escapeHTML(t("seg.tb.tieneDesc"))}">${iconSvg("menu", { size: 12 })}</span>` : ""
   ].join("");
   return `<article class="sgt-card${SEG_STATE.abierta === r.id ? " is-open" : ""}" draggable="${segPuedeEscribir()}" data-card="${escapeHTML(r.id)}" data-act="segAbrir" data-id="${escapeHTML(r.id)}" tabindex="0">
     ${conPartner ? `<div class="sgt-card__partner">${escapeHTML(r.partner)}</div>` : ""}
     ${r.project ? `<div class="sgt-card__lbls">${_lbl(r.project, r.partner)}</div>` : ""}
     <div class="sgt-card__t">${escapeHTML(r.task)}</div>
+    ${r.status === "bloqueado" ? `<div class="sgt-motivo${motivoVisible(r) ? "" : " sgt-motivo--vacio"}">${iconSvg("alert-circle", { size: 12 })}<span>${escapeHTML(motivoVisible(r) || t("seg.tb.sinMotivo"))}</span></div>` : ""}
     ${badges || r.owner ? `<div class="sgt-card__foot"><span class="sgt-card__badges">${badges}</span>${_av(r.owner)}</div>` : ""}
   </article>`;
 }
@@ -541,6 +545,9 @@ function _detalle(r) {
           ${r.owner ? `<div><span class="sgt-det__lbl">${escapeHTML(t("seg.tb.responsable"))}</span><span class="sgt-det__resp">${_av(r.owner)}${escapeHTML(r.owner)}</span></div>` : ""}
           ${fin ? `<div><span class="sgt-det__lbl">${escapeHTML(t("seg.tb.vence"))}</span><span class="sgt-badge${r.status === "hecho" ? " sgt-badge--ok" : vencida(r, hoy) ? " sgt-badge--bad" : vencePronto(r, hoy) ? " sgt-badge--warn" : ""}">${iconSvg("clock", { size: 12 })}${escapeHTML(_fCorta(fin))}${vencida(r, hoy) ? " · " + escapeHTML(t("seg.vencida")) : ""}</span></div>` : ""}
         </div>
+        ${r.status === "bloqueado" ? `<h4 class="sgt-det__sec">${iconSvg("alert-circle", { size: 15 })}${escapeHTML(t("seg.tb.motivo"))}</h4>
+        <textarea class="sgt-in sgt-in--area sgt-in--bloq" rows="2" placeholder="${escapeHTML(t("seg.tb.phMotivo"))}" data-act-change="segCampo" data-id="${escapeHTML(r.id)}" data-campo="motivo_bloqueo"${dis}>${escapeHTML(r.motivo_bloqueo || "")}</textarea>
+        <div class="sgt-ayuda">${escapeHTML(t(visibleParaPartner(r) ? "seg.tb.motivoAyuda" : "seg.tb.visibleAyudaOff"))}</div>` : ""}
         <h4 class="sgt-det__sec">${iconSvg("menu", { size: 15 })}${escapeHTML(t("seg.tb.descripcion"))}</h4>
         <textarea class="sgt-in sgt-in--area" rows="3" placeholder="${escapeHTML(t("seg.tb.phDesc"))}" data-act-change="segCampo" data-id="${escapeHTML(r.id)}" data-campo="expected_result"${dis}>${escapeHTML(r.expected_result || "")}</textarea>
         <h4 class="sgt-det__sec">${iconSvg("check-circle", { size: 15 })}${escapeHTML(t("seg.tb.checklist"))}${av.total ? `<span class="sgt-det__pct">${av.pct}%</span>` : ""}</h4>
@@ -563,6 +570,10 @@ function _detalle(r) {
         <input class="sgt-in" type="date" value="${escapeHTML((r.start_date || "").slice(0, 10))}" data-act-change="segCampo" data-id="${escapeHTML(r.id)}" data-campo="start_date"${dis}>
         <span class="sgt-det__lbl">${escapeHTML(t("seg.tb.vence"))}</span>
         <input class="sgt-in" type="date" value="${escapeHTML(fin)}" data-act-change="segCampo" data-id="${escapeHTML(r.id)}" data-campo="end_date"${dis}>
+        <div class="sgt-bloque"><span class="sgt-det__lbl">${escapeHTML(t("seg.tb.presentacion"))}</span>
+          <label class="sgt-sw"><input type="checkbox"${r.depende_partner ? " checked" : ""} data-act-change="segFlag" data-id="${escapeHTML(r.id)}" data-campo="depende_partner"${dis}><span class="sgt-sw__t"><b>${escapeHTML(t("seg.tb.depende"))}</b><small>${escapeHTML(t("seg.tb.dependeAyuda"))}</small></span></label>
+          <label class="sgt-sw"><input type="checkbox"${visibleParaPartner(r) ? " checked" : ""} data-act-change="segFlag" data-id="${escapeHTML(r.id)}" data-campo="visible_partner"${dis}><span class="sgt-sw__t"><b>${escapeHTML(t("seg.tb.visible"))}</b><small>${escapeHTML(t(visibleParaPartner(r) ? "seg.tb.visibleAyudaOn" : "seg.tb.visibleAyudaOff"))}</small></span></label>
+        </div>
         ${puede ? `<hr>
         ${r.status !== "hecho" ? `<button type="button" class="sgt-side-btn" data-act="segSiguiente" data-id="${escapeHTML(r.id)}">${iconSvg("arrow-right", { size: 14 })}${escapeHTML(t("seg.tb.siguiente"))}</button>` : ""}
         <button type="button" class="sgt-side-btn sgt-side-btn--bad" data-act="segBorrar" data-id="${escapeHTML(r.id)}">${iconSvg("trash", { size: 14 })}${escapeHTML(t("seg.tb.eliminar"))}</button>` : ""}
@@ -671,15 +682,66 @@ async function _comentar(id, txt) {
   renderSeguimiento();
   document.getElementById("segComNuevo")?.focus();
 }
-function _mover(id, destino, antesDe) {
+// Cuadro al pasar a Bloqueado: motivo (opcional) y "depende del partner". null = canceló.
+function _segPedirBloqueo(r) {
+  return new Promise(resolve => {
+    const prevFocus = document.activeElement;
+    const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+    const backdrop = el("div", "ui-dialog-backdrop");
+    const dialog = el("div", "ui-dialog");
+    dialog.setAttribute("role", "dialog"); dialog.setAttribute("aria-modal", "true");
+    const h = el("h2", "ui-dialog__title", t("seg.dlg.bloqTit")); h.id = "segBloqT";
+    dialog.setAttribute("aria-labelledby", h.id);
+    const tarea = el("p", "sgt-dlg__tarea", r.task);
+    const field = el("label", "ui-field");
+    const area = el("textarea", "ui-input"); area.rows = 3; area.value = r.motivo_bloqueo || ""; area.placeholder = t("seg.tb.phMotivo");
+    field.append(el("span", "ui-field__label", t("seg.dlg.bloqLabel")), area);
+    const dep = el("label", "sgt-dlg__chk"); const cb = el("input"); cb.type = "checkbox"; cb.checked = !!r.depende_partner;
+    dep.append(cb, el("span", null, t("seg.dlg.bloqDep")));
+    const actions = el("div", "ui-dialog__actions");
+    const cancel = el("button", "ui-btn ui-btn--secondary", t("dialogo.cancelar"));
+    const ok = el("button", "ui-btn ui-btn--primary", t("seg.dlg.bloqOk"));
+    cancel.type = ok.type = "button";
+    actions.append(cancel, ok);
+    dialog.append(h, tarea, field, dep, actions);
+    backdrop.appendChild(dialog);
+    let done = false;
+    const close = v => {
+      if (done) return; done = true; backdrop.remove();
+      if (prevFocus && typeof prevFocus.focus === "function" && document.contains(prevFocus)) prevFocus.focus();
+      resolve(v);
+    };
+    cancel.addEventListener("click", () => close(null));
+    ok.addEventListener("click", () => close({ motivo: area.value.trim(), depende: cb.checked }));
+    backdrop.addEventListener("mousedown", e => { if (e.target === backdrop) close(null); });
+    backdrop.addEventListener("keydown", e => {
+      if (e.key === "Escape") { e.preventDefault(); close(null); return; }
+      if (e.key === "Tab") {
+        const items = [area, cb, cancel, ok]; const i = items.indexOf(document.activeElement);
+        e.preventDefault(); items[(i + (e.shiftKey ? items.length - 1 : 1)) % items.length].focus();
+      }
+    });
+    document.body.appendChild(backdrop);
+    area.focus();
+  });
+}
+async function _mover(id, destino, antesDe) {
   const r = _fila(id); if (!r) return;
+  let extra = null;
+  if (destino === "bloqueado" && (r.status || "pendiente") !== "bloqueado") {
+    const res = await _segPedirBloqueo(r);
+    if (!res) { renderSeguimiento(); return; }   // canceló: el <select> nativo ya había cambiado, se repinta
+    extra = { motivo_bloqueo: res.motivo || null, depende_partner: res.depende };
+  }
   const mismas = _filas().filter(x => x.partner === r.partner);
   const cambios = moverTarjeta(mismas, id, destino, antesDe);
-  if (!cambios.length) return;
+  if (!cambios.length && !extra) return;
   // completed_at lo pone la BASE (trigger); acá solo se refleja al instante.
   const ahora = new Date().toISOString();
   cambios.forEach(c => { const f = _fila(c.id); if (f && (f.status === "hecho") !== (c.status === "hecho")) f.completed_at = c.status === "hecho" ? ahora : null; });
-  _actualizar(cambios.map(c => ({ id: c.id, patch: { status: c.status, sort_order: c.sort_order } })));
+  const lista = cambios.map(c => ({ id: c.id, patch: { status: c.status, sort_order: c.sort_order, ...(extra && c.id === id ? extra : {}) } }));
+  if (extra && !lista.some(c => c.id === id)) lista.push({ id, patch: { ...extra } });
+  _actualizar(lista);
 }
 async function _checklist(id, fn) {
   const r = _fila(id); if (!r) return;
@@ -800,6 +862,7 @@ registerActions({
   segAltaNo:         () => { SEG_STATE.alta = ""; renderSeguimiento(); },
   segAltaOk:         d => _altaOk(d.lista),
   segAltaKey:        (d, el, e) => { if (e.key === "Enter") { e.preventDefault(); _altaOk(d.lista); } else if (e.key === "Escape") { SEG_STATE.alta = ""; renderSeguimiento(); } },
+  segFlag:           (d, el) => _patch(d.id, { [d.campo]: el.checked }),
   segCampo:          (d, el) => { const v = el.value.trim(); if (d.campo === "task" && !v) { renderSeguimiento(); return; } _patch(d.id, { [d.campo]: v || null }); },
   segEstado:         (d, el) => _mover(d.id, el.value, null),
   segSiguiente:      d => { const r = _fila(d.id); if (r) _mover(d.id, LISTAS_SEG[Math.min(LISTAS_SEG.indexOf(r.status || "pendiente") + 1, LISTAS_SEG.length - 1)], null); },

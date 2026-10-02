@@ -222,6 +222,10 @@ if (import.meta.env.DEV && new URLSearchParams(location.search).get("ui") === "c
 if (import.meta.env.DEV && new URLSearchParams(location.search).get("ui") === "segdeck") {
   import("./dev/segdeck").then(m => m.mountSegDeck()).catch(err => console.error("[segdeck]", err));
 }
+// Maqueta de las 3 mejoras de Seguimiento (SOLO dev): ?ui=segmejoras. Mismo mecanismo.
+if (import.meta.env.DEV && new URLSearchParams(location.search).get("ui") === "segmejoras") {
+  import("./dev/segmejoras").then(m => m.mountSegMejoras()).catch(err => console.error("[segmejoras]", err));
+}
 // Maquetas de Seguimiento tipo Trello (SOLO dev): ?ui=tablero. Mismo mecanismo.
 if (import.meta.env.DEV && new URLSearchParams(location.search).get("ui") === "tablero") {
   import("./dev/tablero").then(m => m.mountTablero()).catch(err => console.error("[tablero]", err));

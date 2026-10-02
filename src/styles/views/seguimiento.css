@@ -197,6 +197,23 @@ th.sg-gantt__today { color: var(--color-over-fg); }
 .sgt-side-btn:hover { background: var(--color-border-soft); }
 .sgt-side-btn--bad { color: var(--color-bad-solid); }
 
+/* Presentación al partner (2-oct-2026): marcas en la tarjeta, motivo del bloqueo y casillas. */
+.sgt-chip { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; border-radius: 6px; padding: 2px 6px; }
+.sgt-chip--dep { background: rgba(2, 132, 199, .12); color: #0369a1; }
+.sgt-chip--int { background: var(--color-fill-soft); color: var(--color-text-muted); }
+.sgt-motivo { display: flex; gap: 5px; align-items: flex-start; font-size: 12px; color: #b91c1c; background: rgba(220, 38, 38, .08); border-radius: 6px; padding: 4px 7px; }
+.sgt-motivo span { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.sgt-motivo--vacio { color: var(--color-text-muted); background: var(--color-fill-soft); font-style: italic; }
+.sgt-in--bloq { border-color: rgba(220, 38, 38, .45); }
+.sgt-ayuda { font-size: 11.5px; color: var(--color-text-muted); margin-top: 4px; }
+.sgt-bloque { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--color-border-soft); display: flex; flex-direction: column; gap: 10px; }
+.sgt-sw { display: flex; gap: 9px; align-items: flex-start; cursor: pointer; }
+.sgt-sw input { margin-top: 3px; }
+.sgt-sw__t { display: flex; flex-direction: column; font-size: 13px; }
+.sgt-sw__t small { color: var(--color-text-muted); font-size: 11.5px; line-height: 1.35; }
+.sgt-dlg__tarea { margin: 0 0 12px; font-size: 13.5px; font-weight: 600; }
+.sgt-dlg__chk { display: flex; gap: 8px; align-items: center; font-size: 13px; margin: 12px 0; }
+
 /* Pantallas angostas: AL FINAL a propósito — si va antes, la regla general de
    .sgt-det__grid (2 columnas) la pisa y en celular la barra lateral tapa los
    comentarios (pasó en la primera versión). */
@@ -243,6 +260,7 @@ th.sg-gantt__today { color: var(--color-over-fg); }
 .sgk-chk { display: flex; align-items: center; gap: 7px; font-size: .62rem; color: #0284c7; font-weight: 700; }
 .sgk-meta { display: flex; justify-content: space-between; gap: 6px; font-size: .62rem; line-height: 1.45; padding-bottom: 1px; color: #6b7280; white-space: nowrap; overflow: hidden; }
 .sgk-venc { color: #dc2626; font-weight: 800; }
+.sgk-motivo { font-size: .66rem; color: #b91c1c; font-weight: 600; line-height: 1.3; max-height: 2.6em; overflow: hidden; overflow-wrap: anywhere; }
 .sgk-nec { font-size: .62rem; font-weight: 800; color: #dc2626; background: #fee2e2; border-radius: 6px; padding: 3px 7px; }
 .sgk-vacio { font-size: .76rem; color: #6b7280; text-align: center; padding: 16px 0; }
 .sgk-mas { font-size: .66rem; color: #6b7280; font-style: italic; padding-left: 4px; }
