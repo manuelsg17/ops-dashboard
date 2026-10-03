@@ -33,7 +33,11 @@ export function registerActions(map) {
 // datasetKey = cómo lo ve el DOM (data-act-change → dataset.actChange)
 function _makeHandler(attr, datasetKey) {
   return e => {
-    const el = e.target.closest(`[${attr}]`);
+    // Un evento cuyo target no es un elemento (p. ej. despachado sobre
+    // `document` o `window`) no tiene `closest`: se ignora en vez de tirar error.
+    const tg = e.target;
+    if (!tg || typeof tg.closest !== "function") return;
+    const el = tg.closest(`[${attr}]`);
     if (!el) return;
     const fn = _ACTIONS.get(el.dataset[datasetKey]);
     if (!fn) return;

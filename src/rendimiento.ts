@@ -858,6 +858,11 @@ export function _renderRendImpl() {
   html += _rdSec(t("rend.tabla.titulo"), t("ds.tabla.sub"), leadsNote);
   html += `<div id="dsChips"></div>`;
   html += `<div class="ui-table-wrap ui-table-wrap--scroll rd-tabla-wrap rd-tabla-compacta"><div id="tblContainer"></div></div>`;
+  // Leyenda de columnas para pantallas táctiles (3-oct-2026): los nombres
+  // completos ("Conductores activos" por "Activos"…) vivían solo en el `title`
+  // de cada encabezado, que sin mouse no se ve, y tocar el encabezado ordena.
+  // Se muestra solo con (hover: none); en escritorio sigue el tooltip.
+  html += `<p class="rd-tabla-leyenda">${escapeHTML(t("ds.tabla.leyenda", { ad: t("metric.ad.label"), nr: t("metric.nr.label"), sh: t("metric.sh.label") }))}</p>`;
 
   // ── 9. Tarjetas por Partner ────────────────────────────────────────────────
   html += _rdSec(t("rend.cards.titulo"), t("rend.cards.sub"));

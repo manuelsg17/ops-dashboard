@@ -615,3 +615,6 @@
 .ds-estado-pop__v--ok { color: var(--color-ok-fg); }
 .ds-estado-pop__v--over { color: var(--color-over-fg); }
 .ds-estado-pop__v--neutral { color: var(--color-text-muted); }
+/* Leyenda de columnas de la tabla de partners: solo en táctil (ver rendimiento.ts). */
+.rd-tabla-leyenda { display: none; margin: 6px 2px 0; font-size: var(--text-xs); line-height: 1.45; color: var(--color-text-muted); }
+@media (hover: none) { .rd-tabla-leyenda { display: block; } }

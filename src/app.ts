@@ -58,6 +58,7 @@ let _listenersListos = false;
 function _instalarListenersUnaVez() {
   if (_listenersListos) return;
   _listenersListos = true;
+  instalarAyudasTactiles();   // `title` tocable y ⓘ dentro de la pantalla (iPad/celular)
   // Debounce en búsqueda de partners (timer a nivel modulo para cancelar al cambiar tab)
   document.getElementById("partnerSearch").addEventListener("input", () => {
     clearTimeout(_pSearchTimer);
@@ -1148,6 +1149,7 @@ import { registerActions } from "./shared/actions.js";
 // import deja la dependencia a la vista, que es el punto.
 import { alertBox, btn } from "./shared/ui";
 import { detenerCargaInicial } from "./shared/cargaInicial";
+import { instalarAyudasTactiles } from "./shared/tactil";
 import { alCerrarSesion } from "./shared/sesion";
 
 // I2: la sub-sección, la búsqueda y la página de Configuración son del usuario

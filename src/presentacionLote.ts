@@ -181,7 +181,12 @@ function _estadoFila(p, i) {
     : g.estado === "error" ? `${iconSvg("alert-triangle", { size: 13 })}${escapeHTML(t("p2l.est.error"))}`
     : g.estado === "run" ? `<span class="p2l-mini"><span style="width:${Math.round((g.hechas / (g.total || 1)) * 100)}%"></span></span>${g.hechas}/${g.total}`
     : g.estado === "cancelado" ? escapeHTML(t("p2l.est.cancelado")) : escapeHTML(t("p2l.est.cola"));
-  return `<span id="p2lEst${i}" class="p2l-est p2l-est--${g.estado}"${g.err ? ` title="${escapeHTML(g.err)}"` : ""}>${txt}</span>`;
+  // El motivo del error, VISIBLE (3-oct-2026): antes vivía solo en el `title` y en
+  // el iPad el KAM veía "Error" sin saber por qué.
+  if (g.estado === "error" && g.err) {
+    return `<span id="p2lEst${i}" class="p2l-est p2l-est--error p2l-est--conmotivo" title="${escapeHTML(g.err)}"><span class="p2l-est__lbl">${txt}</span><small class="p2l-est__err">${escapeHTML(g.err)}</small></span>`;
+  }
+  return `<span id="p2lEst${i}" class="p2l-est p2l-est--${g.estado}">${txt}</span>`;
 }
 export function p2LoteBodyHTML() {
   _asegurar();

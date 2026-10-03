@@ -189,7 +189,10 @@ function _tarjetaMercado() {
   const datos = _mercadoDatos();
   const ciudades = [...new Set(datasetLinea(STATE, "comb").map(r => r.city).filter(Boolean))].sort();
   const sel = _mercadoCiudad();
-  const opciones = ciudades.map(c => `<button type="button" class="ui-segmented__btn" aria-pressed="${sel === c}" data-act="portalMercado" data-v="${escapeHTML(c)}">${escapeHTML(t("pt.mkt.de", { c: cityLabel(c) }))}</button>`).join("")
+  // Solo el nombre de la ciudad a la vista (3-oct-2026): arriba ya dice "Comparar
+  // con", y "Mercado de Arequipa / Mercado de Lima / …" no entraba en el celular
+  // (Trujillo y "Todo Perú" quedaban escondidos). La frase completa va al lector.
+  const opciones = ciudades.map(c => `<button type="button" class="ui-segmented__btn" aria-pressed="${sel === c}" data-act="portalMercado" data-v="${escapeHTML(c)}" aria-label="${escapeHTML(t("pt.mkt.de", { c: cityLabel(c) }))}">${escapeHTML(cityLabel(c))}</button>`).join("")
     + `<button type="button" class="ui-segmented__btn" aria-pressed="${sel === "__peru"}" data-act="portalMercado" data-v="__peru">${escapeHTML(t("pt.mkt.peru"))}</button>`;
   let cuerpo;
   if (!datos) cuerpo = `<p class="pt-mut">${escapeHTML(t("pt.mkt.cargando"))}</p>`;

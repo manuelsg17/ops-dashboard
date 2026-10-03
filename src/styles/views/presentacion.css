@@ -297,7 +297,11 @@
 .p2l-n--0 { color: var(--color-bad-fg); }
 .p2l-est { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--color-text-subtle); }
 .p2l-est--ok { color: var(--color-ok-fg); font-weight: var(--weight-semibold); }
-.p2l-est--error { color: var(--color-bad-fg); font-weight: var(--weight-semibold); cursor: help; }
+.p2l-est--error { color: var(--color-bad-fg); font-weight: var(--weight-semibold); }
+.p2l-est--conmotivo { flex-direction: column; align-items: flex-end; gap: 2px; white-space: normal; }
+.p2l-est__lbl { display: inline-flex; align-items: center; gap: 6px; }
+.p2l-est__err { max-width: 220px; font-weight: var(--weight-regular); text-align: right; line-height: 1.3;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .p2l-est--run { color: var(--color-text); }
 .p2l-mini { width: 54px; height: 6px; border-radius: 99px; background: var(--color-fill-soft); overflow: hidden; }
 .p2l-mini span { display: block; height: 100%; border-radius: 99px; background: var(--color-info-fg); transition: width .2s; }

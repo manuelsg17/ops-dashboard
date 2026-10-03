@@ -197,7 +197,14 @@ td.ui-num > .ui-delta { margin-left: auto; }
   display: inline-flex; padding: 3px; gap: 2px;
   background: var(--color-fill-soft); border: 1px solid transparent;
   border-radius: var(--radius-pill);
+  /* Nunca más ancho que su contenedor (3-oct-2026): en el celular un selector
+     con opciones largas (mercado del portal: "Mercado de Arequipa | … | Todo
+     Perú", 537 px) ensanchaba la PÁGINA y todo se desplazaba de costado hasta
+     300 px. Si no entra, se desplaza dentro de sí mismo. */
+  max-width: 100%; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch;
 }
+.ui-segmented::-webkit-scrollbar { display: none; }
+.ui-segmented__btn { flex-shrink: 0; }
 .ui-segmented__btn {
   display: inline-flex; align-items: center; gap: var(--space-1);
   height: 28px; padding: 0 var(--space-3);
@@ -231,18 +238,24 @@ td.ui-num > .ui-delta { margin-left: auto; }
 .ui-tip:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .ui-tip::after {
   content: attr(data-tip); position: absolute; z-index: 50; left: 50%; top: calc(100% + 6px);
-  transform: translateX(-50%); width: max-content; max-width: 280px;
+  transform: translateX(calc(-50% + var(--tip-dx, 0px))); width: max-content; max-width: 280px;
   padding: 8px 10px; border-radius: 8px; white-space: normal; text-align: left;
   font-size: var(--text-sm); font-weight: var(--weight-regular); line-height: 1.4;
   color: var(--color-text-inverse); background: var(--color-text);
   box-shadow: var(--shadow-md);
   opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .12s ease;
+  /* Oculto = FUERA del layout (3-oct-2026). Con solo visibility:hidden la
+     burbuja (hasta 280 px, centrada en el ícono) seguía contando para el ancho
+     de la página: un ⓘ cerca del borde derecho daba scroll horizontal (7 px
+     medidos en la Calculadora a 768 px) y la página "bailaba" de costado en el
+     iPad y el celular. */
+  display: none;
 }
-.ui-tip:hover::after, .ui-tip:focus-visible::after { opacity: 1; visibility: visible; }
+.ui-tip:hover::after, .ui-tip:focus-visible::after { display: block; opacity: 1; visibility: visible; }
 /* Táctil: un toque da :focus pero NO :focus-visible, así que la ayuda no
    aparecía. Tocar fuera le quita el foco y la cierra. 3-oct-2026. */
 @media (hover: none) {
-  .ui-tip:focus::after { opacity: 1; visibility: visible; }
+  .ui-tip:focus::after { display: block; opacity: 1; visibility: visible; }
   .ui-tip::after { max-width: min(280px, calc(100vw - 32px)); }
 }
 /* Pegado al borde derecho de su contenedor: la burbuja se abre hacia la izquierda. */
@@ -436,3 +449,12 @@ td.ui-num > .ui-delta { margin-left: auto; }
 .login-sin-permiso { display: flex; flex-direction: column; gap: 10px; align-items: center; text-align: center; font-size: 14px; color: var(--color-text-muted); margin-top: 8px; }
 .login-sin-permiso__t { font-size: 16px; font-weight: 600; color: var(--color-text); margin: 0; }
 .login-sin-permiso p { margin: 0; }
+
+/* Burbuja del `title` tocable en pantallas táctiles (shared/tactil.ts). */
+.titulo-pop {
+  position: fixed; z-index: 9500; max-width: min(300px, calc(100vw - 16px));
+  padding: 8px 10px; border-radius: 8px;
+  font-size: var(--text-sm); line-height: 1.4; white-space: pre-line;
+  color: var(--color-text-inverse); background: var(--color-text);
+  box-shadow: var(--shadow-md); pointer-events: none;
+}

@@ -945,6 +945,14 @@ body.role-partner #uploadDropdown { display: none !important; }
      (la marca ya no se encoge, para no quedar debajo de lo que viene después):
      queda "YANGO" junto al logo. */
   .brand span { display: none; }
+  /* 375 px (iPhone SE/mini) — 3-oct-2026: la barra seguía midiendo 390 px y TODA
+     la página se desplazaba 18 px de costado, con el ícono de usuario cortado.
+     El botón sol/luna se esconde (el tema también está en el menú de usuario:
+     Claro/Oscuro/Sistema) y el idioma muestra la bandera y el comienzo del
+     nombre. */
+  #themeToggle { display: none; }
+  .lang-select { max-width: 76px; }
+  .topbar-right { gap: var(--space-1); }
 }
 
 /* ── Objetivos táctiles (puntero grueso) ──────────────────────────────────── */
