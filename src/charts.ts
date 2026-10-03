@@ -105,7 +105,7 @@ export function showFloatTip(date, rows) {
            <span class="ft-n">${escapeHTML(r.name)}</span>
            <span class="ft-v">${fmt(r.val)}</span>
          </div>`).join("")
-    : `<div class="agy-style-54">Sin datos</div>`;
+    : `<div class="agy-style-54">${escapeHTML(t("estado.sinDatos"))}</div>`;
   ft.style.display = "block";
   _ubicarTip();
 }

@@ -44,6 +44,7 @@ import { logAccess } from "./shared/accessLog.js";
 import { filaCSV } from "./shared/csv";
 import { fechaLimaISO } from "./core/dates";
 import { CONFIG_STATE, CARGAS_SESION, showBanner, showLoad, lsSet, renderConfig } from "./app.js";
+import { traducirMensajeParser } from "./domain/erroresSubida";
 
 const e = s => escapeHTML(s == null ? "" : String(s));
 const CIUDADES = ["LIMA", "TRUJILLO", "AREQUIPA"];
@@ -810,7 +811,7 @@ async function flotaSetFlagCLID(clid, key, checked) {
   try {
     await setPartnerFlag(clid, key, checked, STATE.CLID_MAP[clid], STATE.KAM_MAP[clid] || "");
     await _clasifRefrescar(t("raw.actualizado"), t("raw.hecho.clasificacion"));
-  } catch (err) { showBanner(false, t("raw.error") + err.message); console.error(err); renderConfig(); }
+  } catch (err) { showBanner(false, t("raw.error") + traducirMensajeParser(err.message)); console.error(err); renderConfig(); }
   finally { showLoad(false); }
 }
 
@@ -820,7 +821,7 @@ async function fleetroomSetFlag(dbId, key, checked, name, clid, kam, city) {
     const c = clasifSubflota(dbId, clid, _MAPAS());
     await setFleetroomFlags(dbId, patchMaterializar(c, key, checked), { clid, name, kam, city });
     await _clasifRefrescar(t("raw.actualizado"), t("raw.hecho.clasificacionSubflota"));
-  } catch (err) { showBanner(false, t("raw.error") + err.message); console.error(err); renderConfig(); }
+  } catch (err) { showBanner(false, t("raw.error") + traducirMensajeParser(err.message)); console.error(err); renderConfig(); }
   finally { showLoad(false); }
 }
 
@@ -839,7 +840,7 @@ async function flotaSaveEdit(clid) {
     else await createFlota(clid, payload);
     CLASIF_STATE.editingClid = null;
     await _clasifRefrescar(t("raw.flotaActualizada"), t("raw.hecho.flotaActualizada"));
-  } catch (err) { showBanner(false, t("raw.errorGuardar") + err.message); console.error(err); }
+  } catch (err) { showBanner(false, t("raw.errorGuardar") + traducirMensajeParser(err.message)); console.error(err); }
   finally { showLoad(false); }
 }
 
@@ -857,7 +858,7 @@ async function flotaToggleActivo(clid, nuevo) {
     else await createFlota(clid, { activo: nuevo, nombre_asignado: STATE.CLID_MAP[clid] || "" });
     await _clasifRefrescar(nuevo ? t("raw.flotaReactivada") : t("raw.flotaInactiva"),
       nuevo ? t("raw.hecho.flotaReactivada") : t("raw.hecho.flotaInactiva"));
-  } catch (err) { showBanner(false, t("raw.error") + err.message); console.error(err); }
+  } catch (err) { showBanner(false, t("raw.error") + traducirMensajeParser(err.message)); console.error(err); }
   finally { showLoad(false); }
 }
 

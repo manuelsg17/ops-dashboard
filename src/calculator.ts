@@ -2844,7 +2844,7 @@ export function _calcCerosQueBorran(rows) {
                 "meta_sh_car", "meta_acceptance", "meta_utilization"];
   const MET  = { meta_active_drivers: "ad", meta_nr: "nr", meta_supply_hours: "sh",
                  meta_sh_car: "shcar", meta_acceptance: "accept", meta_utilization: "util" };
-  const LBL  = { ad: "AD", nr: "N+R", sh: "SH", shcar: "SH/Auto", accept: "Aceptación", util: "Utilización" };
+  const LBL  = { ad: "AD", nr: "N+R", sh: "SH", shcar: t("rend.kpi.shAuto"), accept: t("portal.aceptacion"), util: t("metas.kpi.utilizacion") };
   const out = [];
   rows.forEach(r => COLS.forEach(col => {
     if (r[col] == null || +r[col] !== 0) return;

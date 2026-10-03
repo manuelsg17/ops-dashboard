@@ -1585,7 +1585,7 @@ export function _rendFleetPartnerTable(lastRows, prevRows) {
   let h = `<div class="ui-table-wrap ui-table-wrap--scroll rd-tabla-wrap"><table class="ui-table ui-table--sticky-first rd-table rd-table--fleet"><thead><tr>
     <th scope="col">${escapeHTML(t("rend.col.partner"))}</th><th scope="col">KAM</th>
     <th scope="col" class="ui-num">${escapeHTML(t("rend.kpi.ownedCars"))}</th><th scope="col" class="ui-num">${escapeHTML(t("rend.kpi.shAuto"))}</th>
-    <th scope="col" class="ui-num">${escapeHTML(t("portal.aceptacion"))}</th><th scope="col" class="ui-num">Branded</th>
+    <th scope="col" class="ui-num">${escapeHTML(t("portal.aceptacion"))}</th><th scope="col" class="ui-num">${escapeHTML(t("rend.kpi.brandeados"))}</th>
     <th scope="col" class="ui-num">${escapeHTML(t("rend.fleet.pctBrandeado"))}</th><th scope="col" class="ui-num">${escapeHTML(t("rend.kpi.gmvAuto"))}</th>
     <th scope="col" class="ui-num">${escapeHTML(t("rend.fleet.comisionAuto"))}</th></tr></thead><tbody>`;
   rows.forEach(r => {

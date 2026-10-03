@@ -41,7 +41,7 @@ import {
   plantillaActiva, tieneExcepciones, limpiarPartner, estadoDe, siguienteValor, PLANTILLAS, reglasIniciales
 } from "./domain/loteHojas";
 import {
-  PRESENT2_STATE, P2_LANGS, p2Deck, p2SlideKey, p2GenerarPdf, p2NombrePdf, p2ChequeoExport,
+  PRESENT2_STATE, P2_LANGS, p2Deck, p2SlideKey, p2GenerarPdf, p2NombrePdf, p2ChequeoExport, p2SlideLabelUI,
   p2HasTaxi, p2TuktukSectionVisible, p2TieneVertical, p2PartnerList, p2MetaMeses, p2AvanceMes,
   destroyPresent2Charts, renderPresent2, p2PdfOffDefecto
 } from "./presentacion2";
@@ -164,8 +164,22 @@ function _celda(p, tipo, fila) {
   if (!del.length) return `<td class="p2l-td"><span class="p2l-na" title="${escapeHTML(t("p2l.noAplica", { p: p.name }))}">—</span></td>`;
   const inc = del.map(h => incluida(P2_LOTE.reglas, p.name, h.key));
   const st = estadoDe(inc), n = inc.filter(Boolean).length;
-  const tip = del.map((h, i) => `${inc[i] ? "✓" : "✕"} ${h.entry.def.es}`).join("\n");
+  const tip = del.map((h, i) => `${inc[i] ? "✓" : "✕"} ${p2SlideLabelUI(h.entry.def)}`).join("\n");
   return `<td class="p2l-td"><button type="button" class="p2l-cell p2l-cell--${st}" data-act="p2LoteCelda" data-fila="${fila}" data-tipo="${tipo}" aria-pressed="${st !== "off"}" aria-label="${escapeHTML(`${p.name} · ${t(_TIPO_LBL[tipo])}`)}" title="${escapeHTML(tip)}">${st === "on" ? iconSvg("check", { size: 13 }) : st === "mix" ? `${n}/${del.length}` : ""}</button></td>`;
+}
+// Hojas sueltas que NO entran, en texto (3-oct-2026): con un tipo incluido solo
+// en parte, la celda dice "n/m" y cuáles quedan afuera vivía solo en su `title`
+// (sin mouse no se ve, y tocar la celda cambia la selección). Se listan debajo
+// del nombre del partner, en cualquier dispositivo.
+function _sueltasFuera(p, cols) {
+  const fuera = [];
+  cols.forEach(tipo => {
+    const del = p.hojas.filter(h => h.tipo === tipo);
+    const inc = del.map(h => incluida(P2_LOTE.reglas, p.name, h.key));
+    if (estadoDe(inc) !== "mix") return;
+    del.forEach((h, i) => { if (!inc[i]) fuera.push(p2SlideLabelUI(h.entry.def)); });
+  });
+  return fuera.length ? `<small class="p2l-excl">${escapeHTML(t("p2l.sinHojas", { h: fuera.join(" · ") }))}</small>` : "";
 }
 function _tags(p) {
   const v = _vista(p.name), ef = v === "auto" ? (p.fleet ? "fleet" : "taxi") : v;
@@ -211,7 +225,7 @@ export function p2LoteBodyHTML() {
     return `<tr class="${on ? "" : "is-off"}">
       <th scope="row" class="p2l-p"><label class="p2l-chk"><input type="checkbox" data-act="p2LoteFila" data-fila="${i}"${on ? " checked" : ""}${gen ? " disabled" : ""}>
         <span class="p2l-p__n">${escapeHTML(p.name)}</span></label>
-        <div class="p2l-p__sub">${_tags(p)}${exc ? `<button type="button" class="p2l-reset" data-act="p2LoteLimpiar" data-fila="${i}" title="${escapeHTML(t("p2l.limpiarTip"))}"${gen ? " disabled" : ""}>${iconSvg("refresh", { size: 11 })}${escapeHTML(t("p2l.limpiar"))}</button>` : ""}</div></th>
+        <div class="p2l-p__sub">${_tags(p)}${exc ? `<button type="button" class="p2l-reset" data-act="p2LoteLimpiar" data-fila="${i}" title="${escapeHTML(t("p2l.limpiarTip"))}"${gen ? " disabled" : ""}>${iconSvg("refresh", { size: 11 })}${escapeHTML(t("p2l.limpiar"))}</button>` : ""}</div>${_sueltasFuera(p, cols)}</th>
       <td class="p2l-vcell">${vistaSel}</td>${cols.map(tp => _celda(p, tp, i)).join("")}
       <td class="p2l-ncell">${_estadoFila(p, i)}</td></tr>`;
   }).join("");

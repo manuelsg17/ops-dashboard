@@ -1105,7 +1105,7 @@ export function p2KpiDefs() {
 export function p2KpiDefsFleet() {
   return [
     { key: "nr",                   label: xl("kpi.nr", PRESENT2_STATE.lang), color: "#f97316", kind: "num" },
-    { key: "accept",               label: "Acceptance Rate",                                 color: "#10b981", kind: "pct" },
+    { key: "accept",               label: P2T("Acceptance Rate", "Acceptance Rate", "Доля принятых заказов"), color: "#10b981", kind: "pct" },
     { key: "ownedFleetActiveCars", label: P2T("Owned Fleet Active Cars", "Owned Fleet Active Cars", "Активные авто собственного автопарка"), color: "#0284c7", kind: "num" },
     { key: "shCarInt",             label: P2T("Internal Fleet SH/Auto", "Internal Fleet SH/Car", "Часы внутреннего автопарка / авто"),     color: "#8b5cf6", kind: "ratio1" }
   ];
@@ -1271,7 +1271,7 @@ export function p2RawColsFleet() {
     // del reporte Fleet del partner, en inglés también en español a propósito.
     { key: "ownedFleetActiveCars", label: P2T("Owned Fleet Active Cars", "Owned Fleet Active Cars", "Активные авто собственного автопарка"), kind: "num", grp: "fleet" },
     { key: "shCarInt",             label: P2T("Internal Fleet SH/Auto", "Internal Fleet SH/Car", "Часы внутреннего автопарка / авто"),     kind: "ratio1", grp: "fleet" },
-    { key: "accept",               label: "Acceptance Rate", kind: "pct", grp: "fleet" }
+    { key: "accept",               label: P2T("Acceptance Rate", "Acceptance Rate", "Доля принятых заказов"), kind: "pct", grp: "fleet" }
   ];
 }
 export function p2FmtRaw(kind, v) {

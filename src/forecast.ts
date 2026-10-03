@@ -193,9 +193,9 @@ export function fcGrowthLevers(m) {
   const reg50 = v(m.regP50, L) + v(m.regS50, L);
   const reg100 = v(m.regP100, L) + v(m.regS100, L);
   const stages = [
-    { key: "r1_10",   es: "Registro → 10 viajes",  en: "Signup → 10 trips",  from: reg1,  to: reg10 },
-    { key: "r10_50",  es: "10 → 50 viajes",         en: "10 → 50 trips",      from: reg10, to: reg50 },
-    { key: "r50_100", es: "50 → 100 viajes",        en: "50 → 100 trips",     from: reg50, to: reg100 }
+    { key: "r1_10",   es: "Registro → 10 viajes",  en: "Signup → 10 trips",  ru: "Регистрация → 10 поездок", from: reg1,  to: reg10 },
+    { key: "r10_50",  es: "10 → 50 viajes",         en: "10 → 50 trips",      ru: "10 → 50 поездок",          from: reg10, to: reg50 },
+    { key: "r50_100", es: "50 → 100 viajes",        en: "50 → 100 trips",     ru: "50 → 100 поездок",         from: reg50, to: reg100 }
   ].map(s => ({ ...s, conv: s.from > 0 ? s.to / s.from : null }));
   const withConv = stages.filter(s => s.conv != null);
   const bottleneck = withConv.length ? withConv.slice().sort((a, b) => a.conv - b.conv)[0] : null;

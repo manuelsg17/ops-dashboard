@@ -81,9 +81,25 @@ export function etiquetaTipoSubida(tipo: string): string {
 
 /** Mensaje para el usuario. `tipo` es el tipo de carga de handleFile. Los textos
  *  viven en core/i18n (subida.err.*); la CLASIFICACIÓN sigue siendo por código. */
+// Mensajes del parser de taxiparks (domain/taxiparks.ts). Ese archivo se comparte
+// con la Edge Function de ingesta (su copia la vigila `sync:ingest --check`), así
+// que se traducen ACÁ, al mostrarlos, en vez de tocar el parser. 3-oct-2026.
+const _MSG_PARSER: Array<[RegExp, string]> = [
+  [/^Reporte vac[ií]o$/, "subida.err.reporteVacio"],
+  [/^Ninguna columna con formato/, "subida.err.sinColumnasFecha"],
+  [/^No se encontraron datos en el reporte$/, "subida.err.sinDatosReporte"],
+  [/^Falta CLID$/, "subida.err.faltaClid"],
+  [/^Falta db_id$/, "subida.err.faltaDbId"]
+];
+/** Traduce un mensaje conocido del parser; si no lo conoce, lo devuelve igual. */
+export function traducirMensajeParser(msg: string): string {
+  const hit = _MSG_PARSER.find(([re]) => re.test(String(msg || "").trim()));
+  return hit ? t(hit[1]) : msg;
+}
+
 export function describirErrorSubida(tipo: string, err: unknown): string {
   const e = (err || {}) as { message?: string; details?: string };
-  const base = e.message || t("subida.err.sinDetalle");
+  const base = e.message ? traducirMensajeParser(e.message) : t("subida.err.sinDetalle");
   const lbl = etiquetaTipoSubida(tipo);
   const codigo = clasificarErrorSubida(err);
   if (codigo === "validacion") return `${lbl}: ${base}`;

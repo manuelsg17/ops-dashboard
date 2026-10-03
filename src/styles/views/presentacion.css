@@ -401,3 +401,5 @@
 }
 .p2l-velo__card { width: min(560px, 100%); }
 .p2l-velo .p2l-foot { box-shadow: var(--shadow-lg); }
+/* Hojas sueltas excluidas de un partner, en texto (presentacionLote.ts#_sueltasFuera). */
+.p2l-excl { display: block; margin-top: 3px; max-width: 260px; font-size: var(--text-xs); line-height: 1.35; color: var(--color-warn-fg); white-space: normal; }

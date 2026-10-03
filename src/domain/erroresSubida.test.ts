@@ -38,3 +38,14 @@ describe("describirErrorSubida", () => {
     expect(describirErrorSubida("metas", new ErrorSubida("cancelado", ""))).toMatch(/cancelada/);
   });
 });
+
+import { traducirMensajeParser } from "./erroresSubida";
+describe("traducirMensajeParser", () => {
+  it("traduce los mensajes conocidos del parser y deja igual los desconocidos", () => {
+    // En el entorno de test el idioma es español: el texto traducido es el de la clave.
+    expect(traducirMensajeParser("Reporte vacio")).toBe("El reporte está vacío");
+    expect(traducirMensajeParser('Ninguna columna con formato "DD.MM.YYYY - Measure": revisa el export')).toMatch(/DD\.MM\.YYYY/);
+    expect(traducirMensajeParser("Falta CLID")).toBe("Falta CLID");
+    expect(traducirMensajeParser("otro error cualquiera")).toBe("otro error cualquiera");
+  });
+});
