@@ -325,6 +325,7 @@ export async function switchMode(mode) {
   if (_inSwitchMode) return;
   _inSwitchMode = true;
 
+  const modoAnterior = STATE.curMode;
   STATE.curMode = mode;
 
   document.querySelectorAll(".mode-btn").forEach(btn => {
@@ -361,6 +362,20 @@ export async function switchMode(mode) {
       STATE.rawData = STATE.rawDataDiario;
     } else {
       if (STATE._semanalData) STATE.rawData = STATE._semanalData;
+    }
+
+    // La escala no llegó (la carga ya mostró el banner de error): se vuelve a la
+    // escala anterior. Antes seguía adelante con un dataset vacío y sin repintar:
+    // quedaban los números de la escala vieja bajo el rótulo de la nueva.
+    const llego = mode === "mensual" ? STATE._mensualLoaded : mode === "diario" ? STATE._diarioLoaded : true;
+    if (!llego && modoAnterior && modoAnterior !== mode) {
+      STATE.curMode = modoAnterior;
+      document.querySelectorAll(".mode-btn").forEach(btn => btn.classList.toggle("active", btn.dataset.mode === modoAnterior));
+      STATE.rawData = modoAnterior === "mensual" ? STATE.rawDataMensual
+                    : modoAnterior === "diario"  ? STATE.rawDataDiario
+                    : (STATE._semanalData || STATE.rawData);
+      if (STATE.curTab === "rend" && STATE.rawData.length) renderRend();
+      return;
     }
 
     // CRITICO: updateIndexes() es la de data.js — reconstruye _byDate, _byPartner,

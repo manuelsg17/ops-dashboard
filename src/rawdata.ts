@@ -216,7 +216,7 @@ export function exportRawCSV() {
   a.href     = url;
   a.download = `data_raw_${RAW_STATE.dateFrom || "inicio"}_${RAW_STATE.dateTo || fechaLimaISO()}.csv`;
   a.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 2000);   // en el acto, WebKit (Safari) puede abortar la descarga
 }
 
 // Buscador sin perder foco: renderRawData reconstruye el panel; se guarda el

@@ -387,3 +387,13 @@
   .p2-carga__trazo { stroke-dashoffset: 0; }
   .p2-carga__paso.is-activo .p2-carga__marca { animation-duration: 2s; }
 }
+
+/* Velo de la descarga de la cartera (presentacionLote.ts, 3-oct-2026): arriba
+   de las hojas temporales del motor (z-index 99998) y de toda la UI. */
+.p2l-velo {
+  position: fixed; inset: 0; z-index: 99999;
+  display: flex; align-items: center; justify-content: center; padding: var(--space-4);
+  background: var(--color-surface); opacity: .97;
+}
+.p2l-velo__card { width: min(560px, 100%); }
+.p2l-velo .p2l-foot { box-shadow: var(--shadow-lg); }

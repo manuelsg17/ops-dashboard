@@ -336,6 +336,16 @@ export async function initAuth() {
       // Sesión que no se pudo confirmar al abrir (sin red) y que supabase-js
       // logró refrescar después: se entra sin volver a pedir la contraseña.
       if (!_appInitialized && session && session.user) showApp(session.user);
+      else if (session && session.user && !_ROLES_CON_ACCESO.includes(session.user.app_metadata?.role)) {
+        // El rol se quitó a mitad de sesión (el token nuevo ya no lo trae): la
+        // misma pantalla "sin acceso" que al entrar. Antes caía a
+        // _setRoleFromUser, que lo dejaba como "viewer" en la UI (la base igual
+        // le devolvía vacío, pero la app se veía rota en vez de explicar).
+        // Los datos ya cargados no quedan en memoria detrás de la pantalla.
+        _limpiarEstadoEnMemoria();
+        _appInitialized = false;
+        _mostrarSinPermiso(session.user);
+      }
       else _setRoleFromUser(session && session.user);
     }
     // I2: una sesión que se cierra SIN pasar por handleLogout (token vencido,

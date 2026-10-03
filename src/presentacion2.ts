@@ -668,6 +668,10 @@ export function buildSlide2SectionCover(partner, ds) {
     </div>`;
 }
 export function destroyPresent2Charts() {
+  // Generando un PDF, los charts registrados son los de la hoja TEMPORAL que se
+  // está por capturar: destruirlos acá (cambio de pestaña, refresco de fondo)
+  // la dejaba en blanco. El motor destruye los suyos al terminar cada hoja.
+  if (_p2Generando()) return;
   PRESENT2_STATE.charts.forEach(c => { try { c.destroy(); } catch (e) {} });
   PRESENT2_STATE.charts = [];
 }
@@ -3307,7 +3311,17 @@ export function buildSlide2ForecastCharts(partner, dates, root) {
 export function present2ToggleInclPartial() { PRESENT2_STATE.fcInclPartial = !PRESENT2_STATE.fcInclPartial; renderSlide2(); }
 
 // ── RENDER PRINCIPAL (shell + slide activo) ───────────────────────────────────
+// ¿Hay una generación de PDF en curso (individual o de la cartera)?
+function _p2Generando() {
+  return !!PRESENT2_STATE._exporting || P2_LOTE.fase === "generando";
+}
+
 export function renderPresent2() {
+  // Mientras se genera un PDF no se repinta (3-oct-2026): un repintado a mitad
+  // (filtros del panel, refresco de fondo de los datos) destruía los gráficos de
+  // la hoja temporal antes de capturarla y cambiaba el estado que el motor lee.
+  // Se recuerda el pedido y se repinta al terminar.
+  if (_p2Generando()) { PRESENT2_STATE._repintarAlTerminar = true; return; }
   ensureIndexes();
   destroyPresent2Charts();
   const el = document.getElementById("present2Content");
@@ -3567,16 +3581,42 @@ export function present2ToggleCity() { PRESENT2_STATE.cmpCity = !PRESENT2_STATE.
 export function present2SetFleetMode(mode) { PRESENT2_STATE.fleetMode = mode; renderPresent2(); }
 // Mes META de "Avance vs Meta": "" → auto (según "Hasta"); nombre → fijo.
 export function present2SetAvanceMes(mes) { PRESENT2_STATE.avanceMesSel = mes || null; renderPresent2(); }
-export function present2TogglePdfPanel() { PRESENT2_STATE.pdfPanel = !PRESENT2_STATE.pdfPanel; renderPresent2(); }
+// "Hojas del PDF": antes cada casilla llamaba renderPresent2(), que destruía y
+// rehacía el deck entero con sus gráficos (parpadeo) y perdía el foco de la
+// casilla. Solo cambian el panel, el conteo del botón y los chips de hojas
+// (tachadas las que no van): se repintan esos tres (3-oct-2026).
+function _p2RepintarHojasPdf() {
+  const nav = document.getElementById("present2Nav");
+  const btnEl = document.getElementById("present2PdfBtn");
+  if (!nav || !btnEl) { renderPresent2(); return; }
+  const ae = document.activeElement;
+  const clave = ae && ae.getAttribute ? ae.getAttribute("data-key") : null;
+  const actFoco = ae && ae.getAttribute ? (ae.getAttribute("data-act") || ae.getAttribute("data-act-change")) : null;
+  const panel = document.getElementById("p2PdfPanel");
+  const html = p2PdfPanelHTML();
+  if (panel) { if (html) panel.outerHTML = html; else panel.remove(); }
+  else if (html) nav.insertAdjacentHTML("beforebegin", html);
+  btnEl.outerHTML = btn({ label: t("p2.ctl.hojas", { n: _p2PdfCount() }), icon: "file-text", variant: "secondary", size: "sm", act: "present2TogglePdfPanel", title: t("p2.ctl.hojasHint"), id: "present2PdfBtn" });
+  const nuevoBtn = document.getElementById("present2PdfBtn");
+  if (nuevoBtn) { nuevoBtn.setAttribute("aria-expanded", String(!!PRESENT2_STATE.pdfPanel)); nuevoBtn.setAttribute("aria-controls", "p2PdfPanel"); }
+  nav.innerHTML = p2NavHTML();
+  p2ScrollChipActivo();
+  // Devolver el foco (teclado) a la misma casilla o botón.
+  const sel = clave ? `#p2PdfPanel [data-key="${CSS.escape(clave)}"]`
+            : actFoco === "present2TogglePdfPanel" ? "#present2PdfBtn" : null;
+  const el = sel && document.querySelector(sel);
+  if (el && el.focus) el.focus({ preventScroll: true });
+}
+export function present2TogglePdfPanel() { PRESENT2_STATE.pdfPanel = !PRESENT2_STATE.pdfPanel; _p2RepintarHojasPdf(); }
 export function present2TogglePdfSlide(key) {
   if (PRESENT2_STATE.pdfOff.has(key)) PRESENT2_STATE.pdfOff.delete(key);
   else PRESENT2_STATE.pdfOff.add(key);
-  renderPresent2();
+  _p2RepintarHojasPdf();
 }
 export function present2PdfAll(on) {
   if (on) { PRESENT2_STATE.pdfOff.clear(); }
   else p2Deck(PRESENT2_STATE.partner).forEach(e => { if (!e.def.noPdf) PRESENT2_STATE.pdfOff.add(p2SlideKey(e)); });
-  renderPresent2();
+  _p2RepintarHojasPdf();
 }
 // Botones Taxi/TukTuk de la Sección (#present2SectionBar). Con la hoja en
 // Delivery/Cargo (u otra vertical) ninguno queda presionado.
@@ -3797,6 +3837,12 @@ export async function p2GenerarPdf(partner, deck, from, to, opts = {}) {
   } finally {
     PRESENT2_STATE.dataset = savedDs;   // restaurar el dataset de la vista en vivo
     PRESENT2_STATE._exporting = false;
+    // Un repintado pedido durante la descarga INDIVIDUAL se hace ahora; el lote
+    // repinta él mismo al terminar todos los PDFs.
+    if (PRESENT2_STATE._repintarAlTerminar && P2_LOTE.fase !== "generando") {
+      PRESENT2_STATE._repintarAlTerminar = false;
+      setTimeout(() => { if (STATE.curTab === "present2") renderPresent2(); }, 0);
+    }
     document.querySelectorAll('div[data-p2slide="1"]').forEach(d => { try { d.remove(); } catch (e) {} });
   }
 }

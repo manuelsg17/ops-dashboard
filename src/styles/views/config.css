@@ -358,3 +358,7 @@
 
 /* Atajo del menú de subida (index.html) */
 .upload-menu-more { border-top: 1px solid var(--color-border); margin-top: var(--space-1); border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
+
+/* Usuarios: recarga tras una acción (adminUsers.ts, 3-oct-2026). La lista se
+   queda en su lugar, atenuada, en vez de cambiarse por "Cargando…". */
+#adminUsersBox.is-actualizando { opacity: .6; pointer-events: none; cursor: progress; transition: opacity .15s; }

@@ -605,18 +605,26 @@ function _pedirLogos(nombre) {
   ensurePartnerLogos().then(() => { if (STATE.curTab === "portal" && (STATE.partnerLogos || {})[nombre]) renderPartnerPortal(); }).catch(() => { /* monograma */ });
 }
 // Columnas diferidas (aceptación, calidad, flota, nuevos a 50 viajes): el portal
-// las pide él mismo y se repinta cuando llegan (una vez por escala).
-const _colsPedidas = {};
+// las pide él mismo y se repinta cuando llegan.
+//
+// Antes se marcaba un booleano "ya pedidas" por escala, para siempre. Pero cada
+// recarga de filas (ampliar el "Desde", datos frescos tras pintar del caché)
+// trae filas SIN esas columnas y resetea el pedido (resetFullRendColumns): con
+// la marca puesta no se volvían a pedir y esas métricas quedaban en "—" el resto
+// de la sesión, también en el CSV/Excel de "Mis datos" (3-oct-2026). Ahora se
+// recuerda la PROMESA vigente: si ensureFullRendColumns devuelve otra, es un
+// pedido nuevo y se repinta cuando llega.
+const _ultimaCols = {};
 const _PENDIENTE = {};
 function _pedirColumnas() {
   const mode = STATE.curMode || "semanal";
-  if (_colsPedidas[mode]) return;
-  _colsPedidas[mode] = true;
-  const p = Promise.resolve(ensureFullRendColumns());
+  const p = ensureFullRendColumns();
+  if (!p || p === _ultimaCols[mode]) return;
+  _ultimaCols[mode] = p;
   Promise.race([p, Promise.resolve(_PENDIENTE)]).then(v => {
-    if (v !== _PENDIENTE) return;
+    if (v !== _PENDIENTE) return;   // ya estaban: no hace falta repintar
     p.then(() => { if (STATE.curTab === "portal" && STATE.curMode === mode) renderPartnerPortal(); });
-  }).catch(() => { _colsPedidas[mode] = false; });
+  }).catch(() => { if (_ultimaCols[mode] === p) _ultimaCols[mode] = null; });
 }
 
 // ── RENDER ───────────────────────────────────────────────────────────────────
@@ -680,8 +688,16 @@ export async function portalDownloadPDF() {
     const bg = tokenClaro("--color-bg", "#f3f4f6");
     const canvas = await html2canvas(content, opcionesCapturaClara({ scale: 2, useCORS: true, logging: false, backgroundColor: bg }));
     const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({ orientation: "portrait", unit: "px", format: [canvas.width, canvas.height] });
-    pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, canvas.width, canvas.height);
+    // La página va en px CSS (no en px del canvas, que con scale:2 es el doble),
+    // con `px_scaling` como Presentación y la orientación de la captura. Antes:
+    // una captura más ancha que alta salía cortada (jsPDF la ponía vertical) y
+    // una larga (celular, Mis datos) perdía el final en silencio, porque jsPDF
+    // limita la página a 14.400 pt. Si aun así no entra, se achica entera.
+    const MAX_PX = 19000;   // 14.400 pt ÷ 0,75 pt/px, con margen
+    const f = Math.min(1, MAX_PX / Math.max(canvas.width / 2, canvas.height / 2));
+    const w = Math.round(canvas.width / 2 * f), h = Math.round(canvas.height / 2 * f);
+    const pdf = new jsPDF({ orientation: w > h ? "landscape" : "portrait", unit: "px", format: [w, h], hotfixes: ["px_scaling"] });
+    pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, w, h);
     stampPDF(pdf, t("portal.pdfTitulo"));
     pdf.save(`MiDesempeno_${fechaLocalISO()}.pdf`);
   } catch (err) {

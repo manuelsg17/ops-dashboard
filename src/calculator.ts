@@ -2755,7 +2755,7 @@ export function calcExportExcel() {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 2000);   // en el acto, WebKit (Safari) puede abortar la descarga
   showBanner(true, t("calc.plantillaExportada"));
 }
 

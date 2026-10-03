@@ -161,6 +161,12 @@ export async function auInvite() {
 // Los guards duros (no borrarse a sí mismo, no dejar el sistema sin admin)
 // están en la Edge Function, no acá: esto es UI y se puede saltear.
 export async function auDeleteUser(userId) {
+  // Doble clic en "Sí, eliminar" mandaba dos deleteUser: el segundo fallaba y
+  // pisaba el aviso verde con "No se pudo eliminar", aunque la cuenta sí se
+  // había borrado (3-oct-2026). El botón se deshabilita mientras corre.
+  if (AU_UI.borrando) return;
+  AU_UI.borrando = true;
+  renderAdminUsers();
   const u = ADMIN_USERS_STATE.users.find(x => x.id === userId);
   try {
     await _fn("deleteUser", { userId });
@@ -171,6 +177,8 @@ export async function auDeleteUser(userId) {
     AU_UI.confirmDelete = null;
     showBanner(false, t("au.noSePudoEliminar") + (e.message || e));
     renderAdminUsers();
+  } finally {
+    AU_UI.borrando = false;
   }
 }
 
@@ -248,7 +256,7 @@ export async function auRemoveClid(mappingId) {
 // ── ESTADO DE UI ─────────────────────────────────────────────────────────────
 // Búsqueda y filtro por rol viven acá (no en el DOM) para que sobrevivan al
 // re-render: el panel se repinta entero tras cada acción.
-export const AU_UI = { q: "", rol: "todos", confirmDelete: null, invitar: false };
+export const AU_UI = { q: "", rol: "todos", confirmDelete: null, invitar: false, borrando: false };
 
 // Ola 6: sin emojis ni colores propios por rol — icono + etiqueta neutros. El
 // rol no es un estado bueno/malo, así que no lleva color semántico.
@@ -307,7 +315,12 @@ export function renderAdminUsers() {
     });
     return;
   }
-  if (S.loading) {
+  // La pantalla "Cargando usuarios…" solo en la PRIMERA carga. Antes salía en
+  // cada recarga (cambiar un rol, un permiso, un CLID): la página se achicaba,
+  // el navegador subía y el admin perdía la tarjeta que estaba editando. En las
+  // recargas se conserva la lista, atenuada, hasta que llega la nueva.
+  box.classList.toggle("is-actualizando", !!(S.loading && S.loaded));
+  if (S.loading && !S.loaded) {
     box.innerHTML = `<div class="au6-loading" role="status">${icon("refresh", { size: 16 })}<span>${_e(t("au.cargandoUsuarios"))}</span></div>`;
     return;
   }
@@ -505,7 +518,7 @@ function _auListHTML(permsByUser, clidsByUser) {
         <div>${t("au.eliminarPermanente", { e: _e(u.email || "") })}</div>
         <div class="au6-danger__actions">
           ${btn({ label: t("cfg.cancelar"), size: "sm", variant: "ghost", act: "auCancelDelete" })}
-          ${btn({ label: t("au.siEliminar"), size: "sm", variant: "danger", icon: "trash", act: "auDelete", data: { uid: u.id } })}
+          ${btn({ label: t("au.siEliminar"), size: "sm", variant: "danger", icon: "trash", act: "auDelete", data: { uid: u.id }, disabled: AU_UI.borrando })}
         </div>
       </div>` : "";
 

@@ -906,7 +906,7 @@ function _descargar(lines, nombre) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url; a.download = nombre; a.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 2000);   // en el acto, WebKit (Safari) puede abortar la descarga
 }
 
 // ── Conciliación (CLID → db_id), movida desde Data Raw ──────────────────────

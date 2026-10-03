@@ -1345,9 +1345,6 @@ export const I18N: Record<string, Record<string, string>> = {
   "top.refreshingHoras": { es: "↻ Actualizando… (mostrando datos de hace {n} h)",
                           en: "↻ Refreshing… (showing data from {n}h ago)",
                           ru: "↻ Обновление… (показаны данные {n} ч назад)" },
-  "datos.cargando": { es: "Cargando datos desde Supabase...",
-                     en: "Loading data from Supabase...",
-                     ru: "Загрузка данных из Supabase..." },
   // Pantalla de carga de los datos (shared/cargaInicial.ts, 3-oct-2026)
   "carga.titulo": { es: "Cargando tus datos", en: "Loading your data", ru: "Загружаем ваши данные" },
   "carga.sub": { es: "Es la primera carga en este dispositivo; las próximas son casi instantáneas.",

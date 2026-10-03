@@ -165,11 +165,19 @@ async function _loadAudit() {
   return data || [];
 }
 
+// Cada cambio de filtro numera su pedido: si se cambia de tabla rápido y la
+// respuesta anterior llega después, se descarta (antes se veían filas de la
+// tabla A con el filtro B elegido). 3-oct-2026.
+let _auditPedido = 0;
 export async function monSetAuditTable(tabla) {
   MON_STATE.auditTable = tabla;
   MON_STATE.errores = MON_STATE.errores || {};
-  try { MON_STATE.audit = await _loadAudit(); delete MON_STATE.errores.audit; }
-  catch (err) { MON_STATE.audit = []; MON_STATE.errores.audit = _msg(err); }
+  const yo = ++_auditPedido;
+  let filas = [], error = null;
+  try { filas = await _loadAudit(); } catch (err) { error = err; }
+  if (yo !== _auditPedido) return;
+  MON_STATE.audit = filas;
+  if (error) MON_STATE.errores.audit = _msg(error); else delete MON_STATE.errores.audit;
   renderMonitoreo();
 }
 

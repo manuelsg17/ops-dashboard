@@ -236,11 +236,19 @@ function _pieHTML(ps, sel) {
     const tot = elegidos.filter(p => P2_LOTE.prog[p.name]).length;
     const hechos = Object.values(P2_LOTE.prog).filter(g => g.estado === "ok" || g.estado === "error").length;
     const cur = Object.entries(P2_LOTE.prog).find(([, g]) => g.estado === "run");
-    return `<div class="p2l-foot" role="status" aria-live="polite"><div class="p2l-gen">
+    // Velo a pantalla completa (3-oct-2026): el motor dibuja cada hoja con
+    // gráficos en un div fijo a la vista (z-index 99998) que antes tapaba la UI y
+    // a veces el botón Cancelar; y el panel lateral seguía activo (cambiar fechas
+    // o escala a mitad del lote mezclaba escalas y repintaba encima de los
+    // gráficos temporales, que salían en blanco). Mismo patrón que .p2-progress
+    // de la descarga individual, con el progreso y Cancelar arriba de todo.
+    return `<div class="p2l-velo"><div class="p2l-velo__card">
+      <div class="p2l-foot" role="status" aria-live="polite"><div class="p2l-gen">
         <div class="p2l-gen__txt" id="p2LoteGenTxt">${escapeHTML(t("p2l.gen", { i: Math.min(hechos + 1, tot), n: tot, p: cur ? cur[0] : "", h: cur ? cur[1].hechas : 0, t: cur ? cur[1].total : 0 }))}</div>
         <div class="p2l-gen__bar"><span id="p2LoteGenBar" style="width:${Math.round(hechos / (tot || 1) * 100)}%"></span></div></div>
       <span class="p2l-sp"></span>
-      <button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" data-act="p2LoteCancelar"${P2_LOTE.cancelar ? " disabled" : ""}>${iconSvg("x", { size: 14 })}<span>${escapeHTML(t(P2_LOTE.cancelar ? "p2l.cancelando" : "p2l.cancelar"))}</span></button></div>`;
+      <button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" data-act="p2LoteCancelar"${P2_LOTE.cancelar ? " disabled" : ""}>${iconSvg("x", { size: 14 })}<span>${escapeHTML(t(P2_LOTE.cancelar ? "p2l.cancelando" : "p2l.cancelar"))}</span></button></div>
+    </div></div>`;
   }
   const destino = segmented({ ariaLabel: t("p2l.destino"), act: "p2LoteDestino", value: P2_LOTE.destino,
     options: [{ value: "carpeta", label: t("p2l.destino.carpeta"), icon: "database", disabled: !_puedeCarpeta() },
@@ -298,13 +306,15 @@ function p2LoteLang(v) {
   document.querySelectorAll('#p2LoteLang [data-act="p2LoteLang"]').forEach(b => b.setAttribute("aria-pressed", String(b.getAttribute("data-value") === v)));
 }
 function p2LoteMes(v) { PRESENT2_STATE.avanceMesSel = v || null; }
-function p2LotePlantilla(k) { aplicarPlantilla(P2_LOTE.reglas, k); P2_LOTE.fase = P2_LOTE.fase === "listo" ? "config" : P2_LOTE.fase; p2LotePintar(); }
+function p2LotePlantilla(k) { if (P2_LOTE.fase === "generando") return; aplicarPlantilla(P2_LOTE.reglas, k); P2_LOTE.fase = P2_LOTE.fase === "listo" ? "config" : P2_LOTE.fase; p2LotePintar(); }
 function p2LoteCol(tipo) {
+  if (P2_LOTE.fase === "generando") return;   // no cambiar las hojas de lo que falta generar
   const ps = _ps();
   fijarTipoTodos(P2_LOTE.reglas, tipo, siguienteValor(_estadoCol(ps, _sel(ps), tipo)));
   p2LotePintar();
 }
 function p2LoteCelda(d, e) {
+  if (P2_LOTE.fase === "generando") return;
   const ps = _ps(), i = +d.fila, tipo = d.tipo, p = ps[i];
   if (!p) return;
   const del = h => h.tipo === tipo;
@@ -403,8 +413,9 @@ export async function p2LoteDescargar() {
   destroyPresent2Charts();
   window.addEventListener("beforeunload", _antesDeSalir);
   // Mientras se genera, la pestaña no debe repintarse (un repinte a mitad borra
-  // el estado de la matriz y los divs temporales del motor).
-  renderPresent2();
+  // el estado de la matriz y los divs temporales del motor): renderPresent2 lo
+  // respeta desde el 3-oct-2026, así que acá se repinta SOLO el cuerpo del lote.
+  p2LotePintar();
   const R = { ok: 0, errores: 0, cancelado: false, destino: dir ? "carpeta" : "descargas", carpeta: dir ? dir.name : "" };
   try {
     for (const p of elegidos) {
@@ -446,6 +457,7 @@ export async function p2LoteDescargar() {
     window.removeEventListener("beforeunload", _antesDeSalir);
     Object.values(P2_LOTE.prog).forEach(g => { if (g.estado === "cola") g.estado = "cancelado"; });
     P2_LOTE.fase = "listo"; P2_LOTE.resultado = R; P2_LOTE.cancelar = false;
+    PRESENT2_STATE._repintarAlTerminar = false;
     if (STATE.curTab === "present2") renderPresent2();
   }
 }
