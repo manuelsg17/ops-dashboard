@@ -422,6 +422,12 @@ const _fCorta = d => { const x = _segParseDate(d); return x ? `${x.getDate()} ${
 const _nombre = q => String(q || "").split("@")[0].split(/[._-]+/).filter(Boolean).map(w => w[0].toUpperCase() + w.slice(1)).join(" ");
 const _ini = n => String(n || "").replace(/\(.*\)/, "").replace(/[._-]+/g, " ").trim().split(/\s+/).slice(0, 2).map(w => w[0] || "").join("").toUpperCase();
 const _av = n => n ? `<span class="sgt-av" title="${escapeHTML(n)}">${escapeHTML(_ini(n))}</span>` : "";
+// "Ana Pérez (partner)" → "Ana". Para la tarjeta del tablero.
+export const nombreCorto = n => String(n || "").replace(/\(.*\)/, "").replace(/[._-]+/g, " ").trim().split(/\s+/)[0] || "";
+// Responsable en la tarjeta del tablero (3-oct-2026): con mouse, las iniciales y
+// el nombre completo en el `title`; en táctil (iPad/celular) no hay hover y tocar
+// abre la tarjeta, así que además se ve el primer nombre (CSS, `hover: none`).
+const _avTarjeta = n => n ? `<span class="sgt-resp" title="${escapeHTML(n)}"><span class="sgt-av">${escapeHTML(_ini(n))}</span><span class="sgt-resp__n">${escapeHTML(nombreCorto(n))}</span></span>` : "";
 const _lbl = (p, partner) => p ? `<span class="sgt-lbl" style="background:${_segProjColor(p, partner)}">${escapeHTML(p)}</span>` : "";
 
 // ── TABLERO: render ──────────────────────────────────────────────────────────
@@ -442,7 +448,7 @@ function _tarjeta(r, conPartner) {
     ${r.project ? `<div class="sgt-card__lbls">${_lbl(r.project, r.partner)}</div>` : ""}
     <div class="sgt-card__t">${escapeHTML(r.task)}</div>
     ${r.status === "bloqueado" ? `<div class="sgt-motivo${motivoVisible(r) ? "" : " sgt-motivo--vacio"}">${iconSvg("alert-circle", { size: 12 })}<span>${escapeHTML(motivoVisible(r) || t("seg.tb.sinMotivo"))}</span></div>` : ""}
-    ${badges || r.owner ? `<div class="sgt-card__foot"><span class="sgt-card__badges">${badges}</span>${_av(r.owner)}</div>` : ""}
+    ${badges || r.owner ? `<div class="sgt-card__foot"><span class="sgt-card__badges">${badges}</span>${_avTarjeta(r.owner)}</div>` : ""}
   </article>`;
 }
 function _altaRapida(lista) {

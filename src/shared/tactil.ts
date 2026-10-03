@@ -63,6 +63,32 @@ function _ajustarInfoTip(tip: HTMLElement) {
   tip.style.setProperty("--tip-dx", corrimientoBurbuja(r.left + r.width / 2, ancho, vw) + "px");
 }
 
+/** ¿iPhone/iPad? (iPadOS se presenta como Mac, pero con pantalla táctil.) Puro (test). */
+export function esIOS(ua: string, plataforma: string, puntosTactiles: number): boolean {
+  if (/Android/i.test(ua)) return false;   // nunca: ahí maximum-scale sí bloquea el pellizco
+  return /iPad|iPhone|iPod/.test(ua) || (plataforma === "MacIntel" && puntosTactiles > 1);
+}
+
+/** Agrega `maximum-scale=1` al viewport si no está. Puro (test). */
+export function viewportSinZoomDeFoco(content: string): string {
+  return /maximum-scale/.test(content) ? content : content.replace(/\s*$/, "") + ", maximum-scale=1";
+}
+
+// Safari de iPhone/iPad amplía la página al tocar un campo con letra < 16 px y
+// la deja ampliada (3-oct-2026: casi todos los campos de la app son de 12-14 px,
+// 189 solo en la tabla de la Calculadora). `maximum-scale=1` lo evita y, desde
+// iOS 10, Safari IGNORA ese tope para el pellizco: se sigue pudiendo hacer zoom
+// con dos dedos. Solo en iOS: en Android sí bloquearía el pellizco.
+function _sinZoomAlEnfocarEnIOS() {
+  if (typeof navigator === "undefined" || !esIOS(navigator.userAgent, navigator.platform, navigator.maxTouchPoints || 0)) return;
+  const meta = document.querySelector('meta[name="viewport"]');
+  if (meta) meta.setAttribute("content", viewportSinZoomDeFoco(meta.getAttribute("content") || "width=device-width,initial-scale=1"));
+}
+
+// Apenas carga el módulo (eager, lo importa app.ts): así ya rige en la pantalla
+// de login, antes de iniciar sesión.
+if (typeof document !== "undefined") _sinZoomAlEnfocarEnIOS();
+
 let _instalado = false;
 export function instalarAyudasTactiles(): void {
   if (_instalado || typeof document === "undefined") return;

@@ -10,6 +10,10 @@
 /* ── RESET & BASE ─────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* iPhone/iPad (3-oct-2026): sin inflar el texto al girar a horizontal, y sin el
+   zoom por doble toque al tocar rápido dos veces un botón (+5%, +10%, flechas
+   del deck). El pellizco para hacer zoom sigue funcionando. */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; touch-action: manipulation; }
 body {
   font-family: var(--font-sans);
   background: var(--color-bg);
@@ -961,4 +965,15 @@ body.role-partner #uploadDropdown { display: none !important; }
   .sidebar .mode-btn, .sidebar .preset-btn, .sidebar .sb-sel, .sidebar .sb-inp, .sb-row button { min-height: 44px; }
   .shell-nav .ui-sidenav__item { height: 44px; }
   .shell-icon-btn { width: 44px; height: 44px; }
+  /* iPhone 18 Pro / iPad (3-oct-2026): controles de 24-28 px de alto eran
+     difíciles de acertar con el dedo. Se agrandan solo con puntero grueso. */
+  /* `html` delante: las hojas de cada vista (calculator.css, config.css,
+     rendimiento.css) se cargan DESPUÉS y fijan su propia altura. */
+  html .ui-segmented__btn,
+  html .calc-tk__right .ui-segmented__btn,
+  html .cfgx .ui-segmented__btn,
+  html .rd-view--suave .rd-toolbar .ui-segmented__btn { height: 36px; }
+  .calc-qchip { min-height: 34px; }
+  .ui-btn--icon.ui-btn--sm { min-width: 40px; min-height: 40px; }
+  .ui-link-btn { padding-block: 8px; }
 }
