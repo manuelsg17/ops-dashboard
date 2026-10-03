@@ -14,8 +14,8 @@ Dashboard para KAMs (partner performance): modulos **TypeScript** bundleados con
 
 ## Estado actual
 
-### Resumen vigente (30-sep-2026) — leer primero
-- **Producción = `main` = `b7e8213`** (2-oct-2026): Seguimiento tipo Trello + hoja "Plan de trabajo" en Kanban en el deck + carátula nueva de Presentación. CI en verde y bundle de Vercel (`index-DSc7H9B2.js`) verificado contra el build local. Migraciones de Seguimiento (`seguimiento_tablero`, `seguimiento_completed_at`) aplicadas en producción.
+### Resumen vigente (3-oct-2026) — leer primero
+- **Producción = `main` = `f64d79f`** (2-oct-2026, verificado el 3-oct: el último deployment Production de Vercel es ese commit y el CI de los últimos 5 pushes está en verde). Lo que entró el 2-oct, en orden: ícono del atajo en iPhone/iPad (`1d7fea1`), fix del "Cargando datos (Mensual)" eterno (`2b9de41`), Calculadora con selector de mes (`60c553d`), Seguimiento con "Depende del partner" / motivo del bloqueo / tarjetas internas (`20a8c71`), portal del partner rediseñado con datos internos ocultos en la base y comparación con el mercado (`f8367aa`) y lectura solo con rol explícito (`f64d79f`). Todas sus migraciones están aplicadas en producción. Detalle de cada una en los bloques de abajo.
 - **Pestañas**: Desempeño (por defecto, id `rend`) · Calculadora · Seguimiento (tablero tipo Trello por partner + Mi cartera + Cronograma) · Presentación (con "Qué descargar: Un partner / Cartera de un KAM") · Data Raw · Configuración. **Retiradas**: Metas (30-sep, su motor sigue en `metas.ts`), Vista Partner (sep) y "Rend + Metas" (jul).
 - **Reglas de cálculo vigentes** (detalle en cada fase de abajo):
   - Proyección de AD = máx del rango × 1.4. En semanal, AD contra la meta se lee SOLO por su proyección. En diario, AD no se compara con la meta mensual.
@@ -24,14 +24,23 @@ Dashboard para KAMs (partner performance): modulos **TypeScript** bundleados con
   - Calculadora: reparto por resto mayor y cuadre EXACTO (`domain/cuadre.ts`).
   - "SIN KAM" literal en `partners.kam` = sin KAM (`normKamValor`).
 - **Pendientes abiertos** (nada bloqueante):
-  - Probar el diálogo real de "Una carpeta" en la descarga de la cartera (lo abre el sistema operativo).
-  - Confirmar con Manuel su N+R TukTuk de septiembre (16.6% guardado contra 15.6% anotado).
-  - Datos maestros sucios: 5 metas de Rodolfo sin KAM en `partners`, restos de Miguel (Taxigo, FENIX DRIVE, GIAL WAY) y 11 cuentas sin KAM sin meta.
-  - Delivery/Cargo en la Calculadora: necesitan columnas en `metas` cuando lleguen sus datos.
-  - Hueco conocido del desglose TukTuk en "Solo lo que cambié" (ver "Aviso antes de borrar o reescribir el desglose TukTuk").
-  - Seguimiento está vacío en producción (0 tarjetas al 1-oct): la hoja "Plan de trabajo" del deck aparece recién cuando los KAMs carguen tarjetas. Conviene pedir feedback tras la primera semana de uso.
-  - Accionables es EXPERIMENTAL: los umbrales (`UMBRAL` en `domain/accionables.ts`) esperan el feedback de Manuel.
-  - **Backlog de mejoras de Seguimiento, guardado SIN implementar** (Manuel, 1-oct: "aún no implementemos nada"): 1) casilla "Depende del partner", 2) motivo del bloqueo, 3) "Visible para el partner" por tarjeta (**1-3 HECHAS y en producción el 2-oct, ver arriba**), 4) crear tarjeta desde Accionables, 5) resultado real junto al esperado, 6) plantillas de plan, 7) fecha de cierre visible en el tablero, 8) historial en la tarjeta, 9) Kanban en el portal del partner (requiere RLS).
+  - **Con fecha: período de gracia del egress de Supabase hasta el 17-oct-2026.** El fix del 24-sep debería dejarlo dentro del plan gratuito; revisar Usage → Egress antes de esa fecha (ver "Egress de Supabase").
+  - Necesitan decisión o dato de Manuel:
+    - Confirmar su N+R TukTuk de septiembre (16.6% guardado contra 15.6% anotado).
+    - Datos maestros sucios: 5 metas de Rodolfo sin KAM en `partners`, restos de Miguel (Taxigo, FENIX DRIVE, GIAL WAY) y 11 cuentas sin KAM sin meta.
+    - Accionables es EXPERIMENTAL: los umbrales (`UMBRAL` en `domain/accionables.ts`) esperan su feedback.
+    - Seguimiento está vacío en producción (0 tarjetas al 1-oct): la hoja "Plan de trabajo" del deck aparece recién cuando los KAMs carguen tarjetas. Pedir feedback tras la primera semana de uso.
+  - Sin probar o a medias:
+    - El diálogo real de "Una carpeta" en la descarga de la cartera (lo abre el sistema operativo).
+    - El ícono del atajo en un iPhone real.
+    - Portal del partner: producción tiene 0 cuentas partner, así que nadie lo usó de verdad (probado en local y con un partner ficticio en un bloque que se revierte).
+    - Las vistas que esperan la escala mensual fuera de Desempeño (portal, Presentación, Calculadora) no tienen la pantalla de timeout con "Reintentar".
+    - Hueco conocido del desglose TukTuk en "Solo lo que cambié" (ver "Aviso antes de borrar o reescribir el desglose TukTuk").
+  - Cuando lleguen sus datos: Delivery/Cargo en la Calculadora necesitan columnas en `metas`.
+  - Seguridad, riesgo residual conocido: protección de contraseñas filtradas (plan pago), MFA/TOTP para admins sin hacer, y el mercado con exactamente 5 partners muestra como mediana el valor de UN partner anónimo.
+  - **Backlog de Seguimiento, guardado SIN implementar** (Manuel, 1-oct: no implementar hasta que lo pida; las ideas 1-3 ya están en producción desde el 2-oct): 4) crear tarjeta desde Accionables, 5) resultado real junto al esperado, 6) plantillas de plan, 7) fecha de cierre visible en el tablero, 8) historial en la tarjeta, 9) Kanban en el portal del partner (requiere RLS → confirmación explícita).
+  - Pausado: Fleet Externo (ver "Fleet Externo — PAUSADO").
+  - Cuentas: la única admin es `masantillanag@yango-team.com`; `yango.hbexp@gmail.com` quedó sin rol el 2-oct (ve "sin acceso" si entra al dashboard).
 
 - **Ícono del atajo en iPhone/iPad (2-oct-2026)**: iOS IGNORA el favicon SVG (data URI) y pide un PNG `apple-touch-icon`; sin él el atajo del escritorio sale con una letra o en blanco. Se agregó `public/apple-touch-icon.png` (180×180, cuadrado: iOS aplica sus esquinas), `public/site.webmanifest` (nombre corto "Yango KAMs", color de marca; cubre Android) y los `<link>`/`<meta>` en `index.html`. La CSP (`default-src 'self'`) ya los permite. Para ver el ícono hay que BORRAR el atajo viejo y crearlo de nuevo desde Safari (Compartir → Añadir a pantalla de inicio): iOS guarda el ícono al crearlo. No probado en un iPhone real.
 
