@@ -1201,11 +1201,13 @@ export function renderTable() {
     </tr>`;
   });
   h += `</tbody></table>`;
+  _dsCerrarEstadoPop();   // la tarjeta del % meta es de la tabla anterior
   const el = document.getElementById("tblContainer");
   if (el) el.innerHTML = h;
 }
 
 export function sortTbl(col) {
+  _dsCerrarEstadoPop();
   if (STATE.tblSort.col === col)
     STATE.tblSort.dir = STATE.tblSort.dir === "asc" ? "desc" : "asc";
   else { STATE.tblSort.col = col; STATE.tblSort.dir = "desc"; }
@@ -1684,6 +1686,7 @@ export function _rendTkAdquisicion(lastRows, prevRows) {
 import { registerActions } from "./shared/actions.js";
 
 registerActions({
+  dsEstadoInfo: (d, el) => _dsEstadoPop(d, el),
   // data-line (y data-value del control segmentado): el mismo valor.
   setRendLine:       d => setRendLine(d.line || d.value),
   setRendCiudadModo: d => setRendCiudadModo(d.value),
@@ -2289,5 +2292,60 @@ function _dsEstadoCelda(r) {
   // Compacto (la tabla entra sin scroll horizontal): solo el % coloreado; el
   // estado en palabras va en el tooltip y en los chips de filtro de arriba.
   const tit = lbl + (tip ? " · " + tip : "");
-  return `<span class="ds-estado ds-estado--${_DS_EST_CLS[r.estado]}" title="${escapeHTML(tit)}">${r.pctPeor < 9999 ? `<b${dn("ds", "tabla", "peor", r.partner)}>${r.pctPeor.toFixed(1)}%</b>` : escapeHTML(lbl)}</span>`;
+  // Botón (3-oct-2026): en el celular no hay hover, así que el estado y el % de
+  // cada KPI, que vivían solo en el `title`, no se podían ver. Tocar la píldora
+  // abre una tarjetita con el detalle (_dsEstadoPop); el `title` queda para el
+  // mouse.
+  return `<button type="button" class="ds-estado ds-estado--${_DS_EST_CLS[r.estado]} ds-estado--btn" title="${escapeHTML(tit)}" aria-label="${escapeHTML(tit)}" aria-expanded="false" data-act="dsEstadoInfo" data-partner="${escapeHTML(r.partner)}">${r.pctPeor < 9999 ? `<b${dn("ds", "tabla", "peor", r.partner)}>${r.pctPeor.toFixed(1)}%</b>` : escapeHTML(lbl)}</button>`;
+}
+
+// ── Detalle del % meta al tocar (táctil y mouse) ─────────────────────────────
+function _dsCerrarEstadoPop() {
+  document.getElementById("dsEstadoPop")?.remove();
+  document.querySelectorAll('[data-act="dsEstadoInfo"][aria-expanded="true"]').forEach(b => b.setAttribute("aria-expanded", "false"));
+}
+let _dsEstadoCierre = false;
+function _dsInstalarCierreEstado() {
+  if (_dsEstadoCierre) return;
+  _dsEstadoCierre = true;
+  document.addEventListener("pointerdown", e => {
+    const tg = e.target;
+    if (!document.getElementById("dsEstadoPop")) return;
+    if (tg && tg.closest && (tg.closest("#dsEstadoPop") || tg.closest('[data-act="dsEstadoInfo"]'))) return;
+    _dsCerrarEstadoPop();
+  }, true);
+  document.addEventListener("scroll", () => { if (document.getElementById("dsEstadoPop")) _dsCerrarEstadoPop(); }, { capture: true, passive: true });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") _dsCerrarEstadoPop(); });
+}
+function _dsEstadoPop(d, el) {
+  const abierto = el.getAttribute("aria-expanded") === "true";
+  _dsCerrarEstadoPop();
+  if (abierto) return;                                   // segundo toque: cerrar
+  const r = (STATE.curSummaries || []).find(x => x.partner === d.partner);
+  if (!r || !r.estado) return;
+  _dsInstalarCierreEstado();
+  const est = _DS_EST_CLS[r.estado];
+  const lbl = t({ bajo: "ds.est.bajo", en: "ds.est.en", sobre: "ds.est.sobre", sin: "ds.est.sin" }[r.estado]);
+  const filas = r.metaPct ? _DS_K3.map(k => {
+    const v = r.metaPct[k];
+    return `<li><span>${escapeHTML(_dsLblK(k))}</span><b class="ds-estado-pop__v ds-estado-pop__v--${_dsTone(v)}">${v == null ? "—" : v.toFixed(1) + "%"}</b></li>`;
+  }).join("") : "";
+  const pop = document.createElement("div");
+  pop.id = "dsEstadoPop";
+  pop.className = "ds-estado-pop";
+  pop.setAttribute("role", "dialog");
+  pop.setAttribute("aria-label", d.partner + " · " + lbl);
+  pop.innerHTML = `<div class="ds-estado-pop__h"><strong>${escapeHTML(d.partner)}</strong><span class="ds-estado ds-estado--${est}">${escapeHTML(lbl)}</span></div>
+    ${filas ? `<p class="ds-estado-pop__sub">${escapeHTML(t("ds.est.tip"))}</p><ul class="ds-estado-pop__l">${filas}</ul>` : ""}`;
+  document.body.appendChild(pop);
+  // Debajo de la píldora (o arriba si no entra), siempre dentro de la pantalla.
+  const b = el.getBoundingClientRect(), M = 8;
+  const w = pop.offsetWidth, h = pop.offsetHeight;
+  let x = b.right - w, y = b.bottom + 6;
+  if (y + h > window.innerHeight - M) y = b.top - h - 6;
+  x = Math.max(M, Math.min(x, window.innerWidth - w - M));
+  y = Math.max(M, y);
+  pop.style.left = Math.round(x) + "px";
+  pop.style.top = Math.round(y) + "px";
+  el.setAttribute("aria-expanded", "true");
 }

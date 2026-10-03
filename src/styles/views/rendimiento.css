@@ -587,3 +587,31 @@
   .ci-barra { animation: none; transform: scaleY(var(--alto)); opacity: 1; }
   .ci-paso.is-activo .ci-marca { animation-duration: 2s; }
 }
+
+/* % meta tocable en la tabla de partners (3-oct-2026): en el celular el estado y
+   el % por KPI vivían solo en el `title`. La píldora es un botón y abre
+   #dsEstadoPop (rendimiento.ts#_dsEstadoPop). */
+.ds-estado--btn { border: 0; font: inherit; font-size: var(--text-xs); font-weight: var(--weight-semibold); cursor: pointer; }
+.ds-estado--btn:hover { filter: brightness(.97); }
+.ds-estado--btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.ds-estado--btn[aria-expanded="true"] { box-shadow: 0 0 0 2px currentColor; }
+/* Área táctil cómoda sin agrandar la píldora (la tabla no debe crecer). */
+@media (hover: none) { .ds-estado--btn { position: relative; } .ds-estado--btn::after { content: ""; position: absolute; inset: -10px -6px; } }
+.ds-estado-pop {
+  position: fixed; z-index: 9000; width: min(260px, calc(100vw - 16px));
+  padding: 12px 14px; border-radius: var(--radius-md);
+  background: var(--color-surface); color: var(--color-text);
+  border: 1px solid var(--color-border-soft); box-shadow: var(--shadow-lg);
+  font-size: var(--text-sm);
+}
+.ds-estado-pop__h { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ds-estado-pop__h strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-estado-pop__sub { margin: 8px 0 6px; font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.35; }
+.ds-estado-pop__l { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.ds-estado-pop__l li { display: flex; justify-content: space-between; gap: 12px; }
+.ds-estado-pop__v { font-variant-numeric: tabular-nums; }
+.ds-estado-pop__v--bad { color: var(--color-bad-fg); }
+.ds-estado-pop__v--warn { color: var(--color-warn-fg); }
+.ds-estado-pop__v--ok { color: var(--color-ok-fg); }
+.ds-estado-pop__v--over { color: var(--color-over-fg); }
+.ds-estado-pop__v--neutral { color: var(--color-text-muted); }
