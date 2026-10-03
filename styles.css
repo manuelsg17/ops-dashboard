@@ -91,6 +91,33 @@ input[type="file"] { display: none; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Cambio de escala (switchMode, 3-oct-2026): atenúa SOLO el contenido. Antes
+   era el .overlay de arriba a pantalla completa y la barra lateral y la
+   navegación "parpadeaban" con cada toque en Semanal/Mensual/Diario. */
+body.is-cambiando-escala .main {
+  opacity: .5; pointer-events: none; cursor: progress;
+  transition: opacity .15s ease;
+}
+.escala-pill {
+  position: fixed; top: 76px; left: 50%; transform: translateX(-50%);
+  z-index: 9999; display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 14px; border-radius: 999px;
+  background: var(--color-surface); color: var(--color-text);
+  border: 1px solid var(--color-border-soft); box-shadow: var(--shadow-lg);
+  font-size: var(--text-sm); font-weight: var(--weight-semibold);
+  animation: escalaPillEntra .18s ease-out;
+}
+.escala-pill__giro {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid var(--color-border); border-top-color: var(--color-brand);
+  animation: spin .7s linear infinite;
+}
+@keyframes escalaPillEntra { from { opacity: 0; transform: translate(-50%, -6px); } to { opacity: 1; transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) {
+  body.is-cambiando-escala .main { transition: none; }
+  .escala-pill { animation: none; }
+}
+
 /* ── MODE TOGGLE (base; el panel de filtros lo re-estiliza) ───────────────── */
 .mode-toggle-row {
   display: flex;

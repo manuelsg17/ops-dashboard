@@ -1,6 +1,6 @@
 // Tests de las piezas puras de charts.ts usadas por Rendimiento (Ola 6).
 import { describe, it, expect } from "vitest";
-import { indiceBase100, rendTopPartners, valorMetricaPartner, TOP_PARTNERS_TENDENCIA, configClara } from "./charts";
+import { indiceBase100, rendTopPartners, valorMetricaPartner, TOP_PARTNERS_TENDENCIA, configClara, posicionTip } from "./charts";
 import { FALLBACK } from "./shared/chartTheme";
 
 // PNG de un gráfico con la app en oscuro (Ola 7): se exporta una COPIA clara.
@@ -80,5 +80,24 @@ describe("valorMetricaPartner", () => {
     expect(valorMetricaPartner(bd, "P", "d", "tr")).toBe(7);
     expect(valorMetricaPartner(bd, "P", "d", "ad")).toBe(3);
     expect(valorMetricaPartner(bd, "Q", "d", "ad")).toBe(0);
+  });
+});
+
+describe("posicionTip (lista flotante de los gráficos)", () => {
+  it("con el mouse va a la derecha del cursor y, si no entra, a la izquierda", () => {
+    expect(posicionTip(100, 300, 220, 200, 1280, 800, false)).toEqual({ x: 116, y: 284 });
+    expect(posicionTip(1200, 300, 220, 200, 1280, 800, false).x).toBe(1200 - 220 - 16);
+  });
+  it("con el dedo va ARRIBA del punto tocado y nunca se sale de la pantalla", () => {
+    const p = posicionTip(200, 400, 220, 200, 375, 812, true);
+    expect(p.y + 200).toBeLessThan(400);           // no lo tapa el dedo
+    expect(p.x).toBeGreaterThanOrEqual(8);
+    expect(p.x + 220).toBeLessThanOrEqual(375 - 8);
+  });
+  it("si no entra arriba del dedo, va abajo", () => {
+    expect(posicionTip(200, 100, 220, 200, 375, 812, true).y).toBe(124);
+  });
+  it("una lista más alta que la pantalla queda pegada arriba (y scrollea sola)", () => {
+    expect(posicionTip(200, 400, 220, 900, 375, 812, true).y).toBe(8);
   });
 });

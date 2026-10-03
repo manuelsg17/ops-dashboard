@@ -615,6 +615,12 @@ export function renderSeguimiento() {
   const kamP = SEG_STATE.view !== "cartera" && SEG_STATE.partner ? _segKamOf(SEG_STATE.partner) : "";
   const abierta = SEG_STATE.abierta && _filas().find(r => r.id === SEG_STATE.abierta);
   if (SEG_STATE.abierta && !abierta) SEG_STATE.abierta = null;
+  // La ventana de la tarjeta se rearma con todo el tablero en cada cambio: sin
+  // esto volvía arriba (marcar un ítem del checklist al pie te subía) y el campo
+  // con el foco se destruía (en el celular se cerraba el teclado). 3-oct-2026.
+  const modalAntes = host.querySelector(".sgt-modal");
+  const scrollModal = modalAntes ? modalAntes.scrollTop : 0;
+  const foco = _claveFoco(document.activeElement);
   host.innerHTML = `<div class="sg sgt">
       <div class="sgt-titulo"><h2>${escapeHTML(titulo)}</h2>${kamP && kamP !== SIN_KAM ? `<span class="sgt-titulo__kam">${iconSvg("user", { size: 13 })}${escapeHTML(kamLabel(kamP))}</span>` : ""}
         ${segPuedeEscribir() ? "" : `<span class="sgt-titulo__ro">${iconSvg("lock", { size: 13 })}${escapeHTML(t("seg.tb.soloLectura"))}</span>`}</div>
@@ -623,8 +629,28 @@ export function renderSeguimiento() {
       ${abierta ? `<div class="sgt-modal" data-act="segFondo"><div class="sgt-modal__box" role="dialog" aria-modal="true">${_detalle(abierta)}</div></div>` : ""}
     </div>`;
   const b = document.getElementById("segBoard"); if (b) b.scrollLeft = sx;
+  const modal = host.querySelector(".sgt-modal");
+  if (modal && scrollModal) modal.scrollTop = scrollModal;
+  if (modal && foco) {
+    const el = modal.querySelector(foco) as HTMLElement | null;
+    if (el && el.focus) el.focus({ preventScroll: true });
+  }
   if (SEG_STATE.alta) document.getElementById("segAltaTxt")?.focus();
   _instalarDnD(host);
+}
+
+// Selector que vuelve a encontrar el campo enfocado de la ventana de la tarjeta
+// después de repintar (null si el foco no está en la ventana).
+function _claveFoco(el) {
+  if (!el || !el.closest || !el.closest(".sgt-modal")) return null;
+  const esc = v => (window.CSS && CSS.escape) ? CSS.escape(v) : String(v).replace(/"/g, '\\"');
+  const campo = el.getAttribute("data-campo");
+  if (campo) return `[data-campo="${esc(campo)}"]`;
+  if (el.id) return `#${esc(el.id)}`;
+  const act = el.getAttribute("data-act-change") || el.getAttribute("data-act");
+  if (!act) return null;
+  const i = el.getAttribute("data-i");
+  return `[data-act-change="${esc(act)}"]${i != null ? `[data-i="${esc(i)}"]` : ""}, [data-act="${esc(act)}"]${i != null ? `[data-i="${esc(i)}"]` : ""}`;
 }
 
 // ── GUARDADO (inmediato y optimista) ─────────────────────────────────────────
@@ -639,7 +665,12 @@ async function _error(err) {
 async function _actualizar(cambios) {
   const antes = cambios.map(c => ({ fila: _fila(c.id), prev: {} }));
   cambios.forEach((c, i) => { const f = antes[i].fila; if (!f) return; Object.keys(c.patch).forEach(k => { antes[i].prev[k] = f[k]; f[k] = c.patch[k]; }); });
-  renderSeguimiento();
+  // En la próxima vuelta del event loop, no en el acto: el `change` de un campo
+  // corre DURANTE el blur (Tab o tocar otro campo), antes de que el foco llegue
+  // al campo siguiente. Repintando ahí, ese campo se destruía antes de recibir
+  // el foco. Un instante después el foco ya está en él y renderSeguimiento lo
+  // restaura en el nodo nuevo.
+  setTimeout(renderSeguimiento, 0);
   try {
     const now = new Date().toISOString();
     const res = await Promise.all(cambios.map(c => sb.from("seguimiento").update({ ...c.patch, updated_at: now }).eq("id", c.id).select("id")));

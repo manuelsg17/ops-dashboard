@@ -8,20 +8,94 @@ import { temaActual } from "./shared/theme";
 import { t } from "./core/i18n";
 
 // ── TOOLTIP FLOTANTE ──────────────────────────────────────────────────────────
-// El listener de mousemove se agrega solo cuando el tooltip está visible y se
-// remueve al ocultarlo, evitando disparos en cada pixel cuando no hay tooltip.
-export function _onTipMouseMove(e) {
+// La lista de partners que sigue al puntero sobre un gráfico de líneas.
+//
+// Celular (bug 3-oct-2026): antes se posicionaba con `mousemove` y solo se
+// cerraba en el `mouseLeave` del gráfico. Con el dedo no hay ninguno de los
+// dos: la lista aparecía pegada arriba a la izquierda (sin left/top) tapando la
+// cabecera, y tocar afuera no la cerraba. Ahora la posición sale de los eventos
+// de PUNTERO (mouse, dedo y lápiz) y se cierra al tocar fuera de un gráfico, al
+// hacer scroll y al destruir los gráficos (cambio de pestaña o re-render).
+const _puntero = { x: 0, y: 0, tactil: false, visto: false };
+// Tras un scroll con el dedo, ApexCharts sigue llamando a tooltip.custom en cada
+// touchmove; sin este freno la lista reaparecía mientras se desliza la página.
+// Se levanta con el próximo toque.
+let _suprimida = false;
+let _cierreInstalado = false;
+
+function _tipVisible() {
   const ft = document.getElementById("floatTip");
-  const vw = window.innerWidth, vh = window.innerHeight;
-  let x = e.clientX + 16, y = e.clientY - 16;
-  if (x + 260 > vw) x = e.clientX - 265;
-  if (y + ft.offsetHeight > vh) y = vh - ft.offsetHeight - 10;
+  return !!ft && ft.style.display === "block";
+}
+
+/** Posición de la lista para un puntero en (px, py). Pura (exportada para test):
+ *  con el mouse va a la derecha del cursor; con el dedo va ARRIBA del punto
+ *  tocado (el dedo tapa lo que está debajo). Siempre dentro de la pantalla. */
+export function posicionTip(px, py, ancho, alto, vw, vh, tactil) {
+  const M = 8;
+  let x, y;
+  if (tactil) {
+    x = px - ancho / 2;
+    y = py - alto - 24;
+    if (y < M) y = py + 24;                         // no entra arriba → abajo del dedo
+  } else {
+    x = px + 16;
+    y = py - 16;
+    if (x + ancho > vw - M) x = px - ancho - 16;    // no entra a la derecha → a la izquierda
+  }
+  x = Math.max(M, Math.min(x, vw - ancho - M));
+  y = Math.max(M, Math.min(y, vh - alto - M));
+  return { x: Math.round(x), y: Math.round(y) };
+}
+
+function _ubicarTip() {
+  const ft = document.getElementById("floatTip");
+  if (!ft || !_puntero.visto) return;
+  const { x, y } = posicionTip(_puntero.x, _puntero.y, ft.offsetWidth, ft.offsetHeight,
+    window.innerWidth, window.innerHeight, _puntero.tactil);
   ft.style.left = x + "px";
   ft.style.top  = y + "px";
 }
 
+function _anotarPuntero(x, y, tactil) {
+  _puntero.x = x; _puntero.y = y; _puntero.tactil = tactil; _puntero.visto = true;
+}
+
+// Se instala una sola vez, en la primera aparición de la lista.
+function _instalarCierre() {
+  if (_cierreInstalado) return;
+  _cierreInstalado = true;
+  document.addEventListener("pointerdown", e => {
+    _suprimida = false;
+    _anotarPuntero(e.clientX, e.clientY, e.pointerType !== "mouse");
+    const dentro = e.target && e.target.closest && e.target.closest(".apexcharts-canvas");
+    if (!dentro && _tipVisible()) hideFloatTip();
+  }, true);
+  document.addEventListener("pointermove", e => {
+    if (e.pointerType !== "mouse") return;          // el dedo lo sigue touchmove
+    _suprimida = false;                             // el freno es solo para el dedo
+    _anotarPuntero(e.clientX, e.clientY, false);
+    if (_tipVisible()) _ubicarTip();
+  }, { passive: true });
+  document.addEventListener("touchmove", e => {
+    const t = e.touches && e.touches[0];
+    if (!t) return;
+    _anotarPuntero(t.clientX, t.clientY, true);
+    if (_tipVisible()) _ubicarTip();
+  }, { passive: true });
+  // scroll no burbujea: en captura se ven también los de contenedores internos.
+  document.addEventListener("scroll", () => {
+    if (!_tipVisible()) return;
+    if (_puntero.tactil) _suprimida = true;
+    hideFloatTip();
+  }, { capture: true, passive: true });
+}
+
 export function showFloatTip(date, rows) {
   const ft = document.getElementById("floatTip");
+  if (!ft) return;
+  _instalarCierre();
+  if (_suprimida) return;
   document.getElementById("ftDate").textContent = date;
   const container = document.getElementById("ftRows");
   container.innerHTML = rows.length
@@ -32,15 +106,13 @@ export function showFloatTip(date, rows) {
            <span class="ft-v">${fmt(r.val)}</span>
          </div>`).join("")
     : `<div class="agy-style-54">Sin datos</div>`;
-  if (ft.style.display !== "block") {
-    document.addEventListener("mousemove", _onTipMouseMove);
-  }
   ft.style.display = "block";
+  _ubicarTip();
 }
 
 export function hideFloatTip() {
-  document.getElementById("floatTip").style.display = "none";
-  document.removeEventListener("mousemove", _onTipMouseMove);
+  const ft = document.getElementById("floatTip");
+  if (ft) ft.style.display = "none";
 }
 
 // ── MULTI-LINE CHART (one series per partner) ─────────────────────────────────
@@ -132,6 +204,7 @@ export function ensureApex() {
 
 // Destruye todas las instancias ApexCharts en STATE.charts y ChartRegistry.
 export function destroyAllCharts() {
+  hideFloatTip();   // sin esto, la lista de un gráfico ya destruido quedaba en pantalla
   ChartRegistry.destroyAll();
   if (!STATE.charts) return;
   Object.keys(STATE.charts).forEach(id => {
@@ -187,9 +260,15 @@ export function buildLineChart(elId, dates, series, colors, extra) {
     markers: { size: series.length > MAX_SERIES_CON_MARCADORES ? 0 : 3, strokeWidth: 0, hover: { size: 5 } },
     tooltip: {
       custom({ series: s, dataPointIndex: di, w }) {
-        const date = w.globals.labels[di];
-        const rows = series
-          .map((sr, i) => ({ name: sr.name, val: s[i][di] || 0, color: colors[i] }))
+        // Todo sale del gráfico VIVO (`w`), no del closure: un re-render con
+        // filtros usa updateOptions (abajo), que no reemplaza esta función, así
+        // que `series`/`colors`/`dates` serían los del PRIMER dibujo y la lista
+        // mostraría valores nuevos con nombres viejos. Y la fecha va de las
+        // categorías (globals.categoryLabels; w.globals.labels guarda el ÍNDICE
+        // 1, 2, 3… y salía "4" de título).
+        const date = (w.globals.categoryLabels || [])[di] ?? "";
+        const rows = w.globals.seriesNames
+          .map((name, i) => ({ name, val: (s[i] && s[i][di]) || 0, color: w.globals.colors[i] }))
           .filter(r => r.val > 0)
           .sort((a, b) => b.val - a.val);
         showFloatTip(date, rows);

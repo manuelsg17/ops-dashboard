@@ -239,6 +239,12 @@ td.ui-num > .ui-delta { margin-left: auto; }
   opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .12s ease;
 }
 .ui-tip:hover::after, .ui-tip:focus-visible::after { opacity: 1; visibility: visible; }
+/* Táctil: un toque da :focus pero NO :focus-visible, así que la ayuda no
+   aparecía. Tocar fuera le quita el foco y la cierra. 3-oct-2026. */
+@media (hover: none) {
+  .ui-tip:focus::after { opacity: 1; visibility: visible; }
+  .ui-tip::after { max-width: min(280px, calc(100vw - 32px)); }
+}
 /* Pegado al borde derecho de su contenedor: la burbuja se abre hacia la izquierda. */
 .ui-tip--end::after { left: auto; right: -6px; transform: none; }
 

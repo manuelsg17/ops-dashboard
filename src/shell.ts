@@ -68,6 +68,16 @@ export function renderShellNav() {
     .filter(g => g.items.length);
   const rail = document.body.classList.contains("nav-rail");
   const lbl = t(rail ? "shell.nav.expandir" : "shell.nav.contraer");
+  // Repintar SOLO si cambió algo (3-oct-2026). Volver a la pestaña del navegador
+  // emite SIGNED_IN (supabase-js) y eso llegaba acá dos veces (showApp y la
+  // carga de permisos): al recrear los nodos corre otra vez la animación de
+  // entrada de los textos (styles.css, shellNavTextoEntra) y el menú parpadeaba.
+  const clave = JSON.stringify([groups, rail, lbl]);
+  if (el.dataset.navClave === clave && el.firstElementChild) {
+    syncNavActive(STATE.curTab || "rend");
+    return;
+  }
+  el.dataset.navClave = clave;
   el.innerHTML =
     sideNav(groups, STATE.curTab || "rend", "switchTab", t("shell.nav.aria"), { id: "appNavList", itemTitles: true }) +
     `<div class="shell-nav__foot">` +

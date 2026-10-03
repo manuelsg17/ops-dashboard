@@ -82,6 +82,21 @@ function _instalarListenersUnaVez() {
     if (u) u.classList.remove("open");
     syncMenusAria();
   });
+  // Toque FUERA de los menús (3-oct-2026): iOS Safari no despacha `click` al
+  // tocar algo que no es clicable (un texto, una tarjeta), así que con el
+  // listener de arriba el menú quedaba abierto en el iPhone. `pointerdown` llega
+  // siempre, con mouse o con el dedo. Los toques DENTRO del menú siguen
+  // cerrándolo por el `click` de arriba, después de ejecutar su acción.
+  document.addEventListener("pointerdown", e => {
+    const tg = e.target;
+    if (!tg || !tg.closest || tg.closest(_MENU_TOGGLES) || tg.closest("#uploadMenu, #userMenu")) return;
+    let cerro = false;
+    ["uploadMenu", "userMenu"].forEach(id => {
+      const m = document.getElementById(id);
+      if (m && m.classList.contains("open")) { m.classList.remove("open"); cerro = true; }
+    });
+    if (cerro) syncMenusAria();
+  }, true);
 
   // Cerrar dropdown al seleccionar un archivo
   ["fileRend", "fileRendMensual", "fileRendDiario", "fileMetas", "fileData", "fileFlotas", "fileConversion"].forEach(id => {
@@ -317,76 +332,105 @@ export async function switchMode(mode) {
   });
   schedulePageHeader();   // chip de escala al instante
 
-  // Mostrar feedback inmediato y ceder al browser para que pinte el toggle
-  // ANTES de empezar el trabajo pesado (destroy charts, updateIndexes, render)
-  showLoad(true, `Cambiando a ${mode}...`);
-  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  // Feedback inmediato SIN tapar la pantalla (3-oct-2026). Antes era showLoad:
+  // un overlay a pantalla completa (fondo al 90%) que tapaba también la barra
+  // lateral y la navegación, y las cargas de escala ponían y sacaban OTRO
+  // overlay por su cuenta → la app entera "parpadeaba" al tocar Semanal/
+  // Mensual/Diario, aunque la escala ya estuviera en memoria. Ahora solo se
+  // atenúa el contenido y aparece una píldora con lo que se está haciendo.
+  _indicadorEscala(true, mode);
+  try {
+    // Ceder al browser para que pinte el toggle ANTES del trabajo pesado.
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-  // Destruir charts antiguos antes de reasignar rawData (evita huérfanos)
-  if (typeof destroyAllCharts === "function") destroyAllCharts();
+    // Destruir charts antiguos antes de reasignar rawData (evita huérfanos)
+    if (typeof destroyAllCharts === "function") destroyAllCharts();
 
-  // Lazy load según escala; _semanalData es la referencia fija al dataset semanal filtrado
-  // (Calculadora/Presentación leen además la mensual en cualquier escala.)
-  if (mode !== "mensual" && _NEED_MENSUAL.has(STATE.curTab) && typeof loadMensualIfNeeded === "function") {
-    try { await loadMensualIfNeeded(true); } catch (e) { /* nunca bloquear el render */ }
+    // Lazy load según escala; _semanalData es la referencia fija al dataset semanal filtrado
+    // (Calculadora/Presentación leen además la mensual en cualquier escala.)
+    // `silent`: el indicador de arriba ya avisa; sin esto cada carga ponía su
+    // propio overlay a pantalla completa.
+    if (mode !== "mensual" && _NEED_MENSUAL.has(STATE.curTab) && typeof loadMensualIfNeeded === "function") {
+      try { await loadMensualIfNeeded(true); } catch (e) { /* nunca bloquear el render */ }
+    }
+    if (mode === "mensual") {
+      await loadMensualIfNeeded(true);
+      STATE.rawData = STATE.rawDataMensual;
+    } else if (mode === "diario") {
+      await loadDiarioIfNeeded(true);
+      STATE.rawData = STATE.rawDataDiario;
+    } else {
+      if (STATE._semanalData) STATE.rawData = STATE._semanalData;
+    }
+
+    // CRITICO: updateIndexes() es la de data.js — reconstruye _byDate, _byPartner,
+    // _byCity, _byCityDate, _partnerKAM sobre el NUEVO rawData. Sin esto, los
+    // indices apuntarian a rows del dataset anterior (causa de freeze al filtrar).
+    updateIndexes();
+    if (typeof clearAggCache === "function") clearAggCache(); // purgar cache _C
+    // restoreFilters dentro de popSidebarUI puede disparar onKAMChange → render.
+    // Marcamos para evitar el doble render al final de switchMode.
+    STATE._suppressRestoreRender = true;
+    try { popSidebarUI(); } finally { STATE._suppressRestoreRender = false; }
+
+    // Las pestañas lazy conservan el HTML de la escala ANTERIOR hasta que su render
+    // termina, y el suyo espera a que lleguen las columnas diferidas de la escala
+    // nueva (una request). En ese hueco el KAM veia un deck rotulado "SEMANAL"
+    // estando la app en mensual — y ese deck es el que se le manda al partner.
+    // Blanquearlas es lo unico que garantiza que no exista un estado en el que la
+    // pantalla dice una escala y los numeros son de otra.
+    invalidarPanelesDeEscala();
+
+    // El badge de frescura responde POR ESCALA ("¿hasta cuándo llegan los datos
+    // de lo que estoy mirando?"), así que su respuesta cambia acá aunque el dato
+    // de la ingesta sea el mismo. Sin esto seguiría mostrando el veredicto de la
+    // escala anterior — que es exactamente el error que el badge existe para
+    // evitar: una escala al día y la otra atrasada, con el mismo cartel.
+    if (typeof renderFrescura === "function") renderFrescura();
+
+    // Otro yield antes del render pesado para que el browser pinte el indicador
+    await new Promise(r => requestAnimationFrame(r));
+
+    // Render unico del tab activo (restoreFilters no rendero por _suppressRestoreRender)
+    if (STATE.curTab === "rend"        && STATE.rawData.length) renderRend();
+    // Estas cuatro leen las columnas DIFERIDAS, que son por escala: sin el await
+    // se renderizaban con la escala nueva pero esas columnas en null (KPIs y
+    // embudo en "—", sin ningun error). switchTab ya lo hacia; switchMode no.
+    if (_NEED_FULL_COLS.has(STATE.curTab) && typeof ensureFullRendColumns === "function") {
+      try { await ensureFullRendColumns(); } catch (e) { /* nunca bloquear el render */ }
+    }
+    if (STATE.curTab === "calculator"  && STATE.rawData.length) renderCalculator();
+    if (STATE.curTab === "present2"    && STATE.rawData.length && typeof renderPresent2 === "function") renderPresent2();
+    if (STATE.curTab === "rawdata"     && typeof renderRawData === "function") renderRawData();
+    // Portal del partner: antes no estaba en esta lista y cambiar de escala dejaba
+    // la pantalla con la escala anterior (encontrado el 2-oct-2026).
+    if (STATE.curTab === "portal"      && typeof renderPartnerPortal === "function") renderPartnerPortal();
+  } finally {
+    // Antes sin try/finally: un error en un render dejaba _inSwitchMode en true
+    // (los botones de escala dejaban de responder) y el overlay puesto.
+    _indicadorEscala(false);
+    _inSwitchMode = false;
+    schedulePageHeader();
   }
-  if (mode === "mensual") {
-    await loadMensualIfNeeded();
-    STATE.rawData = STATE.rawDataMensual;
-  } else if (mode === "diario") {
-    await loadDiarioIfNeeded();
-    STATE.rawData = STATE.rawDataDiario;
-  } else {
-    if (STATE._semanalData) STATE.rawData = STATE._semanalData;
+}
+
+// Indicador del cambio de escala: atenúa el contenido (sin bloquear la barra
+// lateral ni la navegación) y muestra una píldora arriba del contenido.
+function _indicadorEscala(on, mode) {
+  document.body.classList.toggle("is-cambiando-escala", !!on);
+  let pill = document.getElementById("escalaPill");
+  if (!on) { pill?.remove(); return; }
+  if (!pill) {
+    pill = document.createElement("div");
+    pill.id = "escalaPill";
+    pill.className = "escala-pill";
+    pill.setAttribute("role", "status");
+    pill.setAttribute("aria-live", "polite");
+    document.body.appendChild(pill);
   }
-
-  // CRITICO: updateIndexes() es la de data.js — reconstruye _byDate, _byPartner,
-  // _byCity, _byCityDate, _partnerKAM sobre el NUEVO rawData. Sin esto, los
-  // indices apuntarian a rows del dataset anterior (causa de freeze al filtrar).
-  updateIndexes();
-  if (typeof clearAggCache === "function") clearAggCache(); // purgar cache _C
-  // restoreFilters dentro de popSidebarUI puede disparar onKAMChange → render.
-  // Marcamos para evitar el doble render al final de switchMode.
-  STATE._suppressRestoreRender = true;
-  popSidebarUI();
-  STATE._suppressRestoreRender = false;
-
-  // Las pestañas lazy conservan el HTML de la escala ANTERIOR hasta que su render
-  // termina, y el suyo espera a que lleguen las columnas diferidas de la escala
-  // nueva (una request). En ese hueco el KAM veia un deck rotulado "SEMANAL"
-  // estando la app en mensual — y ese deck es el que se le manda al partner.
-  // Blanquearlas es lo unico que garantiza que no exista un estado en el que la
-  // pantalla dice una escala y los numeros son de otra.
-  invalidarPanelesDeEscala();
-
-  // El badge de frescura responde POR ESCALA ("¿hasta cuándo llegan los datos
-  // de lo que estoy mirando?"), así que su respuesta cambia acá aunque el dato
-  // de la ingesta sea el mismo. Sin esto seguiría mostrando el veredicto de la
-  // escala anterior — que es exactamente el error que el badge existe para
-  // evitar: una escala al día y la otra atrasada, con el mismo cartel.
-  if (typeof renderFrescura === "function") renderFrescura();
-
-  // Otro yield antes del render pesado para que el browser pinte el spinner
-  await new Promise(r => requestAnimationFrame(r));
-
-  // Render unico del tab activo (restoreFilters no rendero por _suppressRestoreRender)
-  if (STATE.curTab === "rend"        && STATE.rawData.length) renderRend();
-  // Estas cuatro leen las columnas DIFERIDAS, que son por escala: sin el await
-  // se renderizaban con la escala nueva pero esas columnas en null (KPIs y
-  // embudo en "—", sin ningun error). switchTab ya lo hacia; switchMode no.
-  if (_NEED_FULL_COLS.has(STATE.curTab) && typeof ensureFullRendColumns === "function") {
-    try { await ensureFullRendColumns(); } catch (e) { /* nunca bloquear el render */ }
-  }
-  if (STATE.curTab === "calculator"  && STATE.rawData.length) renderCalculator();
-  if (STATE.curTab === "present2"    && STATE.rawData.length && typeof renderPresent2 === "function") renderPresent2();
-  if (STATE.curTab === "rawdata"     && typeof renderRawData === "function") renderRawData();
-  // Portal del partner: antes no estaba en esta lista y cambiar de escala dejaba
-  // la pantalla con la escala anterior (encontrado el 2-oct-2026).
-  if (STATE.curTab === "portal"      && typeof renderPartnerPortal === "function") renderPartnerPortal();
-
-  showLoad(false);
-  _inSwitchMode = false;
-  schedulePageHeader();
+  const clave = mode === "mensual" ? "datos.cargandoMensual" : mode === "diario" ? "datos.cargandoDiario" : "datos.cargandoSemanal";
+  pill.innerHTML = `<span class="escala-pill__giro" aria-hidden="true"></span><span></span>`;
+  pill.lastElementChild.textContent = t(clave);
 }
 
 // Pestañas cuyo contenido depende de la ESCALA y viven en un chunk lazy: su HTML
@@ -820,12 +864,23 @@ export function _pItem(p, selSet) {
 // _byCityDate, _partnerKAM) la hace updateIndexes() en data.js — debe llamarse
 // ANTES de popSidebarUI() porque restoreFilters > onKAMChange leen los indices.
 export function popSidebarUI() {
+  // Rearmar el panel no debe mover al usuario (3-oct-2026): se conservan el
+  // scroll del panel y de la lista de partners, y la búsqueda escrita (antes
+  // quedaba el texto en la caja con la lista completa debajo, sin filtrar).
+  const sb = document.getElementById("mainSidebar");
+  const lista = document.getElementById("pList");
+  const scrollPanel = sb ? sb.scrollTop : 0, scrollLista = lista ? lista.scrollTop : 0;
   popDates();
   rerenderSidebarPresets();
   popKAM();
   popPartners(_sidebarList());
   restoreFilters();
   restoreSidebarState();   // aparte: restoreFilters corta antes si no hay filtros guardados
+  const busq = document.getElementById("partnerSearch");
+  if (busq && busq.value) filterPList();
+  const lista2 = document.getElementById("pList");
+  if (lista2 && scrollLista) lista2.scrollTop = scrollLista;
+  if (sb && scrollPanel) sb.scrollTop = scrollPanel;
   // Frescura del encabezado: depende de los períodos de la escala (allDates),
   // que recién están acá. Antes solo se evaluaba al volver get_last_ingest_at
   // (que puede llegar antes que los datos) y al cambiar de escala.
@@ -1059,11 +1114,14 @@ export function showLoad(show, msg = "Procesando...") {
       el.className = "overlay";
       document.body.appendChild(el);
     }
+    detenerCargaInicial();                  // otro aviso reemplaza a la pantalla de carga
+    el.classList.remove("overlay--carga");
     el.innerHTML = `
       <div class="spinner"></div>
       <div class="agy-style-86"></div>`;
     el.lastElementChild.textContent = msg == null ? "" : String(msg);
   } else {
+    detenerCargaInicial();
     el?.remove();
   }
 }
@@ -1074,6 +1132,7 @@ import { registerActions } from "./shared/actions.js";
 // los globales, y estas se llaman desde handlers que corren despues — pero el
 // import deja la dependencia a la vista, que es el punto.
 import { alertBox, btn } from "./shared/ui";
+import { detenerCargaInicial } from "./shared/cargaInicial";
 import { alCerrarSesion } from "./shared/sesion";
 
 // I2: la sub-sección, la búsqueda y la página de Configuración son del usuario

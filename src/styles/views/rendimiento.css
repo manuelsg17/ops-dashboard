@@ -497,3 +497,93 @@
   color: var(--color-info-fg); background: var(--color-info-bg);
 }
 .ds-ret-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* ── Pantalla de carga de los datos (shared/cargaInicial.ts, 3-oct-2026) ──────
+   Reemplaza al spinner del "Cargando datos desde Supabase…" de la primera carga.
+   Misma familia visual que la de Presentación (logo con latido y pasos que se
+   tildan), pero en tokens: es UI de la app, no una hoja exportada. */
+.overlay--carga { padding: var(--space-4); }
+.ci-card {
+  width: min(440px, 100%);
+  display: flex; flex-direction: column; gap: var(--space-4);
+  padding: var(--space-6) var(--space-6) var(--space-5);
+  background: var(--color-surface); color: var(--color-text);
+  border: 1px solid var(--color-border-soft); border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card), 0 12px 40px rgba(0, 0, 0, .08);
+  font-family: var(--font-sans);
+}
+.ci-cabeza { display: flex; align-items: center; gap: 14px; }
+.ci-logo {
+  width: 48px; height: 48px; flex: none; border-radius: 14px; background: #E1251B;
+  display: flex; align-items: center; justify-content: center;
+  animation: p2Latido 1.8s ease-out infinite;
+}
+.ci-logo svg { width: 26px; height: 26px; }
+.ci-trazo { stroke-dasharray: 60; stroke-dashoffset: 60; animation: p2Trazo 1.8s ease-in-out infinite; }
+.ci-titulo { display: block; font-size: var(--text-lg); font-weight: var(--weight-bold); letter-spacing: -.01em; }
+.ci-sub { display: block; margin-top: 2px; font-size: var(--text-sm); color: var(--color-text-muted); }
+
+/* Barras que crecen una tras otra: la idea de una serie semanal armándose. */
+.ci-grafico {
+  height: 64px; display: flex; align-items: flex-end; gap: 6px;
+  padding: 0 2px; border-bottom: 1px solid var(--color-border-soft);
+}
+.ci-barra {
+  flex: 1; height: 100%; border-radius: 6px 6px 2px 2px;
+  background: linear-gradient(180deg, #ff5a4f 0%, #E1251B 100%);
+  transform-origin: bottom; transform: scaleY(.12); opacity: .35;
+  animation: ciCrece 2.4s ease-in-out infinite;
+  animation-delay: calc(var(--i) * .12s);
+}
+.ci-barra:nth-child(1) { --alto: .45; } .ci-barra:nth-child(2) { --alto: .62; }
+.ci-barra:nth-child(3) { --alto: .55; } .ci-barra:nth-child(4) { --alto: .78; }
+.ci-barra:nth-child(5) { --alto: .7; }  .ci-barra:nth-child(6) { --alto: .88; }
+.ci-barra:nth-child(7) { --alto: 1; }
+@keyframes ciCrece {
+  0%, 8%    { transform: scaleY(.12); opacity: .35; }
+  45%, 72%  { transform: scaleY(var(--alto)); opacity: 1; }
+  100%      { transform: scaleY(.12); opacity: .35; }
+}
+
+.ci-progreso { height: 6px; border-radius: 999px; background: var(--color-fill-soft); overflow: hidden; position: relative; }
+.ci-progreso__barra {
+  display: block; height: 100%; border-radius: inherit; background: #E1251B;
+  transition: width .45s cubic-bezier(.2, .8, .2, 1);
+}
+/* Brillo continuo: aunque un paso tarde, la barra se ve viva. */
+.ci-progreso::after {
+  content: ""; position: absolute; inset: 0; width: 35%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .55), transparent);
+  animation: ciBrillo 1.6s ease-in-out infinite;
+}
+@keyframes ciBrillo { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+
+.ci-pasos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ci-paso { display: flex; align-items: center; gap: 10px; font-size: var(--text-sm); color: var(--color-text-subtle); transition: color .2s; }
+.ci-marca {
+  width: 18px; height: 18px; flex: none; border-radius: 50%;
+  border: 2px solid var(--color-border); display: flex; align-items: center; justify-content: center;
+}
+.ci-marca svg { width: 11px; height: 11px; opacity: 0; transform: scale(.4); transition: opacity .2s, transform .25s cubic-bezier(.3, 1.6, .5, 1); }
+.ci-paso.is-activo { color: var(--color-text); font-weight: var(--weight-semibold, 600); }
+.ci-paso.is-activo .ci-marca { border-top-color: #E1251B; animation: p2Giro .8s linear infinite; }
+.ci-paso.is-listo { color: var(--color-text-muted); }
+.ci-paso.is-listo .ci-marca { background: #E1251B; border-color: #E1251B; color: #fff; }
+.ci-paso.is-listo .ci-marca svg { opacity: 1; transform: scale(1); }
+
+.ci-consejo {
+  margin: 0; padding: 10px 12px; min-height: 58px;
+  background: var(--color-fill-soft); border-radius: var(--radius-control);
+  font-size: var(--text-sm); line-height: 1.4;
+}
+.ci-consejo__rot { display: block; font-weight: var(--weight-bold); font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: 2px; }
+.ci-consejo__txt { display: block; }
+.ci-consejo__txt.is-entra { animation: ciEntra .35s ease-out; }
+@keyframes ciEntra { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ci-logo, .ci-trazo, .ci-progreso::after, .ci-consejo__txt.is-entra { animation: none; }
+  .ci-trazo { stroke-dashoffset: 0; }
+  .ci-barra { animation: none; transform: scaleY(var(--alto)); opacity: 1; }
+  .ci-paso.is-activo .ci-marca { animation-duration: 2s; }
+}

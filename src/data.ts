@@ -32,6 +32,7 @@ import { filasComoObjetos } from "./workers/excelParse";
 import { alCerrarSesion } from "./shared/sesion";
 import { msgSinFilas } from "./domain/permisosUI";
 import { mostrarEstadoCarga } from "./shell";
+import { mostrarCargaInicial, marcarPasoInicial } from "./shared/cargaInicial";
 
 
 // ── PARSER DE TAXIPARKS ─────────────────────────────────────────────────────
@@ -1252,7 +1253,16 @@ export async function loadFromSupabase(opts = {}) {
       if (!vigente()) return false;
     }
     if (_paintedFromCache) _setRefreshing(true, _snapAt);
-    else showLoad(true, t("datos.cargando"));
+    else {
+      // Sin caché que pintar: pantalla de carga con los pasos REALES (3-oct-2026).
+      // Cada grupo de pedidos tilda su paso al resolver, en el orden en que
+      // lleguen; los rechazos los maneja el await de abajo.
+      mostrarCargaInicial();
+      const tildar = (p, paso) => p.then(() => marcarPasoInicial(paso), () => {});
+      tildar(Promise.race([pPartners, pFleetrooms, pFlotas, pRend]), "conexion");
+      tildar(Promise.all([pPartners, pFleetrooms, pFlotas]), "maestros");
+      tildar(pRend, "rendimiento");
+    }
 
     const [partners, rendSem, frooms, flotas] = await critical;
     if (!vigente()) return false;
@@ -1303,11 +1313,16 @@ export async function loadFromSupabase(opts = {}) {
         }
         _indexCoreData();
         bannerOk();
+        marcarPasoInicial("armando");
         _renderActiveTabAfterLoad();
       });
       if (alt && typeof renderFrescura === "function") renderFrescura();
     }
     perfMark("net:applied");
+    // La vista ya está pintada: se quita la pantalla de carga YA. Antes seguía
+    // tapando el tablero hasta que llegaban metas/proyectos/seguimiento y la
+    // versión de los datos (el `finally` de abajo), que Desempeño no espera.
+    showLoad(false);
     if (altError) {
       // Sin la escala fresca: la próxima llamada (precarga/switchMode) reintenta.
       STATE[_FLAG_ESCALA[alt]] = false;
