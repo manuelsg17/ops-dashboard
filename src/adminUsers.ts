@@ -28,6 +28,7 @@ import { escapeHTML } from "./core/security";
 import { btn, badge, alertBox, emptyState, icon, segmented } from "./shared/ui";
 import { confirmDialog } from "./shared/confirmDialog";
 import { kamsCanonicos } from "./domain/partnersMaestro";
+import { traducirErrorAdmin } from "./domain/erroresAdmin";
 
 export const ADMIN_USERS_STATE = {
   users: [],        // [{id,email,role,lastSignInAt}]
@@ -63,7 +64,7 @@ export async function auLoadUsers() {
       sb.from("partner_users").select("*")
     ]);
     if (fn.error) throw new Error(await _edgeErrMsg(fn.error, t("au.errListarUsuarios")));
-    if (fn.data && fn.data.error) throw new Error(String(fn.data.error));
+    if (fn.data && fn.data.error) throw new Error(_tradErr(String(fn.data.error)));
     // I8: antes un error de estas dos lecturas quedaba en silencio y el panel
     // mostraba a todos SIN permisos ni CLIDs — indistinguible de "no tienen", y
     // tildar un permiso sobre esa vista vacía intentaba insertar uno que ya
@@ -93,10 +94,13 @@ export async function auLoadUsers() {
 // `error.context`, sin leer. Resultado: el usuario veía un banner rojo que no
 // dice nada y en los logs solo se ve "500", mientras el mensaje útil ("ya existe
 // un usuario con ese email", "Requiere rol admin", …) se perdía.
+// Mensajes de la función en el idioma de la UI (domain/erroresAdmin.ts).
+const _tradErr = m => traducirErrorAdmin(m, t);
+
 async function _edgeErrMsg(err, fallback) {
   try {
     const body = await err?.context?.json?.();
-    if (body && body.error) return String(body.error);
+    if (body && body.error) return _tradErr(String(body.error));
   } catch (_) { /* el cuerpo no era JSON */ }
   try {
     const txt = await err?.context?.text?.();
@@ -109,7 +113,7 @@ async function _fn(action, body) {
   const r = await sb.functions.invoke("admin-users", { body: { action, ...body } });
   if (r.error) throw new Error(await _edgeErrMsg(r.error, t("au.errOperacionRechazada")));
   // La función también puede responder 200 con {error} en algunos caminos.
-  if (r.data && r.data.error) throw new Error(String(r.data.error));
+  if (r.data && r.data.error) throw new Error(_tradErr(String(r.data.error)));
   return r.data;
 }
 
