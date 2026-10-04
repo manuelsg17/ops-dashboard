@@ -10,6 +10,7 @@ import { registerActions } from "./shared/actions.js";
 import { t } from "./core/i18n";
 import { logAccess } from "./shared/accessLog.js";
 import { filaCSV } from "./shared/csv";
+import { nombreArchivo } from "./shared/nombreArchivo";
 import { fechaLimaISO } from "./core/dates";
 import { escapeHTML } from "./core/security";
 import { fmt, fmt5, fmtK, d2s, cityLabel } from "./core/format";
@@ -217,7 +218,7 @@ export function exportRawCSV() {
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement("a");
   a.href     = url;
-  a.download = `data_raw_${RAW_STATE.dateFrom || "inicio"}_${RAW_STATE.dateTo || fechaLimaISO()}.csv`;
+  a.download = nombreArchivo([t("arch.dataRaw"), RAW_STATE.dateFrom || t("arch.inicio"), RAW_STATE.dateTo || fechaLimaISO()], "csv");
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 2000);   // en el acto, WebKit (Safari) puede abortar la descarga
 }

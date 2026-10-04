@@ -37,6 +37,7 @@ import { delta, goalTone, emptyState, icon } from "./shared/ui";
 import { apexBase, seriesColor, chartTokens } from "./shared/chartTheme";
 import { alertDialog } from "./shared/confirmDialog";
 import { filaCSV } from "./shared/csv";
+import { nombreArchivo } from "./shared/nombreArchivo";
 import { ensureFullRendColumns, ensurePartnerLogos } from "./data.js";
 import { ensureApex } from "./charts.js";
 import { ChartRegistry } from "./core/chartRegistry.js";
@@ -540,21 +541,22 @@ export async function portalDescargar(formato) {
   logAccess("download_csv", "portal");
   const enc = cols.map(([l]) => t(l));
   const valores = filas.map(r => cols.map(([, fn]) => { const v = fn(r); return v == null ? "" : v; }));
-  const nombre = `MisDatos_${STATE.curMode}_${_rango().from}_${_rango().to}`;
+  // Nombre y hoja en el idioma de la UI (3-oct-2026).
+  const partes = [t("arch.misDatos"), t("mode." + (STATE.curMode || "semanal")), _rango().from, _rango().to];
   if (formato === "xlsx") {
     try {
       const XLSX = await import("xlsx");
       const ws = XLSX.utils.aoa_to_sheet([enc, ...valores]);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Datos");
-      XLSX.writeFile(wb, nombre + ".xlsx");
+      XLSX.utils.book_append_sheet(wb, ws, t("arch.hojaDatos"));
+      XLSX.writeFile(wb, nombreArchivo(partes, "xlsx"));
       return;
     } catch (e) { if (DEBUG) console.error(e); }
   }
   // CSV con BOM (Excel lo abre con tildes) y celdas protegidas contra fórmulas.
   const csv = "﻿" + [filaCSV(enc), ...valores.map(filaCSV)].join("\r\n");
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-  const a = document.createElement("a"); a.href = url; a.download = nombre + ".csv"; a.click();
+  const a = document.createElement("a"); a.href = url; a.download = nombreArchivo(partes, "csv"); a.click();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
@@ -702,7 +704,7 @@ export async function portalDownloadPDF() {
     const pdf = new jsPDF({ orientation: w > h ? "landscape" : "portrait", unit: "px", format: [w, h], hotfixes: ["px_scaling"] });
     pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, w, h);
     stampPDF(pdf, t("portal.pdfTitulo"));
-    pdf.save(`MiDesempeno_${fechaLocalISO()}.pdf`);
+    pdf.save(nombreArchivo([t("arch.miDesempeno"), fechaLocalISO()], "pdf"));
   } catch (err) {
     if (DEBUG) console.error(err);
     await alertDialog({ title: t("portal.errPDFTitulo"), body: t("portal.errPDF"), tone: "bad" });

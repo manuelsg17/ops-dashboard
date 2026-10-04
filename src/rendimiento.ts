@@ -286,9 +286,14 @@ function _rdSec(title, sub = "", right = "") {
 
 // Tarjeta de gráfico con botón PNG (dlChart).
 function _rdChart(id, title, name, caption = "") {
+  // Nombre del PNG = el título visible (ya traducido) + su alcance cuando el
+  // mismo título existe para Perú y por ciudad. 3-oct-2026: antes un código fijo
+  // en español ("AD_Ciudades", "Fleet_Aceptacion").
+  const alcance = name.endsWith("_Ciudades") ? t("arch.porCiudad") : name.endsWith("_Peru") ? t("arch.peru") : "";
+  const nombre = [title, alcance].filter(Boolean).join(" ");
   return `<div class="ui-card rd-chart">
     <div class="rd-chart__head"><span class="rd-chart__title">${escapeHTML(title)}</span>${
-      btn({ label: "PNG", variant: "ghost", size: "sm", icon: "download", act: "dlChart", data: { chart: id, name }, title: t("rd.png") })}</div>
+      btn({ label: "PNG", variant: "ghost", size: "sm", icon: "download", act: "dlChart", data: { chart: id, name: nombre }, title: t("rd.png") })}</div>
     <div id="${escapeHTML(id)}" class="rd-chart__plot"></div>
     ${caption ? `<div class="rd-chart__caption">${escapeHTML(caption)}</div>` : ""}
   </div>`;

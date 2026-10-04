@@ -5,6 +5,7 @@ import { fechaLocalISO } from "./shared/fechaLocal";
 import { MAX_SERIES_CON_MARCADORES } from "./shared/topSeries";
 import { apexBase, chartTokens, seriesColor, lightChartTokens, remapColor, apexThemeOverrides } from "./shared/chartTheme";
 import { temaActual } from "./shared/theme";
+import { nombreArchivo } from "./shared/nombreArchivo";
 import { t } from "./core/i18n";
 
 // ── TOOLTIP FLOTANTE ──────────────────────────────────────────────────────────
@@ -414,7 +415,7 @@ export async function dlChart(chartId, name) {
   const { imgURI } = temaActual() === "dark" ? await _dataURIClaro(ch) : await ch.dataURI();
   const a = document.createElement("a");
   a.href     = imgURI;
-  a.download = `yango_${name}_${fechaLocalISO()}.png`;
+  a.download = nombreArchivo(["Yango", name, fechaLocalISO()], "png");
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

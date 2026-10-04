@@ -2,6 +2,7 @@
 import { ensureHtml2Canvas } from "./shared/lazyLibs.js";
 import { opcionesCapturaClara, tokenClaro } from "./shared/exportClaro";
 import { t, mesLabel, kamLabel, getLang } from "./core/i18n";
+import { nombreArchivo } from "./shared/nombreArchivo";
 import { btn, badge, alertBox, emptyState, icon, segmented, infoTip } from "./shared/ui";
 import { confirmDialog, alertDialog, choiceDialog } from "./shared/confirmDialog";
 import { parseNumInput, rawNumText } from "./calcNumInput";
@@ -2751,7 +2752,9 @@ export function calcExportExcel() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `metas_${mesName}_${mesYear}_${CALC_STATE.kam || "all"}.csv`;
+  // Nombre en el idioma de la UI (3-oct-2026). El CONTENIDO no se traduce: este
+  // CSV se vuelve a subir como metas y la subida lee los encabezados por nombre.
+  a.download = nombreArchivo([t("arch.metas"), mesLabel(mesName), mesYear, CALC_STATE.kam && CALC_STATE.kam !== "all" ? kamLabel(CALC_STATE.kam) : t("arch.todos")], "csv");
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -3158,7 +3161,10 @@ async function _calcCapturarYDescargar(card, nombrePartner) {
   const canvas = await html2canvas(card, opcionesCapturaClara({ scale: 2, useCORS: true, backgroundColor: fondo }));
   const a = document.createElement("a");
   a.href = canvas.toDataURL("image/png");
-  a.download = `meta_${nombrePartner || "partner"}.png`;
+  // En el idioma de la TARJETA (la que recibe el partner), no en el de la app.
+  const lng = CALC_STATE.exportLang || "es-en";
+  const palabra = lng === "ru" ? "Цель" : lng === "en" ? "Goal" : "Meta";
+  a.download = nombreArchivo([palabra, nombrePartner || "partner"], "png");
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

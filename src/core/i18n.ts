@@ -1326,6 +1326,18 @@ export const I18N: Record<string, Record<string, string>> = {
                          ru: "Автопарки" },
   // Encabezados de los CSV de descarga (Data Raw, Conciliación). 3-oct-2026.
   // El CSV de la Calculadora NO usa estas claves: se vuelve a subir como metas.
+  // Nombres de los archivos descargados (shared/nombreArchivo.ts, 3-oct-2026).
+  "arch.misDatos": { es: "Mis datos", en: "My data", ru: "Мои данные" },
+  "arch.hojaDatos": { es: "Datos", en: "Data", ru: "Данные" },
+  "arch.miDesempeno": { es: "Mi desempeño", en: "My performance", ru: "Мои показатели" },
+  "arch.dataRaw": { es: "Data Raw", en: "Raw data", ru: "Исходные данные" },
+  "arch.inicio": { es: "inicio", en: "start", ru: "начало" },
+  "arch.flotas": { es: "Flotas", en: "Fleets", ru: "Автопарки" },
+  "arch.conciliacion": { es: "Conciliación", en: "Reconciliation", ru: "Сверка" },
+  "arch.metas": { es: "Metas", en: "Goals", ru: "Цели" },
+  "arch.todos": { es: "todos los KAMs", en: "all KAMs", ru: "все KAM" },
+  "arch.porCiudad": { es: "por ciudad", en: "by city", ru: "по городам" },
+  "arch.peru": { es: "Perú", en: "Peru", ru: "Перу" },
   "csv.fecha": { es: "Fecha", en: "Date", ru: "Дата" },
   "csv.partner": { es: "Partner", en: "Partner", ru: "Партнёр" },
   "csv.ciudad": { es: "Ciudad", en: "City", ru: "Город" },

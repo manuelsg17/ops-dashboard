@@ -42,6 +42,7 @@ import { btn, badge, alertBox, emptyState, icon, segmented } from "./shared/ui";
 import { confirmDialog, alertDialog } from "./shared/confirmDialog";
 import { logAccess } from "./shared/accessLog.js";
 import { filaCSV } from "./shared/csv";
+import { nombreArchivo } from "./shared/nombreArchivo";
 import { fechaLimaISO } from "./core/dates";
 import { CONFIG_STATE, CARGAS_SESION, showBanner, showLoad, lsSet, renderConfig } from "./app.js";
 import { traducirMensajeParser } from "./domain/erroresSubida";
@@ -899,7 +900,7 @@ function exportFlotasCSV() {
       f ? (f.activo !== false ? "true" : "false") : "true"
     ]));
   });
-  _descargar(lines, `flotas_${fechaLimaISO()}.csv`);
+  _descargar(lines, nombreArchivo([t("arch.flotas"), fechaLimaISO()], "csv"));
 }
 
 function _descargar(lines, nombre) {
@@ -1113,7 +1114,7 @@ async function exportReconCSV() {
       a.ad, _r(a.sh, 2), a.nuevos, a.react, a.nuevos + a.react, a.trips, _r(a.gmv, 2), _r(a.comm, 2),
       a.ofcars > 0 ? _r(a.ifsh / a.ofcars, 4) : "", a.accDen > 0 ? _r(a.accNum / a.accDen, 4) : "", a.ofcars]));
   });
-  _descargar(lines, `conciliacion_${CLASIF_STATE.dateFrom}_${CLASIF_STATE.dateTo}.csv`);
+  _descargar(lines, nombreArchivo([t("arch.conciliacion"), CLASIF_STATE.dateFrom, CLASIF_STATE.dateTo], "csv"));
 }
 
 // ═════════════════════════════════════════════════════════════════════════════

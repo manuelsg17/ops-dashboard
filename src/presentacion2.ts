@@ -19,6 +19,7 @@
 // mundo, incluida la pantalla de login.
 import Chart from "chart.js/auto";
 import { logAccess } from "./shared/accessLog.js";
+import { nombreArchivo } from "./shared/nombreArchivo";
 import { SIN_KAM } from "./core/config.js";
 import ChartDataLabels from "chartjs-plugin-datalabels";
 import { ensurePdfLibs } from "./shared/lazyLibs.js";
@@ -3846,10 +3847,11 @@ export async function p2GenerarPdf(partner, deck, from, to, opts = {}) {
     document.querySelectorAll('div[data-p2slide="1"]').forEach(d => { try { d.remove(); } catch (e) {} });
   }
 }
-// Nombre del archivo del PDF de un partner (mismo formato de siempre; sin los
-// caracteres que un sistema de archivos no acepta).
+// Nombre del archivo del PDF de un partner, en el idioma del DECK (el que lee el
+// partner), no en el de la app. 3-oct-2026: antes "Partner_Presentacion2_fecha"
+// en cualquier idioma.
 export function p2NombrePdf(partner, to) {
-  return `${String(partner).replace(/[\\/:*?"<>|]/g, "-")}_Presentacion2_${to}.pdf`;
+  return nombreArchivo([partner, P2T("Presentación", "Presentation", "Презентация"), to], "pdf");
 }
 
 export async function downloadPresent2PDF() {
