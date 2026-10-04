@@ -200,7 +200,10 @@ export function exportRawCSV() {
   // I10: logAccess como el resto de las exportaciones (Monitoreo cuenta las
   // descargas) y celdas RFC 4180 + fórmulas neutralizadas (shared/csv.ts).
   logAccess("download_csv", "data_raw");
-  const header = ["Fecha", "Partner", "KAM", "Ciudad", "AD", "N+R", "Horas", "Comision", "Viajes"];
+  // Encabezados en el idioma de la UI (3-oct-2026). Este CSV es solo de
+  // descarga: ninguna subida lo vuelve a leer (el de la Calculadora sí, por eso
+  // ese NO se traduce).
+  const header = [t("csv.fecha"), t("csv.partner"), "KAM", t("csv.ciudad"), "AD", "N+R", t("csv.horas"), t("csv.comision"), t("csv.viajes")];
   const lines  = [filaCSV(header)];
   rows.forEach(r => {
     const nr = r.newPartner + r.newService + r.reactivated;

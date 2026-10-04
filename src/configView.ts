@@ -30,7 +30,7 @@ import { sb } from "./auth.js";
 import {
   guardarLogoPartner, borrarLogoPartner, ensurePartnerLogos, refrescarTrasEscritura,
   setFleetroomFlags, setPartnerFlag, updateFlotaField, createFlota, fetchAllPeriods,
-  rowIsFleet, rowIsTuktuk, rowExcludedFromTaxi, dropLegacyAggregateRows
+  rowIsFleet, rowIsTuktuk, rowExcludedFromTaxi, dropLegacyAggregateRows, ensureFullRendColumns
 } from "./data.js";
 import { puede as puedeUI, msgSinFilas } from "./domain/permisosUI";
 import { filtroMetasDeMes } from "./domain/borrarDatos";
@@ -953,9 +953,27 @@ function _reconInRange(r) {
     (!CLASIF_STATE.dateTo || r.date <= CLASIF_STATE.dateTo);
 }
 
+// Conciliación lee columnas DIFERIDAS (aceptación, autos y horas Fleet), que solo
+// pedían Data Raw, Calculadora y Presentación: entrando directo a Configuración
+// la columna "Acept." salía vacía en pantalla y en el CSV (0 de 541 filas,
+// medido el 3-oct-2026). Se piden al mostrar la vista y se repinta al llegar;
+// el CSV las espera. Mismo patrón que el portal (_pedirColumnas).
+let _reconCols = null;
+const _PEND_COLS = {};
+function _asegurarColsRecon() {
+  const p = ensureFullRendColumns();
+  if (!p || p === _reconCols) return;
+  _reconCols = p;
+  Promise.race([p, Promise.resolve(_PEND_COLS)]).then(v => {
+    if (v !== _PEND_COLS) return;   // ya estaban
+    p.then(() => { if (CLASIF_STATE.vista === "recon" && document.getElementById("clasifBox")) _repintarClasif(); });
+  }).catch(() => { if (_reconCols === p) _reconCols = null; });
+}
+
 function _reconHTML() {
   const src = _reconSrc();
   if (!src.length) return emptyState({ icon: "table", title: t("raw.sinDatosCargados") });
+  _asegurarColsRecon();
   const allDates = [...new Set(src.map(r => r.date))].sort();
   if (!CLASIF_STATE.dateFrom || !allDates.includes(CLASIF_STATE.dateFrom)) CLASIF_STATE.dateFrom = allDates[0] || "";
   if (!CLASIF_STATE.dateTo || !allDates.includes(CLASIF_STATE.dateTo)) CLASIF_STATE.dateTo = allDates[allDates.length - 1] || "";
@@ -965,7 +983,7 @@ function _reconHTML() {
   const byClid = new Map();
   src.forEach(r => {
     if (!_reconInRange(r)) return;
-    const clid = r.clid || "(sin clid)";
+    const clid = r.clid || t("csv.sinClid");
     let c = byClid.get(clid);
     if (!c) { c = { clid, partner: "", kam: "", cities: new Set(), agg: _nuevoAgg(), frooms: new Map() }; byClid.set(clid, c); }
     c.partner = STATE.CLID_MAP[clid] || c.partner || r.partner || "";
@@ -1071,24 +1089,29 @@ function reconExpandAll(open) {
   _repintarClasif();
 }
 
-function exportReconCSV() {
+const _r = (v, d) => { const f = 10 ** d; return Number.isFinite(+v) ? Math.round(+v * f) / f : v; };
+async function exportReconCSV() {
+  try { await ensureFullRendColumns(); } catch (_) { /* se exporta con lo que haya; el banner de error ya avisa */ }
   logAccess("download_csv", "conciliacion");
   const byKey = new Map();
   _reconSrc().forEach(r => {
     if (!_reconInRange(r)) return;
-    const clid = r.clid || "(sin clid)", fk = r.db_id || "";
+    const clid = r.clid || t("csv.sinClid"), fk = r.db_id || "";
     const k = clid + "|" + fk;
     let g = byKey.get(k);
     if (!g) { g = { clid, db_id: fk, name: r.fleetroom || "", partner: STATE.CLID_MAP[clid] || r.partner || "", kam: STATE.KAM_MAP[clid] || r.kam || "", agg: _nuevoAgg(), sample: r }; byKey.set(k, g); }
     if (!g.name && r.fleetroom) g.name = r.fleetroom;
     _acc(g.agg, r);
   });
-  const lines = [["CLID", "db_id", "Flota", "Partner", "KAM", "Clasificacion", "Omitido", "AD", "SupplyHours", "Nuevos", "Reactivados", "N+R", "Viajes", "GMV", "Comision", "FleetSHxAuto", "AcceptanceRate", "FleetActiveCars"].join(",")];
+  // Encabezados y "sí" en el idioma de la UI (3-oct-2026): CSV solo de descarga.
+  const lines = [filaCSV(["CLID", "db_id", t("csv.flota"), t("csv.partner"), "KAM", t("csv.clasificacion"), t("csv.omitido"), "AD", t("csv.horas"), t("csv.nuevos"), t("csv.reactivados"), "N+R", t("csv.viajes"), "GMV", t("csv.comision"), t("csv.shAuto"), t("csv.aceptacion"), t("csv.autosFleet")])];
   [...byKey.values()].sort((a, b) => (a.partner || a.clid).localeCompare(b.partner || b.clid) || b.agg.ad - a.agg.ad).forEach(g => {
     const a = g.agg, cl = _reconClasif(g.sample);
-    lines.push(filaCSV([g.clid, g.db_id, g.name, g.partner, g.kam, cl.clase, cl.omit ? "SI" : "",
-      a.ad, a.sh, a.nuevos, a.react, a.nuevos + a.react, a.trips, a.gmv, a.comm,
-      a.ofcars > 0 ? a.ifsh / a.ofcars : "", a.accDen > 0 ? a.accNum / a.accDen : "", a.ofcars]));
+    lines.push(filaCSV([g.clid, g.db_id, g.name, g.partner, g.kam, cl.clase, cl.omit ? t("csv.si") : "",
+      // Redondeo al exportar (3-oct-2026): las sumas en coma flotante dejaban
+      // residuos como "108193.64000000001" en el CSV.
+      a.ad, _r(a.sh, 2), a.nuevos, a.react, a.nuevos + a.react, a.trips, _r(a.gmv, 2), _r(a.comm, 2),
+      a.ofcars > 0 ? _r(a.ifsh / a.ofcars, 4) : "", a.accDen > 0 ? _r(a.accNum / a.accDen, 4) : "", a.ofcars]));
   });
   _descargar(lines, `conciliacion_${CLASIF_STATE.dateFrom}_${CLASIF_STATE.dateTo}.csv`);
 }
