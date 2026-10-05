@@ -247,3 +247,70 @@ export function alertDialog(o: AlertDialogOptions): Promise<void> {
     ok.focus();
   });
 }
+
+// ── Contraseña nueva (3-oct-2026) ─────────────────────────────────────────────
+// Para que cada usuario (en especial un partner, al que el admin le crea la
+// cuenta con una contraseña inicial) pueda cambiarla. Funciona sin correo.
+export const CLAVE_MIN = 8;
+
+/** Clave i18n del primer problema, o null si las dos contraseñas sirven. Puro (test). */
+export function validarNuevaClave(a: string, b: string): string | null {
+  if (!a || a.length < CLAVE_MIN) return "clave.err.corta";
+  if (!/[A-Za-zÀ-ÿ]/.test(a) || !/\d/.test(a)) return "clave.err.mezcla";
+  if (a !== b) return "clave.err.noCoinciden";
+  return null;
+}
+
+/** Pide la contraseña nueva dos veces. Resuelve la contraseña o null (canceló). */
+export function passwordDialog(o: { title: string; body?: string; confirmLabel?: string }): Promise<string | null> {
+  return new Promise<string | null>(resolve => {
+    const prevFocus = document.activeElement as HTMLElement | null;
+    const { backdrop, dialog, actions, content } = _build("dialog", o.title, o.body, null);
+    const campo = (lbl: string, auto: AutoFill): HTMLInputElement => {
+      const l = _el("label", "ui-dialog__confirm-text");
+      const s = _el("span", undefined, lbl);
+      const i = _el("input", "ui-input");
+      i.type = "password";
+      i.autocomplete = auto;
+      i.spellcheck = false;
+      l.append(s, i);
+      content.appendChild(l);
+      return i;
+    };
+    const a = campo(t("clave.nueva"), "new-password");
+    const b = campo(t("clave.repetir"), "new-password");
+    const err = _el("div", "ui-dialog__body ui-dialog__err");
+    err.setAttribute("role", "alert");
+    content.appendChild(err);
+
+    const cancel = _el("button", "ui-btn ui-btn--secondary", t("dialogo.cancelar"));
+    cancel.type = "button";
+    const ok = _el("button", "ui-btn ui-btn--primary", o.confirmLabel ?? t("clave.guardar"));
+    ok.type = "button";
+    actions.append(cancel, ok);
+
+    let done = false;
+    const close = (v: string | null): void => {
+      if (done) return;
+      done = true;
+      backdrop.remove();
+      if (prevFocus && typeof prevFocus.focus === "function" && document.contains(prevFocus)) prevFocus.focus();
+      resolve(v);
+    };
+    const intentar = (): void => {
+      const k = validarNuevaClave(a.value, b.value);
+      if (k) { err.textContent = t(k, { n: CLAVE_MIN }); (k === "clave.err.noCoinciden" ? b : a).focus(); return; }
+      close(a.value);
+    };
+    cancel.addEventListener("click", () => close(null));
+    ok.addEventListener("click", intentar);
+    backdrop.addEventListener("mousedown", e => { if (e.target === backdrop) close(null); });
+    backdrop.addEventListener("keydown", (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.preventDefault(); close(null); return; }
+      if (e.key === "Tab") { _trapTab(e, dialog); return; }
+      if (e.key === "Enter" && (e.target as HTMLElement)?.tagName === "INPUT") { e.preventDefault(); intentar(); }
+    });
+    document.body.appendChild(backdrop);
+    a.focus();
+  });
+}

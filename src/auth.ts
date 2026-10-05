@@ -21,6 +21,7 @@ import { t } from "./core/i18n";
 import { escapeHTML } from "./core/security";
 import { iconSvg } from "./shared/icons";
 import { renderShellNav, renderPageHeader } from "./shell";
+import { passwordDialog, alertDialog } from "./shared/confirmDialog";
 
 // ── LOCK DE AUTH CON ESCAPE ──────────────────────────────────────────────────
 // supabase-js serializa las operaciones de auth con un Web Lock COMPARTIDO entre
@@ -597,8 +598,23 @@ document.addEventListener("DOMContentLoaded", () => {
 // la recarga de página que hace un submit nativo sin backend.
 function handleLoginSubmit(d, el, e) { e.preventDefault(); handleLogin(); }
 
+// Cambiar contraseña (3-oct-2026): para cualquier rol, en especial el partner al
+// que el admin le crea la cuenta con una contraseña inicial. Va por la sesión
+// abierta (updateUser), así que no depende del correo de Supabase.
+async function cambiarClave() {
+  document.getElementById("userMenu")?.classList.remove("open");
+  const nueva = await passwordDialog({ title: t("clave.titulo"), body: t("clave.sub") });
+  if (!nueva) return;
+  const { error } = await sb.auth.updateUser({ password: nueva });
+  if (!error) { await alertDialog({ title: t("clave.ok") }); return; }
+  const m = String(error.message || "");
+  const k = /different from the old|same.*password/i.test(m) ? "clave.err.igual"
+          : /reauthenticat|nonce|recent/i.test(m) ? "clave.err.reauth" : null;
+  await alertDialog({ title: t("clave.titulo"), body: k ? t(k) : t("clave.err.general") + m, tone: "bad" });
+}
+
 registerActions({
-  handleLogin, handleLogout, handleLoginSubmit,
+  handleLogin, handleLogout, handleLoginSubmit, cambiarClave,
   // Salir desde el aviso "sin permisos": cierra SOLO esta sesión y recarga limpio.
   sinPermisoSalir: async () => { try { await sb.auth.signOut({ scope: "local" }); } catch (_) { /* igual recarga */ } location.reload(); }
 });

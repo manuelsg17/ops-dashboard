@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, afterEach } from "vitest";
-import { confirmDialog, alertDialog } from "./confirmDialog";
+import { confirmDialog, alertDialog, validarNuevaClave, passwordDialog } from "./confirmDialog";
 
 // Contratos del diálogo que reemplaza confirm()/alert():
 //   · Esc y clic en el velo CANCELAN; nunca confirman por accidente.
@@ -140,6 +140,27 @@ describe("alertDialog", () => {
     const p2 = alertDialog({ title: "Error", tone: "bad" });
     key(document.activeElement as Element, "Escape");
     await p2;
+    expect(document.querySelector(".ui-dialog")).toBeNull();
+  });
+});
+
+describe("contraseña nueva", () => {
+  it("valida largo, mezcla de letras y números, y que coincidan", () => {
+    expect(validarNuevaClave("abc12", "abc12")).toBe("clave.err.corta");
+    expect(validarNuevaClave("abcdefgh", "abcdefgh")).toBe("clave.err.mezcla");
+    expect(validarNuevaClave("12345678", "12345678")).toBe("clave.err.mezcla");
+    expect(validarNuevaClave("partner2026", "partner2025")).toBe("clave.err.noCoinciden");
+    expect(validarNuevaClave("partner2026", "partner2026")).toBeNull();
+  });
+  it("el diálogo no deja guardar si no coinciden y devuelve la contraseña cuando sí", async () => {
+    const p = passwordDialog({ title: "x" });
+    const [a, b] = Array.from(document.querySelectorAll<HTMLInputElement>(".ui-dialog input[type=password]"));
+    const ok = document.querySelector<HTMLButtonElement>(".ui-dialog .ui-btn--primary")!;
+    a.value = "partner2026"; b.value = "otra2026x"; ok.click();
+    expect(document.querySelector(".ui-dialog")).not.toBeNull();          // sigue abierto
+    expect(document.querySelector(".ui-dialog__err")!.textContent).not.toBe("");
+    b.value = "partner2026"; ok.click();
+    await expect(p).resolves.toBe("partner2026");
     expect(document.querySelector(".ui-dialog")).toBeNull();
   });
 });

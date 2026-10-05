@@ -424,6 +424,8 @@ td.ui-num > .ui-delta { margin-left: auto; }
 .ui-dialog__title { font-size: var(--text-lg); font-weight: var(--weight-bold); line-height: var(--leading-tight); }
 .ui-dialog__body  { font-size: var(--text-base); line-height: var(--leading-normal); color: var(--color-text-muted); white-space: pre-line; }
 .ui-dialog__confirm-text { display: flex; flex-direction: column; gap: var(--space-1); font-size: var(--text-sm); color: var(--color-text-muted); }
+.ui-dialog__confirm-text + .ui-dialog__confirm-text { margin-top: var(--space-3); }
+.ui-dialog__err { margin-top: var(--space-2); color: var(--color-bad-fg); font-size: var(--text-sm); min-height: 1.2em; }
 .ui-dialog__confirm-text code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--text-sm);
   color: var(--color-text); background: var(--color-surface-sunken);
