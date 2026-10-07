@@ -120,7 +120,10 @@ function _kpis(rows) {
 // ── Formato ──────────────────────────────────────────────────────────────────
 const _pct = (v, d = 1) => v == null || !isFinite(v) ? "—" : (v * 100).toFixed(d) + "%";
 const _n = v => v == null || !isFinite(v) ? "—" : fmt(Math.round(v));
-const _sol = v => v == null || !isFinite(v) ? "—" : "S/ " + fmt(Math.round(v));
+// Montos en DÓLARES: GMV, comisión e ingreso por hora vienen en USD en la base
+// (7-oct-2026; antes se rotulaban "S/" por error).
+const _usd = v => v == null || !isFinite(v) ? "—" : "US$ " + fmt(Math.round(v));
+const _usdDec = v => v == null || !isFinite(v) ? "—" : "US$ " + v.toFixed(2);
 const _dec = (v, d) => v == null || !isFinite(v) ? "—" : v.toFixed(d);
 function _delta(a, b, menosEsMejor = false) {
   if (STATE.curMode === "diario" && b == null) return "";
@@ -175,7 +178,7 @@ const _MKT = {
   a50:         { l: "pt.mkt.a50",         f: v => _pct(v, 0) },
   hpc:         { l: "pt.mkt.hpc",         f: v => _dec(v, 1) },
   vph:         { l: "pt.mkt.vph",         f: v => _dec(v, 2) },
-  iph:         { l: "pt.mkt.iph",         f: v => v == null ? "—" : "S/ " + v.toFixed(1) },
+  iph:         { l: "pt.mkt.iph",         f: _usdDec },
   aceptacion:  { l: "pt.mkt.aceptacion",  f: v => _pct(v) },
   completados: { l: "pt.mkt.completados", f: v => _pct(v) },
   soporte:     { l: "pt.mkt.soporte",     f: v => _pct(v), menos: true }
@@ -389,10 +392,10 @@ function _tabResumen(rows) {
         ${_kpi(t("metric.nr.label"), _n(nrL), _delta(nrL, nrP), t("pt.res.entraron"), "", "portal.kpi.comb.nr")}
         ${_kpi(t("metric.sh.label"), _n(k.l.sh), _delta(k.l.sh, k.p && k.p.sh), "", "", "portal.kpi.comb.sh")}
         ${_kpi(t("metric.tr.label"), _n(k.l.tr), _delta(k.l.tr, k.p && k.p.tr), "", "", "portal.kpi.comb.tr")}
-        ${_kpi(t("pt.k.comision"), _sol(k.l.com), _delta(k.l.com, k.p && k.p.com), t("pt.k.comisionSub"))}
+        ${_kpi(t("pt.k.comision"), _usd(k.l.com), _delta(k.l.com, k.p && k.p.com), t("pt.k.comisionSub"))}
         ${_kpi(t("pt.k.hpc"), _dec(hpc, 1), _delta(hpc, hpcP), t("pt.k.productividad"))}
       </div>
-      <p class="pt-mut">${escapeHTML(t("pt.res.enRango", { nr: _n(k.tot.nue + k.tot.rea), h: _n(k.tot.sh), v: _n(k.tot.tr), c: _sol(k.tot.com) }))}</p>`, "pt-span2")}
+      <p class="pt-mut">${escapeHTML(t("pt.res.enRango", { nr: _n(k.tot.nue + k.tot.rea), h: _n(k.tot.sh), v: _n(k.tot.tr), c: _usd(k.tot.com) }))}</p>`, "pt-span2")}
     ${_insights(rows, k)}
     ${subs.length > 1 ? _card(escapeHTML(t("pt.res.comp")), `<div class="pt-comp">${comp}<button type="button" class="pt-link" data-act="portalTab" data-v="subflotas">${escapeHTML(t("pt.res.verSub"))} →</button></div>`) : ""}
   </div>`;
@@ -442,7 +445,7 @@ function _tabDesempeno(rows) {
     ${_card(escapeHTML(t("pt.d.productividad")), `<div class="pt-kpis pt-kpis--3">
         ${_kpi(t("pt.k.hpc"), _dec(hpc, 1), _delta(hpc, hpcP), _ultPer(), _chipMercado("hpc"))}
         ${_kpi(t("pt.k.vph"), _dec(vph, 2), "", t("pt.k.enElRango"), _chipMercado("vph"))}
-        ${_kpi(t("pt.k.iph"), iph == null ? "—" : "S/ " + iph.toFixed(1), "", t("pt.k.iphSub"), _chipMercado("iph"))}
+        ${_kpi(t("pt.k.iph"), _usdDec(iph), "", t("pt.k.iphSub"), _chipMercado("iph"))}
       </div>${_linea("ptChHpc", t("pt.k.hpc"), sHpc, seriesColor(2, tk), v => _dec(v, 1))}`)}
     ${_card(escapeHTML(t("pt.d.calidad")), `<div class="pt-kpis pt-kpis--4">
         ${_kpi(t("portal.aceptacion"), _pct(k.acc), "", t("pt.k.enElRango"), _chipMercado("aceptacion"))}
@@ -451,8 +454,8 @@ function _tabDesempeno(rows) {
         ${_kpi(t("pt.k.soporte"), _pct(k.soporte), "", t("pt.k.soporteSub"), _chipMercado("soporte"))}
       </div>${_linea("ptChAcc", t("portal.aceptacion"), sAcc, seriesColor(1, tk), v => _dec(v, 1) + "%")}`)}
     ${_card(escapeHTML(t("pt.d.ingresos")), `<div class="pt-kpis pt-kpis--3">
-        ${_kpi(t("pt.k.gmv"), _sol(k.tot.gmv), "", t("pt.k.enElRango"))}
-        ${_kpi(t("pt.k.comision"), _sol(k.tot.com), "", t("pt.k.enElRango"))}
+        ${_kpi(t("pt.k.gmv"), _usd(k.tot.gmv), "", t("pt.k.enElRango"))}
+        ${_kpi(t("pt.k.comision"), _usd(k.tot.com), "", t("pt.k.enElRango"))}
         ${_kpi(t("metric.tr.label"), _n(k.tot.tr), "", t("pt.k.enElRango"))}
       </div>${_linea("ptChCom", t("pt.k.comision"), sCom, seriesColor(3, tk))}`)}
     ${flota}
@@ -487,7 +490,7 @@ function _tabSubflotas() {
       <td class="ui-num">${_n(sh)}</td>
       <td class="ui-num">${_dec(ratio(_sum(L, r => r.supplyHours), ad), 1)}</td>
       <td class="ui-num">${_n(_sum(rs, r => r.trips))}</td>
-      <td class="ui-num">${_sol(_sum(rs, r => r.commission))}</td>
+      <td class="ui-num">${_usd(_sum(rs, r => r.commission))}</td>
       <td class="ui-num">${s.enTotal ? _pct(_sum(L, M.fn) / totUlt, 0) : "—"}</td>
       <td><button type="button" class="pt-link" data-act="portalVerSub" data-v="${escapeHTML(s.id)}">${escapeHTML(t("pt.sub.ver"))} →</button></td></tr>`;
   }).join("");
